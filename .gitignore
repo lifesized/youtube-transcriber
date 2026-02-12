@@ -6,6 +6,11 @@ node_modules/
 dist/
 build/
 out/
+.next/
+
+# Database
+*.db
+*.db-journal
 
 # IDE
 .idea/
@@ -25,3 +30,5 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+/lib/generated/prisma
