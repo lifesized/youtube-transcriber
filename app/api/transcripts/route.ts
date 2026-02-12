@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { extractVideoId } from "@/lib/youtube";
-import { getVideoTranscript, RateLimitError } from "@/lib/transcript";
+import { getVideoTranscript, RateLimitError, BotDetectionError } from "@/lib/transcript";
 
 export async function POST(request: NextRequest) {
   let body: { url?: string };
@@ -67,6 +67,16 @@ export async function POST(request: NextRequest) {
             "YouTube is temporarily rate-limiting requests. Please wait a moment and try again.",
         },
         { status: 429 }
+      );
+    }
+
+    if (err instanceof BotDetectionError) {
+      return NextResponse.json(
+        {
+          error:
+            "YouTube is detecting automated requests from your network. This commonly happens with VPN or datacenter IPs. Try disabling your VPN or connecting to a different server.",
+        },
+        { status: 403 }
       );
     }
 

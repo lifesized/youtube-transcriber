@@ -21,6 +21,16 @@ export class RateLimitError extends Error {
 }
 
 /**
+ * Custom error class for YouTube bot detection (LOGIN_REQUIRED).
+ */
+export class BotDetectionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BotDetectionError";
+  }
+}
+
+/**
  * Fetch with retry on HTTP 429 (rate-limit) and timeout responses.
  * Max 3 retries with exponential backoff: 2s, 4s, 8s.
  */
@@ -231,8 +241,8 @@ async function fetchTranscriptAndroid(
 
   const status = playerData.playabilityStatus?.status;
   if (status === "LOGIN_REQUIRED") {
-    throw new Error(
-      `Video ${videoId} is unavailable — it may be private, age-restricted, or removed.`
+    throw new BotDetectionError(
+      `YouTube bot detection triggered for video ${videoId} (ANDROID client).`
     );
   }
 
@@ -280,7 +290,7 @@ async function fetchTranscriptWebFallback(
   videoId: string
 ): Promise<TranscriptSegment[]> {
   console.log(
-    `[transcript] ANDROID client rate-limited, trying WEB fallback for ${videoId}...`
+    `[transcript] ANDROID client blocked (rate-limit or bot detection), trying WEB fallback for ${videoId}...`
   );
 
   const watchRes = await fetchWithRetry(
@@ -328,6 +338,13 @@ async function fetchTranscriptWebFallback(
     );
   }
 
+  const playabilityStatus = (playerData.playabilityStatus as { status?: string })?.status;
+  if (playabilityStatus === "LOGIN_REQUIRED") {
+    throw new BotDetectionError(
+      `YouTube bot detection triggered for video ${videoId}. YouTube is flagging requests from this network as automated. Try from a different network or without VPN.`
+    );
+  }
+
   const captions = playerData.captions as
     | { playerCaptionsTracklistRenderer?: { captionTracks?: Array<{ vssId?: string; baseUrl: string }> } }
     | undefined;
@@ -368,14 +385,14 @@ async function fetchTranscriptWebFallback(
 
 /**
  * Fetch time-coded transcript segments for a YouTube video.
- * Tries ANDROID InnerTube client first, falls back to WEB page scraping on 429.
+ * Tries ANDROID InnerTube client first, falls back to WEB page scraping on 429 or bot detection.
  */
 async function fetchTranscript(videoId: string): Promise<TranscriptSegment[]> {
   try {
     return await fetchTranscriptAndroid(videoId);
   } catch (err) {
-    if (err instanceof RateLimitError) {
-      // ANDROID client got rate-limited — try WEB fallback
+    if (err instanceof RateLimitError || err instanceof BotDetectionError) {
+      // ANDROID client got rate-limited or bot-detected — try WEB fallback
       return await fetchTranscriptWebFallback(videoId);
     }
     throw err;

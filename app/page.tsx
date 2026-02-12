@@ -34,6 +34,10 @@ export default function Home() {
           setError(
             "YouTube is temporarily limiting requests. Please wait a minute and try again."
           );
+        } else if (res.status === 403) {
+          setError(
+            "YouTube is blocking requests from your current network. Try disabling your VPN or connecting from a different network."
+          );
         } else {
           setError(data.error || "Something went wrong.");
         }
