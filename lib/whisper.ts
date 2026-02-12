@@ -138,8 +138,10 @@ function getMlxModelCandidates(model: string): string[] {
   if (MLX_WHISPER_MODEL_OVERRIDE) {
     return [MLX_WHISPER_MODEL_OVERRIDE];
   }
+  if (model.includes("/")) {
+    return [model];
+  }
   const candidates = [
-    model,
     `mlx-community/whisper-${model}-mlx`,
     `mlx-community/whisper-${model}`,
   ];
@@ -159,7 +161,9 @@ async function runMlxWhisper(audioPath: string, outputDir: string, model: string
         "from mlx_whisper import transcribe;" +
         "audio, model_name, out_path = sys.argv[1:4];" +
         "res = transcribe(audio, path_or_hf_repo=model_name);" +
-        "with open(out_path, 'w', encoding='utf-8') as f: json.dump({'segments': res.get('segments', [])}, f)";
+        "f = open(out_path, 'w', encoding='utf-8');" +
+        "json.dump({'segments': res.get('segments', [])}, f);" +
+        "f.close()";
       await execFileAsync(PYTHON_BIN, ["-c", script, audioPath, candidate, jsonPath], {
         timeout: timeoutMs,
       });
