@@ -1,5 +1,31 @@
 @import "tailwindcss";
 
+:root {
+  --bg: 0 0% 4%;
+  --panel: 0 0% 7%;
+  --panel-2: 0 0% 9%;
+  --border: 0 0% 14%;
+  --text: 0 0% 98%;
+  --muted: 0 0% 70%;
+  --muted-2: 0 0% 55%;
+  --accent: 38 92% 62%;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: hsl(var(--bg));
+  color: hsl(var(--text));
+  text-rendering: geometricPrecision;
+}
+
+::selection {
+  background: hsl(var(--accent) / 0.28);
+}
+
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }

@@ -17,23 +17,32 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${GeistSans.className} ${GeistMono.variable} ${GeistPixelSquare.variable} min-h-screen bg-gray-50 text-gray-900`}>
-        <nav className="border-b border-gray-200 bg-white">
-          <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-            <Link href="/" className="text-lg font-semibold text-gray-900">
+      <body
+        className={`${GeistSans.className} ${GeistMono.variable} ${GeistPixelSquare.variable} flex min-h-screen flex-col bg-[hsl(var(--bg))] text-[hsl(var(--text))] antialiased`}
+      >
+        <nav className="border-b border-white/10 bg-[hsl(var(--bg))]/70 backdrop-blur">
+          <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
+            <Link href="/" className="text-sm font-semibold tracking-wide text-white">
               Transcript Capture
             </Link>
-            <div className="flex items-center gap-4">
-              <Link
-                href="/library"
-                className="text-sm font-medium text-gray-600 hover:text-gray-900"
-              >
-                Library
-              </Link>
-            </div>
           </div>
         </nav>
-        <main>{children}</main>
+        <main className="flex-1">{children}</main>
+        <footer className="border-t border-white/10 bg-[hsl(var(--bg))]/70">
+          <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
+            <span className="text-xs text-white/35">
+              This is a project by{" "}
+              <a
+                href="https://github.com/lifesized"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-white/60 hover:text-white"
+              >
+                lifesized
+              </a>
+            </span>
+          </div>
+        </footer>
       </body>
     </html>
   );
