@@ -1,5 +1,7 @@
 # YouTube Transcript Capture
 
+**Paste a YouTube URL. Capture once. Reuse forever.**
+
 A self-hosted web application for capturing and archiving YouTube video transcripts without quota limits or API costs. Uses local Whisper transcription when captions aren't available.
 
 ## Why This Exists
