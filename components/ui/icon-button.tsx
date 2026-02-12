@@ -5,8 +5,8 @@ function cx(...parts: Array<string | undefined | null | false>): string {
 }
 
 const base =
-  "inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white/75 transition " +
-  "hover:bg-white/10 hover:text-white active:bg-white/10 " +
+  "inline-flex items-center justify-center rounded-lg text-white/60 transition " +
+  "hover:bg-white/5 hover:text-white/90 active:bg-white/10 " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 " +
   "disabled:pointer-events-none disabled:opacity-50";
 

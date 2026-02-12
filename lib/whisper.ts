@@ -10,8 +10,9 @@ export type ProgressCallback = (event: { stage: string; progress: number; status
 let transcriptionInProgress = false;
 
 const YTDLP_PATH = "/opt/homebrew/bin/yt-dlp";
-const PYTHON_BIN = path.join(process.cwd(), ".venv/bin/python");
-const OPENAI_WHISPER_CLI = path.join(process.cwd(), ".venv/bin/whisper");
+// Avoid hard-referencing `.venv/*` so builds don't depend on local symlinks.
+const PYTHON_BIN = process.env.WHISPER_PYTHON_BIN?.trim() || "python3";
+const OPENAI_WHISPER_CLI = process.env.WHISPER_CLI?.trim() || "whisper";
 const WHISPER_BACKEND_OVERRIDE = process.env.WHISPER_BACKEND?.trim().toLowerCase();
 const WHISPER_DEVICE_OVERRIDE = process.env.WHISPER_DEVICE?.trim().toLowerCase();
 const MLX_WHISPER_MODEL_OVERRIDE = process.env.MLX_WHISPER_MODEL?.trim();
@@ -271,7 +272,7 @@ async function runWhisper(
   if (requestedBackend === "mlx" && !mlxAvailable) {
     if (WHISPER_BACKEND_OVERRIDE === "mlx") {
       throw new Error(
-        'WHISPER_BACKEND=mlx was requested but Python module "mlx_whisper" is not installed in .venv.'
+        'WHISPER_BACKEND=mlx was requested but Python module "mlx_whisper" is not installed. Install it (or set WHISPER_BACKEND=openai).'
       );
     }
     console.log('[whisper] MLX backend requested by auto-detect but "mlx_whisper" is missing; using OpenAI Whisper.');

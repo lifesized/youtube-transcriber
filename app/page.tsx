@@ -474,7 +474,7 @@ function HomeInner() {
                 <button
                   type="submit"
                   disabled={!url.trim()}
-                  className="shrink-0 rounded-full border border-white/20 bg-white/10 px-8 py-3.5 font-(family-name:--font-geist-pixel) text-[15px] font-medium tracking-[1px] text-white shadow-[0_8px_32px_-12px_rgba(0,0,0,0.4)] backdrop-blur-xl transition-all duration-200 hover:scale-[1.02] hover:border-white/30 hover:bg-white/20 hover:shadow-[0_12px_48px_-16px_rgba(255,255,255,0.15)] active:scale-[0.98] active:bg-white/12 disabled:opacity-50 disabled:pointer-events-none"
+                  className="shrink-0 rounded-full border border-white/20 bg-white/10 px-8 py-3.5 font-(family-name:--font-geist-pixel) text-[15px] font-medium tracking-[1px] text-white shadow-[0_8px_32px_-12px_rgba(0,0,0,0.4)] backdrop-blur-xl transition-all duration-150 hover:border-white/40 hover:bg-white/25 hover:shadow-[0_12px_48px_-16px_rgba(255,255,255,0.2)] active:bg-white/15 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
                 >
                   {isProcessing ? "Add" : "Capture"}
                 </button>
@@ -623,14 +623,13 @@ function HomeInner() {
                 onChange={(e) => setSearch(e.target.value)}
               />
               <IconButton
-                size="sm"
                 onClick={() => setLibraryLayout("tiles")}
-                className={libraryLayout === "tiles" ? "bg-white/10" : ""}
+                className={libraryLayout === "tiles" ? "bg-white/10 text-white" : ""}
                 title="Tiles view"
               >
                 <svg
-                  width="16"
-                  height="16"
+                  width="18"
+                  height="18"
                   viewBox="0 0 20 20"
                   fill="none"
                   stroke="currentColor"
@@ -645,14 +644,13 @@ function HomeInner() {
                 </svg>
               </IconButton>
               <IconButton
-                size="sm"
                 onClick={() => setLibraryLayout("list")}
-                className={libraryLayout === "list" ? "bg-white/10" : ""}
+                className={libraryLayout === "list" ? "bg-white/10 text-white" : ""}
                 title="List view"
               >
                 <svg
-                  width="16"
-                  height="16"
+                  width="18"
+                  height="18"
                   viewBox="0 0 20 20"
                   fill="none"
                   stroke="currentColor"
