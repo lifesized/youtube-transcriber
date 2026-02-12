@@ -1,5 +1,6 @@
 import { execFile } from "child_process";
 import { promises as fs } from "fs";
+import os from "os";
 import path from "path";
 import type { TranscriptSegment } from "./types";
 
@@ -30,6 +31,45 @@ function execFileAsync(
       }
     });
   });
+}
+
+function getWhisperDevice(): string {
+  if (process.platform === "darwin" && os.arch() === "arm64") {
+    return "mps";
+  }
+  return "cpu";
+}
+
+/**
+ * Run Whisper CLI on an audio file with a specific device.
+ * Throws if the expected JSON output is not produced (e.g., MPS silently skips on NaN).
+ */
+async function runWhisperWithDevice(
+  audioPath: string,
+  outputDir: string,
+  model: string,
+  device: string
+): Promise<void> {
+  const args = [
+    audioPath,
+    "--model", model,
+    "--output_format", "json",
+    "--output_dir", outputDir,
+  ];
+  if (device !== "cpu") {
+    args.push("--device", device);
+  }
+  await execFileAsync(WHISPER_CLI, args, { timeout: 600000 });
+
+  // Whisper may silently skip files on MPS failures (exit 0 but no output).
+  // Verify that the expected JSON output was actually produced.
+  const baseName = path.basename(audioPath, path.extname(audioPath));
+  const expectedJson = path.join(outputDir, `${baseName}.json`);
+  try {
+    await fs.access(expectedJson);
+  } catch {
+    throw new Error(`Whisper produced no output on device "${device}" (expected ${expectedJson})`);
+  }
 }
 
 /**
@@ -65,6 +105,7 @@ async function downloadAudio(videoId: string, outputDir: string): Promise<string
 
 /**
  * Run Whisper CLI on an audio file and return parsed transcript segments.
+ * Automatically uses MPS (Metal) on Apple Silicon, with CPU fallback.
  */
 async function runWhisper(
   audioPath: string,
@@ -73,15 +114,24 @@ async function runWhisper(
 ): Promise<TranscriptSegment[]> {
   await fs.mkdir(outputDir, { recursive: true });
 
-  console.log(`[whisper] Transcribing with model "${model}"...`);
+  const device = getWhisperDevice();
+  console.log(`[whisper] Transcribing with model "${model}" on device "${device}"...`);
   const startTime = Date.now();
 
-  await execFileAsync(WHISPER_CLI, [
-    audioPath,
-    "--model", model,
-    "--output_format", "json",
-    "--output_dir", outputDir,
-  ], { timeout: 600000 }); // 10 minutes max for transcription
+  let usedDevice = device;
+  try {
+    await runWhisperWithDevice(audioPath, outputDir, model, device);
+  } catch (err) {
+    if (device !== "cpu") {
+      console.log(`[whisper] ${device} failed, falling back to CPU...`);
+      await fs.rm(outputDir, { recursive: true, force: true }).catch(() => {});
+      await fs.mkdir(outputDir, { recursive: true });
+      await runWhisperWithDevice(audioPath, outputDir, model, "cpu");
+      usedDevice = "cpu";
+    } else {
+      throw err;
+    }
+  }
 
   const wallTime = ((Date.now() - startTime) / 1000).toFixed(1);
 
@@ -99,7 +149,7 @@ async function runWhisper(
   }));
 
   console.log(
-    `[whisper] Transcription complete: ${segments.length} segments, model=${model}, wall-clock=${wallTime}s`
+    `[whisper] Transcription complete: ${segments.length} segments, model=${model}, device=${usedDevice}, wall-clock=${wallTime}s`
   );
 
   return segments;
