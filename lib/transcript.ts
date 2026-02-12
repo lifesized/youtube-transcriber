@@ -1,5 +1,5 @@
 import { extractVideoId } from "./youtube";
-import { transcribeWithWhisper } from "./whisper";
+import { transcribeWithWhisper, type ProgressCallback } from "./whisper";
 import type {
   TranscriptSegment,
   VideoMetadata,
@@ -7,7 +7,7 @@ import type {
 } from "./types";
 
 // Re-export types for convenience
-export type { TranscriptSegment, VideoMetadata, VideoTranscriptResult };
+export type { TranscriptSegment, VideoMetadata, VideoTranscriptResult, ProgressCallback };
 
 const INNERTUBE_API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
 
