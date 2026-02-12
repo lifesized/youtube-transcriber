@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "postinstall": "prisma generate"
   },
   "keywords": [],
   "author": "",
@@ -30,6 +31,6 @@
     "postcss": "^8.5.6",
     "prisma": "^7.4.0",
     "tailwindcss": "^4.1.18",
-    "typescript": "^5.9.3"
+    "typescript": "5.9.3"
   }
 }
