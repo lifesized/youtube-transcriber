@@ -14,6 +14,7 @@ interface VideoRecord {
   thumbnailUrl: string | null;
   videoUrl: string;
   transcript: string;
+  source?: string;
   createdAt: string;
 }
 
@@ -95,7 +96,14 @@ export default function TranscriptPage() {
             className="mb-4 w-full rounded-lg"
           />
         )}
-        <h1 className="mb-2 text-2xl font-bold">{video.title}</h1>
+        <div className="mb-2 flex items-center gap-2">
+          <h1 className="text-2xl font-bold">{video.title}</h1>
+          {video.source === "whisper_local" && (
+            <span className="inline-block rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-700">
+              AI-transcribed
+            </span>
+          )}
+        </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
           <span>
             {video.channelUrl ? (

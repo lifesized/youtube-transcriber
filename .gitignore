@@ -32,3 +32,6 @@ Thumbs.db
 npm-debug.log*
 
 /lib/generated/prisma
+
+# Python virtual environment
+.venv/

@@ -19,6 +19,7 @@ model Video {
   thumbnailUrl String?
   videoUrl     String
   transcript   String   // JSON stringified transcript array
+  source       String   @default("youtube_captions")  // "youtube_captions" or "whisper_local"
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }

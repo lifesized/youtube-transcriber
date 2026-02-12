@@ -11,6 +11,7 @@ interface VideoSummary {
   channelUrl: string | null;
   thumbnailUrl: string | null;
   videoUrl: string;
+  source?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -154,8 +155,15 @@ export default function LibraryPage() {
                   {t.title}
                 </Link>
 
-                {/* Author */}
-                <p className="mb-2 text-xs text-gray-500">{t.author}</p>
+                {/* Author & source badge */}
+                <div className="mb-2 flex items-center gap-1.5">
+                  <p className="text-xs text-gray-500">{t.author}</p>
+                  {t.source === "whisper_local" && (
+                    <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">
+                      AI
+                    </span>
+                  )}
+                </div>
 
                 {/* Date */}
                 <p className="mb-3 text-xs text-gray-400">

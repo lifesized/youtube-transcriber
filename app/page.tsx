@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 export default function Home() {
@@ -8,6 +8,8 @@ export default function Home() {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState("Capturing transcript...");
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -20,6 +22,13 @@ export default function Home() {
     }
 
     setLoading(true);
+    setStatusMessage("Checking for YouTube captions...");
+    timersRef.current = [
+      setTimeout(() => setStatusMessage("No captions found. Downloading audio..."), 8000),
+      setTimeout(() => setStatusMessage("Transcribing with local AI (Whisper)... This may take a few minutes."), 20000),
+      setTimeout(() => setStatusMessage("Still transcribing... Whisper runs locally on your CPU, so longer videos take more time."), 60000),
+      setTimeout(() => setStatusMessage("Almost there... Processing a long video."), 180000),
+    ];
     try {
       const res = await fetch("/api/transcripts", {
         method: "POST",
@@ -48,6 +57,8 @@ export default function Home() {
     } catch {
       setError("Network error. Please try again.");
     } finally {
+      timersRef.current.forEach(clearTimeout);
+      timersRef.current = [];
       setLoading(false);
     }
   }
@@ -95,7 +106,7 @@ export default function Home() {
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                   />
                 </svg>
-                Capturing…
+                Capturing...
               </span>
             ) : (
               "Capture Transcript"
@@ -103,6 +114,12 @@ export default function Home() {
           </button>
         </div>
       </form>
+
+      {loading && (
+        <p className="mt-4 text-center text-sm text-gray-500">
+          {statusMessage}
+        </p>
+      )}
 
       {error && (
         <div className="mt-4 w-full rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

@@ -1,4 +1,5 @@
 import { extractVideoId } from "./youtube";
+import { transcribeWithWhisper } from "./whisper";
 import type {
   TranscriptSegment,
   VideoMetadata,
@@ -27,6 +28,16 @@ export class BotDetectionError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "BotDetectionError";
+  }
+}
+
+/**
+ * Custom error class for videos that have no caption tracks available.
+ */
+export class NoCaptionsError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NoCaptionsError";
   }
 }
 
@@ -250,7 +261,7 @@ async function fetchTranscriptAndroid(
     playerData.captions?.playerCaptionsTracklistRenderer?.captionTracks;
 
   if (!captionTracks || captionTracks.length === 0) {
-    throw new Error(
+    throw new NoCaptionsError(
       `Captions are disabled for video ${videoId}. The video owner has turned off captions.`
     );
   }
@@ -274,7 +285,7 @@ async function fetchTranscriptAndroid(
   const xml = await captionRes.text();
 
   if (!xml.trim()) {
-    throw new Error(
+    throw new NoCaptionsError(
       `Captions are disabled for video ${videoId}. The video owner has turned off captions.`
     );
   }
@@ -347,7 +358,7 @@ async function fetchTranscriptWebClient(
     playerData.captions?.playerCaptionsTracklistRenderer?.captionTracks;
 
   if (!captionTracks || captionTracks.length === 0) {
-    throw new Error(
+    throw new NoCaptionsError(
       `Captions are disabled for video ${videoId}. The video owner has turned off captions.`
     );
   }
@@ -371,7 +382,7 @@ async function fetchTranscriptWebClient(
   const xml = await captionRes.text();
 
   if (!xml.trim()) {
-    throw new Error(
+    throw new NoCaptionsError(
       `Captions are disabled for video ${videoId}. The video owner has turned off captions.`
     );
   }
@@ -448,7 +459,7 @@ async function fetchTranscriptWebFallback(
   const captionTracks = captions?.playerCaptionsTracklistRenderer?.captionTracks;
 
   if (!captionTracks || captionTracks.length === 0) {
-    throw new Error(
+    throw new NoCaptionsError(
       `Captions are disabled for video ${videoId}. The video owner has turned off captions.`
     );
   }
@@ -472,7 +483,7 @@ async function fetchTranscriptWebFallback(
   const xml = await captionRes.text();
 
   if (!xml.trim()) {
-    throw new Error(
+    throw new NoCaptionsError(
       `Captions are disabled for video ${videoId}. The video owner has turned off captions.`
     );
   }
@@ -483,22 +494,44 @@ async function fetchTranscriptWebFallback(
 /**
  * Fetch time-coded transcript segments for a YouTube video.
  * Fallback chain: ANDROID InnerTube → WEB InnerTube → WEB page scrape.
+ * Returns the segments and source ("youtube_captions" or "whisper_local").
  */
-async function fetchTranscript(videoId: string): Promise<TranscriptSegment[]> {
+async function fetchTranscript(
+  videoId: string
+): Promise<{ segments: TranscriptSegment[]; source: string }> {
   try {
-    return await fetchTranscriptAndroid(videoId);
+    const segments = await fetchTranscriptAndroid(videoId);
+    return { segments, source: "youtube_captions" };
   } catch (err) {
     if (err instanceof RateLimitError || err instanceof BotDetectionError) {
       // Try WEB InnerTube client next
       try {
-        return await fetchTranscriptWebClient(videoId);
+        const segments = await fetchTranscriptWebClient(videoId);
+        return { segments, source: "youtube_captions" };
       } catch (err2) {
         if (err2 instanceof RateLimitError || err2 instanceof BotDetectionError) {
           // Last resort: scrape the watch page
-          return await fetchTranscriptWebFallback(videoId);
+          const segments = await fetchTranscriptWebFallback(videoId);
+          return { segments, source: "youtube_captions" };
+        }
+        // If WEB client got NoCaptionsError, fall through to Whisper
+        if (err2 instanceof NoCaptionsError) {
+          console.log(
+            `[transcript] No captions available for ${videoId}, falling back to local Whisper transcription...`
+          );
+          const segments = await transcribeWithWhisper(videoId);
+          return { segments, source: "whisper_local" };
         }
         throw err2;
       }
+    }
+    // If ANDROID client got NoCaptionsError, fall back to Whisper
+    if (err instanceof NoCaptionsError) {
+      console.log(
+        `[transcript] No captions available for ${videoId}, falling back to local Whisper transcription...`
+      );
+      const segments = await transcribeWithWhisper(videoId);
+      return { segments, source: "whisper_local" };
     }
     throw err;
   }
@@ -508,30 +541,35 @@ async function fetchTranscript(videoId: string): Promise<TranscriptSegment[]> {
  * Fetch the full transcript and metadata for a YouTube video.
  *
  * @param url - A YouTube video URL (watch, short, embed, youtu.be)
- * @returns Structured result with metadata + time-coded transcript
+ * @returns Structured result with metadata + time-coded transcript + source
  */
 export async function getVideoTranscript(
   url: string
-): Promise<VideoTranscriptResult> {
+): Promise<VideoTranscriptResult & { source: string }> {
   const videoId = extractVideoId(url);
 
+  // Use a longer timeout when Whisper fallback might be needed (up to 10 minutes)
   const result = await Promise.race([
     (async () => {
-      const [metadata, transcript] = await Promise.all([
+      const [metadata, transcriptResult] = await Promise.all([
         fetchMetadata(videoId),
         fetchTranscript(videoId),
       ]);
-      return { ...metadata, transcript };
+      return {
+        ...metadata,
+        transcript: transcriptResult.segments,
+        source: transcriptResult.source,
+      };
     })(),
     new Promise<never>((_, reject) =>
       setTimeout(
         () =>
           reject(
             new Error(
-              "Transcript capture timed out after 30 seconds. Please try again."
+              "Transcript capture timed out. Please try again."
             )
           ),
-        30000
+        600000
       )
     ),
   ]);

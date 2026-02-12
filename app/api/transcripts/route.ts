@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { extractVideoId } from "@/lib/youtube";
-import { getVideoTranscript, RateLimitError, BotDetectionError } from "@/lib/transcript";
+import { getVideoTranscript, RateLimitError, BotDetectionError, NoCaptionsError } from "@/lib/transcript";
 
 export async function POST(request: NextRequest) {
   let body: { url?: string };
@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
       thumbnailUrl: result.thumbnailUrl ?? `https://i.ytimg.com/vi/${result.videoId}/hqdefault.jpg`,
       videoUrl: url,
       transcript: JSON.stringify(result.transcript),
+      source: result.source,
     };
 
     const video = existing
@@ -118,6 +119,7 @@ export async function GET(request: NextRequest) {
       channelUrl: true,
       thumbnailUrl: true,
       videoUrl: true,
+      source: true,
       createdAt: true,
       updatedAt: true,
     },
