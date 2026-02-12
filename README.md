@@ -1,64 +1,160 @@
 # YouTube Transcript Capture
 
-A local-first web app to capture, store, and browse transcripts from YouTube videos. No API keys, no cloud services — everything runs on your machine.
+A self-hosted web application for capturing and archiving YouTube video transcripts without quota limits or API costs. Uses local Whisper transcription when captions aren't available.
+
+## Why This Exists
+
+**Transcription services are expensive.** I burned through my allowed transcriptions in under a week and needed a solution that wouldn't break the bank. This tool uses **local transcription** with OpenAI Whisper, which means unlimited transcriptions at zero marginal cost. No API keys, no cloud services — everything runs on your machine.
 
 ## Features
 
-- Paste any YouTube URL to capture its transcript
-- Automatic fallback to local Whisper transcription for videos without captions
-- Time-coded transcript display with timestamps
-- Video metadata (title, author, thumbnail, channel link)
-- Transcript library with search
-- Download transcripts as Markdown files
-- Copy transcript text to clipboard (formatted with timestamps)
-- Duplicate detection (same video won't be saved twice)
-- Local SQLite storage — zero cost, fully offline-capable
+- 🎯 **Zero-cost transcription** using local Whisper models
+- 🚀 **Fast transcription** on Apple Silicon (3-5x faster with MLX)
+- 📦 **Queue system** for batch processing multiple videos
+- ⚡ **Auto-cleanup** - completed items removed after 2.5 seconds
+- 💾 **SQLite storage** - all transcripts saved locally
+- 🔍 **Search & filter** your transcript library
+- 🎨 **Vintage sepia aesthetic** with dark mode design
+- 📱 **Single-page responsive UI** with tiles/list views
+- ⬇️ **Export transcripts** as Markdown with timestamps
+- 📋 **Copy to clipboard** with formatted timestamps
+- 🔁 **Duplicate detection** - same video won't be saved twice
+- 🌐 **No API keys required** - fully offline-capable
 
 ## How It Works
 
-Transcripts come from two sources:
+### Transcription Priority Chain
 
-**1. YouTube Captions** — The app fetches captions directly from YouTube's InnerTube API (auto-generated or manually uploaded). No API key is needed. The fallback chain for caption fetching is:
+The app automatically selects the best available method for your system:
 
-1. Try the ANDROID InnerTube client
-2. If rate-limited or bot-detected, try the WEB InnerTube client
-3. If still blocked, try a WEB page scrape
+1. **YouTube Captions** (fastest) - Fetches official captions when available
+2. **MLX Whisper** (Mac only, Apple Silicon) - 3-5x faster than CPU transcription
+3. **OpenAI Whisper on MPS** (Mac only, Apple Silicon) - GPU-accelerated fallback
+4. **OpenAI Whisper on CPU** (all platforms) - Final fallback, works everywhere
 
-**2. Local Whisper Transcription** — If a video has no captions at all, the app falls back to transcribing locally using OpenAI's open-source Whisper model. It downloads the audio via `yt-dlp` and runs Whisper on your machine. This is 100% free and runs entirely on-device.
+For caption fetching, the app tries multiple InnerTube clients (ANDROID → WEB → page scrape) to avoid rate limits and bot detection.
 
 ## Tech Stack
 
-- Next.js 16 (App Router, TypeScript)
-- Tailwind CSS v4
-- Prisma ORM with SQLite
-- Geist font
-- No external API keys required
+- **Next.js 15** - React framework with App Router
+- **TypeScript** - Type-safe development
+- **Tailwind CSS** - Utility-first styling
+- **Prisma** - Database ORM
+- **SQLite** - Local database
+- **OpenAI Whisper** - Speech recognition
+- **MLX Whisper** - Apple Silicon optimization
+- **yt-dlp** - YouTube audio downloader
+- **Geist fonts** - Sans, Mono, and Pixel variants
+
+## Evolution & Changelog
+
+This project has evolved through several phases:
+
+### Phase 1: Foundation
+- Built initial Next.js app with Prisma and SQLite
+- Integrated YouTube caption fetching
+- Added local Whisper transcription as fallback
+- Implemented transcript storage and search
+
+### Phase 2: Performance & Reliability
+- Added MLX backend for 3-5x faster transcription on Apple Silicon
+- Implemented automatic fallback chain (captions → MLX → OpenAI CPU)
+- Added memory safety guards and process cleanup
+- Built queue system for batch processing
+
+### Phase 3: UI/UX Redesign
+- Redesigned with single-page layout (capture + library + viewer)
+- Refined greyscale aesthetic with vintage sepia tones
+- Added tiles/list view toggle for library
+- Implemented auto-cleanup of completed queue items
+- Polished hover states and transitions throughout
+
+### Phase 4: Open Source
+- Prepared for public release
+- Added comprehensive documentation
+- Made available on GitHub for the community
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 18+
-- npm
+- **Node.js** 18+ or **Bun** runtime
+- **Python** 3.8+ (for Whisper transcription)
+- **yt-dlp** (for downloading audio from YouTube)
+- **FFmpeg** (required by Whisper for audio processing)
 
 ### Installation
 
 ```bash
+# Clone the repository
 git clone https://github.com/lifesized/youtube-transcriber.git
 cd youtube-transcriber
-npm install
-npx prisma migrate dev
+
+# Install dependencies
+npm install  # or: bun install
+
+# Set up Python virtual environment
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install Whisper
+pip install openai-whisper
+
+# Optional: Install MLX Whisper (macOS Apple Silicon only)
+pip install mlx-whisper
+
+# Configure environment variables (see next section)
+cp .env.example .env
+# Edit .env with your paths
+
+# Initialize database
+npx prisma generate
+npx prisma db push
 ```
 
-### Running
+### Environment Variables
+
+Create a `.env` file in the project root:
+
+```env
+DATABASE_URL="file:./dev.db"
+
+# Whisper configuration (adjust paths to match your setup)
+WHISPER_CLI="/path/to/your/.venv/bin/whisper"
+WHISPER_PYTHON_BIN="/path/to/your/.venv/bin/python3"
+
+# Optional: Force specific backend (auto, mlx, or openai)
+# WHISPER_BACKEND="auto"
+
+# Optional: Force specific device for OpenAI Whisper (auto, cpu, or mps)
+# WHISPER_DEVICE="auto"
+
+# Optional: Transcription timeout in milliseconds (default: 480000)
+# WHISPER_TIMEOUT_MS="480000"
+```
+
+**Windows paths example:**
+```env
+WHISPER_CLI="C:\\Users\\YourName\\project\\.venv\\Scripts\\whisper.exe"
+WHISPER_PYTHON_BIN="C:\\Users\\YourName\\project\\.venv\\Scripts\\python.exe"
+```
+
+### Running the App
 
 ```bash
-npm run dev
+npm run dev  # or: bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-Paste a YouTube URL on the home page to capture a transcript. Browse saved transcripts in the library.
+**Usage:**
+1. Paste a YouTube URL into the input field
+2. Click "Capture" to add it to the queue
+3. Wait for transcription (progress shown in real-time)
+4. View transcript by clicking any completed video
+5. Use the transcripts as context to feed to your LLMs to your heart's content
+6. Search & filter your transcript library
+7. Export transcripts as Markdown files
 
 ## Whisper Transcription (Captionless Videos)
 
@@ -87,17 +183,19 @@ pip install openai-whisper
 
 The first transcription will download the Whisper `base` model (~150MB).
 
-### Performance
+## Performance Benchmarks
 
-Whisper transcription speed depends on your hardware:
+Transcription speed for a typical 10-minute video:
 
-| Setup | Speed | Example (35-min video) |
-|-------|-------|------------------------|
-| CPU only | ~1x real-time | ~35 minutes |
-| NVIDIA GPU (CUDA) | ~5-10x real-time | ~4-7 minutes |
-| Apple Silicon GPU (MPS) | ~3-5x real-time | ~7-12 minutes |
+| Method | Platform | Speed |
+|--------|----------|-------|
+| YouTube Captions | All | < 5 seconds |
+| MLX Whisper | Apple Silicon | 30-60 seconds |
+| OpenAI Whisper (MPS) | Apple Silicon | 1-2 minutes |
+| OpenAI Whisper (CPU) | All | 2-5 minutes |
+| OpenAI Whisper (CUDA) | NVIDIA GPU | 30-90 seconds |
 
-The app uses the `base` model by default. The smaller `tiny` model is faster but less accurate.
+The app uses the `base` model by default (good balance of speed and accuracy). You can use smaller models (`tiny`, `small`) for faster transcription or larger models (`medium`, `large`) for better accuracy.
 
 ### Backend and device selection
 
@@ -128,42 +226,85 @@ Fallback behavior:
 - If MLX fails, the app falls back to OpenAI Whisper on CPU.
 - If OpenAI MPS fails, the app falls back to OpenAI CPU.
 
-## Platform Notes
+## Platform-Specific Notes
 
-### macOS
+### macOS (Apple Silicon - Recommended)
 
-macOS is the primary development platform. All features work out of the box with Homebrew.
+**Best performance** with M1/M2/M3/M4 chips using MLX backend.
+
+```bash
+# Install dependencies
+brew install yt-dlp ffmpeg
+
+# Python virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+pip install openai-whisper mlx-whisper
+```
+
+**Performance:** MLX Whisper provides 3-5x faster transcription than CPU (typical 10-min video: ~30-60 seconds vs 2-5 minutes).
+
+**Auto-detection:** The app automatically uses MLX on Apple Silicon and falls back to OpenAI Whisper if needed.
+
+### macOS (Intel)
 
 ```bash
 brew install yt-dlp ffmpeg
+python3 -m venv .venv
+source .venv/bin/activate
+pip install openai-whisper
 ```
 
-Python 3 is usually pre-installed on macOS. The `yt-dlp` binary path is hardcoded to `/opt/homebrew/bin/yt-dlp` (the default Homebrew path on Apple Silicon). If you're on Intel macOS, Homebrew installs to `/usr/local/bin` instead — you'll need to update the path in `lib/whisper.ts`.
+Uses OpenAI Whisper on CPU (slower but reliable). Typical 10-min video: 2-5 minutes.
+
+### Windows
+
+**Option 1: WSL2 (Recommended)**
+```bash
+# Inside WSL2, follow Linux instructions below
+```
+
+**Option 2: Native Windows**
+```powershell
+# Install yt-dlp and ffmpeg
+scoop install yt-dlp ffmpeg
+
+# Or use chocolatey
+choco install yt-dlp ffmpeg
+
+# Python virtual environment
+python -m venv .venv
+.venv\Scripts\activate
+pip install openai-whisper
+```
+
+**Important:** Update `.env` with Windows-style paths:
+```env
+WHISPER_CLI="C:\\Users\\YourName\\project\\.venv\\Scripts\\whisper.exe"
+WHISPER_PYTHON_BIN="C:\\Users\\YourName\\project\\.venv\\Scripts\\python.exe"
+```
 
 ### Linux
-
-Install dependencies via your package manager:
 
 ```bash
 # Debian/Ubuntu
 sudo apt install yt-dlp ffmpeg python3 python3-venv
 
-# Fedora
+# Fedora/RHEL
 sudo dnf install yt-dlp ffmpeg python3
+
+# Arch
+sudo pacman -S yt-dlp ffmpeg python
+
+# Python environment
+python3 -m venv .venv
+source .venv/bin/activate
+pip install openai-whisper
 ```
 
-**Important:** The `yt-dlp` path in `lib/whisper.ts` is hardcoded to `/opt/homebrew/bin/yt-dlp`. On Linux, update this to your actual path (e.g., `/usr/bin/yt-dlp`). You can find it with `which yt-dlp`.
+**NVIDIA GPU users:** Install CUDA-enabled PyTorch before Whisper for 5-10x faster transcription.
 
-NVIDIA GPU users can get significantly faster Whisper transcription with CUDA support. Install the CUDA version of PyTorch before installing Whisper.
-
-### Windows
-
-Windows support requires some additional setup:
-
-- **Recommended:** Use WSL2 and follow the Linux instructions
-- **Native:** Install Node.js, then install `yt-dlp` via pip, scoop, or winget. Install `ffmpeg` via scoop or chocolatey.
-
-**Important:** The current code has macOS-specific paths hardcoded in `lib/whisper.ts`. Windows users will need to update the `yt-dlp` path to match their installation.
+**Note:** The `yt-dlp` path is hardcoded to `/opt/homebrew/bin/yt-dlp` in `lib/whisper.ts`. Find your path with `which yt-dlp` and update if needed.
 
 ## Project Structure
 
@@ -186,6 +327,43 @@ prisma/
   schema.prisma                     # Database schema (Video model)
 ```
 
+## Troubleshooting
+
+### "spawn whisper ENOENT" error
+- Check that `WHISPER_CLI` and `WHISPER_PYTHON_BIN` paths in `.env` are correct
+- Verify the virtual environment is activated when installing Whisper
+- Use absolute paths, not relative paths
+- Restart the dev server after updating `.env`
+
+### Slow transcription
+- On Mac with Apple Silicon, install `mlx-whisper` for 3-5x speedup
+- Use smaller Whisper models (`tiny`, `base`, `small`) for faster transcription
+- Set `WHISPER_BACKEND="mlx"` in `.env` to force MLX usage
+
+### Memory issues
+- The app processes one video at a time to prevent memory exhaustion
+- For very long videos (>2 hours), transcription may fail on low-RAM systems
+- Consider using a smaller Whisper model or increasing available RAM
+
+### Rate limiting / bot detection
+- The app automatically tries multiple InnerTube clients
+- If YouTube blocks requests, wait a few minutes before retrying
+- Try disabling VPN if you're getting consistent 403 errors
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues or pull requests.
+
 ## License
 
-ISC
+MIT License - feel free to use, modify, and distribute.
+
+## Credits
+
+Built by [lifesized](https://github.com/lifesized) out of necessity and frustration with expensive transcription services.
+
+## Related Projects
+
+- [OpenAI Whisper](https://github.com/openai/whisper)
+- [MLX Whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper)
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp)

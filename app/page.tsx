@@ -317,6 +317,11 @@ function HomeInner() {
                 : item
             )
           );
+
+          // Remove completed item from queue after a short delay
+          setTimeout(() => {
+            updateQueue((prev) => prev.filter((_, i) => i !== idx));
+          }, 2500);
         } else {
           let errorMsg = data.error || "Failed";
           if (res.status === 429) {
@@ -471,13 +476,14 @@ function HomeInner() {
                     </IconButton>
                   )}
                 </div>
-                <button
-                  type="submit"
-                  disabled={!url.trim()}
-                  className="shrink-0 rounded-full border border-white/20 bg-white/10 px-8 py-3.5 font-(family-name:--font-geist-pixel) text-[15px] font-medium tracking-[1px] text-white shadow-[0_8px_32px_-12px_rgba(0,0,0,0.4)] backdrop-blur-xl transition-all duration-150 hover:border-white/40 hover:bg-white/25 hover:shadow-[0_12px_48px_-16px_rgba(255,255,255,0.2)] active:bg-white/15 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
-                >
-                  {isProcessing ? "Add" : "Capture"}
-                </button>
+                {url.trim() && (
+                  <button
+                    type="submit"
+                    className="shrink-0 rounded-full border border-white/20 bg-white/10 px-8 py-3.5 font-(family-name:--font-geist-pixel) text-[15px] font-medium tracking-[1px] text-white shadow-[0_8px_32px_-12px_rgba(0,0,0,0.4)] backdrop-blur-xl transition-all duration-150 hover:border-white/40 hover:bg-white/25 hover:shadow-[0_12px_48px_-16px_rgba(255,255,255,0.2)] active:bg-white/15 active:scale-[0.98]"
+                  >
+                    {isProcessing ? "Add" : "Capture"}
+                  </button>
+                )}
               </div>
             </form>
 
@@ -507,9 +513,19 @@ function HomeInner() {
 
                 <div className="space-y-2">
                   {queue.map((item, idx) => (
-                    <div
+                    <button
                       key={idx}
-                      className="rounded-xl border border-white/10 bg-[hsl(var(--panel-2))] px-4 py-3"
+                      onClick={() => {
+                        if (item.status === "completed" && item.id) {
+                          selectTranscript(item.id);
+                        }
+                      }}
+                      disabled={item.status !== "completed"}
+                      className={`w-full rounded-xl border border-white/10 bg-[hsl(var(--panel-2))] px-4 py-3 text-left transition ${
+                        item.status === "completed"
+                          ? "cursor-pointer hover:bg-white/5"
+                          : "cursor-default"
+                      }`}
                     >
                       <div className="flex items-start gap-3">
                         {/* Status indicator */}
@@ -570,18 +586,6 @@ function HomeInner() {
                             </p>
                           )}
                         </div>
-
-                        {/* View button for completed items */}
-                        {item.status === "completed" && item.id && (
-                          <Button
-                            onClick={() => selectTranscript(item.id!)}
-                            variant="secondary"
-                            size="sm"
-                            className="shrink-0"
-                          >
-                            View →
-                          </Button>
-                        )}
                       </div>
 
                       {/* Progress bar for processing item */}
@@ -607,7 +611,7 @@ function HomeInner() {
                           </div>
                         </div>
                       )}
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -624,7 +628,7 @@ function HomeInner() {
               />
               <IconButton
                 onClick={() => setLibraryLayout("tiles")}
-                className={libraryLayout === "tiles" ? "bg-white/10 text-white" : ""}
+                className={`shrink-0 ${libraryLayout === "tiles" ? "bg-white/10 text-white" : ""}`}
                 title="Tiles view"
               >
                 <svg
@@ -645,7 +649,7 @@ function HomeInner() {
               </IconButton>
               <IconButton
                 onClick={() => setLibraryLayout("list")}
-                className={libraryLayout === "list" ? "bg-white/10 text-white" : ""}
+                className={`shrink-0 ${libraryLayout === "list" ? "bg-white/10 text-white" : ""}`}
                 title="List view"
               >
                 <svg
@@ -701,7 +705,7 @@ function HomeInner() {
                           <img
                             src={t.thumbnailUrl}
                             alt={t.title}
-                            className="h-24 w-full object-cover"
+                            className="h-24 w-full object-cover opacity-40 sepia saturate-50 brightness-110"
                           />
                         ) : (
                           <div className="flex h-24 items-center justify-center bg-white/5 text-xs text-white/25">

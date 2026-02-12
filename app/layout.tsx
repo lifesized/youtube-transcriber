@@ -20,18 +20,14 @@ export default function RootLayout({
       <body
         className={`${GeistSans.className} ${GeistMono.variable} ${GeistPixelSquare.variable} flex min-h-screen flex-col bg-[hsl(var(--bg))] text-[hsl(var(--text))] antialiased`}
       >
-        <nav className="border-b border-white/10 bg-[hsl(var(--bg))]/70 backdrop-blur">
-          <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-            <Link href="/" className="text-sm font-semibold tracking-wide text-white">
-              Transcript Capture
-            </Link>
-          </div>
-        </nav>
         <main className="flex-1">{children}</main>
         <footer className="border-t border-white/10 bg-[hsl(var(--bg))]/70">
           <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
             <span className="text-xs text-white/35">
-              This is a project by{" "}
+              <Link href="/about" className="text-white/60 hover:text-white">
+                about
+              </Link>{" "}
+              this project by{" "}
               <a
                 href="https://github.com/lifesized"
                 target="_blank"
