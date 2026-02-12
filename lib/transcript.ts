@@ -21,31 +21,50 @@ export class RateLimitError extends Error {
 }
 
 /**
- * Fetch with retry on HTTP 429 (rate-limit) responses.
+ * Fetch with retry on HTTP 429 (rate-limit) and timeout responses.
  * Max 3 retries with exponential backoff: 2s, 4s, 8s.
  */
 async function fetchWithRetry(
   url: string,
   init?: RequestInit,
-  maxRetries = 3
+  maxRetries = 3,
+  timeoutMs = 10000
 ): Promise<Response> {
   let lastResponse: Response | undefined;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const res = await fetch(url, init);
+    try {
+      const res = await fetch(url, {
+        ...init,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
 
-    if (res.status !== 429) {
-      return res;
-    }
+      if (res.status !== 429) {
+        return res;
+      }
 
-    lastResponse = res;
+      lastResponse = res;
 
-    if (attempt < maxRetries) {
-      const delay = Math.pow(2, attempt + 1) * 1000; // 2s, 4s, 8s
-      console.log(
-        `[transcript] 429 rate-limited on attempt ${attempt + 1}/${maxRetries + 1}, retrying in ${delay / 1000}s...`
-      );
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      if (attempt < maxRetries) {
+        const delay = Math.pow(2, attempt + 1) * 1000; // 2s, 4s, 8s
+        console.log(
+          `[transcript] 429 rate-limited on attempt ${attempt + 1}/${maxRetries + 1}, retrying in ${delay / 1000}s...`
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name === "TimeoutError") {
+        console.log(
+          `[transcript] Request timed out on attempt ${attempt + 1}/${maxRetries + 1}`
+        );
+        if (attempt < maxRetries) {
+          const delay = Math.pow(2, attempt + 1) * 1000;
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue;
+        }
+        throw new Error(`Request timed out after ${maxRetries + 1} attempts`);
+      }
+      throw err;
     }
   }
 
@@ -59,7 +78,7 @@ async function fetchWithRetry(
 async function fetchMetadata(videoId: string): Promise<VideoMetadata> {
   const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
 
-  const res = await fetch(oembedUrl);
+  const res = await fetch(oembedUrl, { signal: AbortSignal.timeout(5000) });
 
   if (!res.ok) {
     if (res.status === 401) {
@@ -291,7 +310,7 @@ async function fetchTranscriptWebFallback(
 
   // Extract ytInitialPlayerResponse JSON from the page HTML
   const jsonMatch = html.match(
-    /var\s+ytInitialPlayerResponse\s*=\s*(\{[\s\S]+?\});\s*<\/script>/
+    /ytInitialPlayerResponse\s*=\s*(\{[\s\S]+?\});\s*(?:<\/script>|var\s)/
   );
 
   if (!jsonMatch) {
@@ -374,13 +393,26 @@ export async function getVideoTranscript(
 ): Promise<VideoTranscriptResult> {
   const videoId = extractVideoId(url);
 
-  const [metadata, transcript] = await Promise.all([
-    fetchMetadata(videoId),
-    fetchTranscript(videoId),
+  const result = await Promise.race([
+    (async () => {
+      const [metadata, transcript] = await Promise.all([
+        fetchMetadata(videoId),
+        fetchTranscript(videoId),
+      ]);
+      return { ...metadata, transcript };
+    })(),
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () =>
+          reject(
+            new Error(
+              "Transcript capture timed out after 45 seconds. Please try again."
+            )
+          ),
+        45000
+      )
+    ),
   ]);
 
-  return {
-    ...metadata,
-    transcript,
-  };
+  return result;
 }
