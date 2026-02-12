@@ -5,7 +5,13 @@ import path from "path";
 import type { TranscriptSegment } from "./types";
 
 const YTDLP_PATH = "/opt/homebrew/bin/yt-dlp";
-const WHISPER_CLI = path.join(process.cwd(), ".venv/bin/whisper");
+const PYTHON_BIN = path.join(process.cwd(), ".venv/bin/python");
+const OPENAI_WHISPER_CLI = path.join(process.cwd(), ".venv/bin/whisper");
+const WHISPER_BACKEND_OVERRIDE = process.env.WHISPER_BACKEND?.trim().toLowerCase();
+const WHISPER_DEVICE_OVERRIDE = process.env.WHISPER_DEVICE?.trim().toLowerCase();
+const MLX_WHISPER_MODEL_OVERRIDE = process.env.MLX_WHISPER_MODEL?.trim();
+
+type WhisperBackend = "mlx" | "openai";
 
 interface WhisperJsonSegment {
   start: number;
@@ -33,22 +39,82 @@ function execFileAsync(
   });
 }
 
-function getWhisperDevice(): string {
+function getWhisperBackend(): WhisperBackend {
+  if (WHISPER_BACKEND_OVERRIDE === "mlx" || WHISPER_BACKEND_OVERRIDE === "openai") {
+    return WHISPER_BACKEND_OVERRIDE;
+  }
+  if (WHISPER_BACKEND_OVERRIDE && WHISPER_BACKEND_OVERRIDE !== "auto") {
+    console.warn(
+      `[whisper] Ignoring invalid WHISPER_BACKEND="${process.env.WHISPER_BACKEND}". Use "auto", "mlx", or "openai".`
+    );
+  }
+  if (process.platform === "darwin" && os.arch() === "arm64") {
+    return "mlx";
+  }
+  return "openai";
+}
+
+function getOpenAiWhisperDevice(): string {
+  if (WHISPER_DEVICE_OVERRIDE === "cpu" || WHISPER_DEVICE_OVERRIDE === "mps") {
+    return WHISPER_DEVICE_OVERRIDE;
+  }
+  if (WHISPER_DEVICE_OVERRIDE && WHISPER_DEVICE_OVERRIDE !== "auto") {
+    console.warn(
+      `[whisper] Ignoring invalid WHISPER_DEVICE="${process.env.WHISPER_DEVICE}". Use "auto", "cpu", or "mps".`
+    );
+  }
   if (process.platform === "darwin" && os.arch() === "arm64") {
     return "mps";
   }
   return "cpu";
 }
 
+function getWhisperTimeoutMs(): number {
+  const raw = process.env.WHISPER_TIMEOUT_MS;
+  const parsed = raw ? Number(raw) : NaN;
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+  return 480_000;
+}
+
+async function isMlxWhisperAvailable(): Promise<boolean> {
+  try {
+    await execFileAsync(
+      PYTHON_BIN,
+      ["-c", "import importlib.util,sys;sys.exit(0 if importlib.util.find_spec('mlx_whisper') else 1)"],
+      { timeout: 5000 }
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function expectedJsonPath(audioPath: string, outputDir: string): string {
+  const baseName = path.basename(audioPath, path.extname(audioPath));
+  return path.join(outputDir, `${baseName}.json`);
+}
+
+async function ensureExpectedOutput(audioPath: string, outputDir: string, label: string): Promise<void> {
+  const jsonPath = expectedJsonPath(audioPath, outputDir);
+  try {
+    await fs.access(jsonPath);
+  } catch {
+    throw new Error(`${label} produced no output (expected ${jsonPath})`);
+  }
+}
+
 /**
- * Run Whisper CLI on an audio file with a specific device.
+ * Run OpenAI Whisper CLI on an audio file with a specific device.
  * Throws if the expected JSON output is not produced (e.g., MPS silently skips on NaN).
  */
-async function runWhisperWithDevice(
+async function runOpenAiWhisperWithDevice(
   audioPath: string,
   outputDir: string,
   model: string,
-  device: string
+  device: string,
+  timeoutMs: number
 ): Promise<void> {
   const args = [
     audioPath,
@@ -59,17 +125,53 @@ async function runWhisperWithDevice(
   if (device !== "cpu") {
     args.push("--device", device);
   }
-  await execFileAsync(WHISPER_CLI, args, { timeout: 600000 });
-
-  // Whisper may silently skip files on MPS failures (exit 0 but no output).
-  // Verify that the expected JSON output was actually produced.
-  const baseName = path.basename(audioPath, path.extname(audioPath));
-  const expectedJson = path.join(outputDir, `${baseName}.json`);
-  try {
-    await fs.access(expectedJson);
-  } catch {
-    throw new Error(`Whisper produced no output on device "${device}" (expected ${expectedJson})`);
+  // MPS can produce unstable FP16 output on some systems/audio (NaNs -> empty output).
+  // Force FP32 on MPS for consistency.
+  if (device === "mps") {
+    args.push("--fp16", "False");
   }
+  await execFileAsync(OPENAI_WHISPER_CLI, args, { timeout: timeoutMs });
+  await ensureExpectedOutput(audioPath, outputDir, `OpenAI Whisper (${device})`);
+}
+
+function getMlxModelCandidates(model: string): string[] {
+  if (MLX_WHISPER_MODEL_OVERRIDE) {
+    return [MLX_WHISPER_MODEL_OVERRIDE];
+  }
+  const candidates = [
+    model,
+    `mlx-community/whisper-${model}-mlx`,
+    `mlx-community/whisper-${model}`,
+  ];
+  return [...new Set(candidates)];
+}
+
+async function runMlxWhisper(audioPath: string, outputDir: string, model: string, timeoutMs: number): Promise<void> {
+  const jsonPath = expectedJsonPath(audioPath, outputDir);
+  const candidates = getMlxModelCandidates(model);
+  let lastError = "";
+
+  for (const candidate of candidates) {
+    try {
+      // Use Python module API directly to avoid CLI drift and keep output shape stable.
+      const script =
+        "import json, sys;" +
+        "from mlx_whisper import transcribe;" +
+        "audio, model_name, out_path = sys.argv[1:4];" +
+        "res = transcribe(audio, path_or_hf_repo=model_name);" +
+        "with open(out_path, 'w', encoding='utf-8') as f: json.dump({'segments': res.get('segments', [])}, f)";
+      await execFileAsync(PYTHON_BIN, ["-c", script, audioPath, candidate, jsonPath], {
+        timeout: timeoutMs,
+      });
+      await ensureExpectedOutput(audioPath, outputDir, `MLX Whisper (${candidate})`);
+      return;
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      console.log(`[whisper] mlx candidate failed (${candidate}): ${lastError}`);
+    }
+  }
+
+  throw new Error(`MLX backend failed for all model candidates: ${candidates.join(", ")} (${lastError})`);
 }
 
 /**
@@ -104,8 +206,8 @@ async function downloadAudio(videoId: string, outputDir: string): Promise<string
 }
 
 /**
- * Run Whisper CLI on an audio file and return parsed transcript segments.
- * Automatically uses MPS (Metal) on Apple Silicon, with CPU fallback.
+ * Run Whisper on an audio file and return parsed transcript segments.
+ * On Apple Silicon, MLX is preferred when available; otherwise OpenAI Whisper is used.
  */
 async function runWhisper(
   audioPath: string,
@@ -114,19 +216,52 @@ async function runWhisper(
 ): Promise<TranscriptSegment[]> {
   await fs.mkdir(outputDir, { recursive: true });
 
-  const device = getWhisperDevice();
-  console.log(`[whisper] Transcribing with model "${model}" on device "${device}"...`);
+  const requestedBackend = getWhisperBackend();
+  const timeoutMs = getWhisperTimeoutMs();
+  const openAiDevice = getOpenAiWhisperDevice();
+  const mlxAvailable = await isMlxWhisperAvailable();
+  const backend = requestedBackend === "mlx" && !mlxAvailable ? "openai" : requestedBackend;
+  if (requestedBackend === "mlx" && !mlxAvailable) {
+    if (WHISPER_BACKEND_OVERRIDE === "mlx") {
+      throw new Error(
+        'WHISPER_BACKEND=mlx was requested but Python module "mlx_whisper" is not installed in .venv.'
+      );
+    }
+    console.log('[whisper] MLX backend requested by auto-detect but "mlx_whisper" is missing; using OpenAI Whisper.');
+  }
+  console.log(
+    `[whisper] Transcribing with model "${model}" (backend="${backend}", timeout=${timeoutMs}ms)...`
+  );
   const startTime = Date.now();
 
-  let usedDevice = device;
+  let usedBackend = backend;
+  let usedDevice = backend === "mlx" ? "apple_silicon" : openAiDevice;
+  let fallbackReason: string | null = null;
+
   try {
-    await runWhisperWithDevice(audioPath, outputDir, model, device);
+    if (backend === "mlx") {
+      await runMlxWhisper(audioPath, outputDir, model, timeoutMs);
+    } else {
+      await runOpenAiWhisperWithDevice(audioPath, outputDir, model, openAiDevice, timeoutMs);
+      usedDevice = openAiDevice;
+    }
   } catch (err) {
-    if (device !== "cpu") {
-      console.log(`[whisper] ${device} failed, falling back to CPU...`);
+    const reason = err instanceof Error ? err.message : String(err);
+
+    if (backend === "mlx") {
+      fallbackReason = reason;
+      console.log(`[whisper] mlx failed (${reason}), falling back to OpenAI Whisper on CPU...`);
       await fs.rm(outputDir, { recursive: true, force: true }).catch(() => {});
       await fs.mkdir(outputDir, { recursive: true });
-      await runWhisperWithDevice(audioPath, outputDir, model, "cpu");
+      await runOpenAiWhisperWithDevice(audioPath, outputDir, model, "cpu", timeoutMs);
+      usedBackend = "openai";
+      usedDevice = "cpu";
+    } else if (openAiDevice !== "cpu") {
+      fallbackReason = reason;
+      console.log(`[whisper] ${openAiDevice} failed (${reason}), falling back to CPU...`);
+      await fs.rm(outputDir, { recursive: true, force: true }).catch(() => {});
+      await fs.mkdir(outputDir, { recursive: true });
+      await runOpenAiWhisperWithDevice(audioPath, outputDir, model, "cpu", timeoutMs);
       usedDevice = "cpu";
     } else {
       throw err;
@@ -135,9 +270,7 @@ async function runWhisper(
 
   const wallTime = ((Date.now() - startTime) / 1000).toFixed(1);
 
-  // Whisper outputs a JSON file named after the input file
-  const baseName = path.basename(audioPath, path.extname(audioPath));
-  const jsonPath = path.join(outputDir, `${baseName}.json`);
+  const jsonPath = expectedJsonPath(audioPath, outputDir);
 
   const jsonContent = await fs.readFile(jsonPath, "utf-8");
   const whisperOutput: WhisperJsonOutput = JSON.parse(jsonContent);
@@ -149,7 +282,7 @@ async function runWhisper(
   }));
 
   console.log(
-    `[whisper] Transcription complete: ${segments.length} segments, model=${model}, device=${usedDevice}, wall-clock=${wallTime}s`
+    `[whisper] Transcription complete: ${segments.length} segments, model=${model}, requested_backend=${requestedBackend}, used_backend=${usedBackend}, used_device=${usedDevice}, fallback_reason=${fallbackReason ?? "none"}, wall-clock=${wallTime}s`
   );
 
   return segments;
