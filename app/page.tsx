@@ -190,7 +190,10 @@ export default function Home() {
       progress: 0,
       statusText: "",
     }));
-    updateQueue((prev) => [...prev, ...newItems]);
+
+    // Update ref synchronously so processNext can see new items immediately
+    queueRef.current = [...queueRef.current, ...newItems];
+    setQueue([...queueRef.current]);
 
     if (!processingRef.current) {
       processNext();
@@ -222,19 +225,13 @@ export default function Home() {
   const hasQueue = queue.length > 0;
 
   return (
-    <div
-      className={`mx-auto max-w-xl px-4 ${hasQueue ? "py-8" : "flex min-h-[calc(100vh-57px)] flex-col items-center justify-center"}`}
-    >
-      {!hasQueue && (
-        <>
-          <h1 className="mb-2 text-3xl font-bold">
-            YouTube Transcript Capture
-          </h1>
-          <p className="mb-8 text-center text-gray-500">
-            Paste a YouTube video URL to capture and save its transcript.
-          </p>
-        </>
-      )}
+    <div className="mx-auto max-w-xl px-4 py-12">
+      <h1 className="mb-2 text-center text-3xl font-bold">
+        YouTube Transcript Capture
+      </h1>
+      <p className="mb-8 text-center text-gray-500">
+        Paste a YouTube video URL to capture and save its transcript.
+      </p>
 
       <form onSubmit={handleSubmit} className="w-full">
         <div className="flex gap-2">
