@@ -369,24 +369,19 @@ export default function Home() {
 
                   {/* Content */}
                   <div className="min-w-0 flex-1">
-                    {item.status === "completed" && item.id ? (
-                      <Link
-                        href={`/transcripts/${item.id}`}
-                        className="text-sm font-medium text-blue-600 hover:underline"
-                      >
-                        {item.title || item.url}
-                      </Link>
+                    {item.title ? (
+                      <p className="truncate text-sm font-medium text-gray-900">
+                        {item.title}
+                      </p>
                     ) : (
-                      <>
-                        {item.title && (
-                          <p className="truncate text-sm font-medium text-gray-900">
-                            {item.title}
-                          </p>
-                        )}
-                        <p className="truncate text-xs text-gray-400">
-                          {item.url}
-                        </p>
-                      </>
+                      <p className="truncate text-sm text-gray-700">
+                        {item.url}
+                      </p>
+                    )}
+                    {item.title && (
+                      <p className="truncate text-xs text-gray-400">
+                        {item.url}
+                      </p>
                     )}
                     {item.status === "failed" && item.error && (
                       <p className="mt-0.5 text-xs text-red-500">
@@ -394,11 +389,31 @@ export default function Home() {
                       </p>
                     )}
                   </div>
+
+                  {/* View button for completed items */}
+                  {item.status === "completed" && item.id && (
+                    <Link
+                      href={`/transcripts/${item.id}`}
+                      className="flex-shrink-0 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-100"
+                    >
+                      View →
+                    </Link>
+                  )}
                 </div>
 
                 {/* Progress bar for processing item */}
                 {item.status === "processing" && (
                   <div className="mt-2">
+                    <div className="mb-1 flex items-center justify-between">
+                      {item.statusText && (
+                        <p className="font-[family-name:var(--font-geist-pixel-square)] text-[10px] uppercase tracking-wider text-blue-400/70">
+                          {item.statusText}
+                        </p>
+                      )}
+                      <span className="font-mono text-[10px] font-medium tabular-nums text-blue-500">
+                        {Math.round(item.progress)}%
+                      </span>
+                    </div>
                     <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
                       <div
                         className="h-full rounded-full bg-gradient-to-r from-blue-500 via-blue-400 to-blue-500 transition-all duration-700 ease-out"
@@ -409,11 +424,6 @@ export default function Home() {
                         }}
                       />
                     </div>
-                    {item.statusText && (
-                      <p className="mt-1.5 font-[family-name:var(--font-geist-pixel-square)] text-[10px] uppercase tracking-wider text-blue-400/70">
-                        {item.statusText}
-                      </p>
-                    )}
                   </div>
                 )}
               </div>

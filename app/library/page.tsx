@@ -30,6 +30,7 @@ export default function LibraryPage() {
   const [search, setSearch] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const fetchTranscripts = useCallback(async (query: string) => {
     try {
@@ -59,6 +60,26 @@ export default function LibraryPage() {
     }, 300);
     return () => clearTimeout(timer);
   }, [search, fetchTranscripts]);
+
+  async function handleCopy(id: string) {
+    try {
+      const res = await fetch(`/api/transcripts/${id}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const segments = JSON.parse(data.transcript);
+      const text = segments.map((seg: { startMs: number; text: string }) => {
+        const totalSeconds = Math.floor(seg.startMs / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        return `[${minutes}:${seconds.toString().padStart(2, "0")}] ${seg.text}`;
+      }).join('\n');
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (e) {
+      console.error('Failed to copy:', e);
+    }
+  }
 
   async function handleDelete() {
     if (!deleteId) return;
@@ -155,15 +176,8 @@ export default function LibraryPage() {
                   {t.title}
                 </Link>
 
-                {/* Author & source badge */}
-                <div className="mb-2 flex items-center gap-1.5">
-                  <p className="text-xs text-gray-500">{t.author}</p>
-                  {t.source === "whisper_local" && (
-                    <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">
-                      AI
-                    </span>
-                  )}
-                </div>
+                {/* Author */}
+                <p className="mb-2 text-xs text-gray-500">{t.author}</p>
 
                 {/* Date */}
                 <p className="mb-3 text-xs text-gray-400">
@@ -174,15 +188,39 @@ export default function LibraryPage() {
                 <div className="flex items-center gap-2">
                   <a
                     href={`/api/transcripts/${t.id}/download`}
-                    className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                    title="Download as Markdown"
+                    className="rounded border border-gray-300 p-1.5 text-gray-600 hover:bg-gray-50"
                   >
-                    Download
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10 3v10m0 0l-3.5-3.5M10 13l3.5-3.5" />
+                      <path d="M3 15v1a1 1 0 001 1h12a1 1 0 001-1v-1" />
+                    </svg>
                   </a>
                   <button
-                    onClick={() => setDeleteId(t.id)}
-                    className="rounded border border-red-200 px-3 py-1 text-xs text-red-600 hover:bg-red-50"
+                    onClick={() => handleCopy(t.id)}
+                    title={copiedId === t.id ? "Copied!" : "Copy transcript"}
+                    className="rounded border border-gray-300 p-1.5 text-gray-600 hover:bg-gray-50"
                   >
-                    Delete
+                    {copiedId === t.id ? (
+                      <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M5 10.5l3 3 7-7" />
+                      </svg>
+                    ) : (
+                      <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="7" y="7" width="9" height="9" rx="1" />
+                        <path d="M4 13V4a1 1 0 011-1h9" />
+                      </svg>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setDeleteId(t.id)}
+                    title="Delete"
+                    className="rounded border border-gray-300 p-1.5 text-gray-600 hover:text-red-600 hover:bg-red-50"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 5h12M8 5V3.5a1 1 0 011-1h2a1 1 0 011 1V5m2 0v10.5a1.5 1.5 0 01-1.5 1.5h-5A1.5 1.5 0 016 15.5V5" />
+                      <path d="M9 9v5M11 9v5" />
+                    </svg>
                   </button>
                 </div>
               </div>

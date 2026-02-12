@@ -38,6 +38,7 @@ export default function TranscriptPage() {
   const [video, setVideo] = useState<VideoRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     async function fetchVideo() {
@@ -98,11 +99,6 @@ export default function TranscriptPage() {
         )}
         <div className="mb-2 flex items-center gap-2">
           <h1 className="text-2xl font-bold">{video.title}</h1>
-          {video.source === "whisper_local" && (
-            <span className="inline-block rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-700">
-              AI-transcribed
-            </span>
-          )}
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
           <span>
@@ -133,12 +129,39 @@ export default function TranscriptPage() {
 
       {/* Actions */}
       <div className="mb-6 flex items-center gap-4">
-        <a
-          href={`/api/transcripts/${video.id}/download`}
-          className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
-        >
-          Download as Markdown
-        </a>
+        <div className="flex items-center gap-2">
+          <a
+            href={`/api/transcripts/${video.id}/download`}
+            title="Download as Markdown"
+            className="rounded-lg border border-gray-300 p-2 text-gray-600 hover:bg-gray-50"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10 3v10m0 0l-3.5-3.5M10 13l3.5-3.5" />
+              <path d="M3 15v1a1 1 0 001 1h12a1 1 0 001-1v-1" />
+            </svg>
+          </a>
+          <button
+            title={copied ? "Copied!" : "Copy transcript"}
+            onClick={() => {
+              const text = segments.map(seg => `[${formatTimestamp(seg.startMs)}] ${seg.text}`).join('\n');
+              navigator.clipboard.writeText(text);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            }}
+            className="rounded-lg border border-gray-300 p-2 text-gray-600 hover:bg-gray-50"
+          >
+            {copied ? (
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 10.5l3 3 7-7" />
+              </svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="7" y="7" width="9" height="9" rx="1" />
+                <path d="M4 13V4a1 1 0 011-1h9" />
+              </svg>
+            )}
+          </button>
+        </div>
         <Link
           href="/library"
           className="text-sm text-gray-500 hover:text-gray-700"

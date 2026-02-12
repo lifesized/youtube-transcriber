@@ -1,8 +1,11 @@
-import { execFile } from "child_process";
+import { execFile, execSync } from "child_process";
 import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
 import type { TranscriptSegment } from "./types";
+
+// Concurrency lock: only one transcription at a time to prevent memory exhaustion
+let transcriptionInProgress = false;
 
 const YTDLP_PATH = "/opt/homebrew/bin/yt-dlp";
 const PYTHON_BIN = path.join(process.cwd(), ".venv/bin/python");
@@ -29,15 +32,51 @@ function execFileAsync(
   options?: { timeout?: number }
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    execFile(cmd, args, { timeout: options?.timeout ?? 300000 }, (err, stdout, stderr) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve({ stdout, stderr });
-      }
+    const child = execFile(cmd, args, { maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
+      clearTimeout(timer);
+      if (err) reject(err);
+      else resolve({ stdout, stderr });
     });
+
+    const timeoutMs = options?.timeout ?? 300000;
+    const timer = setTimeout(() => {
+      console.log(`[whisper] Process timed out after ${timeoutMs}ms, sending SIGTERM...`);
+      child.kill('SIGTERM');
+      // Force kill after 5 seconds if still alive
+      setTimeout(() => {
+        try {
+          child.kill('SIGKILL');
+          console.log('[whisper] Sent SIGKILL after SIGTERM timeout');
+        } catch { /* already dead */ }
+      }, 5000);
+    }, timeoutMs);
   });
 }
+
+function cleanupOrphanedProcesses(): void {
+  const patterns = ["mlx_whisper", "openai-whisper", "whisper.*--model", "yt-dlp.*youtube"];
+  for (const pattern of patterns) {
+    try {
+      const pids = execSync(
+        `pgrep -f "${pattern}" 2>/dev/null || true`,
+        { encoding: "utf-8" }
+      ).trim();
+      if (pids) {
+        const pidList = pids.split("\n").filter(Boolean);
+        console.log(`[whisper] Found ${pidList.length} orphaned process(es) matching "${pattern}": ${pidList.join(", ")}`);
+        for (const pid of pidList) {
+          try {
+            process.kill(parseInt(pid, 10), "SIGKILL");
+            console.log(`[whisper] Killed orphaned process ${pid}`);
+          } catch { /* already dead */ }
+        }
+      }
+    } catch { /* pgrep not available or no matches */ }
+  }
+}
+
+// Run cleanup on module load
+cleanupOrphanedProcesses();
 
 function getWhisperBackend(): WhisperBackend {
   if (WHISPER_BACKEND_OVERRIDE === "mlx" || WHISPER_BACKEND_OVERRIDE === "openai") {
@@ -292,14 +331,24 @@ async function runWhisper(
   return segments;
 }
 
+export function isTranscriptionInProgress(): boolean {
+  return transcriptionInProgress;
+}
+
 /**
  * Transcribe a YouTube video using local Whisper.
  * Downloads audio via yt-dlp, runs Whisper CLI, parses output, cleans up temp files.
+ * Only one transcription can run at a time to prevent memory exhaustion.
  */
 export async function transcribeWithWhisper(
   videoId: string,
   model: string = "base"
 ): Promise<TranscriptSegment[]> {
+  if (transcriptionInProgress) {
+    throw new Error("A transcription is already in progress. Please wait and try again.");
+  }
+
+  transcriptionInProgress = true;
   const audioDir = path.join("/tmp", "yt-audio");
   const whisperOutDir = path.join("/tmp", "whisper-out", videoId);
 
@@ -317,6 +366,7 @@ export async function transcribeWithWhisper(
 
     return segments;
   } finally {
+    transcriptionInProgress = false;
     // Clean up temp files
     try {
       const audioFile = path.join(audioDir, `${videoId}.mp3`);

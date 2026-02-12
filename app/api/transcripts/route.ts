@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { extractVideoId } from "@/lib/youtube";
 import { getVideoTranscript, RateLimitError, BotDetectionError, NoCaptionsError } from "@/lib/transcript";
+import { isTranscriptionInProgress } from "@/lib/whisper";
 
 export async function POST(request: NextRequest) {
   let body: { url?: string };
@@ -39,6 +40,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(existing);
     }
     // Existing record has empty transcript — re-fetch and update below
+  }
+
+  if (isTranscriptionInProgress()) {
+    return NextResponse.json(
+      { error: "A transcription is already in progress. Please wait and try again." },
+      { status: 429 }
+    );
   }
 
   try {
