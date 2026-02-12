@@ -366,6 +366,8 @@ Built by [lifesized](https://github.com/lifesized) out of necessity and frustrat
 
 **Development time:** ~7 hours from concept to production-ready application.
 
+**Built with:** Testing [Intent by Augment](https://www.augmentcode.com/intent), [Cursor](https://cursor.sh), [Codex](https://openai.com/index/openai-codex/), [Claude Code](https://github.com/anthropics/claude-code), and [Ghostty](https://ghostty.org).
+
 ## Related Projects
 
 - [OpenAI Whisper](https://github.com/openai/whisper)
