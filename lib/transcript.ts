@@ -11,6 +11,49 @@ export type { TranscriptSegment, VideoMetadata, VideoTranscriptResult };
 const INNERTUBE_API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
 
 /**
+ * Custom error class for 429 rate-limit failures.
+ */
+export class RateLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RateLimitError";
+  }
+}
+
+/**
+ * Fetch with retry on HTTP 429 (rate-limit) responses.
+ * Max 3 retries with exponential backoff: 2s, 4s, 8s.
+ */
+async function fetchWithRetry(
+  url: string,
+  init?: RequestInit,
+  maxRetries = 3
+): Promise<Response> {
+  let lastResponse: Response | undefined;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, init);
+
+    if (res.status !== 429) {
+      return res;
+    }
+
+    lastResponse = res;
+
+    if (attempt < maxRetries) {
+      const delay = Math.pow(2, attempt + 1) * 1000; // 2s, 4s, 8s
+      console.log(
+        `[transcript] 429 rate-limited on attempt ${attempt + 1}/${maxRetries + 1}, retrying in ${delay / 1000}s...`
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  // All retries exhausted with 429
+  return lastResponse!;
+}
+
+/**
  * Fetch video metadata using the YouTube oEmbed API (no API key required).
  */
 async function fetchMetadata(videoId: string): Promise<VideoMetadata> {
@@ -60,11 +103,69 @@ function decodeEntities(text: string): string {
 }
 
 /**
- * Fetch time-coded transcript segments for a YouTube video using the
- * InnerTube API with the Android client (which reliably returns caption URLs).
+ * Select the best caption track from a list of tracks.
+ * Prefers manual English, then auto-generated English, then first available.
  */
-async function fetchTranscript(videoId: string): Promise<TranscriptSegment[]> {
-  // Step 1: Get caption track URLs via InnerTube player API (Android client)
+function selectCaptionTrack(
+  captionTracks: Array<{ vssId?: string; baseUrl: string }>
+): { vssId?: string; baseUrl: string } {
+  return (
+    captionTracks.find((t) => t.vssId === ".en") ??
+    captionTracks.find((t) => t.vssId === "a.en") ??
+    captionTracks[0]
+  );
+}
+
+/**
+ * Parse caption XML into TranscriptSegment[].
+ * Handles both srv3 format (Android) and classic format (WEB).
+ */
+function parseCaptionXml(xml: string): TranscriptSegment[] {
+  const segments: TranscriptSegment[] = [];
+
+  if (xml.includes('<timedtext format="3">')) {
+    // srv3 format: <p t="ms" d="ms"> with <s> children containing text
+    const pRegex = /<p t="(\d+)" d="(\d+)"[^>]*>([\s\S]*?)<\/p>/g;
+    let match;
+    while ((match = pRegex.exec(xml)) !== null) {
+      const startMs = parseInt(match[1], 10);
+      const durationMs = parseInt(match[2], 10);
+      const rawContent = match[3];
+      const text = decodeEntities(rawContent.replace(/<[^>]+>/g, "")).trim();
+      if (text) {
+        segments.push({ text, startMs, durationMs });
+      }
+    }
+  } else {
+    // Classic format: <text start="seconds" dur="seconds">text</text>
+    const textRegex =
+      /<text start="([\d.]+)" dur="([\d.]+)"[^>]*>([\s\S]*?)<\/text>/g;
+    let match;
+    while ((match = textRegex.exec(xml)) !== null) {
+      const startSec = parseFloat(match[1]);
+      const durSec = parseFloat(match[2]);
+      const rawText = match[3];
+      const text = decodeEntities(rawText).replace(/<[^>]+>/g, "").trim();
+      if (text) {
+        segments.push({
+          text,
+          startMs: Math.round(startSec * 1000),
+          durationMs: Math.round(durSec * 1000),
+        });
+      }
+    }
+  }
+
+  return segments;
+}
+
+/**
+ * Fetch transcript via the InnerTube ANDROID client.
+ * Returns segments, or throws RateLimitError on 429 (after retries).
+ */
+async function fetchTranscriptAndroid(
+  videoId: string
+): Promise<TranscriptSegment[]> {
   const playerPayload = {
     context: {
       client: {
@@ -82,7 +183,7 @@ async function fetchTranscript(videoId: string): Promise<TranscriptSegment[]> {
     racyCheckOk: true,
   };
 
-  const playerRes = await fetch(
+  const playerRes = await fetchWithRetry(
     `https://www.youtube.com/youtubei/v1/player?key=${INNERTUBE_API_KEY}`,
     {
       method: "POST",
@@ -94,6 +195,12 @@ async function fetchTranscript(videoId: string): Promise<TranscriptSegment[]> {
       body: JSON.stringify(playerPayload),
     }
   );
+
+  if (playerRes.status === 429) {
+    throw new RateLimitError(
+      `YouTube rate-limited the InnerTube player API for video ${videoId}.`
+    );
+  }
 
   if (!playerRes.ok) {
     throw new Error(
@@ -119,18 +226,15 @@ async function fetchTranscript(videoId: string): Promise<TranscriptSegment[]> {
     );
   }
 
-  // Prefer manual English captions, fall back to auto-generated, then first available
-  const track =
-    captionTracks.find(
-      (t: { vssId?: string }) => t.vssId === ".en"
-    ) ??
-    captionTracks.find(
-      (t: { vssId?: string }) => t.vssId === "a.en"
-    ) ??
-    captionTracks[0];
+  const track = selectCaptionTrack(captionTracks);
 
-  // Step 2: Fetch caption XML
-  const captionRes = await fetch(track.baseUrl);
+  const captionRes = await fetchWithRetry(track.baseUrl);
+
+  if (captionRes.status === 429) {
+    throw new RateLimitError(
+      `YouTube rate-limited the caption download for video ${videoId}.`
+    );
+  }
 
   if (!captionRes.ok) {
     throw new Error(
@@ -146,45 +250,117 @@ async function fetchTranscript(videoId: string): Promise<TranscriptSegment[]> {
     );
   }
 
-  // Step 3: Parse the XML into TranscriptSegment[]
-  // The Android client returns srv3 format: <p t="timeMs" d="durMs">...<s>text</s>...</p>
-  // The WEB client would return: <text start="sec" dur="sec">text</text>
-  const segments: TranscriptSegment[] = [];
+  return parseCaptionXml(xml);
+}
 
-  if (xml.includes('<timedtext format="3">')) {
-    // srv3 format: <p t="ms" d="ms"> with <s> children containing text
-    const pRegex = /<p t="(\d+)" d="(\d+)"[^>]*>([\s\S]*?)<\/p>/g;
-    let match;
-    while ((match = pRegex.exec(xml)) !== null) {
-      const startMs = parseInt(match[1], 10);
-      const durationMs = parseInt(match[2], 10);
-      const rawContent = match[3];
-      // Extract text from <s> elements or use raw content
-      const text = decodeEntities(rawContent.replace(/<[^>]+>/g, "")).trim();
-      if (text) {
-        segments.push({ text, startMs, durationMs });
-      }
+/**
+ * Fallback: fetch transcript by scraping the YouTube watch page (WEB client).
+ * Used when the ANDROID client gets rate-limited.
+ */
+async function fetchTranscriptWebFallback(
+  videoId: string
+): Promise<TranscriptSegment[]> {
+  console.log(
+    `[transcript] ANDROID client rate-limited, trying WEB fallback for ${videoId}...`
+  );
+
+  const watchRes = await fetchWithRetry(
+    `https://www.youtube.com/watch?v=${videoId}`,
+    {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
     }
-  } else {
-    // Classic format: <text start="seconds" dur="seconds">text</text>
-    const textRegex = /<text start="([\d.]+)" dur="([\d.]+)"[^>]*>([\s\S]*?)<\/text>/g;
-    let match;
-    while ((match = textRegex.exec(xml)) !== null) {
-      const startSec = parseFloat(match[1]);
-      const durSec = parseFloat(match[2]);
-      const rawText = match[3];
-      const text = decodeEntities(rawText).replace(/<[^>]+>/g, "").trim();
-      if (text) {
-        segments.push({
-          text,
-          startMs: Math.round(startSec * 1000),
-          durationMs: Math.round(durSec * 1000),
-        });
-      }
-    }
+  );
+
+  if (watchRes.status === 429) {
+    throw new RateLimitError(
+      `YouTube rate-limited the watch page for video ${videoId}.`
+    );
   }
 
-  return segments;
+  if (!watchRes.ok) {
+    throw new Error(
+      `Failed to fetch watch page for video ${videoId} (HTTP ${watchRes.status}).`
+    );
+  }
+
+  const html = await watchRes.text();
+
+  // Extract ytInitialPlayerResponse JSON from the page HTML
+  const jsonMatch = html.match(
+    /var\s+ytInitialPlayerResponse\s*=\s*(\{[\s\S]+?\});\s*<\/script>/
+  );
+
+  if (!jsonMatch) {
+    throw new Error(
+      `Could not extract player response from watch page for video ${videoId}.`
+    );
+  }
+
+  let playerData: Record<string, unknown>;
+  try {
+    playerData = JSON.parse(jsonMatch[1]);
+  } catch {
+    throw new Error(
+      `Failed to parse player response JSON from watch page for video ${videoId}.`
+    );
+  }
+
+  const captions = playerData.captions as
+    | { playerCaptionsTracklistRenderer?: { captionTracks?: Array<{ vssId?: string; baseUrl: string }> } }
+    | undefined;
+  const captionTracks = captions?.playerCaptionsTracklistRenderer?.captionTracks;
+
+  if (!captionTracks || captionTracks.length === 0) {
+    throw new Error(
+      `Captions are disabled for video ${videoId}. The video owner has turned off captions.`
+    );
+  }
+
+  const track = selectCaptionTrack(captionTracks);
+
+  const captionRes = await fetchWithRetry(track.baseUrl);
+
+  if (captionRes.status === 429) {
+    throw new RateLimitError(
+      `YouTube rate-limited the caption download (WEB fallback) for video ${videoId}.`
+    );
+  }
+
+  if (!captionRes.ok) {
+    throw new Error(
+      `Failed to fetch captions (WEB fallback) for video ${videoId} (HTTP ${captionRes.status}).`
+    );
+  }
+
+  const xml = await captionRes.text();
+
+  if (!xml.trim()) {
+    throw new Error(
+      `Captions are disabled for video ${videoId}. The video owner has turned off captions.`
+    );
+  }
+
+  return parseCaptionXml(xml);
+}
+
+/**
+ * Fetch time-coded transcript segments for a YouTube video.
+ * Tries ANDROID InnerTube client first, falls back to WEB page scraping on 429.
+ */
+async function fetchTranscript(videoId: string): Promise<TranscriptSegment[]> {
+  try {
+    return await fetchTranscriptAndroid(videoId);
+  } catch (err) {
+    if (err instanceof RateLimitError) {
+      // ANDROID client got rate-limited — try WEB fallback
+      return await fetchTranscriptWebFallback(videoId);
+    }
+    throw err;
+  }
 }
 
 /**

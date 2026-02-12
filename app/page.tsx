@@ -30,7 +30,13 @@ export default function Home() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Something went wrong.");
+        if (res.status === 429) {
+          setError(
+            "YouTube is temporarily limiting requests. Please wait a minute and try again."
+          );
+        } else {
+          setError(data.error || "Something went wrong.");
+        }
         return;
       }
 

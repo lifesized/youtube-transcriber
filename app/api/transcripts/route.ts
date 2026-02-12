@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { extractVideoId } from "@/lib/youtube";
-import { getVideoTranscript } from "@/lib/transcript";
+import { getVideoTranscript, RateLimitError } from "@/lib/transcript";
 
 export async function POST(request: NextRequest) {
   let body: { url?: string };
@@ -60,6 +60,16 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(video, { status: existing ? 200 : 201 });
   } catch (err: unknown) {
+    if (err instanceof RateLimitError) {
+      return NextResponse.json(
+        {
+          error:
+            "YouTube is temporarily rate-limiting requests. Please wait a moment and try again.",
+        },
+        { status: 429 }
+      );
+    }
+
     const message = err instanceof Error ? err.message : "Unknown error";
 
     if (
