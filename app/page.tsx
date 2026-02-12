@@ -114,6 +114,25 @@ export default function Home() {
       );
       startProgressForItem(idx);
 
+      // Quick title fetch via oEmbed (non-blocking — don't fail if this errors)
+      try {
+        const oembedRes = await fetch(
+          `https://www.youtube.com/oembed?url=${encodeURIComponent(itemUrl)}&format=json`
+        );
+        if (oembedRes.ok) {
+          const oembed = await oembedRes.json();
+          if (oembed.title) {
+            updateQueue((prev) =>
+              prev.map((item, i) =>
+                i === idx ? { ...item, title: oembed.title } : item
+              )
+            );
+          }
+        }
+      } catch {
+        // Ignore — title is optional, we'll get it from the transcript API response
+      }
+
       try {
         const res = await fetch("/api/transcripts", {
           method: "POST",
@@ -289,7 +308,7 @@ export default function Home() {
       {hasQueue && (
         <div className="mt-6">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-700">
+            <h2 className="font-mono text-xs font-medium uppercase tracking-wider text-gray-500">
               {completedCount}/{totalCount} completed
             </h2>
             {!isProcessing && (
@@ -298,7 +317,7 @@ export default function Home() {
                   setQueue([]);
                   queueRef.current = [];
                 }}
-                className="text-xs text-gray-400 hover:text-gray-600"
+                className="font-mono text-[10px] uppercase tracking-wider text-gray-400 hover:text-gray-600"
               >
                 Clear
               </button>
@@ -318,25 +337,7 @@ export default function Home() {
                       <span className="inline-block h-3 w-3 rounded-full bg-gray-300" />
                     )}
                     {item.status === "processing" && (
-                      <svg
-                        className="h-3 w-3 animate-spin text-blue-500"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        />
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                        />
-                      </svg>
+                      <span className="inline-block h-3 w-3 rounded-full bg-blue-500" />
                     )}
                     {item.status === "completed" && (
                       <svg
@@ -376,9 +377,16 @@ export default function Home() {
                         {item.title || item.url}
                       </Link>
                     ) : (
-                      <p className="truncate text-sm text-gray-700">
-                        {item.url}
-                      </p>
+                      <>
+                        {item.title && (
+                          <p className="truncate text-sm font-medium text-gray-900">
+                            {item.title}
+                          </p>
+                        )}
+                        <p className="truncate text-xs text-gray-400">
+                          {item.url}
+                        </p>
+                      </>
                     )}
                     {item.status === "failed" && item.error && (
                       <p className="mt-0.5 text-xs text-red-500">
@@ -391,14 +399,18 @@ export default function Home() {
                 {/* Progress bar for processing item */}
                 {item.status === "processing" && (
                   <div className="mt-2">
-                    <div className="h-1 w-full overflow-hidden rounded-full bg-gray-100">
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
                       <div
-                        className="h-full rounded-full bg-blue-500 transition-all duration-500 ease-out"
-                        style={{ width: `${item.progress}%` }}
+                        className="h-full rounded-full bg-gradient-to-r from-blue-500 via-blue-400 to-blue-500 transition-all duration-700 ease-out"
+                        style={{
+                          width: `${item.progress}%`,
+                          backgroundSize: "200% 100%",
+                          animation: "shimmer 2s ease-in-out infinite",
+                        }}
                       />
                     </div>
                     {item.statusText && (
-                      <p className="mt-1 text-xs text-gray-400">
+                      <p className="mt-1.5 font-[family-name:var(--font-geist-pixel-square)] text-[10px] uppercase tracking-wider text-blue-400/70">
                         {item.statusText}
                       </p>
                     )}
