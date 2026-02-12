@@ -364,6 +364,8 @@ MIT License - feel free to use, modify, and distribute.
 
 Built by [lifesized](https://github.com/lifesized) out of necessity and frustration with expensive transcription services.
 
+**Development time:** ~7 hours from concept to production-ready application.
+
 ## Related Projects
 
 - [OpenAI Whisper](https://github.com/openai/whisper)
