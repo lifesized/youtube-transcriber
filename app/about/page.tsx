@@ -1,8 +1,7 @@
-import Link from "next/link";
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "About - YouTube Transcript Capture",
+  title: "About YouTube Transcriber",
   description: "Learn about why this project exists and how it works",
 };
 
@@ -12,13 +11,7 @@ export default function AboutPage() {
       <div className="space-y-8">
         {/* Header */}
         <div>
-          <Link
-            href="/"
-            className="mb-4 inline-block text-sm text-white/60 hover:text-white"
-          >
-            ← Back to Home
-          </Link>
-          <h1 className="text-3xl font-semibold text-white/90">About This Project</h1>
+          <h1 className="text-3xl font-semibold text-white/90">About YouTube Transcriber</h1>
         </div>
 
         {/* The Problem */}
@@ -138,21 +131,6 @@ export default function AboutPage() {
             View on GitHub →
           </a>
         </section>
-
-        {/* Footer Note */}
-        <div className="pt-4 text-center">
-          <p className="text-xs text-white/35">
-            Built with curiosity and necessity by{" "}
-            <a
-              href="https://github.com/lifesized"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-white/60 hover:text-white"
-            >
-              lifesized
-            </a>
-          </p>
-        </div>
       </div>
     </div>
   );
