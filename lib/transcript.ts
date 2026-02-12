@@ -257,7 +257,7 @@ async function fetchTranscriptAndroid(
 
   const track = selectCaptionTrack(captionTracks);
 
-  const captionRes = await fetchWithRetry(track.baseUrl);
+  const captionRes = await fetchWithRetry(track.baseUrl, undefined, 1);
 
   if (captionRes.status === 429) {
     throw new RateLimitError(
@@ -268,6 +268,103 @@ async function fetchTranscriptAndroid(
   if (!captionRes.ok) {
     throw new Error(
       `Failed to fetch captions for video ${videoId} (HTTP ${captionRes.status}).`
+    );
+  }
+
+  const xml = await captionRes.text();
+
+  if (!xml.trim()) {
+    throw new Error(
+      `Captions are disabled for video ${videoId}. The video owner has turned off captions.`
+    );
+  }
+
+  return parseCaptionXml(xml);
+}
+
+/**
+ * Fetch transcript via the InnerTube WEB client.
+ * Uses a browser-like User-Agent and WEB client context.
+ * Middle fallback between ANDROID and page scrape.
+ */
+async function fetchTranscriptWebClient(
+  videoId: string
+): Promise<TranscriptSegment[]> {
+  console.log(`[transcript] Trying WEB InnerTube client for ${videoId}...`);
+
+  const playerPayload = {
+    context: {
+      client: {
+        hl: "en",
+        gl: "US",
+        clientName: "WEB",
+        clientVersion: "2.20241126.01.00",
+        userAgent:
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+    },
+    videoId,
+    contentCheckOk: true,
+    racyCheckOk: true,
+  };
+
+  const playerRes = await fetchWithRetry(
+    `https://www.youtube.com/youtubei/v1/player?key=${INNERTUBE_API_KEY}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+      body: JSON.stringify(playerPayload),
+    },
+    1 // Only 1 retry for the player API — it's not what's failing
+  );
+
+  if (playerRes.status === 429) {
+    throw new RateLimitError(
+      `YouTube rate-limited the WEB InnerTube player API for video ${videoId}.`
+    );
+  }
+
+  if (!playerRes.ok) {
+    throw new Error(
+      `Failed to fetch video info via WEB client for ${videoId} (HTTP ${playerRes.status}).`
+    );
+  }
+
+  const playerData = await playerRes.json();
+
+  const status = playerData.playabilityStatus?.status;
+  if (status === "LOGIN_REQUIRED") {
+    throw new BotDetectionError(
+      `YouTube bot detection triggered for video ${videoId} (WEB client).`
+    );
+  }
+
+  const captionTracks =
+    playerData.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+
+  if (!captionTracks || captionTracks.length === 0) {
+    throw new Error(
+      `Captions are disabled for video ${videoId}. The video owner has turned off captions.`
+    );
+  }
+
+  const track = selectCaptionTrack(captionTracks);
+
+  const captionRes = await fetchWithRetry(track.baseUrl, undefined, 1);
+
+  if (captionRes.status === 429) {
+    throw new RateLimitError(
+      `YouTube rate-limited the caption download (WEB client) for video ${videoId}.`
+    );
+  }
+
+  if (!captionRes.ok) {
+    throw new Error(
+      `Failed to fetch captions via WEB client for video ${videoId} (HTTP ${captionRes.status}).`
     );
   }
 
@@ -358,7 +455,7 @@ async function fetchTranscriptWebFallback(
 
   const track = selectCaptionTrack(captionTracks);
 
-  const captionRes = await fetchWithRetry(track.baseUrl);
+  const captionRes = await fetchWithRetry(track.baseUrl, undefined, 1);
 
   if (captionRes.status === 429) {
     throw new RateLimitError(
@@ -385,15 +482,23 @@ async function fetchTranscriptWebFallback(
 
 /**
  * Fetch time-coded transcript segments for a YouTube video.
- * Tries ANDROID InnerTube client first, falls back to WEB page scraping on 429 or bot detection.
+ * Fallback chain: ANDROID InnerTube → WEB InnerTube → WEB page scrape.
  */
 async function fetchTranscript(videoId: string): Promise<TranscriptSegment[]> {
   try {
     return await fetchTranscriptAndroid(videoId);
   } catch (err) {
     if (err instanceof RateLimitError || err instanceof BotDetectionError) {
-      // ANDROID client got rate-limited or bot-detected — try WEB fallback
-      return await fetchTranscriptWebFallback(videoId);
+      // Try WEB InnerTube client next
+      try {
+        return await fetchTranscriptWebClient(videoId);
+      } catch (err2) {
+        if (err2 instanceof RateLimitError || err2 instanceof BotDetectionError) {
+          // Last resort: scrape the watch page
+          return await fetchTranscriptWebFallback(videoId);
+        }
+        throw err2;
+      }
     }
     throw err;
   }
@@ -423,10 +528,10 @@ export async function getVideoTranscript(
         () =>
           reject(
             new Error(
-              "Transcript capture timed out after 45 seconds. Please try again."
+              "Transcript capture timed out after 30 seconds. Please try again."
             )
           ),
-        45000
+        30000
       )
     ),
   ]);
