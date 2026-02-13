@@ -470,7 +470,7 @@ function HomeInner() {
                   YouTube Transcriber
                 </h1>
                 <p className="mt-2 text-base text-white/50">
-                  Paste a YouTube URL. Capture once. Reuse forever.
+                  YouTube to LLM-ready transcript in one click.
                 </p>
               </div>
             </div>
@@ -518,7 +518,7 @@ function HomeInner() {
                     type="submit"
                     className="shrink-0 rounded-full border border-white/20 bg-white/10 px-8 py-3 font-(family-name:--font-geist-pixel) text-base font-medium tracking-wide text-white shadow-[0_8px_32px_-12px_rgba(0,0,0,0.4)] backdrop-blur-xl transition-all duration-150 hover:border-white/40 hover:bg-white/25 hover:shadow-[0_12px_48px_-16px_rgba(255,255,255,0.2)] active:bg-white/15 active:scale-[0.98]"
                   >
-                    {isProcessing ? "Add" : "Capture"}
+                    {isProcessing ? "Add" : "Extract"}
                   </button>
                 )}
               </div>

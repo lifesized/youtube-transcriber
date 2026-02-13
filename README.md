@@ -78,14 +78,72 @@ This project has evolved through several phases:
 
 ## Getting Started
 
+### Quick Start (Automated Setup)
+
+**Supported platforms:** macOS, Linux, Windows WSL2
+
+```bash
+# Clone the repository
+git clone https://github.com/lifesized/youtube-transcriber.git
+cd youtube-transcriber
+
+# Run automated setup (installs everything)
+npm run setup
+
+# Start the app
+npm run dev
+```
+
+Then open [http://localhost:19720](http://localhost:19720) in your browser.
+
+**Windows users:** The automated setup requires bash. Use WSL2 or follow the [Manual Installation](#manual-installation-advanced) steps below.
+
+**Note:** The setup script will:
+- Install Node dependencies
+- Create Python virtual environment
+- Install Whisper (and MLX Whisper on Apple Silicon)
+- Configure `.env` with correct paths
+- Check for yt-dlp and ffmpeg (with install instructions if missing)
+
 ### Prerequisites
 
+**Before running setup, you need:**
 - **Node.js** 18+ or **Bun** runtime
-- **Python** 3.8+ (for Whisper transcription)
-- **yt-dlp** (for downloading audio from YouTube)
-- **FFmpeg** (required by Whisper for audio processing)
+- **Python** 3.8+
+- **yt-dlp** and **FFmpeg** (install instructions provided during setup)
 
-### Installation
+**macOS:**
+```bash
+brew install yt-dlp ffmpeg
+```
+
+**Linux:**
+```bash
+# Debian/Ubuntu
+sudo apt install yt-dlp ffmpeg python3 python3-venv
+
+# Fedora/RHEL
+sudo dnf install yt-dlp ffmpeg python3
+
+# Arch
+sudo pacman -S yt-dlp ffmpeg python
+```
+
+**Windows:**
+```powershell
+# Using scoop
+scoop install yt-dlp ffmpeg
+
+# Or using chocolatey
+choco install yt-dlp ffmpeg
+```
+
+### Manual Installation (Advanced)
+
+If you prefer to set up manually or the automated script doesn't work:
+
+<details>
+<summary>Click to expand manual installation steps</summary>
 
 ```bash
 # Clone the repository
@@ -105,16 +163,12 @@ pip install openai-whisper
 # Optional: Install MLX Whisper (macOS Apple Silicon only)
 pip install mlx-whisper
 
-# Configure environment variables (see next section)
+# Configure environment variables
 cp .env.example .env
 # Edit .env with your paths
-
-# Initialize database
-npx prisma generate
-npx prisma db push
 ```
 
-### Environment Variables
+**Environment Variables:**
 
 Create a `.env` file in the project root:
 
@@ -141,29 +195,13 @@ WHISPER_CLI="C:\\Users\\YourName\\project\\.venv\\Scripts\\whisper.exe"
 WHISPER_PYTHON_BIN="C:\\Users\\YourName\\project\\.venv\\Scripts\\python.exe"
 ```
 
-### Running the App
+</details>
 
-**Important:** This is a **local desktop application** that runs on your machine. It requires local access to:
-- Python environment with Whisper installed
-- yt-dlp command-line tool
-- FFmpeg for audio processing
-- SQLite database (file-based, not hosted)
+### Usage
 
-**Do not deploy to hosting services** like Vercel, Netlify, or similar platforms - they don't support these dependencies and the app won't function properly.
+**Important:** This is a **local desktop application** that runs on your machine. It requires local access to Python, yt-dlp, ffmpeg, and SQLite. **Do not deploy to hosting services** like Vercel or Netlify - they don't support these dependencies.
 
-```bash
-# Development mode (recommended) - includes hot reload and better debugging
-npm run dev  # or: bun dev
-
-# Production mode - hides dev indicator, but requires rebuild for every change
-npm run build && npm start
-```
-
-Open [http://localhost:19720](http://localhost:19720) in your browser.
-
-**Note:** Development mode shows a small Next.js indicator in the bottom corner. Use production mode (`npm start`) to hide it, but you'll lose hot reload and need to rebuild for every code change.
-
-**Usage:**
+**How to use:**
 1. Paste a YouTube URL into the input field
 2. Click "Capture" to add it to the queue
 3. Wait for transcription (progress shown in real-time)
