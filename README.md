@@ -2,6 +2,8 @@
 
 **YouTube to LLM-ready transcript in one click.**
 
+<video src="https://github.com/lifesized/youtube-transcriber/raw/main/docs/media/YTT_01_feb13.mp4" controls></video>
+
 A self-hosted web application for capturing and archiving YouTube video transcripts without quota limits or API costs. Uses local Whisper transcription when captions aren't available.
 
 ## Why This Exists
