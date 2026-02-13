@@ -222,9 +222,10 @@ function HomeInner() {
   useEffect(() => {
     async function fetchSelectedVideo(id: string) {
       addDebugEvent("video.fetch.start", `id=${id}`);
-      setVideo(null);
-      setVideoError(null);
-      setVideoLoading(true);
+      // Only update state if values are actually changing to prevent unnecessary re-renders
+      setVideo((prev) => (prev === null ? prev : null));
+      setVideoError((prev) => (prev === null ? prev : null));
+      setVideoLoading((prev) => (prev ? prev : true));
       try {
         const res = await fetch(`/api/transcripts/${id}`);
         if (!res.ok) {
@@ -247,9 +248,9 @@ function HomeInner() {
 
     if (!selectedId) {
       addDebugEvent("video.selection.clear", "selectedId is empty");
-      setVideo(null);
-      setVideoError(null);
-      setVideoLoading(false);
+      setVideo((prev) => (prev === null ? prev : null));
+      setVideoError((prev) => (prev === null ? prev : null));
+      setVideoLoading((prev) => (prev ? false : prev));
       return;
     }
 
@@ -834,149 +835,46 @@ function HomeInner() {
               ) : (
                 <>
                   {libraryLayout === "tiles" ? (
-                    <LayoutGroup>
-                      <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-4">
                       {transcripts.map((t) => {
                         const isSelected = selectedId === t.id;
-                        const isClosing = closingVideo?.id === t.id;
-                        const showDrawer = isSelected || isClosing;
-                        // Use closingVideo if available (during exit animation), otherwise use current video
-                        const videoData = closingVideo || video;
-                        const transcriptSegments: TranscriptSegment[] =
-                          showDrawer && videoData?.transcript && videoData.id === t.id
-                            ? JSON.parse(videoData.transcript)
-                            : [];
 
                         return (
-                          <motion.div
+                          <a
                             key={t.id}
-                            data-transcript-id={t.id}
-                            className={`${showDrawer ? "col-span-2" : ""}`}
-                            layout
-                            transition={{
-                              layout: {
-                                type: "spring",
-                                stiffness: 300,
-                                damping: 36,
-                                mass: 0.9,
-                              },
-                            }}
-                            onLayoutAnimationStart={() => {
-                              addDebugEvent("tile.row.layout.start", `id=${t.id}`);
-                            }}
-                            onLayoutAnimationComplete={() => {
-                              addDebugEvent("tile.row.layout.complete", `id=${t.id}`);
-                            }}
+                            href={t.videoUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`group relative w-full overflow-hidden rounded-lg border text-left transition-all duration-200 ${
+                              isSelected
+                                ? "border-white/40 bg-white/10 ring-2 ring-white/20 shadow-[0_0_20px_-5px_rgba(255,255,255,0.15)] scale-[1.02]"
+                                : "border-white/10 shadow-sm hover:bg-white/5 hover:border-white/20"
+                            }`}
+                            title={t.title}
                           >
-                            <button
-                              onClick={() => selectTranscript(t.id)}
-                              className={`group relative w-full overflow-hidden rounded-lg border text-left transition-all duration-200 ${
-                                selectedId === t.id
-                                  ? "border-white/40 bg-white/10 ring-2 ring-white/20 shadow-[0_0_20px_-5px_rgba(255,255,255,0.15)] scale-[1.02]"
-                                  : "border-white/10 shadow-sm hover:bg-white/5 hover:border-white/20"
-                              }`}
-                              title={t.title}
-                            >
-                              {t.thumbnailUrl ? (
-                                <img
-                                  src={t.thumbnailUrl}
-                                  alt={t.title}
-                                  className="h-24 w-full object-cover opacity-40 sepia saturate-50 brightness-110"
-                                />
-                              ) : (
-                                <div className="flex h-24 items-center justify-center bg-white/5 text-sm text-white/30">
-                                  No thumbnail
-                                </div>
-                              )}
-                              <div className="p-3">
-                                <p className="line-clamp-2 text-sm font-medium text-white/75">
-                                  {t.title}
-                                </p>
-                                <p className="mt-1 truncate text-xs text-white/40">
-                                  {t.author}
-                                </p>
+                            {t.thumbnailUrl ? (
+                              <img
+                                src={t.thumbnailUrl}
+                                alt={t.title}
+                                className="h-24 w-full object-cover opacity-40 sepia saturate-50 brightness-110"
+                              />
+                            ) : (
+                              <div className="flex h-24 items-center justify-center bg-white/5 text-sm text-white/30">
+                                No thumbnail
                               </div>
-                            </button>
-
-                            {/* Transcript drawer */}
-                            {showDrawer && (
-                              <motion.div
-                                key={`tile-drawer-${t.id}`}
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{
-                                  opacity: isSelected ? 1 : 0,
-                                  height: isSelected ? "auto" : 0,
-                                }}
-                                onAnimationStart={() => {
-                                  addDebugEvent(
-                                    "tile.drawer.anim.start",
-                                    `id=${t.id} selected=${isSelected} closing=${isClosing}`
-                                  );
-                                }}
-                                onLayoutAnimationStart={() => {
-                                  addDebugEvent("tile.drawer.layout.start", `id=${t.id}`);
-                                }}
-                                onLayoutAnimationComplete={() => {
-                                  addDebugEvent("tile.drawer.layout.complete", `id=${t.id}`);
-                                }}
-                                transition={{
-                                  height: {
-                                    type: "spring",
-                                    stiffness: 240,
-                                    damping: 32,
-                                    mass: 0.95,
-                                  },
-                                  opacity: {
-                                    duration: 0.28,
-                                    ease: "easeOut",
-                                  },
-                                }}
-                                onAnimationComplete={() => {
-                                  addDebugEvent(
-                                    "tile.drawer.anim.complete",
-                                    `id=${t.id} selected=${isSelected} closing=${isClosing}`
-                                  );
-                                  if (!isSelected) {
-                                    setClosingVideo((prev) => (prev?.id === t.id ? null : prev));
-                                  }
-                                }}
-                                className="overflow-hidden"
-                              >
-                                <div className="mt-4 rounded-lg border border-white/10 bg-white/5 px-6 py-6">
-                                  {videoLoading ? (
-                                    <div className="flex items-center justify-center py-8">
-                                      <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/15 border-t-white/50" />
-                                    </div>
-                                  ) : videoError ? (
-                                    <p className="py-4 text-center text-sm text-red-500">
-                                      {videoError}
-                                    </p>
-                                  ) : transcriptSegments.length > 0 ? (
-                                    <div className="space-y-3">
-                                      {transcriptSegments.map((seg, idx) => (
-                                        <div key={idx} className="flex gap-4">
-                                          <span className="shrink-0 font-mono text-xs text-white/35">
-                                            {formatTimestamp(seg.startMs)}
-                                          </span>
-                                          <p className="text-sm leading-relaxed text-white/70">
-                                            {seg.text}
-                                          </p>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <p className="py-4 text-center text-sm text-white/50">
-                                      No transcript available
-                                    </p>
-                                  )}
-                                </div>
-                              </motion.div>
                             )}
-                          </motion.div>
+                            <div className="p-3">
+                              <p className="line-clamp-2 text-sm font-medium text-white/75">
+                                {t.title}
+                              </p>
+                              <p className="mt-1 truncate text-xs text-white/40">
+                                {t.author}
+                              </p>
+                            </div>
+                          </a>
                         );
                       })}
-                      </div>
-                    </LayoutGroup>
+                    </div>
                   ) : (
                     <LayoutGroup>
                       <div className="overflow-hidden rounded-lg border border-white/10 bg-[hsl(var(--panel-2))]">
