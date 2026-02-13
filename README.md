@@ -1,4 +1,4 @@
-# YouTube Transcript Capture
+# YouTube Transcriber
 
 **Paste a YouTube URL. Capture once. Reuse forever.**
 
