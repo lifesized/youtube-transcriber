@@ -57,11 +57,12 @@ function HomeInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectedId = searchParams.get("id");
-  const libraryLayout = searchParams.get("layout") === "list" ? "list" : "tiles";
+  const libraryLayout = searchParams.get("layout") === "tiles" ? "tiles" : "list";
 
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [queue, setQueue] = useState<QueueItem[]>([]);
+  const [hasCreatedTranscript, setHasCreatedTranscript] = useState(false);
 
   const [transcripts, setTranscripts] = useState<VideoSummary[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(true);
@@ -97,9 +98,22 @@ function HomeInner() {
   }, []);
 
   useEffect(() => {
+    // Check if user has ever created a transcript
+    const hasTranscripts = localStorage.getItem("hasCreatedTranscript") === "true";
+    setHasCreatedTranscript(hasTranscripts);
+
+    // Restore view preference from localStorage if not in URL
+    const currentLayout = searchParams.get("layout");
+    const savedLayout = localStorage.getItem("libraryLayout");
+    if (!currentLayout && savedLayout) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("layout", savedLayout);
+      router.push(`/?${params.toString()}`, { scroll: false });
+    }
+
     setLibraryLoading(true);
     fetchTranscripts("");
-  }, [fetchTranscripts]);
+  }, [fetchTranscripts, router, searchParams]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -151,6 +165,9 @@ function HomeInner() {
 
   const setLibraryLayout = useCallback(
     (layout: "tiles" | "list") => {
+      // Save preference to localStorage
+      localStorage.setItem("libraryLayout", layout);
+
       const params = new URLSearchParams(searchParams.toString());
       params.set("layout", layout);
       router.push(`/?${params.toString()}`, { scroll: false });
@@ -298,6 +315,10 @@ function HomeInner() {
         stopProgressForItem(idx);
 
         if (res.ok) {
+          // Mark that user has created at least one transcript
+          localStorage.setItem("hasCreatedTranscript", "true");
+          setHasCreatedTranscript(true);
+
           // Update library and focus the newly created transcript.
           if (data?.id) {
             selectTranscript(data.id);
@@ -618,160 +639,140 @@ function HomeInner() {
             )}
           </section>
 
-          <section className="rounded-2xl border border-white/10 bg-[hsl(var(--panel))] p-4 shadow-[0_20px_70px_-55px_rgba(0,0,0,0.9)]">
-            <div className="mb-4 flex items-center gap-2">
-              <Input
-                type="text"
-                placeholder="Search by title or author..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              <IconButton
-                onClick={() => setLibraryLayout("tiles")}
-                className={`shrink-0 ${libraryLayout === "tiles" ? "bg-white/10 text-white" : ""}`}
-                title="Tiles view"
-              >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+          {hasCreatedTranscript && (
+            <section className="rounded-2xl border border-white/10 bg-[hsl(var(--panel))] p-4 shadow-[0_20px_70px_-55px_rgba(0,0,0,0.9)]">
+              <div className="mb-4 flex items-center gap-2">
+                <Input
+                  type="text"
+                  placeholder="Search by title or author..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                <IconButton
+                  onClick={() => setLibraryLayout("tiles")}
+                  className={`shrink-0 ${libraryLayout === "tiles" ? "bg-white/10 text-white" : ""}`}
+                  title="Tiles view"
                 >
-                  <rect x="3" y="3" width="6" height="6" rx="1" />
-                  <rect x="11" y="3" width="6" height="6" rx="1" />
-                  <rect x="3" y="11" width="6" height="6" rx="1" />
-                  <rect x="11" y="11" width="6" height="6" rx="1" />
-                </svg>
-              </IconButton>
-              <IconButton
-                onClick={() => setLibraryLayout("list")}
-                className={`shrink-0 ${libraryLayout === "list" ? "bg-white/10 text-white" : ""}`}
-                title="List view"
-              >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M3 6h14M3 10h14M3 14h14" />
-                </svg>
-              </IconButton>
-            </div>
-
-            {libraryLoading ? (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {[1, 2, 3, 4].map((i) => (
-                  <div
-                    key={i}
-                    className="animate-pulse rounded-lg border border-white/10 bg-[hsl(var(--panel-2))] p-3"
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                   >
-                    <div className="mb-2 h-24 rounded bg-white/10" />
-                    <div className="mb-1 h-3 w-3/4 rounded bg-white/10" />
-                    <div className="h-3 w-1/2 rounded bg-white/10" />
-                  </div>
-                ))}
+                    <rect x="3" y="3" width="6" height="6" rx="1" />
+                    <rect x="11" y="3" width="6" height="6" rx="1" />
+                    <rect x="3" y="11" width="6" height="6" rx="1" />
+                    <rect x="11" y="11" width="6" height="6" rx="1" />
+                  </svg>
+                </IconButton>
+                <IconButton
+                  onClick={() => setLibraryLayout("list")}
+                  className={`shrink-0 ${libraryLayout === "list" ? "bg-white/10 text-white" : ""}`}
+                  title="List view"
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M3 6h14M3 10h14M3 14h14" />
+                  </svg>
+                </IconButton>
               </div>
-            ) : transcripts.length === 0 ? (
-              <div className="py-10 text-center">
-                <p className="text-sm text-white/45">
-                  {search ? "No transcripts match your search." : "No transcripts yet."}
-                </p>
-              </div>
-            ) : (
-              <>
-                {libraryLayout === "tiles" ? (
-                  <div className="grid grid-cols-2 gap-3">
-                    {transcripts.map((t) => (
-                      <button
-                        key={t.id}
-                        onClick={() => selectTranscript(t.id)}
-                        className={`group overflow-hidden rounded-lg border text-left shadow-sm transition ${
-                          selectedId === t.id
-                            ? "border-white/25 ring-2 ring-white/10"
-                            : "border-white/10 hover:bg-white/5"
-                        }`}
-                        title={t.title}
-                      >
-                        {t.thumbnailUrl ? (
-                          <img
-                            src={t.thumbnailUrl}
-                            alt={t.title}
-                            className="h-24 w-full object-cover opacity-40 sepia saturate-50 brightness-110"
-                          />
-                        ) : (
-                          <div className="flex h-24 items-center justify-center bg-white/5 text-xs text-white/25">
-                            No thumbnail
-                          </div>
-                        )}
-                        <div className="p-2.5">
-                          <p className="line-clamp-2 text-xs font-medium text-white/75">
-                            {t.title}
-                          </p>
-                          <p className="mt-1 truncate text-[11px] text-white/40">
-                            {t.author}
-                          </p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="overflow-hidden rounded-lg border border-white/10 bg-[hsl(var(--panel-2))]">
-                    {transcripts.map((t) => (
-                      <div
-                        key={t.id}
-                        className={`group/row flex w-full items-start gap-3 px-3 py-2 transition ${
-                          selectedId === t.id ? "bg-white/5" : "hover:bg-white/5"
-                        }`}
-                      >
-                        <button
-                          onClick={() => selectTranscript(t.id)}
-                          className="min-w-0 flex-1 text-left"
-                        >
-                          <p className="truncate text-sm font-medium text-white/75">
-                            {t.title}
-                          </p>
-                          <p className="mt-0.5 truncate text-xs text-white/40">
-                            {t.author} · {formatDate(t.createdAt)}
-                            {t.source ? ` · ${t.source}` : ""}
-                          </p>
-                        </button>
 
-                        <div className="mt-0.5 flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/row:opacity-100">
-                          <a
-                            href={`/api/transcripts/${t.id}/download`}
-                            title="Download as Markdown"
-                            className={iconButtonClassName("sm")}
-                          >
-                            <svg
-                              width="16"
-                              height="16"
-                              viewBox="0 0 20 20"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.5"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <path d="M10 3v10m0 0l-3.5-3.5M10 13l3.5-3.5" />
-                              <path d="M3 15v1a1 1 0 001 1h12a1 1 0 001-1v-1" />
-                            </svg>
-                          </a>
+              {libraryLoading ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div
+                      key={i}
+                      className="animate-pulse rounded-lg border border-white/10 bg-[hsl(var(--panel-2))] p-3"
+                    >
+                      <div className="mb-2 h-24 rounded bg-white/10" />
+                      <div className="mb-1 h-3 w-3/4 rounded bg-white/10" />
+                      <div className="h-3 w-1/2 rounded bg-white/10" />
+                    </div>
+                  ))}
+                </div>
+              ) : transcripts.length === 0 ? (
+                <div className="py-10 text-center">
+                  <p className="text-sm text-white/45">
+                    {search ? "No transcripts match your search." : "No transcripts yet."}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {libraryLayout === "tiles" ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      {transcripts.map((t) => (
+                        <button
+                          key={t.id}
+                          onClick={() => selectTranscript(t.id)}
+                          className={`group overflow-hidden rounded-lg border text-left shadow-sm transition ${
+                            selectedId === t.id
+                              ? "border-white/25 ring-2 ring-white/10"
+                              : "border-white/10 hover:bg-white/5"
+                          }`}
+                          title={t.title}
+                        >
+                          {t.thumbnailUrl ? (
+                            <img
+                              src={t.thumbnailUrl}
+                              alt={t.title}
+                              className="h-24 w-full object-cover opacity-40 sepia saturate-50 brightness-110"
+                            />
+                          ) : (
+                            <div className="flex h-24 items-center justify-center bg-white/5 text-xs text-white/25">
+                              No thumbnail
+                            </div>
+                          )}
+                          <div className="p-2.5">
+                            <p className="line-clamp-2 text-xs font-medium text-white/75">
+                              {t.title}
+                            </p>
+                            <p className="mt-1 truncate text-[11px] text-white/40">
+                              {t.author}
+                            </p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="overflow-hidden rounded-lg border border-white/10 bg-[hsl(var(--panel-2))]">
+                      {transcripts.map((t) => (
+                        <div
+                          key={t.id}
+                          className={`group/row flex w-full items-start gap-3 px-3 py-2 transition ${
+                            selectedId === t.id ? "bg-white/5" : "hover:bg-white/5"
+                          }`}
+                        >
                           <button
-                            type="button"
-                            title={copiedId === t.id ? "Copied!" : "Copy transcript"}
-                            onClick={() => handleCopyFromLibrary(t.id)}
-                            className={iconButtonClassName("sm")}
+                            onClick={() => selectTranscript(t.id)}
+                            className="min-w-0 flex-1 text-left"
                           >
-                            {copiedId === t.id ? (
+                            <p className="truncate text-sm font-medium text-white/75">
+                              {t.title}
+                            </p>
+                            <p className="mt-0.5 truncate text-xs text-white/40">
+                              {t.author} · {formatDate(t.createdAt)}
+                              {t.source ? ` · ${t.source}` : ""}
+                            </p>
+                          </button>
+
+                          <div className="mt-0.5 flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/row:opacity-100">
+                            <a
+                              href={`/api/transcripts/${t.id}/download`}
+                              title="Download as Markdown"
+                              className={iconButtonClassName("sm")}
+                            >
                               <svg
                                 width="16"
                                 height="16"
@@ -782,9 +783,51 @@ function HomeInner() {
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
                               >
-                                <path d="M5 10.5l3 3 7-7" />
+                                <path d="M10 3v10m0 0l-3.5-3.5M10 13l3.5-3.5" />
+                                <path d="M3 15v1a1 1 0 001 1h12a1 1 0 001-1v-1" />
                               </svg>
-                            ) : (
+                            </a>
+                            <button
+                              type="button"
+                              title={copiedId === t.id ? "Copied!" : "Copy transcript"}
+                              onClick={() => handleCopyFromLibrary(t.id)}
+                              className={iconButtonClassName("sm")}
+                            >
+                              {copiedId === t.id ? (
+                                <svg
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 20 20"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M5 10.5l3 3 7-7" />
+                                </svg>
+                              ) : (
+                                <svg
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 20 20"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <rect x="7" y="7" width="9" height="9" rx="1" />
+                                  <path d="M4 13V4a1 1 0 011-1h9" />
+                                </svg>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              title="Delete"
+                              onClick={() => setDeleteId(t.id)}
+                              className={`${iconButtonClassName("sm")} hover:bg-red-500/15 hover:text-red-200`}
+                            >
                               <svg
                                 width="16"
                                 height="16"
@@ -795,39 +838,19 @@ function HomeInner() {
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
                               >
-                                <rect x="7" y="7" width="9" height="9" rx="1" />
-                                <path d="M4 13V4a1 1 0 011-1h9" />
+                                <path d="M4 5h12M8 5V3.5a1 1 0 011-1h2a1 1 0 011 1V5m2 0v10.5a1.5 1.5 0 01-1.5 1.5h-5A1.5 1.5 0 016 15.5V5" />
+                                <path d="M9 9v5M11 9v5" />
                               </svg>
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            title="Delete"
-                            onClick={() => setDeleteId(t.id)}
-                            className={`${iconButtonClassName("sm")} hover:bg-red-500/15 hover:text-red-200`}
-                          >
-                            <svg
-                              width="16"
-                              height="16"
-                              viewBox="0 0 20 20"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.5"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <path d="M4 5h12M8 5V3.5a1 1 0 011-1h2a1 1 0 011 1V5m2 0v10.5a1.5 1.5 0 01-1.5 1.5h-5A1.5 1.5 0 016 15.5V5" />
-                              <path d="M9 9v5M11 9v5" />
-                            </svg>
-                          </button>
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </section>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
+          )}
         </div>
 
         {/* Right: transcript viewer */}
