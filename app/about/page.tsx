@@ -18,10 +18,7 @@ export default function AboutPage() {
         <section className="space-y-3 rounded-2xl border border-white/10 bg-[hsl(var(--panel))] p-6">
           <h2 className="text-xl font-medium text-white/80">The Problem</h2>
           <p className="text-sm leading-relaxed text-white/60">
-            Transcription services are expensive. I burned through my allowed transcriptions in under a week while trying to capture and archive YouTube content for research and reference. The cost quickly became unsustainable, and I needed a solution that would let me transcribe as much as I wanted without worrying about quotas or pricing tiers.
-          </p>
-          <p className="text-sm leading-relaxed text-white/60">
-            This tool was built to solve that problem. Instead of relying on paid APIs, it uses local transcription with OpenAI Whisper, which means unlimited transcriptions at zero marginal cost.
+            Transcription services are expensive. I found a Chrome extension that transcribed YouTube videos and thought it would last me the year. I burned through my allowed transcriptions in under a week. My most frequent use case is pasting YouTube video transcripts into my LLM du jour and chatting with the transcript to learn, confirm, disagree and cover a lot of ground at speed. Not needing to watch an entire video and capturing its key points while potentially sacrilegious is a pleasure and incredibly useful. As I had already hit my credit limit, instead of paying more, I made this open source tool which is free to use and sharing.
           </p>
         </section>
 
@@ -113,7 +110,40 @@ export default function AboutPage() {
                 <li>• Made available on GitHub for the community</li>
               </ul>
             </div>
+            <div>
+              <h3 className="mb-1 font-mono text-xs uppercase tracking-wider text-white/45">
+                Coming Soon
+              </h3>
+              <ul className="space-y-1 text-white/60">
+                <li>• Support for Open Claw and related tools in the form of skills and tool calls for your agents</li>
+              </ul>
+            </div>
           </div>
+        </section>
+
+        {/* Development Tools */}
+        <section className="space-y-3 rounded-2xl border border-white/10 bg-[hsl(var(--panel))] p-6">
+          <h2 className="text-xl font-medium text-white/80">Built With</h2>
+          <p className="text-sm leading-relaxed text-white/60">
+            This project was built in ~7 hours using modern AI coding assistants and tools:
+          </p>
+          <ul className="space-y-2 text-sm text-white/60">
+            <li>
+              • <a href="https://www.augmentcode.com/intent" target="_blank" rel="noopener noreferrer" className="text-white/75 underline decoration-blue-400 hover:text-white hover:decoration-blue-300">Intent by Augment</a> — AI-powered coding assistant
+            </li>
+            <li>
+              • <a href="https://cursor.sh" target="_blank" rel="noopener noreferrer" className="text-white/75 underline decoration-blue-400 hover:text-white hover:decoration-blue-300">Cursor</a> — AI-first code editor
+            </li>
+            <li>
+              • <a href="https://openai.com/index/openai-codex/" target="_blank" rel="noopener noreferrer" className="text-white/75 underline decoration-blue-400 hover:text-white hover:decoration-blue-300">Codex</a> — OpenAI's code generation model
+            </li>
+            <li>
+              • <a href="https://github.com/anthropics/claude-code" target="_blank" rel="noopener noreferrer" className="text-white/75 underline decoration-blue-400 hover:text-white hover:decoration-blue-300">Claude Code</a> — Anthropic's AI coding assistant
+            </li>
+            <li>
+              • <a href="https://ghostty.org" target="_blank" rel="noopener noreferrer" className="text-white/75 underline decoration-blue-400 hover:text-white hover:decoration-blue-300">Ghostty</a> — Fast, native terminal emulator
+            </li>
+          </ul>
         </section>
 
         {/* Links */}
@@ -126,11 +156,11 @@ export default function AboutPage() {
             href="https://github.com/lifesized/youtube-transcriber"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center justify-center rounded-full border border-white/20 bg-white/10 p-3 transition-all hover:border-white/40 hover:bg-white/15"
+            className="text-white/35 transition-colors hover:text-white/60"
             title="View on GitHub"
           >
             <svg
-              className="h-6 w-6 text-white"
+              className="h-5 w-5"
               fill="currentColor"
               viewBox="0 0 24 24"
               aria-hidden="true"

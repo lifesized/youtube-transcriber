@@ -72,6 +72,7 @@ function HomeInner() {
   const [video, setVideo] = useState<VideoRecord | null>(null);
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
+  const [closingVideo, setClosingVideo] = useState<VideoRecord | null>(null);
   const [copied, setCopied] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -159,21 +160,28 @@ function HomeInner() {
     (id: string) => {
       const params = new URLSearchParams(searchParams.toString());
 
-      // Toggle: if clicking the same item, deselect it with animation delay
+      // Toggle: if clicking the same item, deselect it
       if (selectedId === id) {
-        // Delay URL update to allow exit animation to complete
+        // Preserve video data for exit animation
+        setClosingVideo(video);
+
+        // Update URL immediately to trigger exit animation
+        params.delete("id");
+        const qs = params.toString();
+        router.push(qs ? `/?${qs}` : "/", { scroll: false });
+
+        // Clear closing video after exit animation completes (spring + opacity duration)
         setTimeout(() => {
-          params.delete("id");
-          const qs = params.toString();
-          router.push(qs ? `/?${qs}` : "/", { scroll: false });
-        }, 400); // Match spring animation duration
+          setClosingVideo(null);
+        }, 600);
       } else {
+        setClosingVideo(null);
         params.set("id", id);
         const qs = params.toString();
         router.push(qs ? `/?${qs}` : "/", { scroll: false });
       }
     },
-    [router, searchParams, selectedId]
+    [router, searchParams, selectedId, video]
   );
 
   const setLibraryLayout = useCallback(
@@ -459,7 +467,7 @@ function HomeInner() {
             <div className="mb-6 flex items-center justify-between">
               <div>
                 <h1 className="text-xl font-semibold text-white/90">
-                  YouTube Transcript Capture
+                  YouTube Transcriber
                 </h1>
                 <p className="mt-2 text-base text-white/50">
                   Paste a YouTube URL. Capture once. Reuse forever.
@@ -722,9 +730,11 @@ function HomeInner() {
                     <div className="grid grid-cols-2 gap-4">
                       {transcripts.map((t) => {
                         const isSelected = selectedId === t.id;
+                        // Use closingVideo if available (during exit animation), otherwise use current video
+                        const videoData = closingVideo || video;
                         const transcriptSegments: TranscriptSegment[] =
-                          isSelected && video?.transcript
-                            ? JSON.parse(video.transcript)
+                          (isSelected || closingVideo) && videoData?.transcript && videoData.id === t.id
+                            ? JSON.parse(videoData.transcript)
                             : [];
 
                         return (
@@ -771,12 +781,18 @@ function HomeInner() {
                                   layout
                                   initial={{ opacity: 0, height: 0 }}
                                   animate={{ opacity: 1, height: "auto" }}
-                                  exit={{ height: 0 }}
+                                  exit={{ opacity: 0, height: 0 }}
                                   transition={{
-                                    type: "spring",
-                                    stiffness: 300,
-                                    damping: 30,
-                                    mass: 0.8,
+                                    height: {
+                                      type: "spring",
+                                      stiffness: 300,
+                                      damping: 30,
+                                      mass: 0.8,
+                                    },
+                                    opacity: {
+                                      duration: 0.5,
+                                      ease: "easeInOut",
+                                    },
                                   }}
                                   className="overflow-hidden"
                                 >
@@ -819,9 +835,11 @@ function HomeInner() {
                     <div className="overflow-hidden rounded-lg border border-white/10 bg-[hsl(var(--panel-2))]">
                       {transcripts.map((t) => {
                         const isSelected = selectedId === t.id;
+                        // Use closingVideo if available (during exit animation), otherwise use current video
+                        const videoData = closingVideo || video;
                         const transcriptSegments: TranscriptSegment[] =
-                          isSelected && video?.transcript
-                            ? JSON.parse(video.transcript)
+                          (isSelected || closingVideo) && videoData?.transcript && videoData.id === t.id
+                            ? JSON.parse(videoData.transcript)
                             : [];
 
                         return (
@@ -939,12 +957,18 @@ function HomeInner() {
                                   layout
                                   initial={{ opacity: 0, height: 0 }}
                                   animate={{ opacity: 1, height: "auto" }}
-                                  exit={{ height: 0 }}
+                                  exit={{ opacity: 0, height: 0 }}
                                   transition={{
-                                    type: "spring",
-                                    stiffness: 300,
-                                    damping: 30,
-                                    mass: 0.8,
+                                    height: {
+                                      type: "spring",
+                                      stiffness: 300,
+                                      damping: 30,
+                                      mass: 0.8,
+                                    },
+                                    opacity: {
+                                      duration: 0.5,
+                                      ease: "easeInOut",
+                                    },
                                   }}
                                   className="overflow-hidden"
                                 >
