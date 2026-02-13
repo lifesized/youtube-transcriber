@@ -439,21 +439,21 @@ function HomeInner() {
     video?.transcript ? JSON.parse(video.transcript) : [];
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8">
+    <div className="mx-auto max-w-7xl px-4 py-12">
       <div
-        className={`grid grid-cols-1 gap-6 ${
+        className={`grid grid-cols-1 gap-8 ${
           selectedId ? "lg:grid-cols-[640px_minmax(0,1fr)]" : "lg:grid-cols-1"
         }`}
       >
         {/* Left rail: capture + library */}
-        <div className="space-y-6">
-          <section className="rounded-2xl border border-white/10 bg-[hsl(var(--panel))] p-4 shadow-[0_20px_70px_-55px_rgba(0,0,0,0.9)]">
-            <div className="mb-3 flex items-center justify-between">
+        <div className="space-y-8">
+          <section>
+            <div className="mb-6 flex items-center justify-between">
               <div>
-                <h1 className="text-base font-medium text-white/80">
+                <h1 className="text-xl font-semibold text-white/90">
                   YouTube Transcript Capture
                 </h1>
-                <p className="text-sm text-white/45">
+                <p className="mt-2 text-base text-white/50">
                   Paste a YouTube URL. Capture once. Reuse forever.
                 </p>
               </div>
@@ -470,7 +470,7 @@ function HomeInner() {
                       if (error) setError(null);
                     }}
                     placeholder="https://www.youtube.com/watch?v=..."
-                    className="h-[51px] pr-10"
+                    className="h-12 pr-12"
                   />
                   {url && (
                     <IconButton
@@ -479,7 +479,7 @@ function HomeInner() {
                         setUrl("");
                         setError(null);
                       }}
-                      className="absolute right-1.5 top-1/2 -translate-y-1/2"
+                      className="absolute right-2 top-1/2 -translate-y-1/2"
                       title="Clear"
                     >
                       <svg
@@ -500,7 +500,7 @@ function HomeInner() {
                 {url.trim() && (
                   <button
                     type="submit"
-                    className="shrink-0 rounded-full border border-white/20 bg-white/10 px-8 py-3.5 font-(family-name:--font-geist-pixel) text-[15px] font-medium tracking-[1px] text-white shadow-[0_8px_32px_-12px_rgba(0,0,0,0.4)] backdrop-blur-xl transition-all duration-150 hover:border-white/40 hover:bg-white/25 hover:shadow-[0_12px_48px_-16px_rgba(255,255,255,0.2)] active:bg-white/15 active:scale-[0.98]"
+                    className="shrink-0 rounded-full border border-white/20 bg-white/10 px-8 py-3 font-(family-name:--font-geist-pixel) text-base font-medium tracking-wide text-white shadow-[0_8px_32px_-12px_rgba(0,0,0,0.4)] backdrop-blur-xl transition-all duration-150 hover:border-white/40 hover:bg-white/25 hover:shadow-[0_12px_48px_-16px_rgba(255,255,255,0.2)] active:bg-white/15 active:scale-[0.98]"
                   >
                     {isProcessing ? "Add" : "Capture"}
                   </button>
@@ -508,13 +508,13 @@ function HomeInner() {
               </div>
             </form>
 
-            {error && <p className="mt-1.5 text-xs text-red-500">{error}</p>}
+            {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
 
             {/* Queue list */}
             {hasQueue && (
-              <div className="mt-5">
-                <div className="mb-3 flex items-center justify-between">
-                  <h2 className="font-mono text-xs font-medium uppercase tracking-wider text-white/45">
+              <div className="mt-8">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="font-mono text-sm font-medium uppercase tracking-wider text-white/50">
                     {completedCount}/{totalCount} completed
                   </h2>
                   {!isProcessing && (
@@ -525,7 +525,7 @@ function HomeInner() {
                       }}
                       variant="ghost"
                       size="sm"
-                      className="font-mono text-[10px] uppercase tracking-wider text-white/45 hover:text-white"
+                      className="font-mono text-xs uppercase tracking-wider text-white/45 hover:text-white"
                     >
                       Clear
                     </Button>
@@ -542,15 +542,15 @@ function HomeInner() {
                         }
                       }}
                       disabled={item.status !== "completed"}
-                      className={`w-full rounded-xl border border-white/10 bg-[hsl(var(--panel-2))] px-4 py-3 text-left transition ${
+                      className={`w-full rounded-xl border border-white/10 bg-[hsl(var(--panel-2))] px-4 py-4 text-left transition ${
                         item.status === "completed"
                           ? "cursor-pointer hover:bg-white/5"
                           : "cursor-default"
                       }`}
                     >
-                      <div className="flex items-start gap-3">
+                      <div className="flex items-start gap-4">
                         {/* Status indicator */}
-                        <div className="mt-0.5 shrink-0">
+                        <div className="mt-1 shrink-0">
                           {item.status === "pending" && (
                             <span className="inline-block h-3 w-3 rounded-full bg-white/20" />
                           )}
@@ -602,7 +602,7 @@ function HomeInner() {
                             </p>
                           )}
                           {item.status === "failed" && item.error && (
-                            <p className="mt-0.5 text-xs text-red-500">
+                            <p className="mt-1 text-sm text-red-500">
                               {item.error}
                             </p>
                           )}
@@ -611,18 +611,18 @@ function HomeInner() {
 
                       {/* Progress bar for processing item */}
                       {item.status === "processing" && (
-                        <div className="mt-2">
-                          <div className="mb-1 flex items-center justify-between">
+                        <div className="mt-4">
+                          <div className="mb-2 flex items-center justify-between">
                             {item.statusText && (
-                              <p className="font-(family-name:--font-geist-pixel-square) text-[10px] uppercase tracking-wider text-white/45">
+                              <p className="font-(family-name:--font-geist-pixel-square) text-xs uppercase tracking-wider text-white/50">
                                 {item.statusText}
                               </p>
                             )}
-                            <span className="font-mono text-[10px] font-medium tabular-nums text-white/60">
+                            <span className="font-mono text-xs font-medium tabular-nums text-white/60">
                               {Math.round(item.progress)}%
                             </span>
                           </div>
-                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                          <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
                             <div
                               className="h-full rounded-full bg-white/30 transition-all duration-700 ease-out"
                               style={{
@@ -640,8 +640,8 @@ function HomeInner() {
           </section>
 
           {hasCreatedTranscript && (
-            <section className="rounded-2xl border border-white/10 bg-[hsl(var(--panel))] p-4 shadow-[0_20px_70px_-55px_rgba(0,0,0,0.9)]">
-              <div className="mb-4 flex items-center gap-2">
+            <section className="rounded-2xl border border-white/10 bg-[hsl(var(--panel))] p-6 shadow-[0_20px_70px_-55px_rgba(0,0,0,0.9)]">
+              <div className="mb-6 flex items-center gap-2">
                 <Input
                   type="text"
                   placeholder="Search by title or author..."
@@ -690,36 +690,36 @@ function HomeInner() {
               </div>
 
               {libraryLoading ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   {[1, 2, 3, 4].map((i) => (
                     <div
                       key={i}
-                      className="animate-pulse rounded-lg border border-white/10 bg-[hsl(var(--panel-2))] p-3"
+                      className="animate-pulse rounded-lg border border-white/10 bg-[hsl(var(--panel-2))] p-4"
                     >
                       <div className="mb-2 h-24 rounded bg-white/10" />
-                      <div className="mb-1 h-3 w-3/4 rounded bg-white/10" />
-                      <div className="h-3 w-1/2 rounded bg-white/10" />
+                      <div className="mb-2 h-4 w-3/4 rounded bg-white/10" />
+                      <div className="h-4 w-1/2 rounded bg-white/10" />
                     </div>
                   ))}
                 </div>
               ) : transcripts.length === 0 ? (
-                <div className="py-10 text-center">
-                  <p className="text-sm text-white/45">
+                <div className="py-12 text-center">
+                  <p className="text-base text-white/50">
                     {search ? "No transcripts match your search." : "No transcripts yet."}
                   </p>
                 </div>
               ) : (
                 <>
                   {libraryLayout === "tiles" ? (
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-4">
                       {transcripts.map((t) => (
                         <button
                           key={t.id}
                           onClick={() => selectTranscript(t.id)}
-                          className={`group overflow-hidden rounded-lg border text-left shadow-sm transition ${
+                          className={`group relative overflow-hidden rounded-lg border text-left transition-all duration-200 ${
                             selectedId === t.id
-                              ? "border-white/25 ring-2 ring-white/10"
-                              : "border-white/10 hover:bg-white/5"
+                              ? "border-white/40 bg-white/10 ring-2 ring-white/20 shadow-[0_0_20px_-5px_rgba(255,255,255,0.15)] scale-[1.02]"
+                              : "border-white/10 shadow-sm hover:bg-white/5 hover:border-white/20"
                           }`}
                           title={t.title}
                         >
@@ -730,15 +730,15 @@ function HomeInner() {
                               className="h-24 w-full object-cover opacity-40 sepia saturate-50 brightness-110"
                             />
                           ) : (
-                            <div className="flex h-24 items-center justify-center bg-white/5 text-xs text-white/25">
+                            <div className="flex h-24 items-center justify-center bg-white/5 text-sm text-white/30">
                               No thumbnail
                             </div>
                           )}
-                          <div className="p-2.5">
-                            <p className="line-clamp-2 text-xs font-medium text-white/75">
+                          <div className="p-3">
+                            <p className="line-clamp-2 text-sm font-medium text-white/75">
                               {t.title}
                             </p>
-                            <p className="mt-1 truncate text-[11px] text-white/40">
+                            <p className="mt-1 truncate text-xs text-white/40">
                               {t.author}
                             </p>
                           </div>
@@ -750,24 +750,26 @@ function HomeInner() {
                       {transcripts.map((t) => (
                         <div
                           key={t.id}
-                          className={`group/row flex w-full items-start gap-3 px-3 py-2 transition ${
-                            selectedId === t.id ? "bg-white/5" : "hover:bg-white/5"
+                          className={`group/row relative flex w-full items-start gap-4 px-4 py-3 transition-all ${
+                            selectedId === t.id
+                              ? "bg-white/10 shadow-[inset_3px_0_0_0_rgba(255,255,255,0.3)]"
+                              : "hover:bg-white/5"
                           }`}
                         >
                           <button
                             onClick={() => selectTranscript(t.id)}
                             className="min-w-0 flex-1 text-left"
                           >
-                            <p className="truncate text-sm font-medium text-white/75">
+                            <p className="truncate text-base font-medium text-white/75">
                               {t.title}
                             </p>
-                            <p className="mt-0.5 truncate text-xs text-white/40">
+                            <p className="mt-1 truncate text-sm text-white/40">
                               {t.author} · {formatDate(t.createdAt)}
                               {t.source ? ` · ${t.source}` : ""}
                             </p>
                           </button>
 
-                          <div className="mt-0.5 flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/row:opacity-100">
+                          <div className="mt-1 flex shrink-0 items-center gap-2 opacity-0 transition-opacity group-hover/row:opacity-100">
                             <a
                               href={`/api/transcripts/${t.id}/download`}
                               title="Download as Markdown"
@@ -855,28 +857,28 @@ function HomeInner() {
 
         {/* Right: transcript viewer */}
         {selectedId && (
-        <div className="rounded-2xl border border-white/10 bg-[hsl(var(--panel))] p-5 shadow-[0_20px_70px_-55px_rgba(0,0,0,0.9)]">
+        <div className="rounded-2xl border border-white/10 bg-[hsl(var(--panel))] p-6 shadow-[0_20px_70px_-55px_rgba(0,0,0,0.9)]">
           {!selectedId ? (
-            <div className="flex min-h-[420px] items-center justify-center text-center">
+            <div className="flex min-h-[480px] items-center justify-center text-center">
               <div>
-                <p className="text-sm font-medium text-white/70">
+                <p className="text-base font-medium text-white/70">
                   Select a transcript
                 </p>
-                <p className="mt-1 text-sm text-white/45">
+                <p className="mt-2 text-base text-white/50">
                   Choose something from your library to view it here.
                 </p>
               </div>
             </div>
           ) : videoLoading ? (
-            <div className="flex min-h-[420px] items-center justify-center">
+            <div className="flex min-h-[480px] items-center justify-center">
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-white/15 border-t-white/50" />
             </div>
           ) : videoError || !video ? (
-            <div className="min-h-[420px]">
-              <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            <div className="min-h-[480px]">
+              <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-4 py-4 text-base text-red-200">
                 {videoError || "Transcript not found."}
               </div>
-              <div className="mt-4">
+              <div className="mt-6">
                 <Button onClick={clearSelectedTranscript} variant="ghost" size="sm">
                   Back
                 </Button>
@@ -884,12 +886,12 @@ function HomeInner() {
             </div>
           ) : (
             <div>
-              <div className="mb-5 flex items-start justify-between gap-4">
+              <div className="mb-6 flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <h2 className="truncate text-xl font-semibold text-white/80">
+                  <h2 className="truncate text-2xl font-semibold text-white/90">
                     {video.title}
                   </h2>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/45">
+                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-base text-white/50">
                     <span>
                       {video.channelUrl ? (
                         <a
@@ -1020,14 +1022,14 @@ function HomeInner() {
                 {segments.map((seg, i) => (
                   <div
                     key={i}
-                    className={`flex gap-4 rounded px-3 py-2 ${
+                    className={`flex gap-6 rounded px-4 py-3 ${
                       i % 2 === 0 ? "bg-white/5" : ""
                     }`}
                   >
-                    <span className="shrink-0 font-mono text-xs leading-6 text-white/30">
+                    <span className="shrink-0 font-mono text-sm leading-6 text-white/40">
                       {formatTimestamp(seg.startMs)}
                     </span>
-                    <span className="text-sm leading-6 text-white/70">
+                    <span className="text-base leading-6 text-white/75">
                       {seg.text}
                     </span>
                   </div>
@@ -1042,13 +1044,13 @@ function HomeInner() {
       {/* Delete confirmation dialog */}
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="mx-4 w-full max-w-sm rounded-2xl border border-white/10 bg-[hsl(var(--panel))] p-6 shadow-[0_30px_120px_-60px_rgba(0,0,0,0.95)]">
-            <h2 className="mb-2 text-lg font-medium text-white/80">Delete transcript?</h2>
-            <p className="mb-4 text-sm text-white/50">
+          <div className="mx-4 w-full max-w-sm rounded-2xl border border-white/10 bg-[hsl(var(--panel))] p-8 shadow-[0_30px_120px_-60px_rgba(0,0,0,0.95)]">
+            <h2 className="mb-3 text-xl font-semibold text-white/90">Delete transcript?</h2>
+            <p className="mb-6 text-base text-white/60">
               Are you sure you want to delete this transcript? This action cannot
               be undone.
             </p>
-            <div className="flex justify-end gap-3">
+            <div className="flex justify-end gap-4">
               <Button
                 onClick={() => setDeleteId(null)}
                 disabled={deleting}
