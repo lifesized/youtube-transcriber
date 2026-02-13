@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { LayoutGroup, motion } from "framer-motion";
 import type { TranscriptSegment } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,31 @@ interface VideoRecord extends VideoSummary {
   transcript: string;
 }
 
+interface DebugEvent {
+  id: number;
+  elapsedSec: number;
+  type: string;
+  detail: string;
+}
+
+interface DebugFilters {
+  selection: boolean;
+  fetch: boolean;
+  animation: boolean;
+  layout: boolean;
+  state: boolean;
+}
+
+interface MotionTuning {
+  drawerStiffness: number;
+  drawerDamping: number;
+  drawerMass: number;
+  opacityDuration: number;
+  rowStiffness: number;
+  rowDamping: number;
+  rowMass: number;
+}
+
 function isYouTubeUrl(url: string): boolean {
   return /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\/.+/.test(url);
 }
@@ -52,6 +77,28 @@ function formatTimestamp(ms: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function safeSegmentCount(transcript: string | undefined): number {
+  if (!transcript) return 0;
+  try {
+    const parsed = JSON.parse(transcript);
+    return Array.isArray(parsed) ? parsed.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function eventCategory(type: string): keyof DebugFilters {
+  if (type.includes("select.") || type.includes("route.") || type.includes("layout.change")) {
+    return "selection";
+  }
+  if (type.includes("fetch") || type.includes("loading") || type.includes("debounce")) {
+    return "fetch";
+  }
+  if (type.includes(".anim.")) return "animation";
+  if (type.includes(".layout.")) return "layout";
+  return "state";
 }
 
 function HomeInner() {
@@ -78,55 +125,103 @@ function HomeInner() {
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [debugEvents, setDebugEvents] = useState<DebugEvent[]>([]);
+  const [debugPaused, setDebugPaused] = useState(false);
+  const [debugCollapsed, setDebugCollapsed] = useState(false);
 
   const queueRef = useRef<QueueItem[]>([]);
   const processingRef = useRef(false);
+  const didInitRef = useRef(false);
+  const didRunSearchEffectRef = useRef(false);
+  const debugStartRef = useRef<number>(performance.now());
+  const debugIdRef = useRef(0);
   const progressIntervals = useRef<Map<number, ReturnType<typeof setInterval>>>(
     new Map()
   );
 
+  const addDebugEvent = useCallback(
+    (type: string, detail: string) => {
+      if (debugPaused) return;
+      const id = ++debugIdRef.current;
+      const elapsedSec = (performance.now() - debugStartRef.current) / 1000;
+      setDebugEvents((prev) => [{ id, elapsedSec, type, detail }, ...prev].slice(0, 250));
+    },
+    [debugPaused]
+  );
+
   const fetchTranscripts = useCallback(async (query: string) => {
+    const endpoint = query
+      ? `/api/transcripts?q=${encodeURIComponent(query)}`
+      : "/api/transcripts";
+    addDebugEvent("library.fetch.start", `query="${query || "(empty)"}" endpoint="${endpoint}"`);
     try {
-      const endpoint = query
-        ? `/api/transcripts?q=${encodeURIComponent(query)}`
-        : "/api/transcripts";
       const res = await fetch(endpoint);
-      if (!res.ok) return;
+      if (!res.ok) {
+        addDebugEvent("library.fetch.error", `status=${res.status}`);
+        return;
+      }
       const data = await res.json();
       setTranscripts(data);
+      addDebugEvent("library.fetch.success", `count=${Array.isArray(data) ? data.length : 0}`);
+    } catch (error) {
+      addDebugEvent("library.fetch.exception", error instanceof Error ? error.message : "unknown");
     } finally {
       setLibraryLoading(false);
+      addDebugEvent("library.loading", "setLibraryLoading(false)");
     }
-  }, []);
+  }, [addDebugEvent]);
 
   useEffect(() => {
+    addDebugEvent("app.mount", "HomeInner mounted");
+  }, [addDebugEvent]);
+
+  useEffect(() => {
+    if (didInitRef.current) return;
+    didInitRef.current = true;
+
     // Check if user has ever created a transcript
     const hasTranscripts = localStorage.getItem("hasCreatedTranscript") === "true";
     setHasCreatedTranscript(hasTranscripts);
+    addDebugEvent("ftu.state", `hasCreatedTranscript=${hasTranscripts}`);
 
-    // Restore view preference from localStorage if not in URL
+    // Restore view preference from localStorage only once on first mount.
     const currentLayout = searchParams.get("layout");
     const savedLayout = localStorage.getItem("libraryLayout");
     if (!currentLayout && savedLayout) {
       const params = new URLSearchParams(searchParams.toString());
       params.set("layout", savedLayout);
+      addDebugEvent("layout.restore", `restoring layout=${savedLayout}`);
       router.push(`/?${params.toString()}`, { scroll: false });
     }
 
     setLibraryLoading(true);
+    addDebugEvent("library.loading", "setLibraryLoading(true) initial");
     fetchTranscripts("");
-  }, [fetchTranscripts, router, searchParams]);
+  }, [addDebugEvent, fetchTranscripts, router, searchParams]);
 
   useEffect(() => {
+    // Skip the first run; initial library fetch is handled in the init effect.
+    if (!didRunSearchEffectRef.current) {
+      didRunSearchEffectRef.current = true;
+      addDebugEvent("search.debounce.skip", `initial query="${search}"`);
+      return;
+    }
+
+    addDebugEvent("search.debounce.schedule", `query="${search}" delayMs=250`);
     const timer = setTimeout(() => {
       setLibraryLoading(true);
+      addDebugEvent("search.debounce.fire", `query="${search}"`);
       fetchTranscripts(search);
     }, 250);
-    return () => clearTimeout(timer);
-  }, [search, fetchTranscripts]);
+    return () => {
+      clearTimeout(timer);
+      addDebugEvent("search.debounce.cancel", `query="${search}"`);
+    };
+  }, [addDebugEvent, search, fetchTranscripts]);
 
   useEffect(() => {
     async function fetchSelectedVideo(id: string) {
+      addDebugEvent("video.fetch.start", `id=${id}`);
       setVideo(null);
       setVideoError(null);
       setVideoLoading(true);
@@ -135,26 +230,39 @@ function HomeInner() {
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
           setVideoError(data.error || "Transcript not found.");
+          addDebugEvent("video.fetch.error", `id=${id} status=${res.status}`);
           return;
         }
         const data = await res.json();
         setVideo(data);
+        addDebugEvent("video.fetch.success", `id=${id} segments=${safeSegmentCount(data.transcript)}`);
       } catch {
         setVideoError("Failed to load transcript.");
+        addDebugEvent("video.fetch.exception", `id=${id}`);
       } finally {
         setVideoLoading(false);
+        addDebugEvent("video.loading", `setVideoLoading(false) id=${id}`);
       }
     }
 
     if (!selectedId) {
+      addDebugEvent("video.selection.clear", "selectedId is empty");
       setVideo(null);
       setVideoError(null);
       setVideoLoading(false);
       return;
     }
 
+    addDebugEvent("video.selection.change", `selectedId=${selectedId}`);
     fetchSelectedVideo(selectedId);
-  }, [selectedId]);
+  }, [addDebugEvent, selectedId]);
+
+  useEffect(() => {
+    addDebugEvent(
+      "state.snapshot",
+      `layout=${libraryLayout} selected=${selectedId ?? "none"} closing=${closingVideo?.id ?? "none"} video=${video?.id ?? "none"} videoLoading=${videoLoading}`
+    );
+  }, [addDebugEvent, libraryLayout, selectedId, closingVideo?.id, video?.id, videoLoading]);
 
   const selectTranscript = useCallback(
     (id: string) => {
@@ -164,36 +272,35 @@ function HomeInner() {
       if (selectedId === id) {
         // Preserve video data for exit animation
         setClosingVideo(video);
+        addDebugEvent("select.toggle.close", `id=${id} hasVideo=${Boolean(video?.id)}`);
 
         // Update URL immediately to trigger exit animation
         params.delete("id");
         const qs = params.toString();
+        addDebugEvent("route.push", `close id=${id} qs="${qs}"`);
         router.push(qs ? `/?${qs}` : "/", { scroll: false });
-
-        // Clear closing video after exit animation completes (spring + opacity duration)
-        setTimeout(() => {
-          setClosingVideo(null);
-        }, 600);
       } else {
         setClosingVideo(null);
         params.set("id", id);
         const qs = params.toString();
+        addDebugEvent("select.toggle.open", `id=${id} qs="${qs}"`);
         router.push(qs ? `/?${qs}` : "/", { scroll: false });
       }
     },
-    [router, searchParams, selectedId, video]
+    [addDebugEvent, router, searchParams, selectedId, video]
   );
 
   const setLibraryLayout = useCallback(
     (layout: "tiles" | "list") => {
       // Save preference to localStorage
       localStorage.setItem("libraryLayout", layout);
+      addDebugEvent("layout.change", `layout=${layout}`);
 
       const params = new URLSearchParams(searchParams.toString());
       params.set("layout", layout);
       router.push(`/?${params.toString()}`, { scroll: false });
     },
-    [router, searchParams]
+    [addDebugEvent, router, searchParams]
   );
 
   const clearSelectedTranscript = useCallback(() => {
@@ -666,41 +773,41 @@ function HomeInner() {
                 />
                 <IconButton
                   onClick={() => setLibraryLayout("tiles")}
-                  className={`shrink-0 ${libraryLayout === "tiles" ? "bg-white/10 text-white" : ""}`}
+                  className={`h-10 w-10 shrink-0 ${libraryLayout === "tiles" ? "bg-white/10 text-white" : ""}`}
                   title="Tiles view"
                 >
                   <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 20 20"
+                    className="h-5 w-5 shrink-0"
+                    viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
-                    strokeWidth="1.5"
+                    strokeWidth="1.9"
                     strokeLinecap="round"
                     strokeLinejoin="round"
+                    preserveAspectRatio="xMidYMid meet"
                   >
-                    <rect x="3" y="3" width="6" height="6" rx="1" />
-                    <rect x="11" y="3" width="6" height="6" rx="1" />
-                    <rect x="3" y="11" width="6" height="6" rx="1" />
-                    <rect x="11" y="11" width="6" height="6" rx="1" />
+                    <rect x="3" y="3" width="7" height="7" rx="1.2" />
+                    <rect x="14" y="3" width="7" height="7" rx="1.2" />
+                    <rect x="3" y="14" width="7" height="7" rx="1.2" />
+                    <rect x="14" y="14" width="7" height="7" rx="1.2" />
                   </svg>
                 </IconButton>
                 <IconButton
                   onClick={() => setLibraryLayout("list")}
-                  className={`shrink-0 ${libraryLayout === "list" ? "bg-white/10 text-white" : ""}`}
+                  className={`h-10 w-10 shrink-0 ${libraryLayout === "list" ? "bg-white/10 text-white" : ""}`}
                   title="List view"
                 >
                   <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 20 20"
+                    className="h-5 w-5 shrink-0"
+                    viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
-                    strokeWidth="1.5"
+                    strokeWidth="1.9"
                     strokeLinecap="round"
                     strokeLinejoin="round"
+                    preserveAspectRatio="xMidYMid meet"
                   >
-                    <path d="M3 6h14M3 10h14M3 14h14" />
+                    <path d="M4 7h16M4 12h16M4 17h16" />
                   </svg>
                 </IconButton>
               </div>
@@ -727,21 +834,39 @@ function HomeInner() {
               ) : (
                 <>
                   {libraryLayout === "tiles" ? (
-                    <div className="grid grid-cols-2 gap-4">
+                    <LayoutGroup>
+                      <div className="grid grid-cols-2 gap-4">
                       {transcripts.map((t) => {
                         const isSelected = selectedId === t.id;
+                        const isClosing = closingVideo?.id === t.id;
+                        const showDrawer = isSelected || isClosing;
                         // Use closingVideo if available (during exit animation), otherwise use current video
                         const videoData = closingVideo || video;
                         const transcriptSegments: TranscriptSegment[] =
-                          (isSelected || closingVideo) && videoData?.transcript && videoData.id === t.id
+                          showDrawer && videoData?.transcript && videoData.id === t.id
                             ? JSON.parse(videoData.transcript)
                             : [];
 
                         return (
-                          <div
+                          <motion.div
                             key={t.id}
                             data-transcript-id={t.id}
-                            className={`${isSelected ? "col-span-2" : ""}`}
+                            className={`${showDrawer ? "col-span-2" : ""}`}
+                            layout
+                            transition={{
+                              layout: {
+                                type: "spring",
+                                stiffness: 300,
+                                damping: 36,
+                                mass: 0.9,
+                              },
+                            }}
+                            onLayoutAnimationStart={() => {
+                              addDebugEvent("tile.row.layout.start", `id=${t.id}`);
+                            }}
+                            onLayoutAnimationComplete={() => {
+                              addDebugEvent("tile.row.layout.complete", `id=${t.id}`);
+                            }}
                           >
                             <button
                               onClick={() => selectTranscript(t.id)}
@@ -774,76 +899,118 @@ function HomeInner() {
                             </button>
 
                             {/* Transcript drawer */}
-                            <AnimatePresence initial={false}>
-                              {isSelected && (
-                                <motion.div
-                                  key={`tile-drawer-${t.id}`}
-                                  layout
-                                  initial={{ opacity: 0, height: 0 }}
-                                  animate={{ opacity: 1, height: "auto" }}
-                                  exit={{ opacity: 0, height: 0 }}
-                                  transition={{
-                                    height: {
-                                      type: "spring",
-                                      stiffness: 300,
-                                      damping: 30,
-                                      mass: 0.8,
-                                    },
-                                    opacity: {
-                                      duration: 0.5,
-                                      ease: "easeInOut",
-                                    },
-                                  }}
-                                  className="overflow-hidden"
-                                >
-                                  <div className="mt-4 rounded-lg border border-white/10 bg-white/5 px-6 py-6">
-                                    {videoLoading ? (
-                                      <div className="flex items-center justify-center py-8">
-                                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/15 border-t-white/50" />
-                                      </div>
-                                    ) : videoError ? (
-                                      <p className="py-4 text-center text-sm text-red-500">
-                                        {videoError}
-                                      </p>
-                                    ) : transcriptSegments.length > 0 ? (
-                                      <div className="space-y-3">
-                                        {transcriptSegments.map((seg, idx) => (
-                                          <div key={idx} className="flex gap-4">
-                                            <span className="shrink-0 font-mono text-xs text-white/35">
-                                              {formatTimestamp(seg.startMs)}
-                                            </span>
-                                            <p className="text-sm leading-relaxed text-white/70">
-                                              {seg.text}
-                                            </p>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : (
-                                      <p className="py-4 text-center text-sm text-white/50">
-                                        No transcript available
-                                      </p>
-                                    )}
-                                  </div>
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-                          </div>
+                            {showDrawer && (
+                              <motion.div
+                                key={`tile-drawer-${t.id}`}
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{
+                                  opacity: isSelected ? 1 : 0,
+                                  height: isSelected ? "auto" : 0,
+                                }}
+                                onAnimationStart={() => {
+                                  addDebugEvent(
+                                    "tile.drawer.anim.start",
+                                    `id=${t.id} selected=${isSelected} closing=${isClosing}`
+                                  );
+                                }}
+                                onLayoutAnimationStart={() => {
+                                  addDebugEvent("tile.drawer.layout.start", `id=${t.id}`);
+                                }}
+                                onLayoutAnimationComplete={() => {
+                                  addDebugEvent("tile.drawer.layout.complete", `id=${t.id}`);
+                                }}
+                                transition={{
+                                  height: {
+                                    type: "spring",
+                                    stiffness: 240,
+                                    damping: 32,
+                                    mass: 0.95,
+                                  },
+                                  opacity: {
+                                    duration: 0.28,
+                                    ease: "easeOut",
+                                  },
+                                }}
+                                onAnimationComplete={() => {
+                                  addDebugEvent(
+                                    "tile.drawer.anim.complete",
+                                    `id=${t.id} selected=${isSelected} closing=${isClosing}`
+                                  );
+                                  if (!isSelected) {
+                                    setClosingVideo((prev) => (prev?.id === t.id ? null : prev));
+                                  }
+                                }}
+                                className="overflow-hidden"
+                              >
+                                <div className="mt-4 rounded-lg border border-white/10 bg-white/5 px-6 py-6">
+                                  {videoLoading ? (
+                                    <div className="flex items-center justify-center py-8">
+                                      <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/15 border-t-white/50" />
+                                    </div>
+                                  ) : videoError ? (
+                                    <p className="py-4 text-center text-sm text-red-500">
+                                      {videoError}
+                                    </p>
+                                  ) : transcriptSegments.length > 0 ? (
+                                    <div className="space-y-3">
+                                      {transcriptSegments.map((seg, idx) => (
+                                        <div key={idx} className="flex gap-4">
+                                          <span className="shrink-0 font-mono text-xs text-white/35">
+                                            {formatTimestamp(seg.startMs)}
+                                          </span>
+                                          <p className="text-sm leading-relaxed text-white/70">
+                                            {seg.text}
+                                          </p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <p className="py-4 text-center text-sm text-white/50">
+                                      No transcript available
+                                    </p>
+                                  )}
+                                </div>
+                              </motion.div>
+                            )}
+                          </motion.div>
                         );
                       })}
-                    </div>
+                      </div>
+                    </LayoutGroup>
                   ) : (
-                    <div className="overflow-hidden rounded-lg border border-white/10 bg-[hsl(var(--panel-2))]">
+                    <LayoutGroup>
+                      <div className="overflow-hidden rounded-lg border border-white/10 bg-[hsl(var(--panel-2))]">
                       {transcripts.map((t) => {
                         const isSelected = selectedId === t.id;
+                        const isClosing = closingVideo?.id === t.id;
+                        const showDrawer = isSelected || isClosing;
                         // Use closingVideo if available (during exit animation), otherwise use current video
                         const videoData = closingVideo || video;
                         const transcriptSegments: TranscriptSegment[] =
-                          (isSelected || closingVideo) && videoData?.transcript && videoData.id === t.id
+                          showDrawer && videoData?.transcript && videoData.id === t.id
                             ? JSON.parse(videoData.transcript)
                             : [];
 
                         return (
-                          <div key={t.id} data-transcript-id={t.id}>
+                          <motion.div
+                            key={t.id}
+                            data-transcript-id={t.id}
+                            layout
+                            transition={{
+                              layout: {
+                                type: "spring",
+                                stiffness: 300,
+                                damping: 36,
+                                mass: 0.9,
+                              },
+                            }}
+                            onLayoutAnimationStart={() => {
+                              addDebugEvent("list.row.layout.start", `id=${t.id}`);
+                            }}
+                            onLayoutAnimationComplete={() => {
+                              addDebugEvent("list.row.layout.complete", `id=${t.id}`);
+                            }}
+                          >
                             <div
                               className={`group/row relative flex w-full items-center gap-4 px-4 py-3 transition-all ${
                                 isSelected
@@ -950,63 +1117,84 @@ function HomeInner() {
                             </div>
 
                             {/* Transcript drawer */}
-                            <AnimatePresence initial={false}>
-                              {isSelected && (
-                                <motion.div
-                                  key={`list-drawer-${t.id}`}
-                                  layout
-                                  initial={{ opacity: 0, height: 0 }}
-                                  animate={{ opacity: 1, height: "auto" }}
-                                  exit={{ opacity: 0, height: 0 }}
-                                  transition={{
-                                    height: {
-                                      type: "spring",
-                                      stiffness: 300,
-                                      damping: 30,
-                                      mass: 0.8,
-                                    },
-                                    opacity: {
-                                      duration: 0.5,
-                                      ease: "easeInOut",
-                                    },
-                                  }}
-                                  className="overflow-hidden"
-                                >
-                                  <div className="border-t border-white/10 bg-white/5 px-6 py-6">
-                                    {videoLoading ? (
-                                      <div className="flex items-center justify-center py-8">
-                                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/15 border-t-white/50" />
-                                      </div>
-                                    ) : videoError ? (
-                                      <p className="py-4 text-center text-sm text-red-500">
-                                        {videoError}
-                                      </p>
-                                    ) : transcriptSegments.length > 0 ? (
-                                      <div className="space-y-3">
-                                        {transcriptSegments.map((seg, idx) => (
-                                          <div key={idx} className="flex gap-4">
-                                            <span className="shrink-0 font-mono text-xs text-white/35">
-                                              {formatTimestamp(seg.startMs)}
-                                            </span>
-                                            <p className="text-sm leading-relaxed text-white/70">
-                                              {seg.text}
-                                            </p>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : (
-                                      <p className="py-4 text-center text-sm text-white/50">
-                                        No transcript available
-                                      </p>
-                                    )}
-                                  </div>
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-                          </div>
+                            {showDrawer && (
+                              <motion.div
+                                key={`list-drawer-${t.id}`}
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{
+                                  opacity: isSelected ? 1 : 0,
+                                  height: isSelected ? "auto" : 0,
+                                }}
+                                onAnimationStart={() => {
+                                  addDebugEvent(
+                                    "list.drawer.anim.start",
+                                    `id=${t.id} selected=${isSelected} closing=${isClosing}`
+                                  );
+                                }}
+                                onLayoutAnimationStart={() => {
+                                  addDebugEvent("list.drawer.layout.start", `id=${t.id}`);
+                                }}
+                                onLayoutAnimationComplete={() => {
+                                  addDebugEvent("list.drawer.layout.complete", `id=${t.id}`);
+                                }}
+                                transition={{
+                                  height: {
+                                    type: "spring",
+                                    stiffness: 240,
+                                    damping: 32,
+                                    mass: 0.95,
+                                  },
+                                  opacity: {
+                                    duration: 0.28,
+                                    ease: "easeOut",
+                                  },
+                                }}
+                                onAnimationComplete={() => {
+                                  addDebugEvent(
+                                    "list.drawer.anim.complete",
+                                    `id=${t.id} selected=${isSelected} closing=${isClosing}`
+                                  );
+                                  if (!isSelected) {
+                                    setClosingVideo((prev) => (prev?.id === t.id ? null : prev));
+                                  }
+                                }}
+                                className="overflow-hidden"
+                              >
+                                <div className="border-t border-white/10 bg-white/5 px-6 py-6">
+                                  {videoLoading ? (
+                                    <div className="flex items-center justify-center py-8">
+                                      <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/15 border-t-white/50" />
+                                    </div>
+                                  ) : videoError ? (
+                                    <p className="py-4 text-center text-sm text-red-500">
+                                      {videoError}
+                                    </p>
+                                  ) : transcriptSegments.length > 0 ? (
+                                    <div className="space-y-3">
+                                      {transcriptSegments.map((seg, idx) => (
+                                        <div key={idx} className="flex gap-4">
+                                          <span className="shrink-0 font-mono text-xs text-white/35">
+                                            {formatTimestamp(seg.startMs)}
+                                          </span>
+                                          <p className="text-sm leading-relaxed text-white/70">
+                                            {seg.text}
+                                          </p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <p className="py-4 text-center text-sm text-white/50">
+                                      No transcript available
+                                    </p>
+                                  )}
+                                </div>
+                              </motion.div>
+                            )}
+                          </motion.div>
                         );
                       })}
-                    </div>
+                      </div>
+                    </LayoutGroup>
                   )}
                 </>
               )}
@@ -1055,6 +1243,65 @@ function HomeInner() {
           )}
         </div>
       </div>
+
+      <aside className="fixed bottom-4 right-4 z-40 w-[min(720px,calc(100vw-2rem))] rounded-xl border border-white/15 bg-black/70 shadow-[0_24px_60px_-24px_rgba(0,0,0,0.9)] backdrop-blur-md">
+        <div className="flex items-center justify-between gap-3 border-b border-white/10 px-3 py-2">
+          <div className="min-w-0">
+            <p className="font-mono text-xs uppercase tracking-wider text-white/85">
+              Drawer Debug Console
+            </p>
+            <p className="truncate font-mono text-[11px] text-white/45">
+              layout={libraryLayout} selected={selectedId ?? "none"} closing={closingVideo?.id ?? "none"} videoLoading=
+              {String(videoLoading)} events={debugEvents.length}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setDebugPaused((prev) => !prev)}
+              className="rounded border border-white/20 px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-white/80 hover:bg-white/10"
+            >
+              {debugPaused ? "Resume" : "Pause"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setDebugEvents([])}
+              className="rounded border border-white/20 px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-white/80 hover:bg-white/10"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={() => setDebugCollapsed((prev) => !prev)}
+              className="rounded border border-white/20 px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-white/80 hover:bg-white/10"
+            >
+              {debugCollapsed ? "Expand" : "Collapse"}
+            </button>
+          </div>
+        </div>
+        {!debugCollapsed && (
+          <div className="max-h-[40vh] overflow-y-auto p-2">
+            {debugEvents.length === 0 ? (
+              <p className="px-2 py-1 font-mono text-[11px] text-white/40">
+                No events yet. Interact with list/tile drawers to capture traces.
+              </p>
+            ) : (
+              <ul className="space-y-1">
+                {debugEvents.map((event) => (
+                  <li
+                    key={event.id}
+                    className="grid grid-cols-[72px_220px_1fr] gap-2 rounded border border-white/10 bg-white/[0.03] px-2 py-1 font-mono text-[11px] leading-4"
+                  >
+                    <span className="tabular-nums text-white/45">+{event.elapsedSec.toFixed(3)}s</span>
+                    <span className="text-white/80">{event.type}</span>
+                    <span className="break-all text-white/55">{event.detail}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </aside>
 
       {/* Delete confirmation dialog */}
       {deleteId && (
