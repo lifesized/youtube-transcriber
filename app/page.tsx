@@ -845,7 +845,7 @@ function HomeInner() {
                         return (
                           <div key={t.id} data-transcript-id={t.id}>
                             <div
-                              className={`group/row relative flex w-full items-start gap-4 px-4 py-3 transition-all ${
+                              className={`group/row relative flex w-full items-center gap-4 px-4 py-3 transition-all ${
                                 isSelected
                                   ? "bg-white/10 shadow-[inset_3px_0_0_0_rgba(255,255,255,0.3)]"
                                   : "hover:bg-white/5"
@@ -864,7 +864,7 @@ function HomeInner() {
                                 </p>
                               </button>
 
-                              <div className="mt-1 flex shrink-0 items-center gap-2 opacity-0 transition-opacity group-hover/row:opacity-100">
+                              <div className="flex shrink-0 items-center gap-2 opacity-0 transition-opacity group-hover/row:opacity-100">
                                 <a
                                   href={`/api/transcripts/${t.id}/download`}
                                   title="Download as Markdown"
