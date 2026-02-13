@@ -366,6 +366,51 @@ prisma/
 - If YouTube blocks requests, wait a few minutes before retrying
 - Try disabling VPN if you're getting consistent 403 errors
 
+## AI Agent Integration
+
+This transcription service can be used by AI agents like **OpenClaw**, **Claude Code**, and other LLM-powered assistants. A skill file is included that teaches agents how to interact with the REST API.
+
+### OpenClaw Setup
+
+1. **Start the transcription service:**
+   ```bash
+   npm run dev
+   # Running at http://127.0.0.1:3000
+   ```
+
+2. **Install the skill:**
+   ```bash
+   cp -r contrib/openclaw ~/.openclaw/skills/youtube-transcriber
+   ```
+
+3. **Use it!** Ask your OpenClaw agent:
+   > "Transcribe this YouTube video: https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
+### Claude Code Setup
+
+Copy the skill to Claude Code's skill directory:
+```bash
+cp -r contrib/openclaw /mnt/skills/user/youtube-transcriber
+```
+
+### REST API Reference
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/transcripts` | POST | Capture transcript from YouTube URL |
+| `/api/transcripts` | GET | List all transcripts |
+| `/api/transcripts?q=query` | GET | Search transcripts |
+| `/api/transcripts/:id` | GET | Get single transcript |
+| `/api/transcripts/:id` | DELETE | Delete transcript |
+| `/api/transcripts/:id/download` | GET | Download as Markdown |
+
+**Example:**
+```bash
+curl -X POST 'http://127.0.0.1:3000/api/transcripts' \
+  -H 'Content-Type: application/json' \
+  -d '{"url": "https://www.youtube.com/watch?v=VIDEO_ID"}'
+```
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit issues or pull requests.
