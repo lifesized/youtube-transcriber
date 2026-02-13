@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import type { TranscriptSegment } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -157,14 +158,20 @@ function HomeInner() {
   const selectTranscript = useCallback(
     (id: string) => {
       const params = new URLSearchParams(searchParams.toString());
-      // Toggle: if clicking the same item, deselect it
+
+      // Toggle: if clicking the same item, deselect it with animation delay
       if (selectedId === id) {
-        params.delete("id");
+        // Delay URL update to allow exit animation to complete
+        setTimeout(() => {
+          params.delete("id");
+          const qs = params.toString();
+          router.push(qs ? `/?${qs}` : "/", { scroll: false });
+        }, 400); // Match spring animation duration
       } else {
         params.set("id", id);
+        const qs = params.toString();
+        router.push(qs ? `/?${qs}` : "/", { scroll: false });
       }
-      const qs = params.toString();
-      router.push(qs ? `/?${qs}` : "/", { scroll: false });
     },
     [router, searchParams, selectedId]
   );
@@ -723,6 +730,7 @@ function HomeInner() {
                         return (
                           <div
                             key={t.id}
+                            data-transcript-id={t.id}
                             className={`${isSelected ? "col-span-2" : ""}`}
                           >
                             <button
@@ -756,36 +764,53 @@ function HomeInner() {
                             </button>
 
                             {/* Transcript drawer */}
-                            {isSelected && (
-                              <div className="mt-4 rounded-lg border border-white/10 bg-white/5 px-6 py-6">
-                                {videoLoading ? (
-                                  <div className="flex items-center justify-center py-8">
-                                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/15 border-t-white/50" />
-                                  </div>
-                                ) : videoError ? (
-                                  <p className="py-4 text-center text-sm text-red-500">
-                                    {videoError}
-                                  </p>
-                                ) : transcriptSegments.length > 0 ? (
-                                  <div className="space-y-3">
-                                    {transcriptSegments.map((seg, idx) => (
-                                      <div key={idx} className="flex gap-4">
-                                        <span className="shrink-0 font-mono text-xs text-white/35">
-                                          {formatTimestamp(seg.startMs)}
-                                        </span>
-                                        <p className="text-sm leading-relaxed text-white/70">
-                                          {seg.text}
-                                        </p>
+                            <AnimatePresence initial={false}>
+                              {isSelected && (
+                                <motion.div
+                                  key={`tile-drawer-${t.id}`}
+                                  layout
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: "auto" }}
+                                  exit={{ height: 0 }}
+                                  transition={{
+                                    type: "spring",
+                                    stiffness: 300,
+                                    damping: 30,
+                                    mass: 0.8,
+                                  }}
+                                  className="overflow-hidden"
+                                >
+                                  <div className="mt-4 rounded-lg border border-white/10 bg-white/5 px-6 py-6">
+                                    {videoLoading ? (
+                                      <div className="flex items-center justify-center py-8">
+                                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/15 border-t-white/50" />
                                       </div>
-                                    ))}
+                                    ) : videoError ? (
+                                      <p className="py-4 text-center text-sm text-red-500">
+                                        {videoError}
+                                      </p>
+                                    ) : transcriptSegments.length > 0 ? (
+                                      <div className="space-y-3">
+                                        {transcriptSegments.map((seg, idx) => (
+                                          <div key={idx} className="flex gap-4">
+                                            <span className="shrink-0 font-mono text-xs text-white/35">
+                                              {formatTimestamp(seg.startMs)}
+                                            </span>
+                                            <p className="text-sm leading-relaxed text-white/70">
+                                              {seg.text}
+                                            </p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="py-4 text-center text-sm text-white/50">
+                                        No transcript available
+                                      </p>
+                                    )}
                                   </div>
-                                ) : (
-                                  <p className="py-4 text-center text-sm text-white/50">
-                                    No transcript available
-                                  </p>
-                                )}
-                              </div>
-                            )}
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
                           </div>
                         );
                       })}
@@ -800,7 +825,7 @@ function HomeInner() {
                             : [];
 
                         return (
-                          <div key={t.id}>
+                          <div key={t.id} data-transcript-id={t.id}>
                             <div
                               className={`group/row relative flex w-full items-start gap-4 px-4 py-3 transition-all ${
                                 isSelected
@@ -907,36 +932,53 @@ function HomeInner() {
                             </div>
 
                             {/* Transcript drawer */}
-                            {isSelected && (
-                              <div className="border-t border-white/10 bg-white/5 px-6 py-6">
-                                {videoLoading ? (
-                                  <div className="flex items-center justify-center py-8">
-                                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/15 border-t-white/50" />
-                                  </div>
-                                ) : videoError ? (
-                                  <p className="py-4 text-center text-sm text-red-500">
-                                    {videoError}
-                                  </p>
-                                ) : transcriptSegments.length > 0 ? (
-                                  <div className="space-y-3">
-                                    {transcriptSegments.map((seg, idx) => (
-                                      <div key={idx} className="flex gap-4">
-                                        <span className="shrink-0 font-mono text-xs text-white/35">
-                                          {formatTimestamp(seg.startMs)}
-                                        </span>
-                                        <p className="text-sm leading-relaxed text-white/70">
-                                          {seg.text}
-                                        </p>
+                            <AnimatePresence initial={false}>
+                              {isSelected && (
+                                <motion.div
+                                  key={`list-drawer-${t.id}`}
+                                  layout
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: "auto" }}
+                                  exit={{ height: 0 }}
+                                  transition={{
+                                    type: "spring",
+                                    stiffness: 300,
+                                    damping: 30,
+                                    mass: 0.8,
+                                  }}
+                                  className="overflow-hidden"
+                                >
+                                  <div className="border-t border-white/10 bg-white/5 px-6 py-6">
+                                    {videoLoading ? (
+                                      <div className="flex items-center justify-center py-8">
+                                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/15 border-t-white/50" />
                                       </div>
-                                    ))}
+                                    ) : videoError ? (
+                                      <p className="py-4 text-center text-sm text-red-500">
+                                        {videoError}
+                                      </p>
+                                    ) : transcriptSegments.length > 0 ? (
+                                      <div className="space-y-3">
+                                        {transcriptSegments.map((seg, idx) => (
+                                          <div key={idx} className="flex gap-4">
+                                            <span className="shrink-0 font-mono text-xs text-white/35">
+                                              {formatTimestamp(seg.startMs)}
+                                            </span>
+                                            <p className="text-sm leading-relaxed text-white/70">
+                                              {seg.text}
+                                            </p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="py-4 text-center text-sm text-white/50">
+                                        No transcript available
+                                      </p>
+                                    )}
                                   </div>
-                                ) : (
-                                  <p className="py-4 text-center text-sm text-white/50">
-                                    No transcript available
-                                  </p>
-                                )}
-                              </div>
-                            )}
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
                           </div>
                         );
                       })}
