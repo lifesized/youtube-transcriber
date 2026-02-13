@@ -388,23 +388,19 @@ This transcription service can be used by AI agents like **OpenClaw**, **Claude 
 
 ### Claude Code Setup
 
-Copy the skill to Claude Code's skill directory:
 ```bash
-cp -r contrib/openclaw /mnt/skills/user/youtube-transcriber
+cp -r contrib/claude-code ~/.claude/skills/youtube-transcriber
 ```
 
-### REST API Reference
+Then ask Claude Code to transcribe a video.
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/transcripts` | POST | Capture transcript from YouTube URL |
-| `/api/transcripts` | GET | List all transcripts |
-| `/api/transcripts?q=query` | GET | Search transcripts |
-| `/api/transcripts/:id` | GET | Get single transcript |
-| `/api/transcripts/:id` | DELETE | Delete transcript |
-| `/api/transcripts/:id/download` | GET | Download as Markdown |
+### REST API
 
-**Example:**
+Full API documentation: [`docs/API.md`](./docs/API.md)
+
+OpenAPI spec: [`docs/openapi.yaml`](./docs/openapi.yaml)
+
+**Quick example:**
 ```bash
 curl -X POST 'http://127.0.0.1:3000/api/transcripts' \
   -H 'Content-Type: application/json' \

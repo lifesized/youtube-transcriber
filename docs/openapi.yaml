@@ -1,0 +1,284 @@
+openapi: 3.1.0
+info:
+  title: YouTube Transcriber API
+  description: |
+    Capture transcripts from YouTube videos. Uses official YouTube captions when available,
+    falls back to local Whisper transcription for videos without captions.
+  version: 1.0.0
+  contact:
+    name: lifesized
+    url: https://github.com/lifesized
+
+servers:
+  - url: http://127.0.0.1:3000
+    description: Local development server
+
+paths:
+  /api/transcripts:
+    post:
+      operationId: createTranscript
+      summary: Capture transcript from YouTube URL
+      description: |
+        Submits a YouTube URL for transcription. If the video was previously transcribed,
+        returns the existing transcript. Otherwise, captures a new transcript using
+        YouTube captions or local Whisper.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  description: YouTube video URL
+                  examples:
+                    - "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+                    - "https://youtu.be/dQw4w9WgXcQ"
+                    - "https://www.youtube.com/shorts/abc123"
+      responses:
+        "201":
+          description: Transcript created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Video"
+        "200":
+          description: Existing transcript returned (duplicate URL)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Video"
+        "400":
+          description: Invalid URL format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Video not found or unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limited by YouTube
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Transcription failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    get:
+      operationId: listTranscripts
+      summary: List all transcripts
+      description: Returns all saved transcripts, optionally filtered by search query.
+      parameters:
+        - name: q
+          in: query
+          description: Search query (matches title and author)
+          schema:
+            type: string
+          example: "machine learning"
+      responses:
+        "200":
+          description: List of transcripts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VideoSummary"
+
+  /api/transcripts/{id}:
+    get:
+      operationId: getTranscript
+      summary: Get transcript by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Transcript ID
+      responses:
+        "200":
+          description: Transcript details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Video"
+        "404":
+          description: Transcript not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      operationId: deleteTranscript
+      summary: Delete transcript
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Transcript ID
+      responses:
+        "200":
+          description: Transcript deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        "404":
+          description: Transcript not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/transcripts/{id}/download:
+    get:
+      operationId: downloadTranscript
+      summary: Download transcript as Markdown
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Transcript ID
+      responses:
+        "200":
+          description: Markdown file
+          content:
+            text/markdown:
+              schema:
+                type: string
+        "404":
+          description: Transcript not found
+
+components:
+  schemas:
+    Video:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique transcript ID
+          example: "cm5abc123def"
+        videoId:
+          type: string
+          description: YouTube video ID
+          example: "dQw4w9WgXcQ"
+        title:
+          type: string
+          description: Video title
+          example: "Rick Astley - Never Gonna Give You Up"
+        author:
+          type: string
+          description: Channel name
+          example: "Rick Astley"
+        channelUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: Channel URL
+          example: "https://www.youtube.com/@RickAstleyYT"
+        thumbnailUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: Video thumbnail
+          example: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
+        videoUrl:
+          type: string
+          format: uri
+          description: Original video URL
+          example: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        transcript:
+          type: string
+          description: JSON-encoded array of transcript segments
+          example: '[{"text":"We''re no strangers to love","startMs":18000,"durationMs":3500}]'
+        source:
+          type: string
+          enum: [youtube_captions, whisper_local]
+          description: |
+            How the transcript was captured:
+            - `youtube_captions`: Fetched from YouTube (fast)
+            - `whisper_local`: Transcribed with local Whisper (slower)
+          example: "youtube_captions"
+        createdAt:
+          type: string
+          format: date-time
+          description: When the transcript was created
+        updatedAt:
+          type: string
+          format: date-time
+          description: When the transcript was last updated
+
+    VideoSummary:
+      type: object
+      description: Transcript summary (without full transcript text)
+      properties:
+        id:
+          type: string
+        videoId:
+          type: string
+        title:
+          type: string
+        author:
+          type: string
+        channelUrl:
+          type: string
+          nullable: true
+        thumbnailUrl:
+          type: string
+          nullable: true
+        videoUrl:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TranscriptSegment:
+      type: object
+      description: A single segment of the transcript
+      properties:
+        text:
+          type: string
+          description: The spoken words
+          example: "We're no strangers to love"
+        startMs:
+          type: integer
+          description: Start time in milliseconds
+          example: 18000
+        durationMs:
+          type: integer
+          description: Duration in milliseconds
+          example: 3500
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Invalid YouTube URL"
