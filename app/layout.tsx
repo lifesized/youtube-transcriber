@@ -22,7 +22,7 @@ export default function RootLayout({
       >
         <main className="flex-1">{children}</main>
         <footer className="bg-[hsl(var(--bg))]/70">
-          <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
+          <div className="mx-auto flex max-w-7xl items-center justify-between px-10 py-4">
             <span className="text-xs text-white/35">
               <Link href="/about" className="text-white/60 hover:text-white">
                 about

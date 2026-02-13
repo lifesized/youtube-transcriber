@@ -157,10 +157,16 @@ function HomeInner() {
   const selectTranscript = useCallback(
     (id: string) => {
       const params = new URLSearchParams(searchParams.toString());
-      params.set("id", id);
-      router.push(`/?${params.toString()}`, { scroll: false });
+      // Toggle: if clicking the same item, deselect it
+      if (selectedId === id) {
+        params.delete("id");
+      } else {
+        params.set("id", id);
+      }
+      const qs = params.toString();
+      router.push(qs ? `/?${qs}` : "/", { scroll: false });
     },
-    [router, searchParams]
+    [router, searchParams, selectedId]
   );
 
   const setLibraryLayout = useCallback(
@@ -440,12 +446,7 @@ function HomeInner() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-12">
-      <div
-        className={`grid grid-cols-1 gap-8 ${
-          selectedId ? "lg:grid-cols-[640px_minmax(0,1fr)]" : "lg:grid-cols-1"
-        }`}
-      >
-        {/* Left rail: capture + library */}
+      <div className="mx-auto max-w-[800px]">
         <div className="space-y-8">
           <section>
             <div className="mb-6 flex items-center justify-between">
@@ -747,106 +748,154 @@ function HomeInner() {
                     </div>
                   ) : (
                     <div className="overflow-hidden rounded-lg border border-white/10 bg-[hsl(var(--panel-2))]">
-                      {transcripts.map((t) => (
-                        <div
-                          key={t.id}
-                          className={`group/row relative flex w-full items-start gap-4 px-4 py-3 transition-all ${
-                            selectedId === t.id
-                              ? "bg-white/10 shadow-[inset_3px_0_0_0_rgba(255,255,255,0.3)]"
-                              : "hover:bg-white/5"
-                          }`}
-                        >
-                          <button
-                            onClick={() => selectTranscript(t.id)}
-                            className="min-w-0 flex-1 text-left"
-                          >
-                            <p className="truncate text-base font-medium text-white/75">
-                              {t.title}
-                            </p>
-                            <p className="mt-1 truncate text-sm text-white/40">
-                              {t.author} · {formatDate(t.createdAt)}
-                              {t.source ? ` · ${t.source}` : ""}
-                            </p>
-                          </button>
+                      {transcripts.map((t) => {
+                        const isSelected = selectedId === t.id;
+                        const transcriptSegments: TranscriptSegment[] =
+                          isSelected && video?.transcript
+                            ? JSON.parse(video.transcript)
+                            : [];
 
-                          <div className="mt-1 flex shrink-0 items-center gap-2 opacity-0 transition-opacity group-hover/row:opacity-100">
-                            <a
-                              href={`/api/transcripts/${t.id}/download`}
-                              title="Download as Markdown"
-                              className={iconButtonClassName("sm")}
+                        return (
+                          <div key={t.id}>
+                            <div
+                              className={`group/row relative flex w-full items-start gap-4 px-4 py-3 transition-all ${
+                                isSelected
+                                  ? "bg-white/10 shadow-[inset_3px_0_0_0_rgba(255,255,255,0.3)]"
+                                  : "hover:bg-white/5"
+                              }`}
                             >
-                              <svg
-                                width="16"
-                                height="16"
-                                viewBox="0 0 20 20"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.5"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
+                              <button
+                                onClick={() => selectTranscript(t.id)}
+                                className="min-w-0 flex-1 text-left"
                               >
-                                <path d="M10 3v10m0 0l-3.5-3.5M10 13l3.5-3.5" />
-                                <path d="M3 15v1a1 1 0 001 1h12a1 1 0 001-1v-1" />
-                              </svg>
-                            </a>
-                            <button
-                              type="button"
-                              title={copiedId === t.id ? "Copied!" : "Copy transcript"}
-                              onClick={() => handleCopyFromLibrary(t.id)}
-                              className={iconButtonClassName("sm")}
-                            >
-                              {copiedId === t.id ? (
-                                <svg
-                                  width="16"
-                                  height="16"
-                                  viewBox="0 0 20 20"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.5"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
+                                <p className="truncate text-base font-medium text-white/75">
+                                  {t.title}
+                                </p>
+                                <p className="mt-1 truncate text-sm text-white/40">
+                                  {t.author} · {formatDate(t.createdAt)}
+                                  {t.source ? ` · ${t.source}` : ""}
+                                </p>
+                              </button>
+
+                              <div className="mt-1 flex shrink-0 items-center gap-2 opacity-0 transition-opacity group-hover/row:opacity-100">
+                                <a
+                                  href={`/api/transcripts/${t.id}/download`}
+                                  title="Download as Markdown"
+                                  className={iconButtonClassName("sm")}
+                                  onClick={(e) => e.stopPropagation()}
                                 >
-                                  <path d="M5 10.5l3 3 7-7" />
-                                </svg>
-                              ) : (
-                                <svg
-                                  width="16"
-                                  height="16"
-                                  viewBox="0 0 20 20"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.5"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
+                                  <svg
+                                    width="16"
+                                    height="16"
+                                    viewBox="0 0 20 20"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="1.5"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  >
+                                    <path d="M10 3v10m0 0l-3.5-3.5M10 13l3.5-3.5" />
+                                    <path d="M3 15v1a1 1 0 001 1h12a1 1 0 001-1v-1" />
+                                  </svg>
+                                </a>
+                                <button
+                                  type="button"
+                                  title={copiedId === t.id ? "Copied!" : "Copy transcript"}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleCopyFromLibrary(t.id);
+                                  }}
+                                  className={iconButtonClassName("sm")}
                                 >
-                                  <rect x="7" y="7" width="9" height="9" rx="1" />
-                                  <path d="M4 13V4a1 1 0 011-1h9" />
-                                </svg>
-                              )}
-                            </button>
-                            <button
-                              type="button"
-                              title="Delete"
-                              onClick={() => setDeleteId(t.id)}
-                              className={`${iconButtonClassName("sm")} hover:bg-red-500/15 hover:text-red-200`}
-                            >
-                              <svg
-                                width="16"
-                                height="16"
-                                viewBox="0 0 20 20"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.5"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              >
-                                <path d="M4 5h12M8 5V3.5a1 1 0 011-1h2a1 1 0 011 1V5m2 0v10.5a1.5 1.5 0 01-1.5 1.5h-5A1.5 1.5 0 016 15.5V5" />
-                                <path d="M9 9v5M11 9v5" />
-                              </svg>
-                            </button>
+                                  {copiedId === t.id ? (
+                                    <svg
+                                      width="16"
+                                      height="16"
+                                      viewBox="0 0 20 20"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="1.5"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    >
+                                      <path d="M5 10.5l3 3 7-7" />
+                                    </svg>
+                                  ) : (
+                                    <svg
+                                      width="16"
+                                      height="16"
+                                      viewBox="0 0 20 20"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="1.5"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    >
+                                      <rect x="7" y="7" width="9" height="9" rx="1" />
+                                      <path d="M4 13V4a1 1 0 011-1h9" />
+                                    </svg>
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  title="Delete"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeleteId(t.id);
+                                  }}
+                                  className={`${iconButtonClassName("sm")} hover:bg-red-500/15 hover:text-red-200`}
+                                >
+                                  <svg
+                                    width="16"
+                                    height="16"
+                                    viewBox="0 0 20 20"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="1.5"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  >
+                                    <path d="M4 5h12M8 5V3.5a1 1 0 011-1h2a1 1 0 011 1V5m2 0v10.5a1.5 1.5 0 01-1.5 1.5h-5A1.5 1.5 0 016 15.5V5" />
+                                    <path d="M9 9v5M11 9v5" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Transcript drawer */}
+                            {isSelected && (
+                              <div className="border-t border-white/10 bg-white/5 px-6 py-6">
+                                {videoLoading ? (
+                                  <div className="flex items-center justify-center py-8">
+                                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/15 border-t-white/50" />
+                                  </div>
+                                ) : videoError ? (
+                                  <p className="py-4 text-center text-sm text-red-500">
+                                    {videoError}
+                                  </p>
+                                ) : transcriptSegments.length > 0 ? (
+                                  <div className="space-y-3">
+                                    {transcriptSegments.map((seg, idx) => (
+                                      <div key={idx} className="flex gap-4">
+                                        <span className="shrink-0 font-mono text-xs text-white/35">
+                                          {formatTimestamp(seg.startMs)}
+                                        </span>
+                                        <p className="text-sm leading-relaxed text-white/70">
+                                          {seg.text}
+                                        </p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="py-4 text-center text-sm text-white/50">
+                                    No transcript available
+                                  </p>
+                                )}
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </>
@@ -854,191 +903,6 @@ function HomeInner() {
             </section>
           )}
         </div>
-
-        {/* Right: transcript viewer */}
-        {selectedId && (
-        <div className="rounded-2xl border border-white/10 bg-[hsl(var(--panel))] p-6 shadow-[0_20px_70px_-55px_rgba(0,0,0,0.9)]">
-          {!selectedId ? (
-            <div className="flex min-h-[480px] items-center justify-center text-center">
-              <div>
-                <p className="text-base font-medium text-white/70">
-                  Select a transcript
-                </p>
-                <p className="mt-2 text-base text-white/50">
-                  Choose something from your library to view it here.
-                </p>
-              </div>
-            </div>
-          ) : videoLoading ? (
-            <div className="flex min-h-[480px] items-center justify-center">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-white/15 border-t-white/50" />
-            </div>
-          ) : videoError || !video ? (
-            <div className="min-h-[480px]">
-              <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-4 py-4 text-base text-red-200">
-                {videoError || "Transcript not found."}
-              </div>
-              <div className="mt-6">
-                <Button onClick={clearSelectedTranscript} variant="ghost" size="sm">
-                  Back
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div>
-              <div className="mb-6 flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <h2 className="truncate text-2xl font-semibold text-white/90">
-                    {video.title}
-                  </h2>
-                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-base text-white/50">
-                    <span>
-                      {video.channelUrl ? (
-                        <a
-                          href={video.channelUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-white/65 hover:text-white/90 hover:underline"
-                        >
-                          {video.author}
-                        </a>
-                      ) : (
-                        video.author
-                      )}
-                    </span>
-                    <span>Captured {formatDate(video.createdAt)}</span>
-                    <a
-                      href={video.videoUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-white/65 hover:text-white/90 hover:underline"
-                    >
-                      Watch
-                    </a>
-                  </div>
-                </div>
-
-                <div className="flex shrink-0 items-center gap-2">
-                  <a
-                    href={`/api/transcripts/${video.id}/download`}
-                    title="Download as Markdown"
-                    className={iconButtonClassName()}
-                  >
-                    <svg
-                      width="18"
-                      height="18"
-                      viewBox="0 0 20 20"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M10 3v10m0 0l-3.5-3.5M10 13l3.5-3.5" />
-                      <path d="M3 15v1a1 1 0 001 1h12a1 1 0 001-1v-1" />
-                    </svg>
-                  </a>
-                  <button
-                    title={copied ? "Copied!" : "Copy transcript"}
-                    onClick={() => {
-                      const text = segments
-                        .map((seg) => `[${formatTimestamp(seg.startMs)}] ${seg.text}`)
-                        .join("\n");
-                      navigator.clipboard.writeText(text);
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 2000);
-                    }}
-                    className={iconButtonClassName()}
-                  >
-                    {copied ? (
-                      <svg
-                        width="18"
-                        height="18"
-                        viewBox="0 0 20 20"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M5 10.5l3 3 7-7" />
-                      </svg>
-                    ) : (
-                      <svg
-                        width="18"
-                        height="18"
-                        viewBox="0 0 20 20"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <rect x="7" y="7" width="9" height="9" rx="1" />
-                        <path d="M4 13V4a1 1 0 011-1h9" />
-                      </svg>
-                    )}
-                  </button>
-                  <button
-                    title="Delete"
-                    onClick={() => setDeleteId(video.id)}
-                    className={`${iconButtonClassName()} hover:bg-red-500/15 hover:text-red-200`}
-                  >
-                    <svg
-                      width="18"
-                      height="18"
-                      viewBox="0 0 20 20"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M4 5h12M8 5V3.5a1 1 0 011-1h2a1 1 0 011 1V5m2 0v10.5a1.5 1.5 0 01-1.5 1.5h-5A1.5 1.5 0 016 15.5V5" />
-                      <path d="M9 9v5M11 9v5" />
-                    </svg>
-                  </button>
-                  <IconButton
-                    onClick={clearSelectedTranscript}
-                    title="Close transcript"
-                  >
-                    <svg
-                      width="18"
-                      height="18"
-                      viewBox="0 0 20 20"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M6 6l8 8M14 6l-8 8" />
-                    </svg>
-                  </IconButton>
-                </div>
-              </div>
-
-              <div className="space-y-0">
-                {segments.map((seg, i) => (
-                  <div
-                    key={i}
-                    className={`flex gap-6 rounded px-4 py-3 ${
-                      i % 2 === 0 ? "bg-white/5" : ""
-                    }`}
-                  >
-                    <span className="shrink-0 font-mono text-sm leading-6 text-white/40">
-                      {formatTimestamp(seg.startMs)}
-                    </span>
-                    <span className="text-base leading-6 text-white/75">
-                      {seg.text}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-        )}
       </div>
 
       {/* Delete confirmation dialog */}
