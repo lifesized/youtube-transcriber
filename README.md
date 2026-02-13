@@ -143,6 +143,14 @@ WHISPER_PYTHON_BIN="C:\\Users\\YourName\\project\\.venv\\Scripts\\python.exe"
 
 ### Running the App
 
+**Important:** This is a **local desktop application** that runs on your machine. It requires local access to:
+- Python environment with Whisper installed
+- yt-dlp command-line tool
+- FFmpeg for audio processing
+- SQLite database (file-based, not hosted)
+
+**Do not deploy to hosting services** like Vercel, Netlify, or similar platforms - they don't support these dependencies and the app won't function properly.
+
 ```bash
 npm run dev  # or: bun dev
 ```
