@@ -18,12 +18,12 @@ Use when the user wants to:
 
 ## API
 
-Base URL: `http://127.0.0.1:3000`
+Base URL: `http://127.0.0.1:19720`
 
 ### Capture Transcript
 
 ```bash
-curl -X POST 'http://127.0.0.1:3000/api/transcripts' \
+curl -X POST 'http://127.0.0.1:19720/api/transcripts' \
   -H 'Content-Type: application/json' \
   -d '{"url": "YOUTUBE_URL"}'
 ```
@@ -45,25 +45,25 @@ The `transcript` field is JSON. Parse it to get segments with `text`, `startMs`,
 ### List Transcripts
 
 ```bash
-curl 'http://127.0.0.1:3000/api/transcripts'
+curl 'http://127.0.0.1:19720/api/transcripts'
 ```
 
 ### Search
 
 ```bash
-curl 'http://127.0.0.1:3000/api/transcripts?q=QUERY'
+curl 'http://127.0.0.1:19720/api/transcripts?q=QUERY'
 ```
 
 ### Get by ID
 
 ```bash
-curl 'http://127.0.0.1:3000/api/transcripts/ID'
+curl 'http://127.0.0.1:19720/api/transcripts/ID'
 ```
 
 ### Delete
 
 ```bash
-curl -X DELETE 'http://127.0.0.1:3000/api/transcripts/ID'
+curl -X DELETE 'http://127.0.0.1:19720/api/transcripts/ID'
 ```
 
 ## Format Timestamps
@@ -89,7 +89,7 @@ When user asks to transcribe a video:
 3. Format and display the transcript with timestamps
 
 ```bash
-RESP=$(curl -s -X POST 'http://127.0.0.1:3000/api/transcripts' \
+RESP=$(curl -s -X POST 'http://127.0.0.1:19720/api/transcripts' \
   -H 'Content-Type: application/json' \
   -d '{"url": "USER_URL"}')
 

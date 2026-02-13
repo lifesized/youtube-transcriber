@@ -12,11 +12,11 @@ Use this skill when the user wants to:
 
 ## Prerequisites
 
-The YouTube Transcriber service must be running at `http://127.0.0.1:3000`.
+The YouTube Transcriber service must be running at `http://127.0.0.1:19720`.
 
 To check if it's running:
 ```bash
-curl -s http://127.0.0.1:3000/api/transcripts | head -c 100
+curl -s http://127.0.0.1:19720/api/transcripts | head -c 100
 ```
 
 If not running, the user needs to start it in their youtube-transcriber project directory:
@@ -26,12 +26,12 @@ npm run dev
 
 ## API Endpoints
 
-Base URL: `http://127.0.0.1:3000`
+Base URL: `http://127.0.0.1:19720`
 
 ### Capture a Transcript
 
 ```bash
-curl -X POST 'http://127.0.0.1:3000/api/transcripts' \
+curl -X POST 'http://127.0.0.1:19720/api/transcripts' \
   -H 'Content-Type: application/json' \
   -d '{"url": "YOUTUBE_URL"}'
 ```
@@ -62,25 +62,25 @@ The `source` field indicates:
 ### List All Transcripts
 
 ```bash
-curl 'http://127.0.0.1:3000/api/transcripts'
+curl 'http://127.0.0.1:19720/api/transcripts'
 ```
 
 ### Search Transcripts
 
 ```bash
-curl 'http://127.0.0.1:3000/api/transcripts?q=SEARCH_TERM'
+curl 'http://127.0.0.1:19720/api/transcripts?q=SEARCH_TERM'
 ```
 
 ### Get Single Transcript
 
 ```bash
-curl 'http://127.0.0.1:3000/api/transcripts/ID'
+curl 'http://127.0.0.1:19720/api/transcripts/ID'
 ```
 
 ### Delete Transcript
 
 ```bash
-curl -X DELETE 'http://127.0.0.1:3000/api/transcripts/ID'
+curl -X DELETE 'http://127.0.0.1:19720/api/transcripts/ID'
 ```
 
 ## Formatting Transcripts
@@ -117,7 +117,7 @@ When user asks: "Transcribe https://youtube.com/watch?v=abc123"
 
 ```bash
 # 1. Capture the transcript
-RESPONSE=$(curl -s -X POST 'http://127.0.0.1:3000/api/transcripts' \
+RESPONSE=$(curl -s -X POST 'http://127.0.0.1:19720/api/transcripts' \
   -H 'Content-Type: application/json' \
   -d '{"url": "https://youtube.com/watch?v=abc123"}')
 

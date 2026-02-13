@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 19720",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 19720",
     "lint": "next lint",
     "postinstall": "prisma generate",
     "reset-data": "tsx scripts/reset-data.ts"

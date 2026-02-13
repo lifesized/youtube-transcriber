@@ -159,7 +159,7 @@ npm run dev  # or: bun dev
 npm run build && npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:19720](http://localhost:19720) in your browser.
 
 **Note:** Development mode shows a small Next.js indicator in the bottom corner. Use production mode (`npm start`) to hide it, but you'll lose hot reload and need to rebuild for every code change.
 
@@ -375,7 +375,7 @@ This transcription service can be used by AI agents like **OpenClaw**, **Claude 
 1. **Start the transcription service:**
    ```bash
    npm run dev
-   # Running at http://127.0.0.1:3000
+   # Running at http://127.0.0.1:19720
    ```
 
 2. **Install the skill:**
@@ -402,7 +402,7 @@ OpenAPI spec: [`docs/openapi.yaml`](./docs/openapi.yaml)
 
 **Quick example:**
 ```bash
-curl -X POST 'http://127.0.0.1:3000/api/transcripts' \
+curl -X POST 'http://127.0.0.1:19720/api/transcripts' \
   -H 'Content-Type: application/json' \
   -d '{"url": "https://www.youtube.com/watch?v=VIDEO_ID"}'
 ```

@@ -1,6 +1,6 @@
 # YouTube Transcriber API
 
-Base URL: `http://127.0.0.1:3000`
+Base URL: `http://127.0.0.1:19720`
 
 ## Endpoints
 
@@ -161,31 +161,31 @@ interface TranscriptSegment {
 
 ```bash
 # Create transcript
-curl -X POST 'http://127.0.0.1:3000/api/transcripts' \
+curl -X POST 'http://127.0.0.1:19720/api/transcripts' \
   -H 'Content-Type: application/json' \
   -d '{"url": "https://youtu.be/dQw4w9WgXcQ"}'
 
 # List all
-curl 'http://127.0.0.1:3000/api/transcripts'
+curl 'http://127.0.0.1:19720/api/transcripts'
 
 # Search
-curl 'http://127.0.0.1:3000/api/transcripts?q=rick+astley'
+curl 'http://127.0.0.1:19720/api/transcripts?q=rick+astley'
 
 # Get by ID
-curl 'http://127.0.0.1:3000/api/transcripts/cm5abc123def'
+curl 'http://127.0.0.1:19720/api/transcripts/cm5abc123def'
 
 # Delete
-curl -X DELETE 'http://127.0.0.1:3000/api/transcripts/cm5abc123def'
+curl -X DELETE 'http://127.0.0.1:19720/api/transcripts/cm5abc123def'
 
 # Download markdown
-curl 'http://127.0.0.1:3000/api/transcripts/cm5abc123def/download' -o transcript.md
+curl 'http://127.0.0.1:19720/api/transcripts/cm5abc123def/download' -o transcript.md
 ```
 
 ### JavaScript
 
 ```javascript
 // Create transcript
-const response = await fetch('http://127.0.0.1:3000/api/transcripts', {
+const response = await fetch('http://127.0.0.1:19720/api/transcripts', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ url: 'https://youtu.be/dQw4w9WgXcQ' })
@@ -209,7 +209,7 @@ import json
 
 # Create transcript
 response = requests.post(
-    'http://127.0.0.1:3000/api/transcripts',
+    'http://127.0.0.1:19720/api/transcripts',
     json={'url': 'https://youtu.be/dQw4w9WgXcQ'}
 )
 video = response.json()
