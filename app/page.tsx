@@ -1142,65 +1142,6 @@ function HomeInner() {
         </div>
       </div>
 
-      <aside className="fixed bottom-4 right-4 z-40 w-[min(720px,calc(100vw-2rem))] rounded-xl border border-white/15 bg-black/70 shadow-[0_24px_60px_-24px_rgba(0,0,0,0.9)] backdrop-blur-md">
-        <div className="flex items-center justify-between gap-3 border-b border-white/10 px-3 py-2">
-          <div className="min-w-0">
-            <p className="font-mono text-xs uppercase tracking-wider text-white/85">
-              Drawer Debug Console
-            </p>
-            <p className="truncate font-mono text-[11px] text-white/45">
-              layout={libraryLayout} selected={selectedId ?? "none"} closing={closingVideo?.id ?? "none"} videoLoading=
-              {String(videoLoading)} events={debugEvents.length}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setDebugPaused((prev) => !prev)}
-              className="rounded border border-white/20 px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-white/80 hover:bg-white/10"
-            >
-              {debugPaused ? "Resume" : "Pause"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setDebugEvents([])}
-              className="rounded border border-white/20 px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-white/80 hover:bg-white/10"
-            >
-              Clear
-            </button>
-            <button
-              type="button"
-              onClick={() => setDebugCollapsed((prev) => !prev)}
-              className="rounded border border-white/20 px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-white/80 hover:bg-white/10"
-            >
-              {debugCollapsed ? "Expand" : "Collapse"}
-            </button>
-          </div>
-        </div>
-        {!debugCollapsed && (
-          <div className="max-h-[40vh] overflow-y-auto p-2">
-            {debugEvents.length === 0 ? (
-              <p className="px-2 py-1 font-mono text-[11px] text-white/40">
-                No events yet. Interact with list/tile drawers to capture traces.
-              </p>
-            ) : (
-              <ul className="space-y-1">
-                {debugEvents.map((event) => (
-                  <li
-                    key={event.id}
-                    className="grid grid-cols-[72px_220px_1fr] gap-2 rounded border border-white/10 bg-white/[0.03] px-2 py-1 font-mono text-[11px] leading-4"
-                  >
-                    <span className="tabular-nums text-white/45">+{event.elapsedSec.toFixed(3)}s</span>
-                    <span className="text-white/80">{event.type}</span>
-                    <span className="break-all text-white/55">{event.detail}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-      </aside>
-
       {/* Delete confirmation dialog */}
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
