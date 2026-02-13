@@ -152,10 +152,16 @@ WHISPER_PYTHON_BIN="C:\\Users\\YourName\\project\\.venv\\Scripts\\python.exe"
 **Do not deploy to hosting services** like Vercel, Netlify, or similar platforms - they don't support these dependencies and the app won't function properly.
 
 ```bash
+# Development mode (recommended) - includes hot reload and better debugging
 npm run dev  # or: bun dev
+
+# Production mode - hides dev indicator, but requires rebuild for every change
+npm run build && npm start
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+**Note:** Development mode shows a small Next.js indicator in the bottom corner. Use production mode (`npm start`) to hide it, but you'll lose hot reload and need to rebuild for every code change.
 
 **Usage:**
 1. Paste a YouTube URL into the input field
