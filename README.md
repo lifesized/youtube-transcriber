@@ -6,6 +6,12 @@
 
 A self-hosted web application for capturing and archiving YouTube video transcripts without quota limits or API costs. Uses local Whisper transcription when captions aren't available.
 
+
+
+https://github.com/user-attachments/assets/a87f2be7-09cf-4dbe-a861-65582d9b5753
+
+
+
 ## Why This Exists
 
 **Transcription services are expensive.** I burned through my allowed transcriptions in under a week and needed a solution that wouldn't break the bank. This tool uses **local transcription** with OpenAI Whisper, which means unlimited transcriptions at zero marginal cost. No API keys, no cloud services — everything runs on your machine.
