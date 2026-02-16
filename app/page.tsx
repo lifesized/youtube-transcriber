@@ -7,6 +7,7 @@ import type { TranscriptSegment } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { IconButton, iconButtonClassName } from "@/components/ui/icon-button";
+import { LlmLauncher } from "@/components/ui/llm-launcher";
 
 interface QueueItem {
   url: string;
@@ -125,6 +126,7 @@ function HomeInner() {
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const [debugEvents, setDebugEvents] = useState<DebugEvent[]>([]);
   const [debugPaused, setDebugPaused] = useState(false);
   const [debugCollapsed, setDebugCollapsed] = useState(false);
@@ -930,6 +932,14 @@ function HomeInner() {
                               </button>
 
                               <div className="flex shrink-0 items-center gap-2 opacity-0 transition-opacity group-hover/row:opacity-100">
+                                <LlmLauncher
+                                  videoId={t.id}
+                                  videoTitle={t.title}
+                                  onToast={(msg) => {
+                                    setToast(msg);
+                                    setTimeout(() => setToast(null), 2500);
+                                  }}
+                                />
                                 <a
                                   href={`/api/transcripts/${t.id}/download`}
                                   title="Download as Markdown"
@@ -1141,6 +1151,13 @@ function HomeInner() {
           )}
         </div>
       </div>
+
+      {/* Toast notification */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-white/15 bg-[hsl(var(--panel))] px-4 py-2.5 text-sm text-white/80 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7)]">
+          {toast}
+        </div>
+      )}
 
       {/* Delete confirmation dialog */}
       {deleteId && (
