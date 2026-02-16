@@ -165,9 +165,6 @@ export function LlmLauncher({ videoId, videoTitle, onToast }: LlmLauncherProps) 
               onClick={() => launchWithProvider(provider)}
               className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/5 hover:text-white"
             >
-              <span className="flex h-5 w-5 items-center justify-center rounded bg-white/10 text-[10px] font-bold uppercase text-white/60">
-                {provider.name[0]}
-              </span>
               <span>{provider.name}</span>
               {provider.id === lastProvider && (
                 <span className="ml-auto text-[10px] text-white/30">last used</span>
