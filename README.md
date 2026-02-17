@@ -11,6 +11,8 @@ https://github.com/user-attachments/assets/a87f2be7-09cf-4dbe-a861-65582d9b5753
 
 
 
+**AI Agent Skills:** This app ships with ready-made skills for [Claude Code and OpenClaw](#ai-agent-integration) so your AI agents can transcribe videos too. See [`contrib/`](./contrib/) for details.
+
 ## Why This Exists
 
 **Transcription services are expensive.** I burned through my allowed transcriptions in under a week and needed a solution that wouldn't break the bank. This tool uses **local transcription** with OpenAI Whisper, which means unlimited transcriptions at zero marginal cost. No API keys, no cloud services — everything runs on your machine.
