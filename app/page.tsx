@@ -110,6 +110,7 @@ function HomeInner() {
 
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [duplicateHint, setDuplicateHint] = useState<{ message: string; id: string } | null>(null);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [hasCreatedTranscript, setHasCreatedTranscript] = useState(false);
 
@@ -450,11 +451,38 @@ function HomeInner() {
           localStorage.setItem("hasCreatedTranscript", "true");
           setHasCreatedTranscript(true);
 
-          // Update library and focus the newly created transcript.
-          if (data?.id) {
-            selectTranscript(data.id);
+          if (data?.duplicate) {
+            // Already transcribed — remove from queue, switch to list view,
+            // select the existing item, and show hint below the input.
+            updateQueue((prev) => prev.filter((_, i) => i !== idx));
+            setSearch("");
+            await fetchTranscripts("");
+            // Set layout + selection in a single router.push to avoid race conditions
+            if (data?.id) {
+              localStorage.setItem("libraryLayout", "list");
+              setClosingVideo(null);
+              const params = new URLSearchParams(searchParams.toString());
+              params.set("layout", "list");
+              params.set("id", data.id);
+              router.push(`/?${params.toString()}`, { scroll: false });
+            }
+            setDuplicateHint({ message: "This video has already been transcribed.", id: data.id });
+            setTimeout(() => setDuplicateHint(null), 6000);
+            return;
           }
-          fetchTranscripts(search);
+
+          // Update library and focus the newly created transcript.
+          // Clear search and switch to list view so the new video is visible.
+          setSearch("");
+          if (data?.id) {
+            localStorage.setItem("libraryLayout", "list");
+            setClosingVideo(null);
+            const params = new URLSearchParams(searchParams.toString());
+            params.set("layout", "list");
+            params.set("id", data.id);
+            router.push(`/?${params.toString()}`, { scroll: false });
+          }
+          fetchTranscripts("");
           updateQueue((prev) =>
             prev.map((item, i) =>
               i === idx
@@ -594,6 +622,7 @@ function HomeInner() {
                     onChange={(e) => {
                       setUrl(e.target.value);
                       if (error) setError(null);
+                      if (duplicateHint) setDuplicateHint(null);
                     }}
                     placeholder="https://www.youtube.com/watch?v=..."
                     className="h-12 pr-12"
@@ -635,6 +664,24 @@ function HomeInner() {
             </form>
 
             {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+            {duplicateHint && (
+              <p className="mt-2 flex items-center gap-1.5 text-sm text-white/50">
+                <span>{duplicateHint.message}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = document.querySelector(`[data-transcript-id="${duplicateHint.id}"]`);
+                    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                  className="inline-flex items-center rounded-md p-0.5 text-white/40 transition-colors hover:text-white/70"
+                  title="Scroll to transcript"
+                >
+                  <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10 4v12M5 11l5 5 5-5" />
+                  </svg>
+                </button>
+              </p>
+            )}
 
             {/* Queue list */}
             {hasQueue && (
@@ -844,6 +891,7 @@ function HomeInner() {
                         return (
                           <a
                             key={t.id}
+                            data-transcript-id={t.id}
                             href={t.videoUrl}
                             target="_blank"
                             rel="noopener noreferrer"

@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     const transcript = existing.transcript as string;
     const hasTranscript = transcript && transcript !== "[]";
     if (hasTranscript) {
-      return NextResponse.json(existing);
+      return NextResponse.json({ ...existing, duplicate: true });
     }
     // Existing record has empty transcript — re-fetch and update below
   }
