@@ -31,8 +31,34 @@ export default function AboutPage() {
           <div className="space-y-3 pt-4 border-t border-white/10">
             <h2 className="text-xl font-medium text-white/80">Why This Matters</h2>
             <p className="text-sm leading-relaxed text-white/60">
-              Most AI workflows involve extracting knowledge from video content. Even major providers like Google, OpenAI, and AssemblyAI charge for transcription services with usage limits and ongoing costs. This tool runs entirely on your machine using OpenAI Whisper, giving you unlimited transcriptions with no recurring fees.
+              Most AI workflows involve extracting knowledge from video content. This tool first attempts to extract existing YouTube captions directly — the fastest and most reliable option. When captions aren't available, it falls back to OpenAI Whisper to download the audio and convert it to a transcript locally on your machine. No cloud dependencies, no usage limits, no recurring fees.
             </p>
+          </div>
+
+          {/* How to Use */}
+          <div className="space-y-3 pt-4 border-t border-white/10">
+            <h2 className="text-xl font-medium text-white/80">How to Use</h2>
+            <p className="text-sm leading-relaxed text-white/60">
+              There are three ways to use YouTube Transcriber:
+            </p>
+            <ul className="space-y-3 text-sm text-white/60">
+              <li>
+                <strong className="text-white/70">Browser app</strong> — Run <code className="rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-white/70">npm run dev</code> in your terminal and open{" "}
+                <code className="rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-white/70">localhost:19720</code> in your browser. Paste a YouTube URL, manage your transcript library, and launch summaries to your favorite LLM — all from the UI you're looking at right now.
+              </li>
+              <li>
+                <strong className="text-white/70">OpenClaw agent</strong> — Install the included{" "}
+                <a href="https://github.com/lifesized/youtube-transcriber/tree/main/contrib/openclaw" target="_blank" rel="noopener noreferrer" className="text-white/75 underline decoration-blue-400 hover:text-white hover:decoration-blue-300">OpenClaw skill</a> and ask your agent in natural language:{" "}
+                <code className="block mt-2 rounded bg-white/10 px-3 py-2 text-[13px] italic text-white/70">&quot;Transcribe this YouTube video and summarize the key takeaways: https://youtube.com/watch?v=...&quot;</code>
+              </li>
+              <li>
+                <strong className="text-white/70">Claude Code agent</strong> — With the Claude Code skill installed, ask directly from your terminal:{" "}
+                <code className="block mt-2 rounded bg-white/10 px-3 py-2 text-[13px] italic text-white/70">&quot;Grab the transcript from this talk and list the main arguments: https://youtube.com/watch?v=...&quot;</code>
+                <span className="mt-1 block text-[12px] text-white/40">See the{" "}
+                  <a href="https://github.com/lifesized/youtube-transcriber" target="_blank" rel="noopener noreferrer" className="text-white/50 underline decoration-blue-400/50 hover:text-white/70 hover:decoration-blue-300">GitHub README</a> for setup instructions.
+                </span>
+              </li>
+            </ul>
           </div>
 
           {/* Technical Highlights */}
