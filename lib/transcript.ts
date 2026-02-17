@@ -503,29 +503,6 @@ async function fetchTranscript(
     const segments = await fetchTranscriptAndroid(videoId);
     return { segments, source: "youtube_captions" };
   } catch (err) {
-    if (err instanceof RateLimitError || err instanceof BotDetectionError) {
-      // Try WEB InnerTube client next
-      try {
-        const segments = await fetchTranscriptWebClient(videoId);
-        return { segments, source: "youtube_captions" };
-      } catch (err2) {
-        if (err2 instanceof RateLimitError || err2 instanceof BotDetectionError) {
-          // Last resort: scrape the watch page
-          const segments = await fetchTranscriptWebFallback(videoId);
-          return { segments, source: "youtube_captions" };
-        }
-        // If WEB client got NoCaptionsError, fall through to Whisper
-        if (err2 instanceof NoCaptionsError) {
-          console.log(
-            `[transcript] No captions available for ${videoId}, falling back to local Whisper transcription...`
-          );
-          const segments = await transcribeWithWhisper(videoId);
-          return { segments, source: "whisper_local" };
-        }
-        throw err2;
-      }
-    }
-    // If ANDROID client got NoCaptionsError, fall back to Whisper
     if (err instanceof NoCaptionsError) {
       console.log(
         `[transcript] No captions available for ${videoId}, falling back to local Whisper transcription...`
@@ -533,7 +510,26 @@ async function fetchTranscript(
       const segments = await transcribeWithWhisper(videoId);
       return { segments, source: "whisper_local" };
     }
-    throw err;
+    console.log(
+      `[transcript] ANDROID client failed for ${videoId}: ${err instanceof Error ? err.message : err}. Trying WEB InnerTube...`
+    );
+    try {
+      const segments = await fetchTranscriptWebClient(videoId);
+      return { segments, source: "youtube_captions" };
+    } catch (err2) {
+      if (err2 instanceof NoCaptionsError) {
+        console.log(
+          `[transcript] No captions available for ${videoId}, falling back to local Whisper transcription...`
+        );
+        const segments = await transcribeWithWhisper(videoId);
+        return { segments, source: "whisper_local" };
+      }
+      console.log(
+        `[transcript] WEB InnerTube failed for ${videoId}: ${err2 instanceof Error ? err2.message : err2}. Trying WEB page scrape...`
+      );
+      const segments = await fetchTranscriptWebFallback(videoId);
+      return { segments, source: "youtube_captions" };
+    }
   }
 }
 
