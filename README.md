@@ -25,11 +25,13 @@ Open [http://localhost:19720](http://localhost:19720) — paste a YouTube URL, h
 
 Install the included skill for your agent, then ask it in natural language:
 
+**Claude Code:**
 ```bash
-# Claude Code
 cp -r contrib/claude-code ~/.claude/skills/youtube-transcriber
+```
 
-# OpenClaw
+**OpenClaw:**
+```bash
 cp -r contrib/openclaw ~/.openclaw/skills/youtube-transcriber
 ```
 
