@@ -17,7 +17,7 @@ npm run setup
 npm run dev
 ```
 
-Open [http://localhost:19720](http://localhost:19720) — paste a YouTube URL, hit Capture, done.
+Open [http://localhost:19720](http://localhost:19720) — paste a YouTube URL, hit Extract, done.
 
 > `npm run setup` installs all dependencies (yt-dlp, ffmpeg, Whisper, MLX on Apple Silicon) and configures everything automatically. Requires Node.js 18+, Python 3.8+, and a package manager (Homebrew / apt / dnf / pacman).
 
