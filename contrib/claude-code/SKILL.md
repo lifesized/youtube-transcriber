@@ -7,6 +7,7 @@ Capture transcripts from YouTube videos using a local transcription service. The
 Use this skill when the user:
 - Pastes a YouTube URL (with or without a verb like "transcribe", "summarize", "watch")
 - Says "transcribe", "summarize", or "caption" followed by a YouTube URL
+- Uses a shorthand like "s" or "t" followed by a YouTube URL (e.g. "s https://youtube.com/watch?v=...")
 - Asks to extract, capture, or get what was said in a YouTube video
 - Sends just a YouTube URL with no other context
 
