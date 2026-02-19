@@ -9,6 +9,7 @@ Use this skill when the user wants to:
 - Get the transcript or captions from a video
 - Extract what was said in a YouTube video
 - Capture dialogue from a YouTube video for analysis
+- Summarize a YouTube video
 
 ## Prerequisites
 
@@ -83,37 +84,20 @@ curl 'http://127.0.0.1:19720/api/transcripts/ID'
 curl -X DELETE 'http://127.0.0.1:19720/api/transcripts/ID'
 ```
 
-## Formatting Transcripts
+## Default Behavior
 
-When displaying transcripts, format timestamps as `[MM:SS]`:
+After capturing a transcript, **always present a summary to the user** unless they explicitly asked for the full transcript. This is the expected workflow:
 
-```python
-import json
+1. Capture the transcript via the API (saves it to the library)
+2. Parse the transcript segments into plain text
+3. Summarize the content directly — focus on key topics, insights, and takeaways
+4. Present the summary with the video title and author
 
-def format_transcript(transcript_json: str) -> str:
-    segments = json.loads(transcript_json)
-    lines = []
-    for seg in segments:
-        ms = seg['startMs']
-        minutes = ms // 60000
-        seconds = (ms % 60000) // 1000
-        lines.append(f"[{minutes}:{seconds:02d}] {seg['text']}")
-    return "\n".join(lines)
-```
-
-Or in bash:
-```bash
-echo "$TRANSCRIPT_JSON" | python3 -c "
-import json, sys
-for seg in json.load(sys.stdin):
-    ms = seg['startMs']
-    print(f'[{ms//60000}:{(ms%60000)//1000:02d}] {seg[\"text\"]}')
-"
-```
+If the user asks for the full transcript, format it with timestamps instead of summarizing.
 
 ## Example Workflow
 
-When user asks: "Transcribe https://youtube.com/watch?v=abc123"
+When user asks: "Transcribe this https://youtube.com/watch?v=abc123"
 
 ```bash
 # 1. Capture the transcript
@@ -127,20 +111,28 @@ if echo "$RESPONSE" | grep -q '"error"'; then
   exit 1
 fi
 
-# 3. Extract metadata
-TITLE=$(echo "$RESPONSE" | jq -r '.title')
-AUTHOR=$(echo "$RESPONSE" | jq -r '.author')
-SOURCE=$(echo "$RESPONSE" | jq -r '.source')
-ID=$(echo "$RESPONSE" | jq -r '.id')
+# 3. Extract metadata and transcript text
+echo "$RESPONSE" | python3 -c "
+import json, sys
+resp = json.load(sys.stdin)
+print(f'Title: {resp[\"title\"]}')
+print(f'Author: {resp[\"author\"]}')
+print(f'Source: {resp.get(\"source\", \"unknown\")}')
+print()
+segments = json.loads(resp['transcript'])
+for seg in segments:
+    print(seg['text'], end=' ')
+print()
+"
+```
 
-echo "✓ Captured: $TITLE"
-echo "  Author: $AUTHOR"
-echo "  Source: $SOURCE"
-echo "  ID: $ID"
+Then summarize the transcript text and present the summary to the user.
 
-# 4. Format and display transcript
-echo ""
-echo "Transcript:"
+## Formatting Full Transcripts
+
+When the user asks for the full transcript, format timestamps as `[MM:SS]`:
+
+```bash
 echo "$RESPONSE" | jq -r '.transcript' | python3 -c "
 import json, sys
 for seg in json.load(sys.stdin):
@@ -173,3 +165,4 @@ for seg in json.load(sys.stdin):
 - Submitting a duplicate URL returns the existing transcript (no re-processing)
 - Videos without captions use local Whisper transcription (can take several minutes)
 - Transcripts are stored locally in SQLite and persist across sessions
+- Always summarize by default — the full transcript is saved in the library for later
