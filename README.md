@@ -37,6 +37,8 @@ cp -r contrib/openclaw ~/.openclaw/skills/youtube-transcriber
 
 > *"summarize https://youtube.com/watch?v=..."*
 
+Or just paste a YouTube URL — the skill auto-activates. Shorthand like `s [url]` or `t [url]` works too.
+
 The app must be running (`npm run dev`) for the agent to use it.
 
 ---
