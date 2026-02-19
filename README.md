@@ -21,6 +21,22 @@ Open [http://localhost:19720](http://localhost:19720) — paste a YouTube URL, h
 
 > `npm run setup` installs all dependencies (yt-dlp, ffmpeg, Whisper, MLX on Apple Silicon) and configures everything automatically. Requires Node.js 18+, Python 3.8+, and a package manager (Homebrew / apt / dnf / pacman).
 
+## Use as an AI Agent Skill
+
+Install the included skill for your agent, then ask it in natural language:
+
+```bash
+# Claude Code
+cp -r contrib/claude-code ~/.claude/skills/youtube-transcriber
+
+# OpenClaw
+cp -r contrib/openclaw ~/.openclaw/skills/youtube-transcriber
+```
+
+> *"Transcribe this YouTube video and summarize the key takeaways: https://youtube.com/watch?v=..."*
+
+The app must be running (`npm run dev`) for the agent to use it.
+
 ---
 
 ## How It Works
@@ -43,20 +59,6 @@ No API keys needed. Everything runs on your machine.
 - **Duplicate detection** — same video won't be saved twice
 - **SQLite storage** — all data stays on your machine
 - **Fully offline-capable** after initial setup
-
-## AI Agent Integration
-
-This app ships with ready-made skills so your AI agents can transcribe videos too.
-
-```bash
-# Claude Code
-cp -r contrib/claude-code ~/.claude/skills/youtube-transcriber
-
-# OpenClaw
-cp -r contrib/openclaw ~/.openclaw/skills/youtube-transcriber
-```
-
-Start the service (`npm run dev`), then ask your agent to transcribe a video.
 
 Full REST API docs: [`docs/API.md`](./docs/API.md) | OpenAPI spec: [`docs/openapi.yaml`](./docs/openapi.yaml)
 
