@@ -21,7 +21,63 @@ echo "✓ Node.js found: $(node --version)"
 echo "✓ Python found: $(python3 --version)"
 echo ""
 
+# ---------------------------------------------------------------------------
+# Install system dependencies: yt-dlp & ffmpeg
+# ---------------------------------------------------------------------------
+install_with_brew() {
+    if ! command -v brew &> /dev/null; then
+        echo "❌ Homebrew not found. Install it from https://brew.sh then re-run setup."
+        exit 1
+    fi
+    echo "📦 Installing yt-dlp and ffmpeg via Homebrew..."
+    brew install yt-dlp ffmpeg
+}
+
+install_with_apt() {
+    echo "📦 Installing yt-dlp and ffmpeg via apt..."
+    sudo apt-get update -qq
+    sudo apt-get install -y yt-dlp ffmpeg python3-venv
+}
+
+install_with_dnf() {
+    echo "📦 Installing yt-dlp and ffmpeg via dnf..."
+    sudo dnf install -y yt-dlp ffmpeg python3
+}
+
+install_with_pacman() {
+    echo "📦 Installing yt-dlp and ffmpeg via pacman..."
+    sudo pacman -S --noconfirm yt-dlp ffmpeg python
+}
+
+NEED_YTDLP=false
+NEED_FFMPEG=false
+command -v yt-dlp &> /dev/null && echo "✓ yt-dlp found" || NEED_YTDLP=true
+command -v ffmpeg &> /dev/null && echo "✓ ffmpeg found" || NEED_FFMPEG=true
+
+if $NEED_YTDLP || $NEED_FFMPEG; then
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        install_with_brew
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        if command -v apt-get &> /dev/null; then
+            install_with_apt
+        elif command -v dnf &> /dev/null; then
+            install_with_dnf
+        elif command -v pacman &> /dev/null; then
+            install_with_pacman
+        else
+            echo "❌ Could not detect package manager. Please install yt-dlp and ffmpeg manually, then re-run setup."
+            exit 1
+        fi
+    else
+        echo "❌ Unsupported OS. Please install yt-dlp and ffmpeg manually, then re-run setup."
+        exit 1
+    fi
+    echo ""
+fi
+
+# ---------------------------------------------------------------------------
 # Install Node dependencies
+# ---------------------------------------------------------------------------
 echo "📦 Installing Node dependencies..."
 if command -v bun &> /dev/null; then
     bun install
@@ -30,7 +86,9 @@ else
 fi
 echo ""
 
-# Set up Python virtual environment
+# ---------------------------------------------------------------------------
+# Python virtual environment + Whisper
+# ---------------------------------------------------------------------------
 echo "🐍 Setting up Python virtual environment..."
 if [ ! -d ".venv" ]; then
     python3 -m venv .venv
@@ -39,7 +97,6 @@ else
     echo "✓ .venv already exists"
 fi
 
-# Activate venv and install Whisper
 echo "📥 Installing Whisper..."
 source .venv/bin/activate
 pip install --upgrade pip
@@ -47,7 +104,7 @@ pip install openai-whisper
 
 # Install MLX Whisper if on Apple Silicon
 if [[ $(uname -m) == "arm64" ]] && [[ $(uname) == "Darwin" ]]; then
-    echo "🍎 Detected Apple Silicon - installing MLX Whisper for faster transcription..."
+    echo "🍎 Detected Apple Silicon — installing MLX Whisper for faster transcription..."
     pip install mlx-whisper
 fi
 
@@ -55,17 +112,17 @@ fi
 echo "🔊 Installing pyannote.audio for speaker diarization..."
 pip install pyannote.audio || echo "⚠️  pyannote.audio install failed (speaker diarization will be unavailable)"
 
+# ---------------------------------------------------------------------------
+# Configure .env
+# ---------------------------------------------------------------------------
 echo ""
 echo "📝 Configuring environment..."
 
-# Create .env if it doesn't exist
 if [ ! -f ".env" ]; then
     cp .env.example .env
 
-    # Get absolute paths
     VENV_PATH=$(pwd)/.venv
 
-    # Update .env with actual paths
     if [[ "$OSTYPE" == "darwin"* ]] || [[ "$OSTYPE" == "linux-gnu"* ]]; then
         sed -i.bak "s|WHISPER_CLI=\"/path/to/your/.venv/bin/whisper\"|WHISPER_CLI=\"$VENV_PATH/bin/whisper\"|" .env
         sed -i.bak "s|WHISPER_PYTHON_BIN=\"/path/to/your/.venv/bin/python3\"|WHISPER_PYTHON_BIN=\"$VENV_PATH/bin/python3\"|" .env
@@ -75,33 +132,6 @@ if [ ! -f ".env" ]; then
     echo "✓ Created .env with configured paths"
 else
     echo "✓ .env already exists (not overwriting)"
-fi
-
-echo ""
-echo "🔍 Checking system dependencies..."
-
-# Check for yt-dlp
-if command -v yt-dlp &> /dev/null; then
-    echo "✓ yt-dlp found"
-else
-    echo "⚠️  yt-dlp not found"
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        echo "   Install with: brew install yt-dlp"
-    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        echo "   Install with your package manager (apt/dnf/pacman)"
-    fi
-fi
-
-# Check for ffmpeg
-if command -v ffmpeg &> /dev/null; then
-    echo "✓ ffmpeg found"
-else
-    echo "⚠️  ffmpeg not found"
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        echo "   Install with: brew install ffmpeg"
-    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        echo "   Install with your package manager (apt/dnf/pacman)"
-    fi
 fi
 
 echo ""
