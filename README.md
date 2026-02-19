@@ -21,7 +21,7 @@ Open [http://localhost:19720](http://localhost:19720) — paste a YouTube URL, h
 
 > `npm run setup` installs all dependencies (yt-dlp, ffmpeg, Whisper, MLX on Apple Silicon) and configures everything automatically. Requires Node.js 18+, Python 3.8+, and a package manager (Homebrew / apt / dnf / pacman).
 
-## Use as an AI Agent Skill
+## Use as a Skill
 
 Install the included skill for your agent, then ask it in natural language:
 
