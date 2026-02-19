@@ -10,8 +10,6 @@ https://github.com/user-attachments/assets/a87f2be7-09cf-4dbe-a861-65582d9b5753
 
 ## Get Running in 60 Seconds
 
-**Requires:** Node.js 18+, Python 3.8+, and Homebrew (macOS) or apt/dnf/pacman (Linux).
-
 ```bash
 git clone https://github.com/lifesized/youtube-transcriber.git
 cd youtube-transcriber
@@ -21,7 +19,7 @@ npm run dev
 
 Open [http://localhost:19720](http://localhost:19720) — paste a YouTube URL, hit Capture, done.
 
-> **`npm run setup`** handles everything: yt-dlp, ffmpeg, Node dependencies, Python venv, Whisper (with MLX on Apple Silicon), and `.env` configuration. Nothing else to install.
+> `npm run setup` installs all dependencies (yt-dlp, ffmpeg, Whisper, MLX on Apple Silicon) and configures everything automatically. Requires Node.js 18+, Python 3.8+, and a package manager (Homebrew / apt / dnf / pacman).
 
 ---
 
