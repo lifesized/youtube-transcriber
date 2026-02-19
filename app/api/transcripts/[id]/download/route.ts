@@ -47,9 +47,12 @@ export async function GET(
     "",
     "## Transcript",
     "",
-    ...segments.map(
-      (seg) => `[${formatTimestamp(seg.startMs)}] ${seg.text}`
-    ),
+    ...segments.map((seg, idx) => {
+      const prev = segments[idx - 1];
+      const speakerChanged = seg.speaker && (!prev || prev.speaker !== seg.speaker);
+      const prefix = speakerChanged ? `**${seg.speaker}:** ` : "";
+      return `[${formatTimestamp(seg.startMs)}] ${prefix}${seg.text}`;
+    }),
     "",
   ];
 

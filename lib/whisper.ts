@@ -16,8 +16,15 @@ const OPENAI_WHISPER_CLI = process.env.WHISPER_CLI?.trim() || "whisper";
 const WHISPER_BACKEND_OVERRIDE = process.env.WHISPER_BACKEND?.trim().toLowerCase();
 const WHISPER_DEVICE_OVERRIDE = process.env.WHISPER_DEVICE?.trim().toLowerCase();
 const MLX_WHISPER_MODEL_OVERRIDE = process.env.MLX_WHISPER_MODEL?.trim();
+const HF_TOKEN = process.env.HF_TOKEN?.trim();
 
 type WhisperBackend = "mlx" | "openai";
+
+interface DiarizationSegment {
+  speaker: string;
+  start: number;
+  end: number;
+}
 
 interface WhisperJsonSegment {
   start: number;
@@ -341,6 +348,89 @@ export function isTranscriptionInProgress(): boolean {
 }
 
 /**
+ * Run pyannote.audio speaker diarization on an audio file.
+ * Requires HF_TOKEN and pyannote.audio to be installed.
+ */
+async function runDiarization(
+  audioPath: string,
+  hfToken: string,
+  outDir: string
+): Promise<DiarizationSegment[]> {
+  const outputPath = path.join(outDir, "diarization.json");
+  const timeoutMs = getWhisperTimeoutMs();
+
+  const script =
+    "import json, sys, os;" +
+    "os.environ['HF_TOKEN'] = sys.argv[2];" +
+    "from pyannote.audio import Pipeline;" +
+    "pipeline = Pipeline.from_pretrained('pyannote/speaker-diarization-3.1', use_auth_token=sys.argv[2]);" +
+    "diarization = pipeline(sys.argv[1]);" +
+    "segments = [];" +
+    "[segments.append({'speaker': speaker, 'start': turn.start, 'end': turn.end}) for turn, _, speaker in diarization.itertracks(yield_label=True)];" +
+    "f = open(sys.argv[3], 'w', encoding='utf-8');" +
+    "json.dump(segments, f);" +
+    "f.close()";
+
+  console.log("[whisper] Running speaker diarization with pyannote.audio...");
+  await execFileAsync(PYTHON_BIN, ["-c", script, audioPath, hfToken, outputPath], {
+    timeout: timeoutMs,
+  });
+
+  const jsonContent = await fs.readFile(outputPath, "utf-8");
+  const segments: DiarizationSegment[] = JSON.parse(jsonContent);
+  console.log(`[whisper] Diarization complete: ${segments.length} speaker segments found`);
+  return segments;
+}
+
+/**
+ * Merge Whisper transcript segments with diarization speaker labels.
+ * Each transcript segment is assigned the speaker who overlaps most with it.
+ * Raw labels (SPEAKER_00, SPEAKER_01) are renamed to Speaker 1, Speaker 2, etc.
+ * in order of first appearance.
+ */
+function mergeSpeakers(
+  segments: TranscriptSegment[],
+  diarization: DiarizationSegment[]
+): TranscriptSegment[] {
+  if (diarization.length === 0) return segments;
+
+  const speakerMap = new Map<string, string>();
+  let speakerCount = 0;
+
+  function getSpeakerLabel(raw: string): string {
+    if (!speakerMap.has(raw)) {
+      speakerCount++;
+      speakerMap.set(raw, `Speaker ${speakerCount}`);
+    }
+    return speakerMap.get(raw)!;
+  }
+
+  return segments.map((seg) => {
+    const segStartSec = seg.startMs / 1000;
+    const segEndSec = (seg.startMs + seg.durationMs) / 1000;
+
+    // Find the diarization segment with the most overlap
+    let bestSpeaker = "";
+    let bestOverlap = 0;
+
+    for (const d of diarization) {
+      const overlapStart = Math.max(segStartSec, d.start);
+      const overlapEnd = Math.min(segEndSec, d.end);
+      const overlap = overlapEnd - overlapStart;
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap;
+        bestSpeaker = d.speaker;
+      }
+    }
+
+    return {
+      ...seg,
+      speaker: bestSpeaker ? getSpeakerLabel(bestSpeaker) : undefined,
+    };
+  });
+}
+
+/**
  * Transcribe a YouTube video using local Whisper.
  * Downloads audio via yt-dlp, runs Whisper CLI, parses output, cleans up temp files.
  * Only one transcription can run at a time to prevent memory exhaustion.
@@ -365,12 +455,24 @@ export async function transcribeWithWhisper(
     const audioPath = await downloadAudio(videoId, audioDir, onProgress);
     const segments = await runWhisper(audioPath, whisperOutDir, model);
 
+    // Speaker diarization (opt-in, requires HF_TOKEN)
+    let finalSegments = segments;
+    if (HF_TOKEN) {
+      onProgress?.({ stage: "diarizing", progress: 85, statusText: "Identifying speakers..." });
+      try {
+        const diarization = await runDiarization(audioPath, HF_TOKEN, whisperOutDir);
+        finalSegments = mergeSpeakers(segments, diarization);
+      } catch (err) {
+        console.log(`[whisper] Diarization failed, proceeding without speakers: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+
     const totalTime = ((Date.now() - overallStart) / 1000).toFixed(1);
     console.log(
-      `[whisper] Done: videoId=${videoId}, segments=${segments.length}, model=${model}, total=${totalTime}s`
+      `[whisper] Done: videoId=${videoId}, segments=${finalSegments.length}, model=${model}, total=${totalTime}s`
     );
 
-    return segments;
+    return finalSegments;
   } finally {
     transcriptionInProgress = false;
     // Clean up temp files

@@ -51,6 +51,10 @@ if [[ $(uname -m) == "arm64" ]] && [[ $(uname) == "Darwin" ]]; then
     pip install mlx-whisper
 fi
 
+# Install pyannote.audio for speaker diarization (optional)
+echo "🔊 Installing pyannote.audio for speaker diarization..."
+pip install pyannote.audio || echo "⚠️  pyannote.audio install failed (speaker diarization will be unavailable)"
+
 echo ""
 echo "📝 Configuring environment..."
 

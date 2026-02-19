@@ -7,53 +7,51 @@ export const metadata: Metadata = {
 
 export default function AboutPage() {
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12">
-      <div className="space-y-8">
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:py-12">
+      <div className="mx-auto max-w-[800px]">
+      <div className="space-y-6 sm:space-y-8">
         {/* Header */}
         <div>
-          <h1 className="text-xl font-semibold text-white/90">About YouTube Transcriber</h1>
-          <p className="mt-3 text-base leading-relaxed text-white/60">
-            A local-first tool for converting YouTube videos into LLM-ready transcripts. No API costs, no rate limits, no cloud dependencies.
-          </p>
+          <h1 className="text-xl font-semibold text-white/90">About</h1>
         </div>
 
         {/* Main Content */}
-        <section className="space-y-6 rounded-2xl border border-white/10 bg-[hsl(var(--panel))] hover:border-white/30 transition-colors duration-200 p-6">
+        <section className="space-y-6 rounded-2xl border border-white/10 bg-[hsl(var(--panel))] hover:border-white/30 transition-colors duration-200 p-4 sm:p-6">
           {/* Personal Note */}
           <div className="space-y-3">
-            <h2 className="text-xl font-medium text-white/80">Why I Built This</h2>
-            <p className="text-sm leading-relaxed text-white/60">
-              I built this because I kept hitting credit limits on paid transcription services. My workflow is simple: paste YouTube transcripts into Claude or ChatGPT to quickly extract insights, ask questions, and learn faster than watching videos. After burning through yet another subscription in a week, I decided to build a local alternative that I could use unlimited, forever, for free.
+            <h2 className="text-base font-medium text-white/75">Why I Built This</h2>
+            <p className="text-sm leading-relaxed text-white/40">
+              I built this because I kept hitting credit limits on paid transcription services. My workflow is simple: paste YouTube transcripts into Claude or ChatGPT to quickly extract insights, ask questions, and learn faster than watching videos. After burning through yet another subscription in a week, I decided to build a local alternative for free.
             </p>
           </div>
 
           {/* Why This Matters */}
-          <div className="space-y-3 pt-4 border-t border-white/10">
-            <h2 className="text-xl font-medium text-white/80">Why This Matters</h2>
-            <p className="text-sm leading-relaxed text-white/60">
+          <div className="space-y-3">
+            <h2 className="text-base font-medium text-white/75">Why This Matters</h2>
+            <p className="text-sm leading-relaxed text-white/40">
               Most AI workflows involve extracting knowledge from video content. This tool first attempts to extract existing YouTube captions directly — the fastest and most reliable option. When captions aren't available, it falls back to OpenAI Whisper to download the audio and convert it to a transcript locally on your machine. No cloud dependencies, no usage limits, no recurring fees.
             </p>
           </div>
 
           {/* How to Use */}
-          <div className="space-y-3 pt-4 border-t border-white/10">
-            <h2 className="text-xl font-medium text-white/80">How to Use</h2>
-            <p className="text-sm leading-relaxed text-white/60">
-              There are three ways to use YouTube Transcriber:
-            </p>
-            <ul className="space-y-3 text-sm text-white/60">
+          <div className="space-y-3">
+            <h2 className="text-base font-medium text-white/75">How to Use</h2>
+            <ul className="space-y-3 text-sm text-white/40">
               <li>
                 <strong className="text-white/70">Browser app</strong> — Run <code className="rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-white/70">npm run dev</code> in your terminal and open{" "}
-                <code className="rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-white/70">localhost:19720</code> in your browser. Paste a YouTube URL, manage your transcript library, and launch summaries to your favorite LLM — all from the UI you're looking at right now.
+                <code className="rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-white/70">localhost:19720</code> in your browser. Paste a YouTube URL to extract its transcript.
+              </li>
+              <li>
+                <strong className="text-white/70">Summarize with...</strong> — Hover over any transcript in the library and click the &quot;Summarize with&quot; button to send it directly to ChatGPT or Claude for instant analysis.
               </li>
               <li>
                 <strong className="text-white/70">OpenClaw agent</strong> — Install the included{" "}
                 <a href="https://github.com/lifesized/youtube-transcriber/tree/main/contrib/openclaw" target="_blank" rel="noopener noreferrer" className="text-white/75 underline decoration-blue-400 hover:text-white hover:decoration-blue-300">OpenClaw skill</a> and ask your agent in natural language:{" "}
-                <code className="block mt-2 rounded bg-white/10 px-3 py-2 text-[13px] italic text-white/70">&quot;Transcribe this YouTube video and summarize the key takeaways: https://youtube.com/watch?v=...&quot;</code>
+                <code className="block mt-2 wrap-break-word rounded bg-white/10 px-3 py-2 text-[13px] italic text-white/70">&quot;Transcribe this YouTube video and summarize the key takeaways: https://youtube.com/watch?v=...&quot;</code>
               </li>
               <li>
                 <strong className="text-white/70">Claude Code agent</strong> — With the Claude Code skill installed, ask directly from your terminal:{" "}
-                <code className="block mt-2 rounded bg-white/10 px-3 py-2 text-[13px] italic text-white/70">&quot;Grab the transcript from this talk and list the main arguments: https://youtube.com/watch?v=...&quot;</code>
+                <code className="block mt-2 wrap-break-word rounded bg-white/10 px-3 py-2 text-[13px] italic text-white/70">&quot;Grab the transcript from this talk and list the main arguments: https://youtube.com/watch?v=...&quot;</code>
                 <span className="mt-1 block text-[12px] text-white/40">See the{" "}
                   <a href="https://github.com/lifesized/youtube-transcriber" target="_blank" rel="noopener noreferrer" className="text-white/50 underline decoration-blue-400/50 hover:text-white/70 hover:decoration-blue-300">GitHub README</a> for setup instructions.
                 </span>
@@ -62,9 +60,9 @@ export default function AboutPage() {
           </div>
 
           {/* Technical Highlights */}
-          <div className="space-y-3 pt-4 border-t border-white/10">
-            <h2 className="text-xl font-medium text-white/80">Technical Highlights</h2>
-            <ul className="space-y-2 text-sm text-white/60">
+          <div className="space-y-3">
+            <h2 className="text-base font-medium text-white/75">Technical Highlights</h2>
+            <ul className="space-y-2 text-sm text-white/40">
               <li>• <strong className="text-white/70">Local-first architecture</strong> — All processing happens on your machine. No data leaves your computer.</li>
               <li>• <strong className="text-white/70">MLX Whisper optimization</strong> — 3-5x faster transcription on Apple Silicon using Apple's MLX framework.</li>
               <li>• <strong className="text-white/70">Automatic fallback chain</strong> — YouTube captions → MLX Whisper → OpenAI Whisper, ensuring you always get a transcript.</li>
@@ -74,9 +72,9 @@ export default function AboutPage() {
           </div>
 
           {/* Use Cases */}
-          <div className="space-y-3 pt-4 border-t border-white/10">
-            <h2 className="text-xl font-medium text-white/80">Use Cases</h2>
-            <ul className="space-y-2 text-sm text-white/60">
+          <div className="space-y-3">
+            <h2 className="text-base font-medium text-white/75">Use Cases</h2>
+            <ul className="space-y-2 text-sm text-white/40">
               <li>• <strong className="text-white/70">Research & learning</strong> — Extract key insights from educational content without watching entire videos.</li>
               <li>• <strong className="text-white/70">Content analysis</strong> — Feed transcripts to LLMs for summarization, Q&A, or deeper analysis.</li>
               <li>• <strong className="text-white/70">Documentation</strong> — Convert tutorial videos or talks into searchable, reusable text.</li>
@@ -86,14 +84,14 @@ export default function AboutPage() {
         </section>
 
         {/* Footer */}
-        <section className="space-y-6 rounded-2xl border border-white/10 bg-[hsl(var(--panel))] hover:border-white/30 transition-colors duration-200 p-6">
+        <section className="space-y-6 rounded-2xl border border-white/10 bg-[hsl(var(--panel))] hover:border-white/30 transition-colors duration-200 p-4 sm:p-6">
           {/* Built With AI */}
           <div>
-            <h2 className="text-xl font-medium text-white/80 mb-3">Built With AI</h2>
-            <p className="text-sm leading-relaxed text-white/60 mb-4">
-              This project was built in ~7 hours using modern AI coding assistants and tools:
+            <h2 className="text-base font-medium text-white/75 mb-3">Tools</h2>
+            <p className="text-sm leading-relaxed text-white/40 mb-4">
+              This project was built using:
             </p>
-            <ul className="space-y-2 text-sm text-white/60">
+            <ul className="space-y-2 text-sm text-white/40">
               <li>
                 • <a href="https://www.augmentcode.com/intent" target="_blank" rel="noopener noreferrer" className="text-white/75 underline decoration-blue-400 hover:text-white hover:decoration-blue-300">Intent by Augment</a> — AI-powered coding assistant
               </li>
@@ -106,17 +104,14 @@ export default function AboutPage() {
               <li>
                 • <a href="https://github.com/anthropics/claude-code" target="_blank" rel="noopener noreferrer" className="text-white/75 underline decoration-blue-400 hover:text-white hover:decoration-blue-300">Claude Code</a> — Anthropic's AI coding assistant
               </li>
-              <li>
-                • <a href="https://ghostty.org" target="_blank" rel="noopener noreferrer" className="text-white/75 underline decoration-blue-400 hover:text-white hover:decoration-blue-300">Ghostty</a> — Fast, native terminal emulator
-              </li>
             </ul>
           </div>
 
           {/* Open Source */}
-          <div className="pt-4 border-t border-white/10">
-            <h2 className="text-xl font-medium text-white/80 mb-3">Open Source</h2>
-            <p className="text-sm leading-relaxed text-white/60 mb-4">
-              This project is open source and available on GitHub. Feel free to use it, modify it, or contribute improvements. If you find it useful, consider giving it a star.
+          <div className="">
+            <h2 className="text-base font-medium text-white/75 mb-3">Open Source</h2>
+            <p className="text-sm leading-relaxed text-white/40 mb-4">
+              This project is open source under the MIT License and available on GitHub. Feel free to use it, modify it, or contribute improvements. If you find it useful, consider giving it a star.
             </p>
             <a
               href="https://github.com/lifesized/youtube-transcriber"
@@ -140,6 +135,7 @@ export default function AboutPage() {
             </a>
           </div>
         </section>
+      </div>
       </div>
     </div>
   );

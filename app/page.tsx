@@ -90,6 +90,42 @@ function safeSegmentCount(transcript: string | undefined): number {
   }
 }
 
+interface MergedBlock {
+  startMs: number;
+  text: string;
+  speaker?: string;
+}
+
+/**
+ * Merge short transcript segments into larger blocks (~30s each).
+ * A new block starts when: the gap exceeds 30s, or the speaker changes.
+ */
+function mergeSegments(segments: TranscriptSegment[]): MergedBlock[] {
+  if (segments.length === 0) return [];
+  const BLOCK_DURATION_MS = 10_000;
+  const blocks: MergedBlock[] = [];
+  let current: MergedBlock = {
+    startMs: segments[0].startMs,
+    text: segments[0].text,
+    speaker: segments[0].speaker,
+  };
+
+  for (let i = 1; i < segments.length; i++) {
+    const seg = segments[i];
+    const elapsed = seg.startMs - current.startMs;
+    const speakerChanged = seg.speaker !== current.speaker;
+
+    if (elapsed >= BLOCK_DURATION_MS || speakerChanged) {
+      blocks.push(current);
+      current = { startMs: seg.startMs, text: seg.text, speaker: seg.speaker };
+    } else {
+      current.text += " " + seg.text;
+    }
+  }
+  blocks.push(current);
+  return blocks;
+}
+
 function eventCategory(type: string): keyof DebugFilters {
   if (type.includes("select.") || type.includes("route.") || type.includes("layout.change")) {
     return "selection";
@@ -321,7 +357,12 @@ function HomeInner() {
       const data = await res.json();
       const segs: TranscriptSegment[] = JSON.parse(data.transcript);
       const text = segs
-        .map((seg) => `[${formatTimestamp(seg.startMs)}] ${seg.text}`)
+        .map((seg, idx) => {
+          const prev = segs[idx - 1];
+          const speakerChanged = seg.speaker && (!prev || prev.speaker !== seg.speaker);
+          const prefix = speakerChanged ? `[${seg.speaker}] ` : "";
+          return `[${formatTimestamp(seg.startMs)}] ${prefix}${seg.text}`;
+        })
         .join("\n");
       await navigator.clipboard.writeText(text);
       setCopiedId(id);
@@ -360,15 +401,21 @@ function HomeInner() {
         } else if (seconds < 15) {
           progress = 20 + (seconds - 5) * 1.5;
           statusText = "Downloading audio...";
-        } else if (seconds < 300) {
+        } else if (seconds < 240) {
           progress = Math.min(
-            35 + 55 * (1 - Math.exp(-((seconds - 15) / 120))),
-            90
+            35 + 40 * (1 - Math.exp(-((seconds - 15) / 120))),
+            75
           );
           const pct = Math.round(progress);
           statusText = `Transcribing with Whisper... ~${pct}%`;
+        } else if (seconds < 360) {
+          progress = Math.min(
+            75 + 15 * (1 - Math.exp(-((seconds - 240) / 60))),
+            90
+          );
+          statusText = "Identifying speakers...";
         } else {
-          progress = Math.min(90 + (seconds - 300) * 0.01, 95);
+          progress = Math.min(90 + (seconds - 360) * 0.01, 95);
           statusText = "Almost done... Processing a long video.";
         }
 
@@ -1126,17 +1173,29 @@ function HomeInner() {
                                       {videoError}
                                     </p>
                                   ) : transcriptSegments.length > 0 ? (
-                                    <div className="space-y-3">
-                                      {transcriptSegments.map((seg, idx) => (
-                                        <div key={idx} className="flex gap-4">
-                                          <span className="shrink-0 font-mono text-xs text-white/35">
-                                            {formatTimestamp(seg.startMs)}
-                                          </span>
-                                          <p className="text-sm leading-relaxed text-white/70">
-                                            {seg.text}
-                                          </p>
-                                        </div>
-                                      ))}
+                                    <div className="space-y-4">
+                                      {mergeSegments(transcriptSegments).map((block, idx, blocks) => {
+                                        const showSpeaker = block.speaker && (
+                                          idx === 0 || blocks[idx - 1]?.speaker !== block.speaker
+                                        );
+                                        return (
+                                          <div key={idx}>
+                                            {showSpeaker && (
+                                              <p className="mb-1 text-xs font-medium text-white/50">
+                                                {block.speaker}
+                                              </p>
+                                            )}
+                                            <div className="flex items-baseline gap-3">
+                                              <span className="w-10 shrink-0 text-right font-mono text-xs leading-relaxed text-white/35">
+                                                {formatTimestamp(block.startMs)}
+                                              </span>
+                                              <p className="text-sm leading-relaxed text-white/70">
+                                                {block.text}
+                                              </p>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   ) : (
                                     <p className="py-4 text-center text-sm text-white/50">

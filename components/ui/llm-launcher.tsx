@@ -78,7 +78,11 @@ export function LlmLauncher({ videoId, videoTitle, onToast }: LlmLauncherProps) 
         }
         const data = await res.json();
         const segments = JSON.parse(data.transcript);
-        transcriptText = segments.map((s: { text: string }) => s.text).join(" ");
+        transcriptText = segments.map((s: { text: string; speaker?: string }, idx: number) => {
+          const prev = segments[idx - 1] as { speaker?: string } | undefined;
+          const speakerChanged = s.speaker && (!prev || prev.speaker !== s.speaker);
+          return speakerChanged ? `\n${s.speaker}: ${s.text}` : s.text;
+        }).join(" ");
       } catch {
         onToast?.("Failed to load transcript");
         return;

@@ -45,7 +45,11 @@ function buildPrompt(
 }
 
 function flattenTranscript(segments: TranscriptSegment[]): string {
-  return segments.map((s) => s.text).join(" ");
+  return segments.map((s, idx) => {
+    const prev = segments[idx - 1];
+    const speakerChanged = s.speaker && (!prev || prev.speaker !== s.speaker);
+    return speakerChanged ? `\n${s.speaker}: ${s.text}` : s.text;
+  }).join(" ");
 }
 
 async function callOpenAI(

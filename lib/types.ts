@@ -2,6 +2,7 @@ export interface TranscriptSegment {
   text: string;
   startMs: number;
   durationMs: number;
+  speaker?: string;
 }
 
 export interface VideoMetadata {
