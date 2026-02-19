@@ -4,12 +4,11 @@ Capture transcripts from YouTube videos using a local transcription service. The
 
 ## When to Use
 
-Use this skill when the user wants to:
-- Transcribe a YouTube video
-- Get the transcript or captions from a video
-- Extract what was said in a YouTube video
-- Capture dialogue from a YouTube video for analysis
-- Summarize a YouTube video
+Use this skill when the user:
+- Pastes a YouTube URL (with or without a verb like "transcribe", "summarize", "watch")
+- Says "transcribe", "summarize", or "caption" followed by a YouTube URL
+- Asks to extract, capture, or get what was said in a YouTube video
+- Sends just a YouTube URL with no other context
 
 ## Prerequisites
 

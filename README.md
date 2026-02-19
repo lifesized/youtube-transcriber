@@ -35,7 +35,7 @@ cp -r contrib/claude-code ~/.claude/skills/youtube-transcriber
 cp -r contrib/openclaw ~/.openclaw/skills/youtube-transcriber
 ```
 
-> *"Transcribe this https://youtube.com/watch?v=..."*
+> *"summarize https://youtube.com/watch?v=..."*
 
 The app must be running (`npm run dev`) for the agent to use it.
 
