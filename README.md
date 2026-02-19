@@ -36,6 +36,7 @@ No API keys needed. Everything runs on your machine.
 ## Features
 
 - **Zero-cost transcription** — local Whisper models, no API fees
+- **Summarize with LLM** — send any transcript straight to ChatGPT or Claude. ChatGPT opens with the prompt pre-filled; Claude copies it to your clipboard so you can paste (⌘V) into a new chat
 - **Queue system** — batch-process multiple videos
 - **Search & filter** your transcript library
 - **Export as Markdown** or copy to clipboard with timestamps
