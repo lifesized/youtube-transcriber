@@ -36,8 +36,10 @@ cp -r contrib/openclaw ~/.openclaw/skills/youtube-transcriber
 ```
 
 > *"summarize https://youtube.com/watch?v=..."*
+> *"transcribe https://youtube.com/watch?v=..."*
+> *"s https://youtube.com/watch?v=..."* / *"t https://youtube.com/watch?v=..."*
 
-Or just paste a YouTube URL — the skill auto-activates. Shorthand like `s [url]` or `t [url]` works too.
+Or just paste a YouTube URL — the skill auto-activates.
 
 The app must be running (`npm run dev`) for the agent to use it.
 
@@ -154,6 +156,6 @@ MIT
 
 ## Credits
 
-Built by [lifesized](https://github.com/lifesized) out of necessity and frustration with expensive transcription services.
+Built by [lifesized](https://github.com/lifesized).
 
 **Built with:** [Intent by Augment](https://www.augmentcode.com/intent), [Cursor](https://cursor.sh), [Codex](https://openai.com/index/openai-codex/), [Claude Code](https://github.com/anthropics/claude-code), and [Ghostty](https://ghostty.org).
