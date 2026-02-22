@@ -56,6 +56,11 @@ export default function AboutPage() {
                   <a href="https://github.com/lifesized/youtube-transcriber" target="_blank" rel="noopener noreferrer" className="text-white/50 underline decoration-blue-400/50 hover:text-white/70 hover:decoration-blue-300">GitHub README</a> for setup.
                 </span>
               </li>
+              <li>
+                <strong className="text-white/70">Claude Desktop / Cursor</strong> — An optional MCP server is included. Choose to install it during{" "}
+                <code className="rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-white/70">npm run setup</code>, then add the config snippet to your client. Run{" "}
+                <code className="rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-white/70">npm run mcp:config</code> to get it.
+              </li>
             </ul>
           </div>
 
@@ -67,7 +72,7 @@ export default function AboutPage() {
               <li>• <strong className="text-white/70">MLX Whisper optimization</strong> — 3-5x faster transcription on Apple Silicon using Apple's MLX framework.</li>
               <li>• <strong className="text-white/70">Automatic fallback chain</strong> — YouTube captions → MLX Whisper → OpenAI Whisper, ensuring you always get a transcript.</li>
               <li>• <strong className="text-white/70">Modern stack</strong> — Next.js 15, React 19, TypeScript, Prisma with SQLite.</li>
-              <li>• <strong className="text-white/70">AI agent integration</strong> — Built-in skills for Claude Code and OpenClaw, making it easy to integrate into agentic workflows.</li>
+              <li>• <strong className="text-white/70">AI agent integration</strong> — Built-in skills for Claude Code and OpenClaw, plus an MCP server for Claude Desktop and Cursor.</li>
             </ul>
           </div>
 

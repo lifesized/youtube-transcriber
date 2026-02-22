@@ -11,7 +11,8 @@
 ### Changed
 - **README** — Added "Use as an MCP Server" section; expanded skill trigger examples; simplified credits line.
 - **Favicon** — Regenerated as multi-size ICO (16/32/48px) with 4x supersampled anti-aliasing.
-- **Setup script** — Now builds MCP server automatically.
+- **Setup script** — MCP server install is now opt-in via y/N prompt during `npm run setup`.
+- **About page** — Added Claude Desktop / Cursor entry to "How to Use"; updated AI agent integration highlight to mention MCP.
 
 ## 2026-02-20
 

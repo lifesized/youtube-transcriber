@@ -45,7 +45,7 @@ The app must be running (`npm run dev`) for the agent to use it.
 
 ## Use as an MCP Server
 
-Works with Claude Desktop, Cursor, and any MCP-compatible client. The MCP server is built automatically during setup.
+Works with Claude Desktop, Cursor, and any MCP-compatible client. During `npm run setup`, choose "yes" when prompted to install the MCP server.
 
 ```bash
 npm run mcp:config   # prints config with your absolute path

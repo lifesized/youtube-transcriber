@@ -1,51 +1,49 @@
-# Handover — YouTube Transcriber
+# Handover — 2026-02-22
 
-You are continuing work on a YouTube Transcriber Next.js app. The main branch is up to date with remote.
+## What was done this session
 
-## What was done
-
-### Session 1: improve-transcript branch (merged)
-
-1. **Favicon** — `app/favicon.ico` (black circle, light gray background, rounded corners)
-2. **About page redesign** — `app/about/page.tsx` matched to home page width/typography, updated content with skill usage examples and shorthand triggers
-3. **Speaker diarization** — Opt-in pyannote.audio via `HF_TOKEN` env var, non-fatal. Speaker labels in UI, clipboard, Markdown download, summarize route, LLM launcher
-4. **Transcript rendering** — `mergeSegments()` groups captions into ~10s blocks, fixed timestamp alignment, speaker labels above blocks
-5. **Shared utilities** — `lib/utils.ts` (`formatTimestamp`, `cx`), `lib/api-utils.ts` (`getVideoOr404`)
-
-### Session 2: README, setup, and skill improvements
-
-6. **Simplified setup** — `scripts/setup.sh` now auto-installs yt-dlp and ffmpeg via platform detection (brew/apt/dnf/pacman). One command does everything.
-7. **README overhaul** — Code block is the hero, prerequisites moved to footnote, "Install yt-dlp first" section removed, button text fixed (Extract not Capture), "Summarize with LLM" feature documented, agent skill section added after quick start with separate code blocks per agent
-8. **Claude Code skill: auto-summarize** — `contrib/claude-code/SKILL.md` updated to summarize transcripts by default (the agent reads the transcript and summarizes inline). Full transcript only shown if explicitly requested.
-9. **Broadened skill triggers** — Skill activates on bare YouTube URLs, "summarize [url]", shorthand "s [url]" or "t [url]", or just a pasted URL with no context
-10. **About page updated** — Skill examples now show short triggers (`s https://...`) and explain that transcripts are saved + summarized in chat
+1. Updated README skill examples to show all trigger forms (summarize, transcribe, s, t)
+2. Simplified README credits line
+3. Regenerated favicon as multi-size ICO (16/32/48px) with 4x anti-aliased rendering
+4. Built session continuity hook (`scripts/check-handover.sh`) — git-based, warns when work done but HANDOVER.md not updated
+5. Updated Linear tickets: YTT-15 done, YTT-18 and YTT-17 progress notes
+6. Built MCP server (`mcp-server/src/index.ts`) — 6 tools + 1 resource, wraps REST API via stdio transport
+7. Made MCP install opt-in during `npm run setup` (y/N prompt)
+8. Added MCP server to user's Claude Desktop config
+9. Updated about page and README with MCP integration docs
+10. Created `docs/MCP.md` setup guide
+11. Closed YTT-14 on Linear
 
 ## Key files
-- `app/favicon.ico` — favicon
-- `app/about/page.tsx` — about page with skill usage examples
-- `app/page.tsx` — segment merging, speaker labels, progress indicator
-- `lib/types.ts` — `TranscriptSegment` with optional `speaker` field
-- `lib/whisper.ts` — Whisper transcription + diarization pipeline
-- `app/api/transcripts/[id]/download/route.ts` — Markdown export
-- `app/api/transcripts/[id]/summarize/route.ts` — summarize route
-- `components/ui/llm-launcher.tsx` — LLM launcher (ChatGPT / Claude)
-- `lib/utils.ts` — shared formatting utilities
-- `lib/api-utils.ts` — shared API helpers
-- `scripts/setup.sh` — one-command setup (installs everything)
-- `contrib/claude-code/SKILL.md` — Claude Code skill (auto-summarize, short triggers)
-- `contrib/openclaw/SKILL.md` — OpenClaw skill
-- `.env.example` — env var documentation
-- `CHANGELOG.md` — change log
-- `README.md` — simplified quick start, skill section, features
+
+- `mcp-server/src/index.ts` — MCP server (~200 lines, one file)
+- `mcp-server/package.json`, `tsconfig.json` — sub-package config
+- `scripts/check-handover.sh` — session continuity hook
+- `scripts/mcp-config.sh` — prints Claude Desktop config snippet
+- `scripts/setup.sh` — opt-in MCP prompt added
+- `docs/MCP.md` — MCP setup guide for Claude Desktop, Claude Code, Cursor
+- `CLAUDE.md` — project instructions for new sessions
+- `app/about/page.tsx` — added Claude Desktop/Cursor to How to Use
+- `README.md` — MCP section, updated skill examples, simplified credits
 
 ## Current state
-- **Branch:** `main` (up to date with `origin/main`)
-- Latest commit: `1cfa33c`
-- TypeScript compiles cleanly, Next.js build passes
-- No uncommitted changes (only this `HANDOVER.md` is untracked)
-- App runs at `localhost:19720`
+
+- **Branch:** `main`
+- **Last commit:** `69cebe5` — Make MCP server opt-in during setup
+- **Build:** clean (app running at localhost:19720, MCP server builds without errors)
+- **Claude Desktop:** MCP server configured — restart Desktop to activate
 
 ## Tech stack
+
 - Next.js 15, React 19, TypeScript, Prisma + SQLite, Tailwind CSS v4
 - Whisper (MLX + OpenAI) for transcription, yt-dlp for audio download
 - Optional: pyannote.audio for speaker diarization (requires `HF_TOKEN`)
+- MCP server: `@modelcontextprotocol/sdk` v1.x, stdio transport
+
+## Open items / next steps
+
+- Test MCP server in Claude Desktop after restart
+- YTT-30 (Chrome Extension) — backlog
+- YTT-23 (Background service management) — backlog
+- YTT-19 (npm publishing) — backlog
+- YTT-32 (Weekly summary + skill suggestions) — backlog
