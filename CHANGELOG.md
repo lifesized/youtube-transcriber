@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-02-22
+
+### Added
+- **MCP server** — New `mcp-server/` sub-package wrapping the REST API for Claude Desktop, Claude Code, Cursor, and other MCP clients. Includes 6 tools (`transcribe`, `list_transcripts`, `search_transcripts`, `get_transcript`, `delete_transcript`, `summarize_transcript`) and a `transcript://{id}` resource. Built automatically during `npm run setup`.
+- **`npm run mcp:config`** — Helper that prints the MCP client config with the correct absolute path.
+- **MCP documentation** — `docs/MCP.md` with setup guides for Claude Desktop, Claude Code, and Cursor.
+- **Session continuity hook** — `scripts/check-handover.sh` warns when work was done but `HANDOVER.md` wasn't updated.
+
+### Changed
+- **README** — Added "Use as an MCP Server" section; expanded skill trigger examples; simplified credits line.
+- **Favicon** — Regenerated as multi-size ICO (16/32/48px) with 4x supersampled anti-aliasing.
+- **Setup script** — Now builds MCP server automatically.
+
+## 2026-02-20
+
+### Changed
+- **README skill examples** — Show all trigger forms (summarize, transcribe, s, t) as separate example lines instead of inline shorthand note.
+- **README credits** — Simplified credits line.
+- **Favicon** — Regenerated as multi-size ICO (16/32/48px) with 4x supersampled anti-aliasing for smooth edges in browser tabs.
+
 ## [Unreleased] — improve-transcript branch
 
 ### Added

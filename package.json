@@ -8,7 +8,9 @@
     "build": "next build",
     "start": "next start -p 19720",
     "lint": "next lint",
-    "postinstall": "prisma generate",
+    "postinstall": "prisma generate && cd mcp-server && npm install && npm run build",
+    "mcp:build": "cd mcp-server && npm run build",
+    "mcp:config": "bash scripts/mcp-config.sh",
     "reset-data": "tsx scripts/reset-data.ts"
   },
   "keywords": [],

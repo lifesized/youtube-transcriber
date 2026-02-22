@@ -134,6 +134,14 @@ else
     echo "✓ .env already exists (not overwriting)"
 fi
 
+# ---------------------------------------------------------------------------
+# Build MCP server
+# ---------------------------------------------------------------------------
+echo "🔌 Building MCP server..."
+cd mcp-server && npm install && npm run build && cd ..
+echo "✓ MCP server built at mcp-server/dist/index.js"
+echo "  Run 'npm run mcp:config' to get your client config snippet."
+
 echo ""
 echo "✅ Setup complete!"
 echo ""

@@ -43,6 +43,24 @@ Or just paste a YouTube URL — the skill auto-activates.
 
 The app must be running (`npm run dev`) for the agent to use it.
 
+## Use as an MCP Server
+
+Works with Claude Desktop, Cursor, and any MCP-compatible client. The MCP server is built automatically during setup.
+
+```bash
+npm run mcp:config   # prints config with your absolute path
+```
+
+Add the output to your client config ([full setup guide](./docs/MCP.md)):
+
+| Client | Config file |
+|--------|-------------|
+| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Claude Code | `.claude/mcp.json` or `claude mcp add` |
+| Cursor | `.cursor/mcp.json` |
+
+**Available tools:** `transcribe`, `list_transcripts`, `search_transcripts`, `get_transcript`, `delete_transcript`, `summarize_transcript`
+
 ---
 
 ## How It Works

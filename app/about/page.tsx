@@ -29,7 +29,7 @@ export default function AboutPage() {
           <div className="space-y-3">
             <h2 className="text-base font-medium text-white/75">Why This Matters</h2>
             <p className="text-sm leading-relaxed text-white/40">
-              Most AI workflows involve extracting knowledge from video content. This tool first attempts to extract existing YouTube captions directly — the fastest and most reliable option. When captions aren't available, it falls back to OpenAI Whisper to download the audio and convert it to a transcript locally on your machine. No cloud dependencies, no usage limits, no recurring fees.
+              Extracting knowledge from video content can help with speeding up your learning and sense making of knowledge and the world out there. This tool attempts to extract existing YouTube captions directly, the fastest and most reliable option. When captions aren&apos;t available, it falls back to OpenAI Whisper to download the audio and convert it to a transcript locally on your machine. No cloud dependencies, no usage limits, no recurring fees.
             </p>
           </div>
 
