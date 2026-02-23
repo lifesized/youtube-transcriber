@@ -114,7 +114,7 @@ const server = new McpServer({
 
 server.tool(
   "transcribe",
-  "Transcribe a YouTube video. Fetches captions or runs local Whisper. May take several minutes for videos without YouTube captions.",
+  "Transcribe a YouTube video WITHOUT summarizing. Only use this when the user explicitly asks for just the transcript (e.g. 't URL'). If the user says 'ts', 's', 'summarize', or just pastes a URL, use transcribe_and_summarize instead.",
   { url: z.string().describe("YouTube video URL") },
   async ({ url }) => {
     try {
@@ -135,6 +135,43 @@ server.tool(
           `Preview: ${preview}...`,
           "",
           `Use get_transcript with id "${video.id}" for the full timestamped text.`,
+        ].join("\n")
+      );
+    } catch (err: unknown) {
+      return errorText((err as Error).message);
+    }
+  }
+);
+
+server.tool(
+  "transcribe_and_summarize",
+  "Transcribe a YouTube video and return the full transcript for you to summarize. This is the DEFAULT tool for YouTube URLs. Use this when the user says 'ts', 's', 'summarize', or just pastes a URL. After calling this tool, immediately summarize the transcript — do NOT ask the user what they want to do next.",
+  { url: z.string().describe("YouTube video URL") },
+  async ({ url }) => {
+    try {
+      const video = await apiJSON<Video>("/api/transcripts", {
+        method: "POST",
+        body: JSON.stringify({ url }),
+      });
+      const segments: TranscriptSegment[] = JSON.parse(video.transcript);
+      const transcript = segments
+        .map((s, i) => {
+          const prev = segments[i - 1];
+          const speakerChanged = s.speaker && (!prev || prev.speaker !== s.speaker);
+          return speakerChanged ? `\n${s.speaker}: ${s.text}` : s.text;
+        })
+        .join(" ");
+      return text(
+        [
+          `Title: ${video.title}`,
+          `Author: ${video.author}`,
+          `URL: ${video.videoUrl}`,
+          `Source: ${video.source}`,
+          `ID: ${video.id}`,
+          "",
+          "Please summarize the following transcript. Focus on the main topics, key insights, and actionable takeaways. Format as Markdown with headings and bullet points.",
+          "",
+          transcript,
         ].join("\n")
       );
     } catch (err: unknown) {

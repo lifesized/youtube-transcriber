@@ -7,7 +7,7 @@ Capture transcripts from YouTube videos using a local transcription service. The
 Use this skill when the user:
 - Pastes a YouTube URL (with or without a verb like "transcribe", "summarize", "watch")
 - Says "transcribe", "summarize", or "caption" followed by a YouTube URL
-- Uses a shorthand like "s" or "t" followed by a YouTube URL (e.g. "s https://youtube.com/watch?v=...")
+- Uses a shorthand like "s", "t", or "ts" followed by a YouTube URL (e.g. "ts https://youtube.com/watch?v=..." to transcribe and summarize)
 - Asks to extract, capture, or get what was said in a YouTube video
 - Sends just a YouTube URL with no other context
 
@@ -86,7 +86,7 @@ curl -X DELETE 'http://127.0.0.1:19720/api/transcripts/ID'
 
 ## Default Behavior
 
-After capturing a transcript, **always present a summary to the user** unless they explicitly asked for the full transcript. This is the expected workflow:
+When the user uses "ts" (transcribe + summarize) or "s" (summarize), **always present a summary to the user**. When the user uses "t" (transcribe), return the full transcript unless they say otherwise. This is the expected workflow:
 
 1. Capture the transcript via the API (saves it to the library)
 2. Parse the transcript segments into plain text

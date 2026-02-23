@@ -51,7 +51,7 @@ export default function AboutPage() {
               </li>
               <li>
                 <strong className="text-white/70">Claude Code agent</strong> — With the Claude Code skill installed, just paste a URL or type:{" "}
-                <code className="block mt-2 wrap-break-word rounded bg-white/10 px-3 py-2 text-[13px] italic text-white/70">&quot;s https://youtube.com/watch?v=...&quot;</code>
+                <code className="block mt-2 wrap-break-word rounded bg-white/10 px-3 py-2 text-[13px] italic text-white/70">&quot;ts https://youtube.com/watch?v=...&quot;</code>
                 <span className="mt-1 block text-[12px] text-white/40">The transcript is saved to the library and a summary is shown in the chat. See the{" "}
                   <a href="https://github.com/lifesized/youtube-transcriber" target="_blank" rel="noopener noreferrer" className="text-white/50 underline decoration-blue-400/50 hover:text-white/70 hover:decoration-blue-300">GitHub README</a> for setup.
                 </span>

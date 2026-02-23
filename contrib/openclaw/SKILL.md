@@ -15,6 +15,7 @@ Use when the user wants to:
 - Get captions/transcript from a video
 - Extract dialogue from a YouTube video
 - Save what was said in a video
+- Uses a shorthand like "s", "t", or "ts" followed by a YouTube URL (e.g. "ts https://youtube.com/watch?v=..." to transcribe and summarize)
 
 ## API
 

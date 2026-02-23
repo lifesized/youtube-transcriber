@@ -80,6 +80,7 @@ Add to `.cursor/mcp.json`:
 | Tool | Description | Parameters |
 |------|-------------|------------|
 | `transcribe` | Transcribe a YouTube video (captions or Whisper) | `url` |
+| `transcribe_and_summarize` | Transcribe and return full text for the LLM to summarize | `url` |
 | `list_transcripts` | List all saved transcripts | — |
 | `search_transcripts` | Search by title or author | `query` |
 | `get_transcript` | Get full timestamped transcript | `id` |

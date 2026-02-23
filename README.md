@@ -37,7 +37,7 @@ cp -r contrib/openclaw ~/.openclaw/skills/youtube-transcriber
 
 > *"summarize https://youtube.com/watch?v=..."*
 > *"transcribe https://youtube.com/watch?v=..."*
-> *"s https://youtube.com/watch?v=..."* / *"t https://youtube.com/watch?v=..."*
+> *"s https://youtube.com/watch?v=..."* / *"t https://youtube.com/watch?v=..."* / *"ts https://youtube.com/watch?v=..."*
 
 Or just paste a YouTube URL — the skill auto-activates.
 
@@ -59,7 +59,7 @@ Add the output to your client config ([full setup guide](./docs/MCP.md)):
 | Claude Code | `.claude/mcp.json` or `claude mcp add` |
 | Cursor | `.cursor/mcp.json` |
 
-**Available tools:** `transcribe`, `list_transcripts`, `search_transcripts`, `get_transcript`, `delete_transcript`, `summarize_transcript`
+**Available tools:** `transcribe`, `transcribe_and_summarize`, `list_transcripts`, `search_transcripts`, `get_transcript`, `delete_transcript`, `summarize_transcript`
 
 ---
 
