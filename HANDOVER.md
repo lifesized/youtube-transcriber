@@ -1,4 +1,4 @@
-# Handover — 2026-02-22
+# Handover — 2026-02-23
 
 ## What was done this session
 
@@ -10,34 +10,22 @@
 6. Built YTT-35: Lightweight standalone SKILL-lite.md — dual-mode skill (yt-dlp direct / full service)
 7. Built YTT-36: Caption language preference — `lang` param threaded through API, InnerTube clients, and MCP tools; `YTT_CAPTION_LANGS` env var
 8. MCP server rebuilt with lang support
-
-## Uncommitted changes (8 files)
-
-From **previous session** (still uncommitted):
-- `mcp-server/src/index.ts` — `transcribe_and_summarize` tool, updated `transcribe` description
-- `README.md` — added `ts` shorthand, added `transcribe_and_summarize` to tool list
-- `docs/MCP.md` — added `transcribe_and_summarize` to tools table
-- `app/about/page.tsx` — updated example to show `ts` shorthand
-- `contrib/claude-code/SKILL.md` — user edits (check diff)
-- `contrib/openclaw/SKILL.md` — user edits (check diff)
-
-From **this session**:
-- `CHANGELOG.md` — added 2026-02-23 section with competitive analysis + ticket list
-- `HANDOVER.md` — this file
-
-**These all need to be committed and pushed.**
+9. Tested all features: English, Spanish, Japanese captions, fallback behavior, lite mode, pre-commit hook
+10. Updated README with lite/full skill comparison table, Language Preference section, expanded features
+11. Updated about page with lite skill entry and multi-language highlight
+12. Pushed all commits to origin
 
 ## Current state
 
 - **Branch:** `main`
-- **Last commit:** `db1af4f` — Update docs and about page for opt-in MCP server
+- **Last commit:** `ab2c77b` — Add lightweight skill and caption language preference (YTT-35, YTT-36)
 - **Build:** clean (app running at localhost:19720)
-- **MCP server needs rebuild** after index.ts changes: `npm run mcp:build`
+- **MCP server:** rebuilt with lang support
 
 ## Completed this session
 
-- **YTT-35** (Lightweight standalone SKILL.md) — done
-- **YTT-36** (Caption language preference) — done
+- **YTT-35** (Lightweight standalone SKILL.md) — done, tested, pushed
+- **YTT-36** (Caption language preference) — done, tested, pushed
 
 ## Tech stack
 
@@ -50,8 +38,6 @@ From **this session**:
 
 | Ticket | Title | Priority |
 |--------|-------|----------|
-| YTT-35 | Lightweight standalone SKILL.md (no server required) | Urgent |
-| YTT-36 | Add caption language preference support | High |
 | YTT-41 | BYOK cloud Whisper fallback (Groq, OpenAI, user-provided) | High |
 | YTT-37 | Browser automation fallback (Chrome DevTools MCP) | Medium |
 | YTT-38 | Cookie/auth support for restricted content | Medium |

@@ -23,25 +23,44 @@ Open [http://localhost:19720](http://localhost:19720) — paste a YouTube URL, h
 
 ## Use as a Skill
 
-Install the included skill for your agent, then ask it in natural language:
+Two options — pick the one that fits your setup:
 
-**Claude Code:**
+### Full Skill (all features, requires running service)
+
 ```bash
+# Claude Code
 cp -r contrib/claude-code ~/.claude/skills/youtube-transcriber
-```
 
-**OpenClaw:**
-```bash
+# OpenClaw
 cp -r contrib/openclaw ~/.openclaw/skills/youtube-transcriber
 ```
+
+Requires the app running at `localhost:19720` (`npm run dev`). Gives you Whisper fallback, speaker diarization, persistent library, and all API features.
+
+### Lite Skill (zero setup, just yt-dlp)
+
+```bash
+cp contrib/claude-code/SKILL-lite.md ~/.claude/skills/youtube-transcriber/SKILL.md
+```
+
+Works with just `yt-dlp` installed — no server needed. Extracts YouTube subtitles directly. **Automatically upgrades to the full service when it detects it running.**
+
+| | Lite | Full |
+|--|:---:|:----:|
+| YouTube captions | Yes | Yes |
+| Auto-generated subs | Yes | Yes |
+| Whisper transcription | — | Yes |
+| Speaker diarization | — | Yes |
+| Persistent library | — | Yes |
+| Setup | `yt-dlp` only | Node + Python + service |
+
+### Triggers
 
 > *"summarize https://youtube.com/watch?v=..."*
 > *"transcribe https://youtube.com/watch?v=..."*
 > *"s https://youtube.com/watch?v=..."* / *"t https://youtube.com/watch?v=..."* / *"ts https://youtube.com/watch?v=..."*
 
 Or just paste a YouTube URL — the skill auto-activates.
-
-The app must be running (`npm run dev`) for the agent to use it.
 
 ## Use as an MCP Server
 
@@ -76,15 +95,40 @@ No API keys needed. Everything runs on your machine.
 ## Features
 
 - **Zero-cost transcription** — local Whisper models, no API fees
+- **Multi-language captions** — request captions in any language YouTube supports (see [Language Preference](#language-preference) below)
 - **Summarize with LLM** — send any transcript straight to ChatGPT or Claude. ChatGPT opens with the prompt pre-filled; Claude copies it to your clipboard so you can paste (⌘V) into a new chat
 - **Queue system** — batch-process multiple videos
 - **Search & filter** your transcript library
 - **Export as Markdown** or copy to clipboard with timestamps
 - **Duplicate detection** — same video won't be saved twice
+- **Speaker diarization** — optional speaker identification with pyannote.audio
 - **SQLite storage** — all data stays on your machine
 - **Fully offline-capable** after initial setup
 
 Full REST API docs: [`docs/API.md`](./docs/API.md) | OpenAPI spec: [`docs/openapi.yaml`](./docs/openapi.yaml)
+
+## Language Preference
+
+By default, the app fetches English captions. You can change this per-request or globally.
+
+**Per-request** — pass `lang` in the API body:
+```bash
+curl -X POST http://localhost:19720/api/transcripts \
+  -H 'Content-Type: application/json' \
+  -d '{"url": "https://youtube.com/watch?v=...", "lang": "es"}'
+```
+
+**Multi-language priority** — tries each language in order, falls back to first available:
+```bash
+-d '{"url": "...", "lang": "ja,en"}'   # Japanese preferred, English fallback
+```
+
+**Global default** — set in `.env`:
+```env
+YTT_CAPTION_LANGS="zh-Hans,zh-Hant,en"
+```
+
+The MCP tools (`transcribe`, `transcribe_and_summarize`) also accept an optional `lang` parameter.
 
 ---
 
