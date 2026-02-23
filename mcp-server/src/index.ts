@@ -115,12 +115,15 @@ const server = new McpServer({
 server.tool(
   "transcribe",
   "Transcribe a YouTube video WITHOUT summarizing. Only use this when the user explicitly asks for just the transcript (e.g. 't URL'). If the user says 'ts', 's', 'summarize', or just pastes a URL, use transcribe_and_summarize instead.",
-  { url: z.string().describe("YouTube video URL") },
-  async ({ url }) => {
+  {
+    url: z.string().describe("YouTube video URL"),
+    lang: z.string().optional().describe("Preferred caption language(s), comma-separated (e.g. 'en', 'zh-Hans,en', 'es,pt,en'). Defaults to English."),
+  },
+  async ({ url, lang }) => {
     try {
       const video = await apiJSON<Video>("/api/transcripts", {
         method: "POST",
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, lang }),
       });
       const segments: TranscriptSegment[] = JSON.parse(video.transcript);
       const preview = segments.slice(0, 10).map((s) => s.text).join(" ");
@@ -146,12 +149,15 @@ server.tool(
 server.tool(
   "transcribe_and_summarize",
   "Transcribe a YouTube video and return the full transcript for you to summarize. This is the DEFAULT tool for YouTube URLs. Use this when the user says 'ts', 's', 'summarize', or just pastes a URL. After calling this tool, immediately summarize the transcript — do NOT ask the user what they want to do next.",
-  { url: z.string().describe("YouTube video URL") },
-  async ({ url }) => {
+  {
+    url: z.string().describe("YouTube video URL"),
+    lang: z.string().optional().describe("Preferred caption language(s), comma-separated (e.g. 'en', 'zh-Hans,en', 'es,pt,en'). Defaults to English."),
+  },
+  async ({ url, lang }) => {
     try {
       const video = await apiJSON<Video>("/api/transcripts", {
         method: "POST",
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, lang }),
       });
       const segments: TranscriptSegment[] = JSON.parse(video.transcript);
       const transcript = segments

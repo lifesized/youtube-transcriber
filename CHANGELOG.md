@@ -3,6 +3,9 @@
 ## 2026-02-22 (session 2)
 
 ### Added
+- **Lightweight standalone skill** (`contrib/claude-code/SKILL-lite.md`) — Zero-setup transcription skill that works with just `yt-dlp` installed. Auto-detects and upgrades to the full service when running. (YTT-35)
+- **Caption language preference** — New `lang` parameter on POST `/api/transcripts` and MCP tools (`transcribe`, `transcribe_and_summarize`). Configure defaults via `YTT_CAPTION_LANGS` env var (comma-separated, e.g. `en,zh-Hans,es`). Tries manual captions first, then auto-generated, falls back to first available. (YTT-36)
+- **Stronger session continuity hook** — `check-handover.sh` now validates both HANDOVER.md and CHANGELOG.md, checks date headers, and blocks git commits when files are stale.
 - **Competitive analysis** — Researched skills.sh ecosystem, feiskyer/youtube-transcribe-skill, mower07/youtube-transcribe-openclaw, and inference-sh audio skills to identify gaps and improvements.
 - **9 new Linear tickets** for improvement roadmap:
   - YTT-35: Lightweight standalone SKILL.md (no server required) — Urgent

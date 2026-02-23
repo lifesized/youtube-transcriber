@@ -5,7 +5,7 @@ import { getVideoTranscript, RateLimitError, BotDetectionError, NoCaptionsError 
 import { isTranscriptionInProgress } from "@/lib/whisper";
 
 export async function POST(request: NextRequest) {
-  let body: { url?: string };
+  let body: { url?: string; lang?: string };
   try {
     body = await request.json();
   } catch {
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { url } = body;
+  const { url, lang } = body;
   if (!url || typeof url !== "string") {
     return NextResponse.json(
       { error: "A YouTube URL is required" },
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await getVideoTranscript(url);
+    const result = await getVideoTranscript(url, lang);
 
     const data = {
       videoId: result.videoId,

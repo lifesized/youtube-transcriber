@@ -6,7 +6,10 @@
 2. Researched competitive landscape: feiskyer/youtube-transcribe-skill, mower07/youtube-transcribe-openclaw, inference-sh speech-to-text/dialogue-audio/ai-podcast-creation/ai-voice-cloning/content-repurposing skills
 3. Generated detailed pros/cons analysis vs our implementation
 4. Created 9 Linear tickets (YTT-35 through YTT-43) covering: lightweight skill, language preference, BYOK cloud Whisper, browser automation fallback, cookie auth, post-transcription intelligence, remote server, auto-start, download improvements
-5. Updated CHANGELOG.md with competitive analysis and ticket creation
+5. Strengthened `scripts/check-handover.sh` — now checks CHANGELOG.md too, validates dates, blocks commits when stale
+6. Built YTT-35: Lightweight standalone SKILL-lite.md — dual-mode skill (yt-dlp direct / full service)
+7. Built YTT-36: Caption language preference — `lang` param threaded through API, InnerTube clients, and MCP tools; `YTT_CAPTION_LANGS` env var
+8. MCP server rebuilt with lang support
 
 ## Uncommitted changes (8 files)
 
@@ -31,10 +34,10 @@ From **this session**:
 - **Build:** clean (app running at localhost:19720)
 - **MCP server needs rebuild** after index.ts changes: `npm run mcp:build`
 
-## In progress
+## Completed this session
 
-- **YTT-35** (Lightweight standalone SKILL.md) — next to build
-- **YTT-36** (Caption language preference) — next to build
+- **YTT-35** (Lightweight standalone SKILL.md) — done
+- **YTT-36** (Caption language preference) — done
 
 ## Tech stack
 

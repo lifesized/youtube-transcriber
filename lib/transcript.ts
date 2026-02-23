@@ -143,17 +143,38 @@ function decodeEntities(text: string): string {
 }
 
 /**
+ * Get preferred caption languages from env var or parameter.
+ * Returns an array of language codes, e.g. ["en", "zh-Hans", "zh-Hant"].
+ * Defaults to ["en"] if not configured.
+ */
+function getCaptionLangs(langOverride?: string): string[] {
+  const raw = langOverride || process.env.YTT_CAPTION_LANGS || "en";
+  return raw.split(",").map((l) => l.trim()).filter(Boolean);
+}
+
+/**
  * Select the best caption track from a list of tracks.
- * Prefers manual English, then auto-generated English, then first available.
+ * Tries preferred languages in order (manual first, then auto-generated).
+ * Falls back to first available if no preferred language is found.
  */
 function selectCaptionTrack(
-  captionTracks: Array<{ vssId?: string; baseUrl: string }>
+  captionTracks: Array<{ vssId?: string; languageCode?: string; baseUrl: string }>,
+  preferredLangs?: string[]
 ): { vssId?: string; baseUrl: string } {
-  return (
-    captionTracks.find((t) => t.vssId === ".en") ??
-    captionTracks.find((t) => t.vssId === "a.en") ??
-    captionTracks[0]
-  );
+  const langs = preferredLangs ?? getCaptionLangs();
+
+  for (const lang of langs) {
+    // Try manual track (vssId like ".en" or languageCode match)
+    const manual = captionTracks.find(
+      (t) => t.vssId === `.${lang}` || t.languageCode === lang
+    );
+    if (manual) return manual;
+    // Try auto-generated track (vssId like "a.en")
+    const auto = captionTracks.find((t) => t.vssId === `a.${lang}`);
+    if (auto) return auto;
+  }
+
+  return captionTracks[0];
 }
 
 /**
@@ -204,7 +225,8 @@ function parseCaptionXml(xml: string): TranscriptSegment[] {
  * Returns segments, or throws RateLimitError on 429 (after retries).
  */
 async function fetchTranscriptAndroid(
-  videoId: string
+  videoId: string,
+  lang?: string
 ): Promise<TranscriptSegment[]> {
   const playerPayload = {
     context: {
@@ -266,7 +288,7 @@ async function fetchTranscriptAndroid(
     );
   }
 
-  const track = selectCaptionTrack(captionTracks);
+  const track = selectCaptionTrack(captionTracks, lang ? getCaptionLangs(lang) : undefined);
 
   const captionRes = await fetchWithRetry(track.baseUrl, undefined, 1);
 
@@ -299,7 +321,8 @@ async function fetchTranscriptAndroid(
  * Middle fallback between ANDROID and page scrape.
  */
 async function fetchTranscriptWebClient(
-  videoId: string
+  videoId: string,
+  lang?: string
 ): Promise<TranscriptSegment[]> {
   console.log(`[transcript] Trying WEB InnerTube client for ${videoId}...`);
 
@@ -363,7 +386,7 @@ async function fetchTranscriptWebClient(
     );
   }
 
-  const track = selectCaptionTrack(captionTracks);
+  const track = selectCaptionTrack(captionTracks, lang ? getCaptionLangs(lang) : undefined);
 
   const captionRes = await fetchWithRetry(track.baseUrl, undefined, 1);
 
@@ -395,7 +418,8 @@ async function fetchTranscriptWebClient(
  * Used when the ANDROID client gets rate-limited.
  */
 async function fetchTranscriptWebFallback(
-  videoId: string
+  videoId: string,
+  lang?: string
 ): Promise<TranscriptSegment[]> {
   console.log(
     `[transcript] ANDROID client blocked (rate-limit or bot detection), trying WEB fallback for ${videoId}...`
@@ -454,7 +478,7 @@ async function fetchTranscriptWebFallback(
   }
 
   const captions = playerData.captions as
-    | { playerCaptionsTracklistRenderer?: { captionTracks?: Array<{ vssId?: string; baseUrl: string }> } }
+    | { playerCaptionsTracklistRenderer?: { captionTracks?: Array<{ vssId?: string; languageCode?: string; baseUrl: string }> } }
     | undefined;
   const captionTracks = captions?.playerCaptionsTracklistRenderer?.captionTracks;
 
@@ -464,7 +488,7 @@ async function fetchTranscriptWebFallback(
     );
   }
 
-  const track = selectCaptionTrack(captionTracks);
+  const track = selectCaptionTrack(captionTracks, lang ? getCaptionLangs(lang) : undefined);
 
   const captionRes = await fetchWithRetry(track.baseUrl, undefined, 1);
 
@@ -497,10 +521,11 @@ async function fetchTranscriptWebFallback(
  * Returns the segments and source ("youtube_captions" or "whisper_local").
  */
 async function fetchTranscript(
-  videoId: string
+  videoId: string,
+  lang?: string
 ): Promise<{ segments: TranscriptSegment[]; source: string }> {
   try {
-    const segments = await fetchTranscriptAndroid(videoId);
+    const segments = await fetchTranscriptAndroid(videoId, lang);
     return { segments, source: "youtube_captions" };
   } catch (err) {
     if (err instanceof NoCaptionsError) {
@@ -514,7 +539,7 @@ async function fetchTranscript(
       `[transcript] ANDROID client failed for ${videoId}: ${err instanceof Error ? err.message : err}. Trying WEB InnerTube...`
     );
     try {
-      const segments = await fetchTranscriptWebClient(videoId);
+      const segments = await fetchTranscriptWebClient(videoId, lang);
       return { segments, source: "youtube_captions" };
     } catch (err2) {
       if (err2 instanceof NoCaptionsError) {
@@ -527,7 +552,7 @@ async function fetchTranscript(
       console.log(
         `[transcript] WEB InnerTube failed for ${videoId}: ${err2 instanceof Error ? err2.message : err2}. Trying WEB page scrape...`
       );
-      const segments = await fetchTranscriptWebFallback(videoId);
+      const segments = await fetchTranscriptWebFallback(videoId, lang);
       return { segments, source: "youtube_captions" };
     }
   }
@@ -540,7 +565,8 @@ async function fetchTranscript(
  * @returns Structured result with metadata + time-coded transcript + source
  */
 export async function getVideoTranscript(
-  url: string
+  url: string,
+  lang?: string
 ): Promise<VideoTranscriptResult & { source: string }> {
   const videoId = extractVideoId(url);
 
@@ -549,7 +575,7 @@ export async function getVideoTranscript(
     (async () => {
       const [metadata, transcriptResult] = await Promise.all([
         fetchMetadata(videoId),
-        fetchTranscript(videoId),
+        fetchTranscript(videoId, lang),
       ]);
       return {
         ...metadata,
