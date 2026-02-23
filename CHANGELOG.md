@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-02-23
+
+### Added
+- **Competitive analysis** — Researched skills.sh ecosystem, feiskyer/youtube-transcribe-skill, mower07/youtube-transcribe-openclaw, and inference-sh audio skills to identify gaps and improvements.
+- **9 new Linear tickets** for improvement roadmap:
+  - YTT-35: Lightweight standalone SKILL.md (no server required) — Urgent
+  - YTT-36: Caption language preference support — High
+  - YTT-41: BYOK cloud Whisper fallback (Groq, OpenAI, user-provided) — High
+  - YTT-37: Browser automation fallback (Chrome DevTools MCP) — Medium
+  - YTT-38: Cookie/auth support for restricted content — Medium
+  - YTT-42: Post-transcription intelligence layer (reflection, bias, content ideas) — Medium
+  - YTT-39: Remote/non-localhost server URL — Low
+  - YTT-40: Auto-detect and start service when not running — Low
+  - YTT-43: Improve transcript download format and structure — Low
+
 ## 2026-02-22
 
 ### Added

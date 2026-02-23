@@ -1,37 +1,40 @@
-# Handover — 2026-02-22
+# Handover — 2026-02-23
 
 ## What was done this session
 
-1. Updated README skill examples to show all trigger forms (summarize, transcribe, s, t)
-2. Simplified README credits line
-3. Regenerated favicon as multi-size ICO (16/32/48px) with 4x anti-aliased rendering
-4. Built session continuity hook (`scripts/check-handover.sh`) — git-based, warns when work done but HANDOVER.md not updated
-5. Updated Linear tickets: YTT-15 done, YTT-18 and YTT-17 progress notes
-6. Built MCP server (`mcp-server/src/index.ts`) — 6 tools + 1 resource, wraps REST API via stdio transport
-7. Made MCP install opt-in during `npm run setup` (y/N prompt)
-8. Added MCP server to user's Claude Desktop config
-9. Updated about page and README with MCP integration docs
-10. Created `docs/MCP.md` setup guide
-11. Closed YTT-14 on Linear
+1. Reviewed HANDOVER.md from previous session
+2. Researched competitive landscape: feiskyer/youtube-transcribe-skill, mower07/youtube-transcribe-openclaw, inference-sh speech-to-text/dialogue-audio/ai-podcast-creation/ai-voice-cloning/content-repurposing skills
+3. Generated detailed pros/cons analysis vs our implementation
+4. Created 9 Linear tickets (YTT-35 through YTT-43) covering: lightweight skill, language preference, BYOK cloud Whisper, browser automation fallback, cookie auth, post-transcription intelligence, remote server, auto-start, download improvements
+5. Updated CHANGELOG.md with competitive analysis and ticket creation
 
-## Key files
+## Uncommitted changes (8 files)
 
-- `mcp-server/src/index.ts` — MCP server (~200 lines, one file)
-- `mcp-server/package.json`, `tsconfig.json` — sub-package config
-- `scripts/check-handover.sh` — session continuity hook
-- `scripts/mcp-config.sh` — prints Claude Desktop config snippet
-- `scripts/setup.sh` — opt-in MCP prompt added
-- `docs/MCP.md` — MCP setup guide for Claude Desktop, Claude Code, Cursor
-- `CLAUDE.md` — project instructions for new sessions
-- `app/about/page.tsx` — added Claude Desktop/Cursor to How to Use
-- `README.md` — MCP section, updated skill examples, simplified credits
+From **previous session** (still uncommitted):
+- `mcp-server/src/index.ts` — `transcribe_and_summarize` tool, updated `transcribe` description
+- `README.md` — added `ts` shorthand, added `transcribe_and_summarize` to tool list
+- `docs/MCP.md` — added `transcribe_and_summarize` to tools table
+- `app/about/page.tsx` — updated example to show `ts` shorthand
+- `contrib/claude-code/SKILL.md` — user edits (check diff)
+- `contrib/openclaw/SKILL.md` — user edits (check diff)
+
+From **this session**:
+- `CHANGELOG.md` — added 2026-02-23 section with competitive analysis + ticket list
+- `HANDOVER.md` — this file
+
+**These all need to be committed and pushed.**
 
 ## Current state
 
 - **Branch:** `main`
-- **Last commit:** `69cebe5` — Make MCP server opt-in during setup
-- **Build:** clean (app running at localhost:19720, MCP server builds without errors)
-- **Claude Desktop:** MCP server configured — restart Desktop to activate
+- **Last commit:** `db1af4f` — Update docs and about page for opt-in MCP server
+- **Build:** clean (app running at localhost:19720)
+- **MCP server needs rebuild** after index.ts changes: `npm run mcp:build`
+
+## In progress
+
+- **YTT-35** (Lightweight standalone SKILL.md) — next to build
+- **YTT-36** (Caption language preference) — next to build
 
 ## Tech stack
 
@@ -40,10 +43,20 @@
 - Optional: pyannote.audio for speaker diarization (requires `HF_TOKEN`)
 - MCP server: `@modelcontextprotocol/sdk` v1.x, stdio transport
 
-## Open items / next steps
+## Backlog (Linear)
 
-- Test MCP server in Claude Desktop after restart
-- YTT-30 (Chrome Extension) — backlog
-- YTT-23 (Background service management) — backlog
-- YTT-19 (npm publishing) — backlog
-- YTT-32 (Weekly summary + skill suggestions) — backlog
+| Ticket | Title | Priority |
+|--------|-------|----------|
+| YTT-35 | Lightweight standalone SKILL.md (no server required) | Urgent |
+| YTT-36 | Add caption language preference support | High |
+| YTT-41 | BYOK cloud Whisper fallback (Groq, OpenAI, user-provided) | High |
+| YTT-37 | Browser automation fallback (Chrome DevTools MCP) | Medium |
+| YTT-38 | Cookie/auth support for restricted content | Medium |
+| YTT-42 | Post-transcription intelligence layer (reflection, bias, ideas) | Medium |
+| YTT-39 | Remote/non-localhost server URL | Low |
+| YTT-40 | Auto-detect and start service when not running | Low |
+| YTT-43 | Improve transcript download format and structure | Low |
+| YTT-30 | Chrome Extension | Backlog |
+| YTT-23 | Background service management | Backlog |
+| YTT-19 | npm publishing | Backlog |
+| YTT-32 | Weekly summary + skill suggestions | Backlog |
