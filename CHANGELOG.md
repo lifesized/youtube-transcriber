@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-02-24
+
+### Added
+- **BYOK cloud Whisper fallback** — Cloud-based transcription via Groq or OpenAI Whisper APIs when YouTube captions aren't available. Configure with `WHISPER_CLOUD_API_KEY` and optional `WHISPER_CLOUD_PROVIDER` / `WHISPER_CLOUD_MODEL` env vars. Falls back to local Whisper on failure. New source values: `whisper_cloud_groq`, `whisper_cloud_openai`. (YTT-41)
+
 ## 2026-02-23
 
 ### Added

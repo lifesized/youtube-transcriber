@@ -1,5 +1,8 @@
+import path from "path";
+import { promises as fs } from "fs";
 import { extractVideoId } from "./youtube";
-import { transcribeWithWhisper, type ProgressCallback } from "./whisper";
+import { transcribeWithWhisper, downloadAudio, type ProgressCallback } from "./whisper";
+import { transcribeWithCloudWhisper, getCloudWhisperConfig } from "./whisper-cloud";
 import type {
   TranscriptSegment,
   VideoMetadata,
@@ -516,9 +519,39 @@ async function fetchTranscriptWebFallback(
 }
 
 /**
+ * Try cloud Whisper first (if configured), then fall back to local Whisper.
+ */
+async function transcribeWithWhisperFallback(
+  videoId: string
+): Promise<{ segments: TranscriptSegment[]; source: string }> {
+  const cloudConfig = getCloudWhisperConfig();
+
+  if (cloudConfig) {
+    try {
+      console.log(
+        `[transcript] Trying cloud Whisper (${cloudConfig.provider}) for ${videoId}...`
+      );
+      const audioDir = path.join("/tmp", "yt-audio");
+      const audioPath = await downloadAudio(videoId, audioDir);
+
+      const { segments, provider } = await transcribeWithCloudWhisper(audioPath);
+      await fs.unlink(audioPath).catch(() => {});
+
+      return { segments, source: `whisper_cloud_${provider}` };
+    } catch (err) {
+      console.log(
+        `[transcript] Cloud Whisper failed for ${videoId}: ${err instanceof Error ? err.message : err}. Falling back to local Whisper...`
+      );
+    }
+  }
+
+  const segments = await transcribeWithWhisper(videoId);
+  return { segments, source: "whisper_local" };
+}
+
+/**
  * Fetch time-coded transcript segments for a YouTube video.
- * Fallback chain: ANDROID InnerTube → WEB InnerTube → WEB page scrape.
- * Returns the segments and source ("youtube_captions" or "whisper_local").
+ * Fallback chain: ANDROID InnerTube → WEB InnerTube → WEB page scrape → Cloud Whisper → Local Whisper.
  */
 async function fetchTranscript(
   videoId: string,
@@ -530,10 +563,9 @@ async function fetchTranscript(
   } catch (err) {
     if (err instanceof NoCaptionsError) {
       console.log(
-        `[transcript] No captions available for ${videoId}, falling back to local Whisper transcription...`
+        `[transcript] No captions available for ${videoId}, falling back to Whisper transcription...`
       );
-      const segments = await transcribeWithWhisper(videoId);
-      return { segments, source: "whisper_local" };
+      return await transcribeWithWhisperFallback(videoId);
     }
     console.log(
       `[transcript] ANDROID client failed for ${videoId}: ${err instanceof Error ? err.message : err}. Trying WEB InnerTube...`
@@ -544,10 +576,9 @@ async function fetchTranscript(
     } catch (err2) {
       if (err2 instanceof NoCaptionsError) {
         console.log(
-          `[transcript] No captions available for ${videoId}, falling back to local Whisper transcription...`
+          `[transcript] No captions available for ${videoId}, falling back to Whisper transcription...`
         );
-        const segments = await transcribeWithWhisper(videoId);
-        return { segments, source: "whisper_local" };
+        return await transcribeWithWhisperFallback(videoId);
       }
       console.log(
         `[transcript] WEB InnerTube failed for ${videoId}: ${err2 instanceof Error ? err2.message : err2}. Trying WEB page scrape...`

@@ -231,7 +231,7 @@ async function runMlxWhisper(audioPath: string, outputDir: string, model: string
  * Download audio from a YouTube video using yt-dlp.
  * Returns the path to the downloaded MP3 file.
  */
-async function downloadAudio(videoId: string, outputDir: string, onProgress?: ProgressCallback): Promise<string> {
+export async function downloadAudio(videoId: string, outputDir: string, onProgress?: ProgressCallback): Promise<string> {
   await fs.mkdir(outputDir, { recursive: true });
 
   const outputTemplate = path.join(outputDir, `${videoId}.%(ext)s`);
