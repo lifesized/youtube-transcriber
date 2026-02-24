@@ -37,3 +37,6 @@ npm-debug.log*
 
 # Python virtual environment
 .venv/
+
+# Backups
+backups/

@@ -11,7 +11,10 @@
     "postinstall": "prisma generate",
     "mcp:build": "cd mcp-server && npm run build",
     "mcp:config": "bash scripts/mcp-config.sh",
-    "reset-data": "tsx scripts/reset-data.ts"
+    "reset-data": "tsx scripts/reset-data.ts",
+    "backup": "tsx scripts/backup.ts",
+    "restore": "tsx scripts/restore.ts",
+    "fresh": "tsx scripts/fresh.ts"
   },
   "keywords": [],
   "author": "",
