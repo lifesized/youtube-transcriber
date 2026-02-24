@@ -87,14 +87,15 @@ Add the output to your client config ([full setup guide](./docs/MCP.md)):
 Paste a URL. The app grabs the transcript using the fastest method available on your system:
 
 1. **YouTube Captions** — fetches official captions when they exist (< 5 sec)
-2. **MLX Whisper** — local GPU transcription on Apple Silicon (30-60 sec for 10 min)
-3. **OpenAI Whisper** — CPU fallback that works everywhere (2-5 min for 10 min)
+2. **Cloud Whisper** — optional Groq or OpenAI API with your own key (10-30 sec for 10 min)
+3. **MLX Whisper** — local GPU transcription on Apple Silicon (30-60 sec for 10 min)
+4. **OpenAI Whisper** — local CPU fallback that works everywhere (2-5 min for 10 min)
 
-No API keys needed. Everything runs on your machine.
+Works fully offline by default. Cloud Whisper is optional — bring your own API key to enable it.
 
 ## Features
 
-- **Zero-cost transcription** — local Whisper models, no API fees
+- **Local + cloud transcription** — free local Whisper by default, optional cloud Whisper (Groq/OpenAI) for faster results with your own API key
 - **Multi-language captions** — request captions in any language YouTube supports (see [Language Preference](#language-preference) below)
 - **Summarize with LLM** — send any transcript straight to ChatGPT or Claude. ChatGPT opens with the prompt pre-filled; Claude copies it to your clipboard so you can paste (⌘V) into a new chat
 - **Queue system** — batch-process multiple videos
@@ -168,10 +169,15 @@ DATABASE_URL="file:./dev.db"
 WHISPER_CLI="/path/to/your/.venv/bin/whisper"
 WHISPER_PYTHON_BIN="/path/to/your/.venv/bin/python3"
 
-# Optional
+# Optional — local Whisper
 # WHISPER_BACKEND="auto"    # auto, mlx, or openai
 # WHISPER_DEVICE="auto"     # auto, cpu, mps
 # WHISPER_TIMEOUT_MS="480000"
+
+# Optional — cloud Whisper (BYOK)
+# WHISPER_CLOUD_PROVIDER="groq"   # groq (default) or openai
+# WHISPER_CLOUD_API_KEY="gsk_..."
+# WHISPER_CLOUD_MODEL=""          # optional model override
 ```
 
 **Windows paths:**
@@ -195,8 +201,9 @@ WHISPER_PYTHON_BIN="C:\\Users\\YourName\\project\\.venv\\Scripts\\python.exe"
 <details>
 <summary>Slow transcription</summary>
 
-- On Apple Silicon, install `mlx-whisper` for 3-5x speedup
-- Use smaller Whisper models (`tiny`, `base`) for faster results
+- Enable cloud Whisper for the fastest option: set `WHISPER_CLOUD_API_KEY` in `.env` (Groq free tier available)
+- On Apple Silicon, install `mlx-whisper` for 3-5x local speedup
+- Use smaller Whisper models (`tiny`, `base`) for faster local results
 - Set `WHISPER_BACKEND="mlx"` in `.env` to force MLX
 </details>
 

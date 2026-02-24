@@ -29,7 +29,7 @@ export default function AboutPage() {
           <div className="space-y-3">
             <h2 className="text-base font-medium text-white/75">Why This Matters</h2>
             <p className="text-sm leading-relaxed text-white/40">
-              Extracting knowledge from video content can help with speeding up your learning and sense making of knowledge and the world out there. This tool attempts to extract existing YouTube captions directly, the fastest and most reliable option. When captions aren&apos;t available, it falls back to OpenAI Whisper to download the audio and convert it to a transcript locally on your machine. No cloud dependencies, no usage limits, no recurring fees.
+              Extracting knowledge from video content can help with speeding up your learning and sense making of knowledge and the world out there. This tool attempts to extract existing YouTube captions directly, the fastest and most reliable option. When captions aren&apos;t available, it can use cloud Whisper (Groq or OpenAI, bring your own API key) or fall back to local Whisper transcription. All data stays on your machine, with zero usage limits on local transcription.
             </p>
           </div>
 
@@ -52,7 +52,7 @@ export default function AboutPage() {
               <li>
                 <strong className="text-white/70">Claude Code agent (full)</strong> — With the Claude Code skill installed, just paste a URL or type:{" "}
                 <code className="block mt-2 wrap-break-word rounded bg-white/10 px-3 py-2 text-[13px] italic text-white/70">&quot;ts https://youtube.com/watch?v=...&quot;</code>
-                <span className="mt-1 block text-[12px] text-white/40">Requires the service running. Gives you Whisper fallback, speaker diarization, and a persistent library.</span>
+                <span className="mt-1 block text-[12px] text-white/40">Requires the service running. Gives you local + cloud Whisper transcription, speaker diarization, and a persistent library.</span>
               </li>
               <li>
                 <strong className="text-white/70">Claude Code agent (lite)</strong> — Zero-setup option that works with just <code className="rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-white/70">yt-dlp</code> installed — no server needed. Extracts YouTube subtitles directly. Automatically upgrades to the full service when detected.
@@ -74,7 +74,7 @@ export default function AboutPage() {
             <ul className="space-y-2 text-sm text-white/40">
               <li>• <strong className="text-white/70">Local-first architecture</strong> — All processing happens on your machine. No data leaves your computer.</li>
               <li>• <strong className="text-white/70">MLX Whisper optimization</strong> — 3-5x faster transcription on Apple Silicon using Apple's MLX framework.</li>
-              <li>• <strong className="text-white/70">Automatic fallback chain</strong> — YouTube captions → MLX Whisper → OpenAI Whisper, ensuring you always get a transcript.</li>
+              <li>• <strong className="text-white/70">Automatic fallback chain</strong> — YouTube captions → Cloud Whisper (BYOK) → MLX Whisper → OpenAI Whisper, ensuring you always get a transcript.</li>
               <li>• <strong className="text-white/70">Multi-language captions</strong> — Request captions in any language YouTube supports via the <code className="rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-white/70">lang</code> parameter or <code className="rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-white/70">YTT_CAPTION_LANGS</code> env var.</li>
               <li>• <strong className="text-white/70">Modern stack</strong> — Next.js 15, React 19, TypeScript, Prisma with SQLite.</li>
               <li>• <strong className="text-white/70">AI agent integration</strong> — Full and lite skills for Claude Code and OpenClaw, plus an MCP server for Claude Desktop and Cursor.</li>
