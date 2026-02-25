@@ -28,6 +28,12 @@ Two options — pick the one that fits your setup:
 
 ### Full Skill (all features, requires running service)
 
+
+
+https://github.com/user-attachments/assets/73a62192-746c-4ec0-b1d5-b46608441bdd
+
+
+
 ```bash
 # Claude Code
 cp -r contrib/claude-code ~/.claude/skills/youtube-transcriber
@@ -37,6 +43,7 @@ cp -r contrib/openclaw ~/.openclaw/skills/youtube-transcriber
 ```
 
 Requires the app running at `localhost:19720` (`npm run dev`). Gives you Whisper fallback, speaker diarization, persistent library, and all API features.
+
 
 ### Lite Skill (zero setup, just yt-dlp)
 
