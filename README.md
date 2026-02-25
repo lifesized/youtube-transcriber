@@ -3,10 +3,7 @@
 **YouTube to LLM-ready transcript in one click. Runs locally, costs nothing.**
 
 
-
-
-https://github.com/user-attachments/assets/9bffc261-1c1c-44b9-b5bd-e5fab1eaaea1
-
+https://github.com/user-attachments/assets/32491284-5c78-4a74-a580-ff3a8c256243
 
 
 
