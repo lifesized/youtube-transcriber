@@ -530,6 +530,18 @@ function HomeInner() {
             router.push(`/?${params.toString()}`, { scroll: false });
           }
           fetchTranscripts("");
+
+          // Animate progress bar to 100% while still showing it
+          updateQueue((prev) =>
+            prev.map((item, i) =>
+              i === idx
+                ? { ...item, progress: 100, statusText: "Done!" }
+                : item
+            )
+          );
+
+          // Let the 100% animation play, then mark completed
+          await new Promise((r) => setTimeout(r, 900));
           updateQueue((prev) =>
             prev.map((item, i) =>
               i === idx
@@ -768,9 +780,9 @@ function HomeInner() {
                           : "cursor-default"
                       }`}
                     >
-                      <div className="flex items-start gap-4">
+                      <div className="flex items-center gap-4">
                         {/* Status indicator */}
-                        <div className="mt-1 shrink-0">
+                        <div className="shrink-0">
                           {item.status === "pending" && (
                             <span className="inline-block h-3 w-3 rounded-full bg-white/20" />
                           )}

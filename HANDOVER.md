@@ -1,35 +1,23 @@
-# Handover — 2026-02-24
+# Handover — 2026-03-01
 
 ## What was done this session
 
-1. Reviewed HANDOVER.md from previous session
-2. Built YTT-41: BYOK cloud Whisper fallback (Groq, OpenAI)
-   - Created `lib/whisper-cloud.ts` — cloud Whisper API client with config, transcription, and response parsing
-   - Exported `downloadAudio` from `lib/whisper.ts` for reuse by cloud path
-   - Integrated cloud fallback into `lib/transcript.ts` — new `transcribeWithWhisperFallback()` helper inserted between YouTube captions and local Whisper
-   - Documented env vars in `.env.example` (`WHISPER_CLOUD_API_KEY`, `WHISPER_CLOUD_PROVIDER`, `WHISPER_CLOUD_MODEL`)
-   - Updated `prisma/schema.prisma` source comment with new values
-3. Build verified clean — TypeScript compiles, no errors
+1. Investigated MCP server configuration — identified Google Sheets MCP at `/Users/tofumajure/mcp-servers/google-sheets/` and helped user restart it
+2. Fixed progress bar never reaching 100% — the bar was hidden when status changed to "completed" before the 100% width could render. Added an intermediate state that animates to 100% with "Done!" text, then transitions to completed after 900ms
+3. Fixed vertical alignment of status indicator (green tick) — changed flex container from `items-start` to `items-center` and removed manual `mt-1` offset
 
 ## Key files touched
 
-- `lib/whisper-cloud.ts` (new) — cloud Whisper API client
-- `lib/whisper.ts` — exported `downloadAudio`
-- `lib/transcript.ts` — added cloud fallback to chain
-- `.env.example` — cloud Whisper env var docs
-- `prisma/schema.prisma` — updated source comment
-- `CHANGELOG.md` — added 2026-02-24 entry
+- `app/page.tsx` — progress bar animation fix + status indicator vertical centering
+- `CHANGELOG.md` — added 2026-03-01 entry
+- `HANDOVER.md` — this file
 
 ## Current state
 
-- **Branch:** `main`
-- **Last commit:** `a1fe313` (previous session)
-- **Uncommitted changes:** YTT-41 implementation (5 files modified, 1 new)
-- **Build:** clean
-
-## Completed this session
-
-- **YTT-41** (BYOK cloud Whisper fallback) — implemented, build verified, not yet committed
+- **Branch:** `main` (3 commits behind origin — needs `git pull`)
+- **Last commit:** `bf9824f` (previous session)
+- **Uncommitted changes:** none after this commit
+- **Build:** not verified this session
 
 ## Tech stack
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-03-01
+
+### Fixed
+- **Progress bar now reaches 100%** — The transcription progress bar previously disappeared around 50–75% because the item status changed to "completed" before the bar could animate to full width. Now the bar animates to 100% with a "Done!" label before transitioning to the completed state.
+- **Vertically centered status indicator** — The green checkmark (and other status icons) on queue cards are now vertically centered instead of being top-aligned.
+
 ## 2026-02-24
 
 ### Added
