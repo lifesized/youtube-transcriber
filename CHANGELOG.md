@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-03-05
+
+### Changed
+- **Reordered transcript fallback chain** — Web page scrape is now tried first instead of last. YouTube's InnerTube API now requires Proof-of-Origin (PO) tokens via BotGuard attestation, causing ANDROID (400 FAILED_PRECONDITION) and WEB (UNPLAYABLE) clients to fail on all videos. Web scrape remains reliable and is now the primary caption source. (`lib/transcript.ts`)
+- **Improved yt-dlp error messages** — Raw yt-dlp command output is no longer shown to users. Errors are classified into friendly messages (network issues, anti-bot blocks, unavailable videos, etc.) with actionable advice. (`lib/whisper.ts`)
+
+### Fixed
+- **yt-dlp audio download retry** — Added automatic retry (1 retry with 3s delay) for transient network errors during audio download, improving reliability on unstable connections. (`lib/whisper.ts`)
+- **Updated yt-dlp** — Upgraded from 2026.02.04 to 2026.03.03 to fix YouTube "n challenge solving" failures.
+
 ## 2026-03-01
 
 ### Fixed

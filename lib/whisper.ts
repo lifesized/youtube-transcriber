@@ -228,36 +228,79 @@ async function runMlxWhisper(audioPath: string, outputDir: string, model: string
 }
 
 /**
+ * Classify a yt-dlp error into a user-friendly message.
+ */
+function classifyYtdlpError(raw: string): string {
+  if (/n challenge solving failed|n function possibilities/i.test(raw)) {
+    return "yt-dlp cannot bypass YouTube's anti-bot protections. Try updating: yt-dlp -U";
+  }
+  if (/unable to download webpage|urlopen error|timed out|network is unreachable|name or service not known|temporary failure in name resolution/i.test(raw)) {
+    return "Network error downloading audio. Check your internet connection and try again.";
+  }
+  if (/video unavailable|private video|removed/i.test(raw)) {
+    return "This video is unavailable, private, or has been removed.";
+  }
+  if (/sign in to confirm|age-restricted/i.test(raw)) {
+    return "This video is age-restricted and requires authentication.";
+  }
+  if (/copyright|blocked/i.test(raw)) {
+    return "This video is blocked or restricted due to copyright.";
+  }
+  // Fallback: first non-WARNING line, truncated
+  const meaningful = raw.split("\n").find((l) => l.trim() && !l.startsWith("WARNING:"));
+  return (meaningful || raw).slice(0, 200);
+}
+
+/**
  * Download audio from a YouTube video using yt-dlp.
  * Returns the path to the downloaded MP3 file.
+ * Retries once on transient network errors.
  */
 export async function downloadAudio(videoId: string, outputDir: string, onProgress?: ProgressCallback): Promise<string> {
   await fs.mkdir(outputDir, { recursive: true });
 
   const outputTemplate = path.join(outputDir, `${videoId}.%(ext)s`);
-
-  console.log(`[whisper] Downloading audio for ${videoId}...`);
-  const { stderr } = await execFileAsync(YTDLP_PATH, [
+  const args = [
     "-x",
     "--audio-format", "mp3",
     "--audio-quality", "5",
     "-o", outputTemplate,
     "--no-playlist",
     `https://www.youtube.com/watch?v=${videoId}`,
-  ], { timeout: 120000 });
+  ];
 
-  if (stderr) {
-    console.log(`[whisper] yt-dlp stderr: ${stderr.slice(0, 500)}`);
+  const maxAttempts = 2;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    console.log(`[whisper] Downloading audio for ${videoId} (attempt ${attempt}/${maxAttempts})...`);
+    try {
+      const { stderr } = await execFileAsync(YTDLP_PATH, args, { timeout: 120000 });
+
+      if (stderr) {
+        console.log(`[whisper] yt-dlp stderr: ${stderr.slice(0, 500)}`);
+      }
+
+      const audioPath = path.join(outputDir, `${videoId}.mp3`);
+      await fs.access(audioPath);
+
+      onProgress?.({ stage: "transcribing", progress: 40, statusText: "Transcribing with Whisper..." });
+      return audioPath;
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : String(err);
+      const isNetworkError = /unable to download webpage|urlopen error|timed out|network is unreachable|name or service not known|temporary failure/i.test(raw);
+
+      if (isNetworkError && attempt < maxAttempts) {
+        console.log(`[whisper] Network error on attempt ${attempt}, retrying in 3s...`);
+        await new Promise((r) => setTimeout(r, 3000));
+        continue;
+      }
+
+      const friendly = classifyYtdlpError(raw);
+      console.error(`[whisper] yt-dlp failed for ${videoId}: ${raw.slice(0, 500)}`);
+      throw new Error(friendly);
+    }
   }
 
-  const audioPath = path.join(outputDir, `${videoId}.mp3`);
-
-  // Verify file exists
-  await fs.access(audioPath);
-
-  onProgress?.({ stage: "transcribing", progress: 40, statusText: "Transcribing with Whisper..." });
-
-  return audioPath;
+  throw new Error("Audio download failed after all retry attempts.");
 }
 
 /**

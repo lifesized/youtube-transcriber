@@ -551,12 +551,33 @@ async function transcribeWithWhisperFallback(
 
 /**
  * Fetch time-coded transcript segments for a YouTube video.
- * Fallback chain: ANDROID InnerTube → WEB InnerTube → WEB page scrape → Cloud Whisper → Local Whisper.
+ * Fallback chain: WEB page scrape → ANDROID InnerTube → WEB InnerTube → Cloud Whisper → Local Whisper.
+ *
+ * Web scrape is tried first because YouTube's InnerTube API now requires
+ * Proof-of-Origin (PO) tokens via BotGuard attestation (as of early 2026).
+ * Without PO tokens, ANDROID returns 400 FAILED_PRECONDITION and WEB returns UNPLAYABLE.
  */
 async function fetchTranscript(
   videoId: string,
   lang?: string
 ): Promise<{ segments: TranscriptSegment[]; source: string }> {
+  // 1. Web page scrape — most reliable method as of 2026
+  try {
+    const segments = await fetchTranscriptWebFallback(videoId, lang);
+    return { segments, source: "youtube_captions" };
+  } catch (err) {
+    if (err instanceof NoCaptionsError) {
+      console.log(
+        `[transcript] No captions available for ${videoId}, falling back to Whisper transcription...`
+      );
+      return await transcribeWithWhisperFallback(videoId);
+    }
+    console.log(
+      `[transcript] WEB scrape failed for ${videoId}: ${err instanceof Error ? err.message : err}. Trying ANDROID InnerTube...`
+    );
+  }
+
+  // 2. ANDROID InnerTube — kept as fallback in case YouTube relaxes PO token requirements
   try {
     const segments = await fetchTranscriptAndroid(videoId, lang);
     return { segments, source: "youtube_captions" };
@@ -570,22 +591,23 @@ async function fetchTranscript(
     console.log(
       `[transcript] ANDROID client failed for ${videoId}: ${err instanceof Error ? err.message : err}. Trying WEB InnerTube...`
     );
-    try {
-      const segments = await fetchTranscriptWebClient(videoId, lang);
-      return { segments, source: "youtube_captions" };
-    } catch (err2) {
-      if (err2 instanceof NoCaptionsError) {
-        console.log(
-          `[transcript] No captions available for ${videoId}, falling back to Whisper transcription...`
-        );
-        return await transcribeWithWhisperFallback(videoId);
-      }
+  }
+
+  // 3. WEB InnerTube — last caption attempt before Whisper
+  try {
+    const segments = await fetchTranscriptWebClient(videoId, lang);
+    return { segments, source: "youtube_captions" };
+  } catch (err) {
+    if (err instanceof NoCaptionsError) {
       console.log(
-        `[transcript] WEB InnerTube failed for ${videoId}: ${err2 instanceof Error ? err2.message : err2}. Trying WEB page scrape...`
+        `[transcript] No captions available for ${videoId}, falling back to Whisper transcription...`
       );
-      const segments = await fetchTranscriptWebFallback(videoId, lang);
-      return { segments, source: "youtube_captions" };
+      return await transcribeWithWhisperFallback(videoId);
     }
+    console.log(
+      `[transcript] All caption methods failed for ${videoId}: ${err instanceof Error ? err.message : err}. Falling back to Whisper...`
+    );
+    return await transcribeWithWhisperFallback(videoId);
   }
 }
 
