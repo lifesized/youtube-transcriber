@@ -40,3 +40,8 @@ npm-debug.log*
 
 # Backups
 backups/
+
+# Internal session/planning files
+HANDOVER.md
+plan.md
+scripts/check-handover.sh
