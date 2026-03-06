@@ -232,7 +232,7 @@ async function runMlxWhisper(audioPath: string, outputDir: string, model: string
  */
 function classifyYtdlpError(raw: string): string {
   if (/n challenge solving failed|n function possibilities/i.test(raw)) {
-    return "yt-dlp cannot bypass YouTube's anti-bot protections. Try updating: yt-dlp -U";
+    return "Captions unavailable and audio download failed. This may be a temporary issue, try again in a moment.";
   }
   if (/unable to download webpage|urlopen error|timed out|network is unreachable|name or service not known|temporary failure in name resolution/i.test(raw)) {
     return "Network error downloading audio. Check your internet connection and try again.";

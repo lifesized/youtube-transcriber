@@ -639,6 +639,20 @@ function HomeInner() {
     }
   }
 
+  function retryItem(index: number) {
+    // Update ref synchronously so processNext can see the reset item immediately
+    queueRef.current = queueRef.current.map((item, i) =>
+      i === index
+        ? { ...item, status: "pending" as const, error: undefined, progress: 0, statusText: "" }
+        : item
+    );
+    setQueue([...queueRef.current]);
+
+    if (!processingRef.current) {
+      processNext();
+    }
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -783,7 +797,7 @@ function HomeInner() {
                           selectTranscript(item.id);
                         }
                       }}
-                      disabled={item.status !== "completed"}
+                      disabled={item.status !== "completed" && item.status !== "failed"}
                       className={`w-full rounded-xl border border-white/10 bg-[hsl(var(--panel-2))] px-4 py-4 text-left transition ${
                         item.status === "completed"
                           ? "cursor-pointer hover:bg-white/5"
@@ -844,9 +858,21 @@ function HomeInner() {
                             </p>
                           )}
                           {item.status === "failed" && item.error && (
-                            <p className="mt-1 text-sm text-red-500">
-                              {item.error}
-                            </p>
+                            <div className="mt-1 flex items-start justify-between gap-2">
+                              <p className="text-sm text-red-500">
+                                {item.error}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  retryItem(index);
+                                }}
+                                className="shrink-0 rounded px-2 py-0.5 text-xs text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+                              >
+                                Retry
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
