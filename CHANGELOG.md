@@ -2,6 +2,9 @@
 
 ## 2026-03-05
 
+### Added
+- **GNU AGPL v3.0 license** — Added `LICENSE` file, updated `package.json`, README badge, and About page. Replaces the previous ISC/MIT references. (`LICENSE`, `package.json`, `README.md`, `app/about/page.tsx`)
+
 ### Changed
 - **Reordered transcript fallback chain** — Web page scrape is now tried first instead of last. YouTube's InnerTube API now requires Proof-of-Origin (PO) tokens via BotGuard attestation, causing ANDROID (400 FAILED_PRECONDITION) and WEB (UNPLAYABLE) clients to fail on all videos. Web scrape remains reliable and is now the primary caption source. (`lib/transcript.ts`)
 - **Improved yt-dlp error messages** — Raw yt-dlp command output is no longer shown to users. Errors are classified into friendly messages (network issues, anti-bot blocks, unavailable videos, etc.) with actionable advice. (`lib/whisper.ts`)

@@ -121,7 +121,7 @@ export default function AboutPage() {
           <div className="">
             <h2 className="text-base font-medium text-white/75 mb-3">Open Source</h2>
             <p className="text-sm leading-relaxed text-white/40 mb-4">
-              This project is open source under the MIT License and available on GitHub. Feel free to use it, modify it, or contribute improvements. If you find it useful, consider giving it a star.
+              This project is open source under the <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener noreferrer" className="text-white/75 underline decoration-blue-400 hover:text-white hover:decoration-blue-300">GNU Affero General Public License v3.0</a> and available on GitHub. Feel free to use it, modify it, or contribute improvements. If you find it useful, consider giving it a star.
             </p>
             <a
               href="https://github.com/lifesized/youtube-transcriber"
