@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-03-06
+
+### Fixed
+- **Queue stuck after duplicate URL** — Submitting a URL that was already transcribed would permanently block the processing queue, causing all subsequent URLs to stay in "pending" forever. (`app/page.tsx`)
+- **Retry button not working** — The retry button on failed queue cards referenced the wrong variable, making it non-functional. (`app/page.tsx`)
+
+### Changed
+- **Pending queue items now show feedback** — Items waiting to be processed display a pulsing indicator and "Queued" label instead of a static grey dot with no context. (`app/page.tsx`)
+
 ## 2026-03-05
 
 ### Added

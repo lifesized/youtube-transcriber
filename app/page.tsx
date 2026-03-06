@@ -525,6 +525,7 @@ function HomeInner() {
             }
             setDuplicateHint({ message: "This video has already been transcribed.", id: data.id });
             setTimeout(() => setDuplicateHint(null), 6000);
+            processingRef.current = false;
             return;
           }
 
@@ -808,7 +809,7 @@ function HomeInner() {
                         {/* Status indicator */}
                         <div className="shrink-0">
                           {item.status === "pending" && (
-                            <span className="inline-block h-3 w-3 rounded-full bg-white/20" />
+                            <span className="inline-block h-3 w-3 animate-pulse rounded-full bg-white/30" />
                           )}
                           {item.status === "processing" && (
                             <span className="inline-block h-3 w-3 rounded-full bg-white/40" />
@@ -857,6 +858,9 @@ function HomeInner() {
                               {item.url}
                             </p>
                           )}
+                          {item.status === "pending" && (
+                            <p className="mt-1 text-xs text-white/35">Queued</p>
+                          )}
                           {item.status === "failed" && item.error && (
                             <div className="mt-1 flex items-start justify-between gap-2">
                               <p className="text-sm text-red-500">
@@ -866,7 +870,7 @@ function HomeInner() {
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  retryItem(index);
+                                  retryItem(idx);
                                 }}
                                 className="shrink-0 rounded px-2 py-0.5 text-xs text-white/60 transition-colors hover:bg-white/10 hover:text-white"
                               >
