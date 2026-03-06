@@ -395,23 +395,33 @@ function HomeInner() {
         let progress: number;
         let statusText: string;
 
-        if (seconds < 5) {
-          progress = Math.min(seconds * 4, 20);
-          statusText = "Checking for YouTube captions...";
-        } else if (seconds < 15) {
-          progress = 20 + (seconds - 5) * 1.5;
+        // Fast phase: caption fetching via web scrape typically completes in 2-5s.
+        // Ramp quickly to ~80% in the first 5s so the bar looks nearly done
+        // when captions are found. If it takes longer (Whisper fallback),
+        // the curve flattens and continues slowly toward 95%.
+        if (seconds < 3) {
+          // Quick ramp: 0 → 60% in 3s (caption fetch + parse)
+          progress = seconds * 20;
+          statusText = "Fetching captions...";
+        } else if (seconds < 6) {
+          // 60 → 85% over next 3s (still in caption path)
+          progress = 60 + (seconds - 3) * 8.3;
+          statusText = "Fetching captions...";
+        } else if (seconds < 20) {
+          // Caption path didn't resolve — likely downloading audio for Whisper
+          progress = 85 + (seconds - 6) * 0.35;
           statusText = "Downloading audio...";
         } else if (seconds < 240) {
+          // Whisper transcription: slow climb from ~90 toward 95
           progress = Math.min(
-            35 + 40 * (1 - Math.exp(-((seconds - 15) / 120))),
-            75
+            90 + 5 * (1 - Math.exp(-((seconds - 20) / 120))),
+            95
           );
-          const pct = Math.round(progress);
-          statusText = `Transcribing with Whisper... ~${pct}%`;
+          statusText = "Transcribing with Whisper...";
         } else if (seconds < 360) {
           progress = Math.min(
-            75 + 15 * (1 - Math.exp(-((seconds - 240) / 60))),
-            90
+            95 + 3 * (1 - Math.exp(-((seconds - 240) / 60))),
+            98
           );
           statusText = "Identifying speakers...";
         } else {
