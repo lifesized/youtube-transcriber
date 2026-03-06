@@ -133,16 +133,17 @@ export function LlmLauncher({ videoId, videoTitle, onToast }: LlmLauncherProps) 
           setOpen((prev) => !prev);
         }}
         title="Summarize with LLM..."
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition hover:bg-white/5 hover:text-white/90 active:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+        className="group/llm inline-flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition hover:bg-white/5 hover:text-white/90 active:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
       >
         {/* Sparkle / wand icon */}
         <svg
+          className="transition-transform duration-300 group-hover/llm:rotate-15"
           width="16"
           height="16"
           viewBox="0 0 20 20"
           fill="none"
           stroke="currentColor"
-          strokeWidth="1.5"
+          strokeWidth="1.75"
           strokeLinecap="round"
           strokeLinejoin="round"
         >

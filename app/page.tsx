@@ -1090,16 +1090,17 @@ function HomeInner() {
                                 <a
                                   href={`/api/transcripts/${t.id}/download`}
                                   title="Download as Markdown"
-                                  className={iconButtonClassName("sm")}
+                                  className={`${iconButtonClassName("sm")} group/dl`}
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <svg
+                                    className="transition-transform duration-300 group-hover/dl:translate-y-0.5"
                                     width="16"
                                     height="16"
                                     viewBox="0 0 20 20"
                                     fill="none"
                                     stroke="currentColor"
-                                    strokeWidth="1.5"
+                                    strokeWidth="1.75"
                                     strokeLinecap="round"
                                     strokeLinejoin="round"
                                   >
@@ -1114,16 +1115,17 @@ function HomeInner() {
                                     e.stopPropagation();
                                     handleCopyFromLibrary(t.id);
                                   }}
-                                  className={iconButtonClassName("sm")}
+                                  className={`${iconButtonClassName("sm")} group/cp`}
                                 >
                                   {copiedId === t.id ? (
                                     <svg
+                                      className="transition-transform duration-300"
                                       width="16"
                                       height="16"
                                       viewBox="0 0 20 20"
                                       fill="none"
                                       stroke="currentColor"
-                                      strokeWidth="1.5"
+                                      strokeWidth="1.75"
                                       strokeLinecap="round"
                                       strokeLinejoin="round"
                                     >
@@ -1131,12 +1133,13 @@ function HomeInner() {
                                     </svg>
                                   ) : (
                                     <svg
+                                      className="transition-transform duration-300 group-hover/cp:scale-110"
                                       width="16"
                                       height="16"
                                       viewBox="0 0 20 20"
                                       fill="none"
                                       stroke="currentColor"
-                                      strokeWidth="1.5"
+                                      strokeWidth="1.75"
                                       strokeLinecap="round"
                                       strokeLinejoin="round"
                                     >
@@ -1152,15 +1155,16 @@ function HomeInner() {
                                     e.stopPropagation();
                                     setDeleteId(t.id);
                                   }}
-                                  className={`${iconButtonClassName("sm")} hover:bg-red-500/15 hover:text-red-200`}
+                                  className={`${iconButtonClassName("sm")} group/del hover:bg-red-500/15 hover:text-red-200`}
                                 >
                                   <svg
+                                    className="transition-transform duration-300 group-hover/del:-rotate-6"
                                     width="16"
                                     height="16"
                                     viewBox="0 0 20 20"
                                     fill="none"
                                     stroke="currentColor"
-                                    strokeWidth="1.5"
+                                    strokeWidth="1.75"
                                     strokeLinecap="round"
                                     strokeLinejoin="round"
                                   >
