@@ -87,6 +87,15 @@ fi
 echo ""
 
 # ---------------------------------------------------------------------------
+# Initialize database
+# ---------------------------------------------------------------------------
+echo "🗄️  Initializing database..."
+npx prisma generate
+npx prisma db push
+echo "✓ Database ready"
+echo ""
+
+# ---------------------------------------------------------------------------
 # Python virtual environment + Whisper
 # ---------------------------------------------------------------------------
 echo "🐍 Setting up Python virtual environment..."

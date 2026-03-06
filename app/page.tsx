@@ -791,14 +791,23 @@ function HomeInner() {
 
                 <div className="space-y-2">
                   {queue.map((item, idx) => (
-                    <button
+                    <div
                       key={idx}
+                      role="button"
+                      tabIndex={item.status === "completed" ? 0 : -1}
                       onClick={() => {
                         if (item.status === "completed" && item.id) {
                           selectTranscript(item.id);
                         }
                       }}
-                      disabled={item.status !== "completed" && item.status !== "failed"}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          if (item.status === "completed" && item.id) {
+                            selectTranscript(item.id);
+                          }
+                        }
+                      }}
                       className={`w-full rounded-xl border border-white/10 bg-[hsl(var(--panel-2))] px-4 py-4 text-left transition ${
                         item.status === "completed"
                           ? "cursor-pointer hover:bg-white/5"
@@ -904,7 +913,7 @@ function HomeInner() {
                           </div>
                         </div>
                       )}
-                    </button>
+                    </div>
                   ))}
                 </div>
               </div>
