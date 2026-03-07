@@ -157,6 +157,13 @@ else
     echo "Skipped MCP server. You can install it later with: npm run mcp:build"
 fi
 
+# ---------------------------------------------------------------------------
+# Verify setup
+# ---------------------------------------------------------------------------
+echo ""
+echo "Running setup verification..."
+bash scripts/test-setup.sh || true
+
 echo ""
 echo "✅ Setup complete!"
 echo ""

@@ -191,6 +191,34 @@ interface TranscriptSegment {
 ]
 ```
 
+### Health Check
+
+Check that all dependencies and services are operational.
+
+```
+GET /api/health
+```
+
+**Response (200 — healthy):**
+```json
+{
+  "status": "healthy",
+  "checks": [
+    { "name": "database", "status": "pass", "detail": "Connected, 42 transcript(s)" },
+    { "name": "python", "status": "pass", "detail": "Python 3.14.0" },
+    { "name": "whisper", "status": "pass", "detail": ".venv/bin/whisper" },
+    { "name": "ffmpeg", "status": "pass", "detail": "/opt/homebrew/bin/ffmpeg" },
+    { "name": "yt-dlp", "status": "pass", "detail": "/opt/homebrew/bin/yt-dlp" },
+    { "name": "tmp_writable", "status": "pass", "detail": "/path/to/tmp" },
+    { "name": "env_vars", "status": "pass" }
+  ]
+}
+```
+
+Returns **503** with `"status": "unhealthy"` when any check fails. Individual checks report `"pass"`, `"fail"`, or `"warn"`.
+
+---
+
 ### Source Types
 
 | Value | Description |

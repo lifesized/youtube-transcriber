@@ -90,6 +90,20 @@ Add the output to your client config ([full setup guide](./docs/MCP.md)):
 
 **Available tools:** `transcribe`, `transcribe_and_summarize`, `list_transcripts`, `search_transcripts`, `get_transcript`, `delete_transcript`, `summarize_transcript`
 
+### Usage Examples
+
+Once configured, just type naturally in Claude Desktop:
+
+| You type | What happens |
+|----------|-------------|
+| `transcribe https://youtube.com/watch?v=...` | Fetches and returns the full transcript |
+| `transcribe and summarize https://youtube.com/watch?v=...` | Fetches transcript, then Claude summarizes it |
+| `t https://youtube.com/watch?v=...` | Shorthand for transcribe |
+| `s https://youtube.com/watch?v=...` | Shorthand for summarize |
+| `ts https://youtube.com/watch?v=...` | Shorthand for transcribe + summarize |
+
+You can also just paste a YouTube URL — Claude will offer to transcribe it.
+
 ---
 
 ## How It Works
@@ -197,6 +211,24 @@ WHISPER_PYTHON_BIN="C:\\Users\\YourName\\project\\.venv\\Scripts\\python.exe"
 ```
 
 </details>
+
+## Verifying Your Setup
+
+After setup, verify everything is wired up correctly:
+
+```bash
+npm run test:setup
+```
+
+This checks Node.js, Python, ffmpeg, yt-dlp, Whisper, database, and environment configuration. Each check prints pass/fail with actionable fix messages. It runs automatically at the end of `npm run setup`.
+
+For a running instance, hit the health endpoint:
+
+```bash
+curl http://localhost:19720/api/health
+```
+
+Returns JSON with per-check pass/fail — useful for Docker health checks or debugging. See [docs/TESTING.md](./docs/TESTING.md) for the full test protocol.
 
 ## Troubleshooting
 

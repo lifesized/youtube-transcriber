@@ -14,7 +14,8 @@
     "reset-data": "tsx scripts/reset-data.ts",
     "backup": "tsx scripts/backup.ts",
     "restore": "tsx scripts/restore.ts",
-    "fresh": "tsx scripts/fresh.ts"
+    "fresh": "tsx scripts/fresh.ts",
+    "test:setup": "bash scripts/test-setup.sh"
   },
   "keywords": [],
   "author": "",
