@@ -17,6 +17,7 @@ interface QueueItem {
   error?: string;
   progress: number;
   statusText: string;
+  startedAt?: number;
 }
 
 interface VideoSummary {
@@ -164,6 +165,7 @@ function HomeInner() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [completionAlertsEnabled, setCompletionAlertsEnabled] = useState(true);
   const [debugEvents, setDebugEvents] = useState<DebugEvent[]>([]);
   const [debugPaused, setDebugPaused] = useState(false);
   const [debugCollapsed, setDebugCollapsed] = useState(false);
@@ -214,12 +216,73 @@ function HomeInner() {
     addDebugEvent("app.mount", "HomeInner mounted");
   }, [addDebugEvent]);
 
+  const notifyTranscriptReady = useCallback(
+    async (title?: string) => {
+      const label = title ? `Transcript ready: ${title}` : "Transcript ready";
+      setToast(label);
+      setTimeout(() => setToast(null), 3000);
+
+      if (!completionAlertsEnabled || typeof window === "undefined") {
+        return;
+      }
+
+      try {
+        const audioContext = new window.AudioContext();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        oscillator.type = "sine";
+        oscillator.frequency.value = 880;
+        gainNode.gain.value = 0.0001;
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        const now = audioContext.currentTime;
+        gainNode.gain.exponentialRampToValueAtTime(0.08, now + 0.02);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+        oscillator.start(now);
+        oscillator.stop(now + 0.24);
+        setTimeout(() => {
+          audioContext.close().catch(() => undefined);
+        }, 300);
+      } catch {
+        // Ignore audio limitations (autoplay policy, etc.)
+      }
+
+      if (!("Notification" in window)) return;
+      if (Notification.permission === "granted") {
+        new Notification("YouTube Transcriber", {
+          body: label,
+          silent: true,
+        });
+        return;
+      }
+      if (Notification.permission === "default") {
+        try {
+          const permission = await Notification.requestPermission();
+          if (permission === "granted") {
+            new Notification("YouTube Transcriber", {
+              body: label,
+              silent: true,
+            });
+          }
+        } catch {
+          // Ignore notification permission errors
+        }
+      }
+    },
+    [completionAlertsEnabled]
+  );
+
   useEffect(() => {
     if (didInitRef.current) return;
     didInitRef.current = true;
 
     // Check if user has ever created a transcript
     const hasTranscripts = localStorage.getItem("hasCreatedTranscript") === "true";
+    const completionAlerts = localStorage.getItem("completionAlertsEnabled");
+    if (completionAlerts !== null) {
+      setCompletionAlertsEnabled(completionAlerts === "true");
+    }
     setHasCreatedTranscript(hasTranscripts);
     addDebugEvent("ftu.state", `hasCreatedTranscript=${hasTranscripts}`);
 
@@ -468,6 +531,7 @@ function HomeInner() {
                 status: "processing",
                 progress: 0,
                 statusText: "Checking for YouTube captions...",
+                startedAt: Date.now(),
               }
             : item
         )
@@ -529,18 +593,30 @@ function HomeInner() {
             return;
           }
 
-          // Update library and focus the newly created transcript.
-          // Clear search and switch to list view so the new video is visible.
+          // Update library and clear search so the new video is visible.
           setSearch("");
-          if (data?.id) {
+          const startedAt = queueRef.current[idx]?.startedAt;
+          const elapsedMs = startedAt ? Date.now() - startedAt : 0;
+          const shouldAutoOpenTranscript = elapsedMs > 0 && elapsedMs <= 5000;
+
+          if (data?.id && shouldAutoOpenTranscript) {
             localStorage.setItem("libraryLayout", "list");
             setClosingVideo(null);
             const params = new URLSearchParams(searchParams.toString());
             params.set("layout", "list");
             params.set("id", data.id);
             router.push(`/?${params.toString()}`, { scroll: false });
+          } else {
+            localStorage.setItem("libraryLayout", "list");
+            const params = new URLSearchParams(searchParams.toString());
+            params.set("layout", "list");
+            params.delete("id");
+            router.push(`/?${params.toString()}`, { scroll: false });
+            setToast("Transcript finished. Use ✨ to summarize.");
+            setTimeout(() => setToast(null), 4000);
           }
           fetchTranscripts("");
+          void notifyTranscriptReady(data?.title);
 
           // Animate progress bar to 100% while still showing it
           updateQueue((prev) =>
@@ -619,8 +695,9 @@ function HomeInner() {
     startProgressForItem,
     stopProgressForItem,
     fetchTranscripts,
-    search,
-    selectTranscript,
+    notifyTranscriptReady,
+    router,
+    searchParams,
   ]);
 
   function addToQueue(urls: string[]) {
@@ -774,19 +851,35 @@ function HomeInner() {
                   <h2 className="font-mono text-sm font-medium uppercase tracking-wider text-white/50">
                     {completedCount}/{totalCount} completed
                   </h2>
-                  {!isProcessing && (
-                    <Button
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
                       onClick={() => {
-                        setQueue([]);
-                        queueRef.current = [];
+                        setCompletionAlertsEnabled((prev) => {
+                          const next = !prev;
+                          localStorage.setItem("completionAlertsEnabled", String(next));
+                          return next;
+                        });
                       }}
-                      variant="ghost"
-                      size="sm"
-                      className="font-mono text-xs uppercase tracking-wider text-white/45 hover:text-white"
+                      className="rounded-md px-2 py-1 font-mono text-xs uppercase tracking-wider text-white/45 transition-colors hover:bg-white/10 hover:text-white"
+                      title="Toggle completion sound and notifications"
                     >
-                      Clear
-                    </Button>
-                  )}
+                      Alerts {completionAlertsEnabled ? "On" : "Off"}
+                    </button>
+                    {!isProcessing && (
+                      <Button
+                        onClick={() => {
+                          setQueue([]);
+                          queueRef.current = [];
+                        }}
+                        variant="ghost"
+                        size="sm"
+                        className="font-mono text-xs uppercase tracking-wider text-white/45 hover:text-white"
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
