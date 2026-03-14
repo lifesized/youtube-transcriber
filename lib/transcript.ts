@@ -524,7 +524,7 @@ async function fetchTranscriptWebFallback(
 async function transcribeWithWhisperFallback(
   videoId: string
 ): Promise<{ segments: TranscriptSegment[]; source: string }> {
-  const cloudConfig = getCloudWhisperConfig();
+  const cloudConfig = await getCloudWhisperConfig();
 
   if (cloudConfig) {
     try {
@@ -561,7 +561,27 @@ async function fetchTranscript(
   videoId: string,
   lang?: string
 ): Promise<{ segments: TranscriptSegment[]; source: string }> {
-  // 1. Web page scrape — most reliable method as of 2026
+  // 0. If cloud Whisper (Groq) is configured via DB settings, use it first — it's
+  //    faster than scraping YouTube captions and more reliable than InnerTube.
+  const cloudConfig = await getCloudWhisperConfig();
+  if (cloudConfig) {
+    try {
+      console.log(
+        `[transcript] Cloud Whisper (${cloudConfig.provider}) is configured — using it as primary method for ${videoId}...`
+      );
+      const audioDir = path.join("/tmp", "yt-audio");
+      const audioPath = await downloadAudio(videoId, audioDir);
+      const { segments, provider } = await transcribeWithCloudWhisper(audioPath);
+      await fs.unlink(audioPath).catch(() => {});
+      return { segments, source: `whisper_cloud_${provider}` };
+    } catch (err) {
+      console.log(
+        `[transcript] Cloud Whisper failed for ${videoId}: ${err instanceof Error ? err.message : err}. Falling back to caption scraping...`
+      );
+    }
+  }
+
+  // 1. Web page scrape — most reliable caption method as of 2026
   try {
     const segments = await fetchTranscriptWebFallback(videoId, lang);
     return { segments, source: "youtube_captions" };

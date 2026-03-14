@@ -132,6 +132,20 @@ Works fully offline by default. Cloud Whisper is optional — bring your own API
 
 Full REST API docs: [`docs/API.md`](./docs/API.md) | OpenAPI spec: [`docs/openapi.yaml`](./docs/openapi.yaml)
 
+## Groq Cloud Transcription (Free)
+
+The fastest transcription option — uses Groq's free Whisper API instead of local processing. No credit card required.
+
+1. Sign up at [console.groq.com](https://console.groq.com)
+2. Go to **API Keys** → **Create API Key**
+3. Open the app's **Settings** page (gear icon, bottom-left) and paste your key
+
+That's it. Transcriptions now use Groq as the primary method and fall back to YouTube captions or local Whisper if Groq is unavailable.
+
+**Free tier limits:** 14,400 audio-seconds per day (~4 hours). The Settings page shows a usage meter so you can track how much you've used. Rate limit is ~20 requests/minute.
+
+> You can also set the key via environment variable instead: `WHISPER_CLOUD_API_KEY="gsk_..."` in `.env`. The Settings page takes priority over the env var.
+
 ## Language Preference
 
 By default, the app fetches English captions. You can change this per-request or globally.
