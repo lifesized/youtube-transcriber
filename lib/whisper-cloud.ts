@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import type { TranscriptSegment } from "./types";
+import { prisma } from "./prisma";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -22,6 +23,7 @@ interface CloudWhisperSegment {
 interface CloudWhisperResponse {
   segments?: CloudWhisperSegment[];
   text?: string;
+  duration?: number; // total audio duration in seconds
 }
 
 // ---------------------------------------------------------------------------
@@ -42,7 +44,34 @@ const DEFAULT_MODELS: Record<CloudWhisperProvider, string> = {
 // Config
 // ---------------------------------------------------------------------------
 
-export function getCloudWhisperConfig(): CloudWhisperConfig | null {
+export async function getCloudWhisperConfig(): Promise<CloudWhisperConfig | null> {
+  // Check DB settings first (priority over env vars)
+  try {
+    const [dbKey, dbProvider, dbModel] = await Promise.all([
+      prisma.setting.findUnique({ where: { key: "groq_api_key" } }),
+      prisma.setting.findUnique({ where: { key: "whisper_cloud_provider" } }),
+      prisma.setting.findUnique({ where: { key: "whisper_cloud_model" } }),
+    ]);
+
+    const apiKey = dbKey?.value?.trim() || process.env.WHISPER_CLOUD_API_KEY?.trim();
+    if (!apiKey) return null;
+
+    const raw = dbProvider?.value?.trim().toLowerCase() ||
+      process.env.WHISPER_CLOUD_PROVIDER?.trim().toLowerCase() || "groq";
+    if (raw !== "groq" && raw !== "openai") {
+      console.warn(
+        `[whisper-cloud] Invalid WHISPER_CLOUD_PROVIDER="${raw}". Use "groq" or "openai".`
+      );
+      return null;
+    }
+
+    const model = dbModel?.value?.trim() || process.env.WHISPER_CLOUD_MODEL?.trim() || undefined;
+    return { provider: raw, apiKey, model };
+  } catch (e) {
+    console.warn("[whisper-cloud] Failed to read DB settings, falling back to env vars:", e);
+  }
+
+  // Fallback: env vars only
   const apiKey = process.env.WHISPER_CLOUD_API_KEY?.trim();
   if (!apiKey) return null;
 
@@ -81,13 +110,51 @@ function parseCloudWhisperResponse(
 }
 
 // ---------------------------------------------------------------------------
+// Usage tracking
+// ---------------------------------------------------------------------------
+
+async function trackGroqUsage(audioSeconds: number): Promise<void> {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [dateSetting, usageSetting] = await Promise.all([
+    prisma.setting.findUnique({ where: { key: "groq_usage_date" } }),
+    prisma.setting.findUnique({ where: { key: "groq_usage_seconds" } }),
+  ]);
+
+  // Reset if it's a new day
+  const currentSeconds =
+    dateSetting?.value === today
+      ? parseFloat(usageSetting?.value || "0")
+      : 0;
+
+  const newSeconds = currentSeconds + audioSeconds;
+
+  await Promise.all([
+    prisma.setting.upsert({
+      where: { key: "groq_usage_date" },
+      update: { value: today },
+      create: { key: "groq_usage_date", value: today },
+    }),
+    prisma.setting.upsert({
+      where: { key: "groq_usage_seconds" },
+      update: { value: String(newSeconds) },
+      create: { key: "groq_usage_seconds", value: String(newSeconds) },
+    }),
+  ]);
+
+  console.log(
+    `[whisper-cloud] Usage: ${newSeconds.toFixed(0)}s / 14400s today`
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Transcription
 // ---------------------------------------------------------------------------
 
 export async function transcribeWithCloudWhisper(
   audioPath: string
 ): Promise<{ segments: TranscriptSegment[]; provider: string }> {
-  const config = getCloudWhisperConfig();
+  const config = await getCloudWhisperConfig();
   if (!config) {
     throw new Error(
       "Cloud Whisper is not configured (missing WHISPER_CLOUD_API_KEY)"
@@ -135,9 +202,23 @@ export async function transcribeWithCloudWhisper(
   const segments = parseCloudWhisperResponse(data);
 
   const wallTime = ((Date.now() - startTime) / 1000).toFixed(1);
+
+  // Compute audio duration: prefer top-level duration, fall back to last segment end
+  let audioDuration = data.duration ?? 0;
+  if (!audioDuration && data.segments && data.segments.length > 0) {
+    audioDuration = data.segments[data.segments.length - 1].end;
+  }
+
   console.log(
-    `[whisper-cloud] Done: ${segments.length} segments, provider=${provider}, model=${resolvedModel}, wall-clock=${wallTime}s`
+    `[whisper-cloud] Done: ${segments.length} segments, provider=${provider}, model=${resolvedModel}, audio=${audioDuration.toFixed(0)}s, wall-clock=${wallTime}s`
   );
+
+  // Track daily usage for the settings page meter
+  if (audioDuration > 0) {
+    trackGroqUsage(audioDuration).catch((err) =>
+      console.warn("[whisper-cloud] Failed to track usage:", err)
+    );
+  }
 
   return { segments, provider };
 }

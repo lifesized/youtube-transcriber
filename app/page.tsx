@@ -17,6 +17,7 @@ interface QueueItem {
   error?: string;
   progress: number;
   statusText: string;
+  startedAt?: number;
 }
 
 interface VideoSummary {
@@ -164,6 +165,7 @@ function HomeInner() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [completionAlertsEnabled, setCompletionAlertsEnabled] = useState(true);
   const [debugEvents, setDebugEvents] = useState<DebugEvent[]>([]);
   const [debugPaused, setDebugPaused] = useState(false);
   const [debugCollapsed, setDebugCollapsed] = useState(false);
@@ -214,12 +216,73 @@ function HomeInner() {
     addDebugEvent("app.mount", "HomeInner mounted");
   }, [addDebugEvent]);
 
+  const notifyTranscriptReady = useCallback(
+    async (title?: string) => {
+      const label = title ? `Transcript ready: ${title}` : "Transcript ready";
+      setToast(label);
+      setTimeout(() => setToast(null), 3000);
+
+      if (!completionAlertsEnabled || typeof window === "undefined") {
+        return;
+      }
+
+      try {
+        const audioContext = new window.AudioContext();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        oscillator.type = "sine";
+        oscillator.frequency.value = 880;
+        gainNode.gain.value = 0.0001;
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        const now = audioContext.currentTime;
+        gainNode.gain.exponentialRampToValueAtTime(0.08, now + 0.02);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+        oscillator.start(now);
+        oscillator.stop(now + 0.24);
+        setTimeout(() => {
+          audioContext.close().catch(() => undefined);
+        }, 300);
+      } catch {
+        // Ignore audio limitations (autoplay policy, etc.)
+      }
+
+      if (!("Notification" in window)) return;
+      if (Notification.permission === "granted") {
+        new Notification("YouTube Transcriber", {
+          body: label,
+          silent: true,
+        });
+        return;
+      }
+      if (Notification.permission === "default") {
+        try {
+          const permission = await Notification.requestPermission();
+          if (permission === "granted") {
+            new Notification("YouTube Transcriber", {
+              body: label,
+              silent: true,
+            });
+          }
+        } catch {
+          // Ignore notification permission errors
+        }
+      }
+    },
+    [completionAlertsEnabled]
+  );
+
   useEffect(() => {
     if (didInitRef.current) return;
     didInitRef.current = true;
 
     // Check if user has ever created a transcript
     const hasTranscripts = localStorage.getItem("hasCreatedTranscript") === "true";
+    const completionAlerts = localStorage.getItem("completionAlertsEnabled");
+    if (completionAlerts !== null) {
+      setCompletionAlertsEnabled(completionAlerts === "true");
+    }
     setHasCreatedTranscript(hasTranscripts);
     addDebugEvent("ftu.state", `hasCreatedTranscript=${hasTranscripts}`);
 
@@ -468,6 +531,7 @@ function HomeInner() {
                 status: "processing",
                 progress: 0,
                 statusText: "Checking for YouTube captions...",
+                startedAt: Date.now(),
               }
             : item
         )
@@ -529,18 +593,30 @@ function HomeInner() {
             return;
           }
 
-          // Update library and focus the newly created transcript.
-          // Clear search and switch to list view so the new video is visible.
+          // Update library and clear search so the new video is visible.
           setSearch("");
-          if (data?.id) {
+          const startedAt = queueRef.current[idx]?.startedAt;
+          const elapsedMs = startedAt ? Date.now() - startedAt : 0;
+          const shouldAutoOpenTranscript = elapsedMs > 0 && elapsedMs <= 5000;
+
+          if (data?.id && shouldAutoOpenTranscript) {
             localStorage.setItem("libraryLayout", "list");
             setClosingVideo(null);
             const params = new URLSearchParams(searchParams.toString());
             params.set("layout", "list");
             params.set("id", data.id);
             router.push(`/?${params.toString()}`, { scroll: false });
+          } else {
+            localStorage.setItem("libraryLayout", "list");
+            const params = new URLSearchParams(searchParams.toString());
+            params.set("layout", "list");
+            params.delete("id");
+            router.push(`/?${params.toString()}`, { scroll: false });
+            setToast("Transcript finished. Use ✨ to summarize.");
+            setTimeout(() => setToast(null), 4000);
           }
           fetchTranscripts("");
+          void notifyTranscriptReady(data?.title);
 
           // Animate progress bar to 100% while still showing it
           updateQueue((prev) =>
@@ -619,8 +695,9 @@ function HomeInner() {
     startProgressForItem,
     stopProgressForItem,
     fetchTranscripts,
-    search,
-    selectTranscript,
+    notifyTranscriptReady,
+    router,
+    searchParams,
   ]);
 
   function addToQueue(urls: string[]) {
@@ -774,19 +851,35 @@ function HomeInner() {
                   <h2 className="font-mono text-sm font-medium uppercase tracking-wider text-white/50">
                     {completedCount}/{totalCount} completed
                   </h2>
-                  {!isProcessing && (
-                    <Button
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
                       onClick={() => {
-                        setQueue([]);
-                        queueRef.current = [];
+                        setCompletionAlertsEnabled((prev) => {
+                          const next = !prev;
+                          localStorage.setItem("completionAlertsEnabled", String(next));
+                          return next;
+                        });
                       }}
-                      variant="ghost"
-                      size="sm"
-                      className="font-mono text-xs uppercase tracking-wider text-white/45 hover:text-white"
+                      className="rounded-md px-2 py-1 font-mono text-xs uppercase tracking-wider text-white/45 transition-colors hover:bg-white/10 hover:text-white"
+                      title="Toggle completion sound and notifications"
                     >
-                      Clear
-                    </Button>
-                  )}
+                      Alerts {completionAlertsEnabled ? "On" : "Off"}
+                    </button>
+                    {!isProcessing && (
+                      <Button
+                        onClick={() => {
+                          setQueue([]);
+                          queueRef.current = [];
+                        }}
+                        variant="ghost"
+                        size="sm"
+                        className="font-mono text-xs uppercase tracking-wider text-white/45 hover:text-white"
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -1281,29 +1374,10 @@ function HomeInner() {
 
               {/* Footer */}
               <div className="mt-8 flex items-center justify-between">
-                <span className="text-xs text-white/35">
-                  <a
-                    href="/about"
-                    className="text-white/60 hover:text-white"
-                  >
-                    about
-                  </a>{" "}
-                  this project by{" "}
-                  <a
-                    href="https://github.com/lifesized"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-white/60 hover:text-white"
-                  >
-                    lifesized
-                  </a>
-                </span>
                 <a
-                  href="https://github.com/lifesized/youtube-transcriber"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href="/settings"
                   className="text-white/35 transition-colors hover:text-white/60"
-                  title="View on GitHub"
+                  title="Settings"
                 >
                   <svg
                     className="h-5 w-5"
@@ -1311,12 +1385,28 @@ function HomeInner() {
                     viewBox="0 0 24 24"
                     aria-hidden="true"
                   >
-                    <path
-                      fillRule="evenodd"
-                      d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
-                      clipRule="evenodd"
-                    />
+                    <path fillRule="evenodd" d="M11.078 2.25c-.917 0-1.699.663-1.85 1.567L9.05 4.889c-.02.12-.115.26-.297.348a7.454 7.454 0 0 0-.986.57c-.166.115-.334.126-.45.083L6.3 5.508a1.875 1.875 0 0 0-2.282.819l-.922 1.597a1.875 1.875 0 0 0 .432 2.385l.84.692c.095.078.17.229.154.43a7.598 7.598 0 0 0 0 1.139c.015.2-.059.352-.153.43l-.841.692a1.875 1.875 0 0 0-.432 2.385l.922 1.597a1.875 1.875 0 0 0 2.282.818l1.019-.382c.115-.043.283-.031.45.082.312.214.641.405.985.57.182.088.277.228.297.35l.178 1.071c.151.904.933 1.567 1.85 1.567h1.844c.916 0 1.699-.663 1.85-1.567l.178-1.072c.02-.12.114-.26.297-.349.344-.165.673-.356.985-.57.167-.114.335-.125.45-.082l1.02.382a1.875 1.875 0 0 0 2.28-.819l.923-1.597a1.875 1.875 0 0 0-.432-2.385l-.84-.692c-.095-.078-.17-.229-.154-.43a7.614 7.614 0 0 0 0-1.139c-.016-.2.059-.352.153-.43l.84-.692c.708-.582.891-1.59.433-2.385l-.922-1.597a1.875 1.875 0 0 0-2.282-.818l-1.02.382c-.114.043-.282.031-.449-.083a7.49 7.49 0 0 0-.985-.57c-.183-.087-.277-.227-.297-.348l-.179-1.072a1.875 1.875 0 0 0-1.85-1.567h-1.843ZM12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5Z" clipRule="evenodd" />
                   </svg>
+                </a>
+                <a
+                    href="https://github.com/lifesized/youtube-transcriber"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-white/35 transition-colors hover:text-white/60"
+                    title="View on GitHub"
+                  >
+                    <svg
+                      className="h-5 w-5"
+                      fill="currentColor"
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
                 </a>
               </div>
             </section>

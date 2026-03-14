@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-03-13
+
+### Added
+- **Chrome extension** — One-click YouTube transcription from any video page. Detects the current video, shows a Transcribe button, and displays recent transcripts. (`extension/`)
+- **Side panel UI** — Extension uses Chrome Side Panel API so it stays open while navigating between YouTube videos. Auto-detects new videos on tab change.
+- **Transcription queue in extension** — Queue multiple videos while one is transcribing. Queue persists via `chrome.storage.session`.
+- **Persistent transcription state** — Extension state survives popup close and service worker restart. Badge indicator on icon: `...` (transcribing), `✓` (done), `!` (error).
+- **Scrollable recent list** — Extension's recent transcripts list is scrollable with `max-height`.
+- **`Setting` model** — Key-value settings table added to Prisma schema for upcoming settings page (YTT-87).
+
+### Changed
+- **"Open in app" button** — Restyled from orange text to white glass design matching the web app (`bg-white/10 border-white/20 rounded-full`).
+
+### Removed
+- **"Online" status badge** — Green dot and "Online"/"Offline" label removed from extension header.
+
 ## 2026-03-06
 
 ### Fixed

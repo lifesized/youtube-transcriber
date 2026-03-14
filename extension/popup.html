@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-left">
+        <img class="logo" src="icons/icon48.png" width="20" height="20" alt="">
+        <span class="header-title">YouTube Transcriber</span>
+      </div>
+    </div>
+
+    <!-- No Service -->
+    <div id="stateNoService" class="state" hidden>
+      <p class="message">Service offline</p>
+      <p class="submessage">Start the app with <code>npm run dev</code></p>
+      <p class="submessage">localhost:19720</p>
+    </div>
+
+    <!-- Not YouTube -->
+    <div id="stateNotYoutube" class="state" hidden>
+      <p class="message">Navigate to a YouTube video</p>
+      <p class="submessage">Open any YouTube video to transcribe it</p>
+    </div>
+
+    <!-- Ready -->
+    <div id="stateReady" class="state" hidden>
+      <div class="video-info">
+        <div class="video-title" id="videoTitle"></div>
+      </div>
+      <button class="btn-transcribe" id="btnTranscribe">Transcribe</button>
+    </div>
+
+    <!-- Transcribing -->
+    <div id="stateTranscribing" class="state" hidden>
+      <div class="video-title muted" id="transcribingTitle"></div>
+      <div class="progress-area">
+        <p class="progress-text" id="progressText">Sending to transcriber...</p>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="progressBar"></div>
+        </div>
+      </div>
+      <!-- Queue current video while another is transcribing -->
+      <div id="queuePrompt" class="queue-prompt" hidden>
+        <div class="queue-video-title" id="queueVideoTitle"></div>
+        <button class="btn-queue" id="btnQueue">Add to queue</button>
+      </div>
+      <div id="queueList" class="queue-list" hidden></div>
+    </div>
+
+    <!-- Done -->
+    <div id="stateDone" class="state" hidden>
+      <div class="success-icon">&#10003;</div>
+      <p class="message">Transcription complete</p>
+      <a class="btn-open" id="btnOpen" target="_blank">Open in app</a>
+    </div>
+
+    <!-- Error -->
+    <div id="stateError" class="state" hidden>
+      <p class="error-message" id="errorMessage"></p>
+      <button class="btn-retry" id="btnRetry">Retry</button>
+    </div>
+
+    <!-- Recent Transcripts -->
+    <div id="recentSection" class="recent-section" hidden>
+      <div class="section-label">Recent</div>
+      <div id="recentList" class="recent-list"></div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

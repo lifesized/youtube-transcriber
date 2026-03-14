@@ -520,28 +520,32 @@ async function fetchTranscriptWebFallback(
 
 /**
  * Try cloud Whisper first (if configured), then fall back to local Whisper.
+ * @param skipCloud - skip cloud Whisper (e.g., if it already failed for this video)
  */
 async function transcribeWithWhisperFallback(
-  videoId: string
+  videoId: string,
+  skipCloud = false
 ): Promise<{ segments: TranscriptSegment[]; source: string }> {
-  const cloudConfig = getCloudWhisperConfig();
+  if (!skipCloud) {
+    const cloudConfig = await getCloudWhisperConfig();
 
-  if (cloudConfig) {
-    try {
-      console.log(
-        `[transcript] Trying cloud Whisper (${cloudConfig.provider}) for ${videoId}...`
-      );
-      const audioDir = path.join("/tmp", "yt-audio");
-      const audioPath = await downloadAudio(videoId, audioDir);
+    if (cloudConfig) {
+      try {
+        console.log(
+          `[transcript] Trying cloud Whisper (${cloudConfig.provider}) for ${videoId}...`
+        );
+        const audioDir = path.join("/tmp", "yt-audio");
+        const audioPath = await downloadAudio(videoId, audioDir);
 
-      const { segments, provider } = await transcribeWithCloudWhisper(audioPath);
-      await fs.unlink(audioPath).catch(() => {});
+        const { segments, provider } = await transcribeWithCloudWhisper(audioPath);
+        await fs.unlink(audioPath).catch(() => {});
 
-      return { segments, source: `whisper_cloud_${provider}` };
-    } catch (err) {
-      console.log(
-        `[transcript] Cloud Whisper failed for ${videoId}: ${err instanceof Error ? err.message : err}. Falling back to local Whisper...`
-      );
+        return { segments, source: `whisper_cloud_${provider}` };
+      } catch (err) {
+        console.log(
+          `[transcript] Cloud Whisper failed for ${videoId}: ${err instanceof Error ? err.message : err}. Falling back to local Whisper...`
+        );
+      }
     }
   }
 
@@ -561,7 +565,29 @@ async function fetchTranscript(
   videoId: string,
   lang?: string
 ): Promise<{ segments: TranscriptSegment[]; source: string }> {
-  // 1. Web page scrape — most reliable method as of 2026
+  // 0. If cloud Whisper (Groq) is configured via DB settings, use it first — it's
+  //    faster than scraping YouTube captions and more reliable than InnerTube.
+  let cloudFailed = false;
+  const cloudConfig = await getCloudWhisperConfig();
+  if (cloudConfig) {
+    try {
+      console.log(
+        `[transcript] Cloud Whisper (${cloudConfig.provider}) is configured — using it as primary method for ${videoId}...`
+      );
+      const audioDir = path.join("/tmp", "yt-audio");
+      const audioPath = await downloadAudio(videoId, audioDir);
+      const { segments, provider } = await transcribeWithCloudWhisper(audioPath);
+      await fs.unlink(audioPath).catch(() => {});
+      return { segments, source: `whisper_cloud_${provider}` };
+    } catch (err) {
+      cloudFailed = true;
+      console.log(
+        `[transcript] Cloud Whisper failed for ${videoId}: ${err instanceof Error ? err.message : err}. Falling back to caption scraping...`
+      );
+    }
+  }
+
+  // 1. Web page scrape — most reliable caption method as of 2026
   try {
     const segments = await fetchTranscriptWebFallback(videoId, lang);
     return { segments, source: "youtube_captions" };
@@ -570,7 +596,7 @@ async function fetchTranscript(
       console.log(
         `[transcript] No captions available for ${videoId}, falling back to Whisper transcription...`
       );
-      return await transcribeWithWhisperFallback(videoId);
+      return await transcribeWithWhisperFallback(videoId, cloudFailed);
     }
     console.log(
       `[transcript] WEB scrape failed for ${videoId}: ${err instanceof Error ? err.message : err}. Trying ANDROID InnerTube...`
@@ -586,7 +612,7 @@ async function fetchTranscript(
       console.log(
         `[transcript] No captions available for ${videoId}, falling back to Whisper transcription...`
       );
-      return await transcribeWithWhisperFallback(videoId);
+      return await transcribeWithWhisperFallback(videoId, cloudFailed);
     }
     console.log(
       `[transcript] ANDROID client failed for ${videoId}: ${err instanceof Error ? err.message : err}. Trying WEB InnerTube...`
@@ -602,12 +628,12 @@ async function fetchTranscript(
       console.log(
         `[transcript] No captions available for ${videoId}, falling back to Whisper transcription...`
       );
-      return await transcribeWithWhisperFallback(videoId);
+      return await transcribeWithWhisperFallback(videoId, cloudFailed);
     }
     console.log(
       `[transcript] All caption methods failed for ${videoId}: ${err instanceof Error ? err.message : err}. Falling back to Whisper...`
     );
-    return await transcribeWithWhisperFallback(videoId);
+    return await transcribeWithWhisperFallback(videoId, cloudFailed);
   }
 }
 

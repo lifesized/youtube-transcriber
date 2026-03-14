@@ -27,7 +27,7 @@ const PROVIDERS: LlmProvider[] = [
 ];
 
 const OPEN_URLS: Record<string, string> = {
-  claude: "https://claude.ai/new",
+  claude: "https://claude.ai/",
 };
 
 const STORAGE_KEY = "llm-launcher-last-provider";
