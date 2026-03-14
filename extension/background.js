@@ -217,6 +217,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // ---------------------------------------------------------------------------
+// Side panel — open on extension icon click
+// ---------------------------------------------------------------------------
+
+chrome.action.onClicked.addListener(async (tab) => {
+  await chrome.sidePanel.open({ tabId: tab.id });
+});
+
+// ---------------------------------------------------------------------------
 // On startup — check if a transcription was interrupted
 // ---------------------------------------------------------------------------
 chrome.runtime.onStartup.addListener(async () => {

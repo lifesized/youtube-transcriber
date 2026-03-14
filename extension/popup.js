@@ -344,5 +344,28 @@ el.btnQueue.addEventListener("click", async () => {
   renderQueueList();
 });
 
+// ---------------------------------------------------------------------------
+// Auto-refresh when active tab changes (side panel stays open)
+// ---------------------------------------------------------------------------
+
+let currentTabUrl = null;
+
+chrome.tabs.onActivated?.addListener(async () => {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.url && tab.url !== currentTabUrl) {
+      currentTabUrl = tab.url;
+      init();
+    }
+  } catch { /* ignore */ }
+});
+
+chrome.tabs.onUpdated?.addListener((tabId, changeInfo) => {
+  if (changeInfo.url && changeInfo.url !== currentTabUrl) {
+    currentTabUrl = changeInfo.url;
+    init();
+  }
+});
+
 // Start
 init();

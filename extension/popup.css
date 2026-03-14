@@ -20,9 +20,9 @@
 }
 
 body {
-  width: 360px;
+  width: 100%;
   min-height: 200px;
-  max-height: 600px;
+  height: 100vh;
   overflow-y: auto;
   background: var(--bg);
   color: var(--text);
@@ -183,19 +183,19 @@ body {
 .btn-open {
   display: inline-block;
   margin-top: 8px;
-  padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--accent);
+  padding: 8px 20px;
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  border-radius: 100px;
+  color: #fff;
   text-decoration: none;
   font-size: 13px;
   font-weight: 500;
   transition: all 0.15s;
 }
 .btn-open:hover {
-  background: rgba(255, 255, 255, 0.10);
-  border-color: var(--border-hover);
+  background: rgba(255, 255, 255, 0.20);
+  border-color: rgba(255, 255, 255, 0.40);
 }
 
 /* Error */

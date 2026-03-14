@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "YouTube Transcriber",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "One-click YouTube transcription via your local YouTube Transcriber service",
   "permissions": [
     "activeTab",
     "tabs",
-    "storage"
+    "storage",
+    "sidePanel"
   ],
   "host_permissions": [
     "http://localhost:19720/*",
@@ -22,8 +23,10 @@
       "run_at": "document_idle"
     }
   ],
+  "side_panel": {
+    "default_path": "popup.html"
+  },
   "action": {
-    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",

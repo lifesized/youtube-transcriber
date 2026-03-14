@@ -9,6 +9,12 @@ datasource db {
   provider = "sqlite"
 }
 
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
 model Video {
   id           String   @id @default(cuid())
   videoId      String   @unique
