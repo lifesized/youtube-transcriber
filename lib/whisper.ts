@@ -263,7 +263,7 @@ export async function downloadAudio(videoId: string, outputDir: string, onProgre
   const args = [
     "-x",
     "--audio-format", "mp3",
-    "--audio-quality", "5",
+    "--audio-quality", "9",
     "-o", outputTemplate,
     "--no-playlist",
     `https://www.youtube.com/watch?v=${videoId}`,
