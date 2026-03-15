@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-03-15
+
+### Added
+- **Tab completion notifications** — Favicon shows a green checkmark badge and document title updates to "✓ Transcript ready: ..." when a transcript finishes, visible from other tabs. Both reset when starting a new extraction. (YTT-86)
+- **Notifications setting** — Completion alerts toggle moved to Settings page with a proper switch control. Replaces the inline "Alerts On/Off" button in the queue header.
+
+### Changed
+- **Louder completion sound** — Increased gain from 0.08 to 0.35 with longer sustain so it's actually audible.
+- **Extension: removed redundant header** — Chrome's side panel already shows the extension name and icon; removed the duplicate header inside the panel.
+- **Extension: "already transcribed" detection** — When navigating to a video that's already in the database, the extension now shows the title with a checkmark badge and "View transcript" button instead of offering to transcribe again.
+- **Extension: auto-open on completion** — Newly completed transcriptions automatically open in the app. Reuses an existing app tab instead of spawning new ones.
+- **Extension: no more dead-end "Done" screen** — The old "Transcription complete / Open in app" screen is replaced with a contextual transcribed state that stays useful.
+
+### Fixed
+- **Groq usage daily reset** — Settings page now persists the usage reset to the database when visiting on a new day, instead of only resetting in the UI.
+
+## 2026-03-14
+
+### Added
+- **Settings page** (`/settings`) — Configure Groq API key with auto-save on paste, test connection button, and step-by-step setup guide. Gear icon in footer links to settings. (YTT-87)
+- **Groq usage meter** — Daily usage visualization showing audio-seconds used vs 14,400s free tier limit with color-coded status (Free / Approaching limit / Paid usage).
+- **Settings API** — `GET /api/settings` (masked key), `PUT /api/settings` (save), `POST /api/settings/test-groq` (verify key).
+- **DB-backed cloud config** — `getCloudWhisperConfig()` now checks DB settings (priority over env vars), allowing API key setup via the Settings page instead of `.env`.
+- **Groq as primary transcription** — When a Groq API key is configured, cloud Whisper runs before YouTube caption scraping for faster results.
+- **README Groq section** — Added "Groq Cloud Transcription (Free)" with signup steps, free tier limits, and env var alternative.
+
+### Fixed
+- **Redundant Groq retries** — When Groq fails (e.g., file too large), fallback path no longer re-attempts Groq, avoiding triple audio downloads.
+- **Audio file size for Groq** — Lowered yt-dlp audio quality from 5 (~130kbps) to 9 (~65kbps) to keep files under Groq's 25MB limit for longer videos.
+- **Usage tracking** — Fixed duration calculation falling back to last segment end time when Groq response omits top-level `duration` field.
+
+### Changed
+- **Footer layout** — Removed "about this project by lifesized" text; settings gear icon on left, GitHub icon on right.
+
 ## 2026-03-13
 
 ### Added
