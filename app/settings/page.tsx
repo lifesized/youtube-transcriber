@@ -94,6 +94,14 @@ export default function SettingsPage() {
       } else {
         setUsageSeconds(0);
         setUsageDate(today);
+        // Persist the daily reset so the database stays in sync
+        if (data.groq_usage_date && data.groq_usage_date !== today) {
+          fetch("/api/settings", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ groq_usage_seconds: "0", groq_usage_date: today }),
+          }).catch(() => {});
+        }
       }
     } catch {
       // Settings may not exist yet — that's fine
