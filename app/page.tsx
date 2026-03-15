@@ -166,6 +166,8 @@ function HomeInner() {
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [completionAlertsEnabled, setCompletionAlertsEnabled] = useState(true);
+  const originalTitleRef = useRef<string>("");
+  const originalFaviconRef = useRef<string>("");
   const [debugEvents, setDebugEvents] = useState<DebugEvent[]>([]);
   const [debugPaused, setDebugPaused] = useState(false);
   const [debugCollapsed, setDebugCollapsed] = useState(false);
@@ -216,11 +218,86 @@ function HomeInner() {
     addDebugEvent("app.mount", "HomeInner mounted");
   }, [addDebugEvent]);
 
+  const setFaviconBadge = useCallback(() => {
+    if (typeof document === "undefined") return;
+
+    // Save original favicon on first call
+    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (link && !originalFaviconRef.current) {
+      originalFaviconRef.current = link.href;
+    }
+
+    const favicon = new Image();
+    favicon.crossOrigin = "anonymous";
+    favicon.src = link?.href ?? "/favicon.ico";
+    favicon.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 64;
+      canvas.height = 64;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      ctx.drawImage(favicon, 0, 0, 64, 64);
+
+      // Green badge circle (bottom-right)
+      ctx.beginPath();
+      ctx.arc(52, 52, 12, 0, 2 * Math.PI);
+      ctx.fillStyle = "#22c55e";
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#fff";
+      ctx.stroke();
+
+      // Checkmark
+      ctx.beginPath();
+      ctx.moveTo(46, 52);
+      ctx.lineTo(50, 56);
+      ctx.lineTo(58, 47);
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 3;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.stroke();
+
+      const newHref = canvas.toDataURL("image/png");
+      if (link) {
+        link.href = newHref;
+      } else {
+        const newLink = document.createElement("link");
+        newLink.rel = "icon";
+        newLink.href = newHref;
+        document.head.appendChild(newLink);
+      }
+    };
+  }, []);
+
+  const resetTabNotification = useCallback(() => {
+    if (typeof document === "undefined") return;
+
+    // Restore original title
+    if (originalTitleRef.current) {
+      document.title = originalTitleRef.current;
+    }
+
+    // Restore original favicon
+    if (originalFaviconRef.current) {
+      const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+      if (link) link.href = originalFaviconRef.current;
+    }
+  }, []);
+
   const notifyTranscriptReady = useCallback(
     async (title?: string) => {
       const label = title ? `Transcript ready: ${title}` : "Transcript ready";
       setToast(label);
       setTimeout(() => setToast(null), 3000);
+
+      // Update tab title and favicon badge so it's visible from other tabs
+      if (typeof document !== "undefined") {
+        if (!originalTitleRef.current) originalTitleRef.current = document.title;
+        document.title = `✓ ${label}`;
+        setFaviconBadge();
+      }
 
       if (!completionAlertsEnabled || typeof window === "undefined") {
         return;
@@ -237,13 +314,13 @@ function HomeInner() {
         gainNode.connect(audioContext.destination);
 
         const now = audioContext.currentTime;
-        gainNode.gain.exponentialRampToValueAtTime(0.08, now + 0.02);
-        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+        gainNode.gain.exponentialRampToValueAtTime(0.35, now + 0.02);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
         oscillator.start(now);
-        oscillator.stop(now + 0.24);
+        oscillator.stop(now + 0.4);
         setTimeout(() => {
           audioContext.close().catch(() => undefined);
-        }, 300);
+        }, 500);
       } catch {
         // Ignore audio limitations (autoplay policy, etc.)
       }
@@ -270,7 +347,7 @@ function HomeInner() {
         }
       }
     },
-    [completionAlertsEnabled]
+    [completionAlertsEnabled, setFaviconBadge]
   );
 
   useEffect(() => {
@@ -701,6 +778,8 @@ function HomeInner() {
   ]);
 
   function addToQueue(urls: string[]) {
+    resetTabNotification();
+
     const newItems: QueueItem[] = urls.map((u) => ({
       url: u,
       status: "pending" as const,
@@ -852,20 +931,6 @@ function HomeInner() {
                     {completedCount}/{totalCount} completed
                   </h2>
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCompletionAlertsEnabled((prev) => {
-                          const next = !prev;
-                          localStorage.setItem("completionAlertsEnabled", String(next));
-                          return next;
-                        });
-                      }}
-                      className="rounded-md px-2 py-1 font-mono text-xs uppercase tracking-wider text-white/45 transition-colors hover:bg-white/10 hover:text-white"
-                      title="Toggle completion sound and notifications"
-                    >
-                      Alerts {completionAlertsEnabled ? "On" : "Off"}
-                    </button>
                     {!isProcessing && (
                       <Button
                         onClick={() => {

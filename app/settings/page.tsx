@@ -74,6 +74,7 @@ export default function SettingsPage() {
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [completionAlertsEnabled, setCompletionAlertsEnabled] = useState(true);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -103,6 +104,8 @@ export default function SettingsPage() {
 
   useEffect(() => {
     loadSettings();
+    const stored = localStorage.getItem("completionAlertsEnabled");
+    if (stored !== null) setCompletionAlertsEnabled(stored === "true");
   }, [loadSettings]);
 
   async function handleSaveKey(key?: string) {
@@ -306,6 +309,42 @@ export default function SettingsPage() {
               {usageDate && ` Tracking for ${usageDate}.`}
               {" "}Usage resets daily.
             </p>
+          </section>
+
+          {/* Notifications */}
+          <section className="space-y-5 rounded-2xl border border-white/10 bg-[hsl(var(--panel))] p-4 transition-colors duration-200 hover:border-white/30 sm:p-6">
+            <h2 className="text-base font-medium text-white/75">
+              Notifications
+            </h2>
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-sm text-white/70">Completion alerts</p>
+                <p className="text-xs text-white/30">
+                  Play a sound and show a browser notification when a transcript finishes
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={completionAlertsEnabled}
+                onClick={() => {
+                  setCompletionAlertsEnabled((prev) => {
+                    const next = !prev;
+                    localStorage.setItem("completionAlertsEnabled", String(next));
+                    return next;
+                  });
+                }}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-offset-2 focus:ring-offset-[hsl(var(--bg))] ${
+                  completionAlertsEnabled ? "bg-green-500" : "bg-white/20"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg transition-transform duration-200 ${
+                    completionAlertsEnabled ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
           </section>
 
           {/* How to get a key */}
