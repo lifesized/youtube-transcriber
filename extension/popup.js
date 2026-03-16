@@ -1,5 +1,8 @@
 const API_APP_BASE = "http://localhost:19720";
 
+// Keep a port open so the background script knows the side panel is active
+chrome.runtime.connect({ name: "sidepanel" });
+
 // DOM refs
 const el = {
   stateNoService: document.getElementById("stateNoService"),
@@ -159,10 +162,18 @@ async function renderQueueList() {
   el.queueList.hidden = false;
   el.queueList.innerHTML = "";
   for (const item of queue) {
-    const div = document.createElement("div");
-    div.className = "queue-item";
-    div.textContent = item.title || item.url;
-    el.queueList.appendChild(div);
+    const card = document.createElement("div");
+    card.className = "queue-card";
+    card.innerHTML = `
+      <div class="queue-card-row">
+        <span class="status-dot pending"></span>
+        <div class="queue-card-content">
+          <div class="queue-card-title">${escapeHtml(item.title || item.url)}</div>
+          <div class="queue-card-status">Queued</div>
+        </div>
+      </div>
+    `;
+    el.queueList.appendChild(card);
   }
 }
 

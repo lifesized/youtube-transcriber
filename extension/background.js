@@ -191,7 +191,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case "OPEN_TRANSCRIPT": {
         const transcriptId = message.id;
-        const fullUrl = `${API_BASE}/?id=${transcriptId}`;
+        const fullUrl = `${API_BASE}/?layout=list&id=${transcriptId}`;
 
         // Find existing app tab
         const allTabs = await chrome.tabs.query({});
@@ -245,11 +245,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // ---------------------------------------------------------------------------
-// Side panel — open on extension icon click
+// Side panel — toggle on extension icon click
 // ---------------------------------------------------------------------------
 
+let sidePanelPort = null;
+
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name === "sidepanel") {
+    sidePanelPort = port;
+    port.onDisconnect.addListener(() => {
+      sidePanelPort = null;
+    });
+  }
+});
+
 chrome.action.onClicked.addListener(async (tab) => {
-  await chrome.sidePanel.open({ tabId: tab.id });
+  if (sidePanelPort) {
+    try {
+      await chrome.sidePanel.close({ windowId: tab.windowId });
+    } catch {
+      // Fallback: disable and re-enable the panel to force close
+      await chrome.sidePanel.setOptions({ enabled: false });
+      await chrome.sidePanel.setOptions({ enabled: true, path: "popup.html" });
+    }
+  } else {
+    await chrome.sidePanel.open({ tabId: tab.id });
+  }
 });
 
 // ---------------------------------------------------------------------------

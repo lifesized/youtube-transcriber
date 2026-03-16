@@ -8,7 +8,6 @@
   --muted: rgba(255, 255, 255, 0.70);
   --muted-2: rgba(255, 255, 255, 0.55);
   --muted-3: rgba(255, 255, 255, 0.35);
-  --accent: #f59e0b;
   --error: #ef4444;
   --success: #22c55e;
 }
@@ -40,17 +39,21 @@ body {
 
 /* State containers */
 .state {
-  text-align: center;
   padding: 20px 0;
+}
+.state.centered {
+  text-align: center;
 }
 .message {
   font-size: 14px;
   color: rgba(255, 255, 255, 0.7);
   margin-bottom: 4px;
+  text-align: center;
 }
 .submessage {
   font-size: 12px;
   color: var(--muted-3);
+  text-align: center;
 }
 .submessage code {
   background: rgba(255, 255, 255, 0.08);
@@ -60,27 +63,18 @@ body {
   font-family: "SF Mono", "Menlo", monospace;
 }
 
-/* Video info */
-.video-info {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 12px;
-  margin-bottom: 12px;
-}
-.video-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.75);
-  line-height: 1.4;
+/* Panel title — clean left-aligned heading */
+.panel-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  margin-bottom: 14px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-}
-.video-title.muted {
-  color: rgba(255, 255, 255, 0.5);
-  margin-bottom: 8px;
 }
 
 /* Transcribe button */
@@ -110,32 +104,76 @@ body {
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.20);
 }
 
-/* Progress */
-.progress-area {
+/* Queue cards — matches web app queue items */
+.queue-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-2);
+  padding: 12px 14px;
+  margin-bottom: 8px;
+}
+.queue-card:last-child {
+  margin-bottom: 0;
+}
+.queue-card-row {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 10px;
-  padding: 12px 0;
 }
-.progress-text {
+.queue-card-content {
+  min-width: 0;
+  flex: 1;
+}
+.queue-card-title {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.5);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.75);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.progress-bar-track {
+.queue-card-status {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  margin-top: 2px;
+}
+
+/* Status dots — match web app */
+.status-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.status-dot.pending {
+  background: rgba(255, 255, 255, 0.30);
+  animation: pulse 2s ease-in-out infinite;
+}
+.status-dot.processing {
+  background: rgba(255, 255, 255, 0.40);
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Progress bar — matches web app style */
+.progress-track {
+  margin-top: 10px;
   width: 100%;
-  height: 4px;
+  height: 6px;
   border-radius: 100px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.10);
   overflow: hidden;
 }
-.progress-bar-fill {
+.progress-fill {
   height: 100%;
   border-radius: 100px;
-  background: var(--accent);
+  background: rgba(255, 255, 255, 0.30);
   width: 0%;
-  transition: width 0.6s ease;
+  transition: width 0.7s ease-out;
 }
-.progress-bar-fill.indeterminate {
+.progress-fill.indeterminate {
   width: 40%;
   animation: indeterminate 1.5s ease-in-out infinite;
 }
@@ -144,16 +182,45 @@ body {
   100% { transform: translateX(350%); }
 }
 
-/* Transcribed */
-.transcribed-info {
-  position: relative;
+/* Queue prompt */
+.queue-card-prompt {
+  opacity: 0.7;
+  transition: opacity 0.15s;
 }
-.transcribed-row {
+.queue-card-prompt:hover {
+  opacity: 1;
+}
+.btn-queue {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-queue:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: var(--border-hover);
+}
+
+/* Queue list */
+.queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Transcribed */
+.transcribed-header {
   display: flex;
   align-items: flex-start;
   gap: 8px;
 }
-.transcribed-row .video-title {
+.transcribed-header .panel-title {
   flex: 1;
 }
 .transcribed-badge {
@@ -211,63 +278,6 @@ body {
 .btn-retry:hover {
   background: rgba(239, 68, 68, 0.15);
   border-color: rgba(239, 68, 68, 0.30);
-}
-
-/* Queue prompt */
-.queue-prompt {
-  margin-top: 12px;
-  padding: 10px 12px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.queue-video-title {
-  flex: 1;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.btn-queue {
-  flex-shrink: 0;
-  padding: 5px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.btn-queue:hover {
-  background: rgba(255, 255, 255, 0.14);
-  border-color: var(--border-hover);
-}
-.queue-list {
-  margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.queue-item {
-  font-size: 12px;
-  color: var(--muted-3);
-  padding: 4px 8px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.queue-item::before {
-  content: "";
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--muted-3);
-  flex-shrink: 0;
 }
 
 /* Recent transcripts */

@@ -21,36 +21,46 @@
 
     <!-- Ready (not yet transcribed) -->
     <div id="stateReady" class="state" hidden>
-      <div class="video-info">
-        <div class="video-title" id="videoTitle"></div>
-      </div>
+      <h1 class="panel-title" id="videoTitle"></h1>
       <button class="btn-transcribe" id="btnTranscribe">Transcribe</button>
     </div>
 
     <!-- Transcribing -->
     <div id="stateTranscribing" class="state" hidden>
-      <div class="video-title muted" id="transcribingTitle"></div>
-      <div class="progress-area">
-        <p class="progress-text" id="progressText">Sending to transcriber...</p>
-        <div class="progress-bar-track">
-          <div class="progress-bar-fill" id="progressBar"></div>
+      <!-- Currently transcribing item -->
+      <div class="queue-card">
+        <div class="queue-card-row">
+          <span class="status-dot processing"></span>
+          <div class="queue-card-content">
+            <div class="queue-card-title" id="transcribingTitle"></div>
+            <div class="queue-card-status" id="progressText">Sending to transcriber...</div>
+          </div>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progressBar"></div>
         </div>
       </div>
+
       <!-- Queue current video while another is transcribing -->
-      <div id="queuePrompt" class="queue-prompt" hidden>
-        <div class="queue-video-title" id="queueVideoTitle"></div>
-        <button class="btn-queue" id="btnQueue">Add to queue</button>
+      <div id="queuePrompt" class="queue-card queue-card-prompt" hidden>
+        <div class="queue-card-row">
+          <span class="status-dot pending"></span>
+          <div class="queue-card-content">
+            <div class="queue-card-title" id="queueVideoTitle"></div>
+          </div>
+          <button class="btn-queue" id="btnQueue">Queue</button>
+        </div>
       </div>
+
+      <!-- Queued items -->
       <div id="queueList" class="queue-list" hidden></div>
     </div>
 
     <!-- Transcribed (already exists or just finished) -->
     <div id="stateTranscribed" class="state" hidden>
-      <div class="video-info transcribed-info">
-        <div class="transcribed-row">
-          <div class="video-title" id="transcribedTitle"></div>
-          <span class="transcribed-badge">&#10003;</span>
-        </div>
+      <div class="transcribed-header">
+        <h1 class="panel-title" id="transcribedTitle"></h1>
+        <span class="transcribed-badge">&#10003;</span>
       </div>
       <button class="btn-view" id="btnView">View transcript</button>
     </div>

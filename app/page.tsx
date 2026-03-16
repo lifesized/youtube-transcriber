@@ -162,6 +162,7 @@ function HomeInner() {
   const [copied, setCopied] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  const [justCompletedIds, setJustCompletedIds] = useState<Set<string>>(new Set());
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -701,6 +702,18 @@ function HomeInner() {
           fetchTranscripts("");
           void notifyTranscriptReady(data?.title);
 
+          // Show a brief tick on the new transcript in the list
+          if (data?.id) {
+            setJustCompletedIds((prev) => new Set(prev).add(data.id));
+            setTimeout(() => {
+              setJustCompletedIds((prev) => {
+                const next = new Set(prev);
+                next.delete(data.id);
+                return next;
+              });
+            }, 1500);
+          }
+
           // Animate progress bar to 100% while still showing it
           updateQueue((prev) =>
             prev.map((item, i) =>
@@ -1238,6 +1251,15 @@ function HomeInner() {
                                   : "hover:bg-white/5"
                               }`}
                             >
+                              {justCompletedIds.has(t.id) && (
+                                <span
+                                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-500/15 text-green-400 animate-[fadeTickOut_1.5s_ease-in-out_forwards]"
+                                >
+                                  <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L7 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                  </svg>
+                                </span>
+                              )}
                               <button
                                 onClick={() => selectTranscript(t.id)}
                                 className="min-w-0 flex-1 text-left"

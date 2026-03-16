@@ -31,6 +31,12 @@ body {
   100% { background-position: 200% 0; }
 }
 
+@keyframes fadeTickOut {
+  0% { opacity: 1; transform: scale(1); }
+  70% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.8); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     transition-duration: 0.01ms !important;
