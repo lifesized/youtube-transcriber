@@ -119,6 +119,27 @@ body::-webkit-scrollbar-thumb:hover {
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.20);
 }
 
+/* Already transcribed */
+.already-transcribed {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.already-transcribed-text {
+  font-size: 13px;
+  color: var(--muted-3);
+}
+.already-transcribed-arrow {
+  color: var(--muted-3);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.already-transcribed:hover .already-transcribed-arrow {
+  opacity: 1;
+}
+
 /* Queue cards — matches web app queue items */
 .queue-card {
   border: 1px solid var(--border);
@@ -304,6 +325,10 @@ body::-webkit-scrollbar-thumb:hover {
   gap: 8px;
   min-width: 0;
   flex: 1;
+  transition: gap 0.3s ease;
+}
+.recent-item-content:not(:has(.recent-tick)) {
+  gap: 0;
 }
 .recent-text {
   min-width: 0;
@@ -325,11 +350,13 @@ body::-webkit-scrollbar-thumb:hover {
 }
 .recent-arrow {
   flex-shrink: 0;
-  color: rgba(255, 255, 255, 0.15);
-  transition: color 0.1s;
+  color: rgba(255, 255, 255, 0.25);
+  animation: fadeArrowOut 2s ease-out forwards;
 }
-.recent-item:hover .recent-arrow {
-  color: rgba(255, 255, 255, 0.4);
+@keyframes fadeArrowOut {
+  0% { opacity: 1; }
+  60% { opacity: 1; }
+  100% { opacity: 0; width: 0; }
 }
 
 /* Just-completed tick */
@@ -344,12 +371,13 @@ body::-webkit-scrollbar-thumb:hover {
   justify-content: center;
   color: var(--success);
   font-size: 10px;
-  animation: fadeTickOut 2s ease-in-out forwards;
+  animation: fadeTickOut 2s ease-out forwards;
 }
 @keyframes fadeTickOut {
-  0% { opacity: 1; transform: scale(1); }
-  70% { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(0.8); }
+  0% { opacity: 1; transform: scale(1); width: 18px; }
+  60% { opacity: 1; transform: scale(1); width: 18px; }
+  85% { opacity: 0; transform: scale(0.6); width: 18px; }
+  100% { opacity: 0; transform: scale(0); width: 0; }
 }
 
 .recent-item-new {

@@ -13,6 +13,7 @@ const el = {
   videoTitle: document.getElementById("videoTitle"),
   transcribingTitle: document.getElementById("transcribingTitle"),
   btnTranscribe: document.getElementById("btnTranscribe"),
+  btnAlreadyTranscribed: document.getElementById("btnAlreadyTranscribed"),
   progressText: document.getElementById("progressText"),
   errorMessage: document.getElementById("errorMessage"),
   btnRetry: document.getElementById("btnRetry"),
@@ -141,13 +142,19 @@ function showCompletedAndReturn(completedId) {
 // Queue UI
 // ---------------------------------------------------------------------------
 
-function showQueuePrompt(transcribingUrl) {
+async function showQueuePrompt(transcribingUrl) {
   if (!pageInfo?.videoId) {
     el.queuePrompt.hidden = true;
     return;
   }
   // Don't show queue prompt if this video is already being transcribed
   if (transcribingUrl && pageInfo.url === transcribingUrl) {
+    el.queuePrompt.hidden = true;
+    return;
+  }
+  // Don't show queue prompt if this video is already transcribed
+  const existingRes = await sendMsg({ type: "CHECK_EXISTING", videoId: pageInfo.videoId });
+  if (existingRes?.success && existingRes.data) {
     el.queuePrompt.hidden = true;
     return;
   }
@@ -209,11 +216,22 @@ async function loadRecent() {
           <span class="recent-meta">${escapeHtml(t.author)} &middot; ${formatDate(t.createdAt)}</span>
         </div>
       </div>
-      <svg class="recent-arrow" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      ${isNew ? `<svg class="recent-arrow" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M7 4l6 6-6 6"/>
-      </svg>
+      </svg>` : ""}
     `;
     el.recentList.appendChild(item);
+
+    // After animation ends, remove tick + arrow and reset item to normal
+    if (isNew) {
+      setTimeout(() => {
+        item.classList.remove("recent-item-new");
+        const tick = item.querySelector(".recent-tick");
+        const arrow = item.querySelector(".recent-arrow");
+        if (tick) tick.remove();
+        if (arrow) arrow.remove();
+      }, 2000);
+    }
   }
 }
 
@@ -232,12 +250,38 @@ function extractVideoId(url) {
   return null;
 }
 
+let existingTranscriptId = null;
+let pageStateVersion = 0;
+
 async function showCurrentPageState() {
+  existingTranscriptId = null;
+  const version = ++pageStateVersion;
+
   if (!pageInfo?.videoId) {
     showState("NotYoutube");
+    return;
+  }
+
+  el.videoTitle.textContent = pageInfo.title || pageInfo.url;
+
+  // Hide both buttons until we know which to show
+  el.btnTranscribe.hidden = true;
+  el.btnAlreadyTranscribed.hidden = true;
+  showState("Ready");
+
+  // Check if this video was already transcribed
+  const existingRes = await sendMsg({ type: "CHECK_EXISTING", videoId: pageInfo.videoId });
+
+  // Stale check — a newer call has taken over
+  if (version !== pageStateVersion) return;
+
+  if (existingRes?.success && existingRes.data) {
+    existingTranscriptId = existingRes.data.id;
+    el.btnTranscribe.hidden = true;
+    el.btnAlreadyTranscribed.hidden = false;
   } else {
-    el.videoTitle.textContent = pageInfo.title || pageInfo.url;
-    showState("Ready");
+    el.btnTranscribe.hidden = false;
+    el.btnAlreadyTranscribed.hidden = true;
   }
 }
 
@@ -248,6 +292,8 @@ async function init() {
     if (tab) {
       const videoId = extractVideoId(tab.url || "");
       pageInfo = { url: tab.url, title: tab.title, videoId };
+      currentTabUrl = tab.url;
+      currentTabId = tab.id;
     }
   } catch { /* ignore */ }
 
@@ -372,6 +418,13 @@ async function processQueue() {
 el.btnTranscribe.addEventListener("click", doTranscribe);
 el.btnRetry.addEventListener("click", doTranscribe);
 
+el.btnAlreadyTranscribed.addEventListener("click", (e) => {
+  e.preventDefault();
+  if (existingTranscriptId) {
+    openTranscript(`${API_APP_BASE}/?id=${existingTranscriptId}`);
+  }
+});
+
 el.btnQueue.addEventListener("click", async () => {
   if (!pageInfo?.url) return;
   await sendMsg({
@@ -388,20 +441,29 @@ el.btnQueue.addEventListener("click", async () => {
 // ---------------------------------------------------------------------------
 
 let currentTabUrl = null;
+let currentTabId = null;
 
 chrome.tabs.onActivated?.addListener(async () => {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab?.url && tab.url !== currentTabUrl) {
       currentTabUrl = tab.url;
+      currentTabId = tab.id;
       init();
     }
   } catch { /* ignore */ }
 });
 
 chrome.tabs.onUpdated?.addListener((tabId, changeInfo) => {
+  // Only react to changes in the active tab
+  if (tabId !== currentTabId) return;
+
   if (changeInfo.url && changeInfo.url !== currentTabUrl) {
     currentTabUrl = changeInfo.url;
+    init();
+  }
+  // YouTube SPA navigations update the title after the URL — re-init to pick up the new title
+  if (changeInfo.title) {
     init();
   }
 });

@@ -19,10 +19,14 @@
       <p class="submessage">Open any YouTube video to transcribe it</p>
     </div>
 
-    <!-- Ready (not yet transcribed) -->
+    <!-- Ready (not yet transcribed, or already transcribed) -->
     <div id="stateReady" class="state" hidden>
       <h1 class="panel-title" id="videoTitle"></h1>
       <button class="btn-transcribe" id="btnTranscribe">Transcribe</button>
+      <a class="already-transcribed" id="btnAlreadyTranscribed" href="#" hidden>
+        <span class="already-transcribed-text">Already transcribed</span>
+        <svg class="already-transcribed-arrow" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4l6 6-6 6"/></svg>
+      </a>
     </div>
 
     <!-- Transcribing -->
