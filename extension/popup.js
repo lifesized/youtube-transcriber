@@ -9,14 +9,11 @@ const el = {
   stateNotYoutube: document.getElementById("stateNotYoutube"),
   stateReady: document.getElementById("stateReady"),
   stateTranscribing: document.getElementById("stateTranscribing"),
-  stateTranscribed: document.getElementById("stateTranscribed"),
   stateError: document.getElementById("stateError"),
   videoTitle: document.getElementById("videoTitle"),
   transcribingTitle: document.getElementById("transcribingTitle"),
   btnTranscribe: document.getElementById("btnTranscribe"),
   progressText: document.getElementById("progressText"),
-  transcribedTitle: document.getElementById("transcribedTitle"),
-  btnView: document.getElementById("btnView"),
   errorMessage: document.getElementById("errorMessage"),
   btnRetry: document.getElementById("btnRetry"),
   recentSection: document.getElementById("recentSection"),
@@ -29,7 +26,7 @@ const el = {
 
 let pageInfo = null;
 let progressTimer = null;
-let currentTranscriptUrl = null;
+let justCompletedId = null;
 
 // ---------------------------------------------------------------------------
 // Progress bar
@@ -100,7 +97,6 @@ const ALL_STATES = [
   "NotYoutube",
   "Ready",
   "Transcribing",
-  "Transcribed",
   "Error",
 ];
 
@@ -133,10 +129,12 @@ async function openTranscript(url) {
   await sendMsg({ type: "OPEN_TRANSCRIPT", id: transcriptId });
 }
 
-function showTranscribed(title, transcriptUrl) {
-  currentTranscriptUrl = transcriptUrl;
-  el.transcribedTitle.textContent = title || "Untitled";
-  showState("Transcribed");
+function showCompletedAndReturn(completedId) {
+  // Highlight the new transcript in the recent list, then show normal page state
+  justCompletedId = completedId;
+  setTimeout(() => { justCompletedId = null; }, 2000);
+  showCurrentPageState();
+  loadRecent();
 }
 
 // ---------------------------------------------------------------------------
@@ -195,16 +193,25 @@ async function loadRecent() {
   el.recentSection.hidden = false;
   el.recentList.innerHTML = "";
   for (const t of res.data) {
+    const isNew = justCompletedId && t.id === justCompletedId;
     const item = document.createElement("a");
-    item.className = "recent-item";
+    item.className = `recent-item${isNew ? " recent-item-new" : ""}`;
     item.href = "#";
     item.addEventListener("click", (e) => {
       e.preventDefault();
       openTranscript(`${API_APP_BASE}/?id=${t.id}`);
     });
     item.innerHTML = `
-      <span class="recent-title">${escapeHtml(t.title)}</span>
-      <span class="recent-meta">${escapeHtml(t.author)} &middot; ${formatDate(t.createdAt)}</span>
+      <div class="recent-item-content">
+        ${isNew ? '<span class="recent-tick">&#10003;</span>' : ""}
+        <div class="recent-text">
+          <span class="recent-title">${escapeHtml(t.title)}</span>
+          <span class="recent-meta">${escapeHtml(t.author)} &middot; ${formatDate(t.createdAt)}</span>
+        </div>
+      </div>
+      <svg class="recent-arrow" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M7 4l6 6-6 6"/>
+      </svg>
     `;
     el.recentList.appendChild(item);
   }
@@ -223,6 +230,15 @@ function extractVideoId(url) {
     if (u.pathname.startsWith("/embed/")) return u.pathname.split("/embed/")[1]?.split("/")[0];
   } catch { /* ignore */ }
   return null;
+}
+
+async function showCurrentPageState() {
+  if (!pageInfo?.videoId) {
+    showState("NotYoutube");
+  } else {
+    el.videoTitle.textContent = pageInfo.title || pageInfo.url;
+    showState("Ready");
+  }
 }
 
 async function init() {
@@ -250,10 +266,8 @@ async function init() {
       return;
     }
     if (pending.status === "done" && pending.result) {
-      const url = `${API_APP_BASE}/?id=${pending.result.id}`;
-      showTranscribed(pending.result.title || pending.title, url);
       await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
-      loadRecent();
+      showCompletedAndReturn(pending.result.id);
       return;
     }
     if (pending.status === "error") {
@@ -275,19 +289,7 @@ async function init() {
   }
 
   // 2. Show page state
-  if (!pageInfo?.videoId) {
-    showState("NotYoutube");
-  } else {
-    // Check if this video was already transcribed
-    const existingRes = await sendMsg({ type: "CHECK_EXISTING", videoId: pageInfo.videoId });
-    if (existingRes?.success && existingRes.data) {
-      const url = `${API_APP_BASE}/?id=${existingRes.data.id}`;
-      showTranscribed(existingRes.data.title || pageInfo.title, url);
-    } else {
-      el.videoTitle.textContent = pageInfo.title || pageInfo.url;
-      showState("Ready");
-    }
-  }
+  showCurrentPageState();
 
   // 3. Load recent
   loadRecent();
@@ -308,10 +310,8 @@ function pollTranscriptionStatus() {
     if (pending.status === "done" && pending.result) {
       clearInterval(interval);
       stopProgress();
-      const url = `${API_APP_BASE}/?id=${pending.result.id}`;
-      showTranscribed(pending.result.title || pending.title, url);
       await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
-      loadRecent();
+      showCompletedAndReturn(pending.result.id);
     } else if (pending.status === "error") {
       clearInterval(interval);
       stopProgress();
@@ -343,12 +343,9 @@ async function doTranscribe() {
   stopProgress();
 
   if (res?.success && res.data?.id) {
-    const url = `${API_APP_BASE}/?id=${res.data.id}`;
-    showTranscribed(pageInfo.title || res.data.title, url);
     await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
-    // Process next in queue
+    showCompletedAndReturn(res.data.id);
     processQueue();
-    loadRecent();
   } else {
     el.errorMessage.textContent = res?.error || "Transcription failed";
     showState("Error");
@@ -374,10 +371,6 @@ async function processQueue() {
 
 el.btnTranscribe.addEventListener("click", doTranscribe);
 el.btnRetry.addEventListener("click", doTranscribe);
-
-el.btnView.addEventListener("click", () => {
-  if (currentTranscriptUrl) openTranscript(currentTranscriptUrl);
-});
 
 el.btnQueue.addEventListener("click", async () => {
   if (!pageInfo?.url) return;

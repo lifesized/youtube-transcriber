@@ -28,6 +28,21 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+body::-webkit-scrollbar {
+  width: 6px;
+}
+body::-webkit-scrollbar-track {
+  background: transparent;
+}
+body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .popup {
@@ -80,42 +95,28 @@ body {
 /* Transcribe button */
 .btn-transcribe {
   width: 100%;
-  height: 44px;
-  border: none;
-  border-radius: 12px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.08) 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.15),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.15),
-    0 1px 3px rgba(0, 0, 0, 0.3),
-    0 4px 12px rgba(0, 0, 0, 0.15);
+  height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.15);
   color: #fff;
   font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 .btn-transcribe:hover {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.24) 0%, rgba(255, 255, 255, 0.12) 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.15),
-    0 2px 6px rgba(0, 0, 0, 0.35),
-    0 6px 20px rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 0.22);
+  border-color: var(--border-hover);
 }
 .btn-transcribe:active {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.06) 100%);
-  box-shadow:
-    inset 0 1px 2px rgba(0, 0, 0, 0.2),
-    0 1px 2px rgba(0, 0, 0, 0.2);
-  transform: scale(0.99);
+  background: rgba(255, 255, 255, 0.12);
+  transform: scale(0.98);
 }
 .btn-transcribe:focus-visible {
   outline: none;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.15),
-    0 0 0 2px rgba(255, 255, 255, 0.25);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.20);
 }
 
 /* Queue cards — matches web app queue items */
@@ -228,50 +229,6 @@ body {
   gap: 0;
 }
 
-/* Transcribed */
-.transcribed-header {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-.transcribed-header .panel-title {
-  flex: 1;
-}
-.transcribed-badge {
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  background: rgba(34, 197, 94, 0.12);
-  border: 1px solid rgba(34, 197, 94, 0.25);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--success);
-  font-size: 11px;
-  margin-top: 1px;
-}
-.btn-view {
-  width: 100%;
-  height: 40px;
-  border: 1px solid rgba(255, 255, 255, 0.20);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.btn-view:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: var(--border-hover);
-}
-.btn-view:active {
-  background: rgba(255, 255, 255, 0.06);
-  transform: scale(0.98);
-}
-
 /* Error */
 .error-message {
   font-size: 13px;
@@ -313,9 +270,26 @@ body {
   gap: 2px;
   max-height: 280px;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+.recent-list::-webkit-scrollbar {
+  width: 4px;
+}
+.recent-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.recent-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+}
+.recent-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
 .recent-item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 10px;
   border-radius: 8px;
   text-decoration: none;
@@ -323,6 +297,17 @@ body {
 }
 .recent-item:hover {
   background: rgba(255, 255, 255, 0.05);
+}
+.recent-item-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.recent-text {
+  min-width: 0;
+  flex: 1;
 }
 .recent-title {
   display: block;
@@ -337,4 +322,42 @@ body {
   font-size: 11px;
   color: var(--muted-3);
   margin-top: 2px;
+}
+.recent-arrow {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.15);
+  transition: color 0.1s;
+}
+.recent-item:hover .recent-arrow {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* Just-completed tick */
+.recent-tick {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  background: rgba(34, 197, 94, 0.12);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--success);
+  font-size: 10px;
+  animation: fadeTickOut 2s ease-in-out forwards;
+}
+@keyframes fadeTickOut {
+  0% { opacity: 1; transform: scale(1); }
+  70% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.8); }
+}
+
+.recent-item-new {
+  background: rgba(34, 197, 94, 0.04);
+  animation: newItemFade 2s ease-in-out forwards;
+}
+@keyframes newItemFade {
+  0% { background: rgba(34, 197, 94, 0.04); }
+  70% { background: rgba(34, 197, 94, 0.04); }
+  100% { background: transparent; }
 }
