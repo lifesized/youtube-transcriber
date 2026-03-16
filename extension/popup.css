@@ -39,7 +39,7 @@ body {
 
 /* State containers */
 .state {
-  padding: 20px 0;
+  padding: 4px 0;
 }
 .state.centered {
   text-align: center;
@@ -80,28 +80,42 @@ body {
 /* Transcribe button */
 .btn-transcribe {
   width: 100%;
-  height: 40px;
-  border: 1px solid rgba(255, 255, 255, 0.20);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.15);
+  height: 44px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.08) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.15),
+    0 1px 3px rgba(0, 0, 0, 0.3),
+    0 4px 12px rgba(0, 0, 0, 0.15);
   color: #fff;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   cursor: pointer;
-  transition: all 0.15s;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
 }
 .btn-transcribe:hover {
-  background: rgba(255, 255, 255, 0.22);
-  border-color: var(--border-hover);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.24) 0%, rgba(255, 255, 255, 0.12) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.15),
+    0 2px 6px rgba(0, 0, 0, 0.35),
+    0 6px 20px rgba(0, 0, 0, 0.2);
 }
 .btn-transcribe:active {
-  background: rgba(255, 255, 255, 0.12);
-  transform: scale(0.98);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.06) 100%);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.2),
+    0 1px 2px rgba(0, 0, 0, 0.2);
+  transform: scale(0.99);
 }
 .btn-transcribe:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.20);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    0 0 0 2px rgba(255, 255, 255, 0.25);
 }
 
 /* Queue cards — matches web app queue items */

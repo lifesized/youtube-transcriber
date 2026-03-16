@@ -143,8 +143,13 @@ function showTranscribed(title, transcriptUrl) {
 // Queue UI
 // ---------------------------------------------------------------------------
 
-function showQueuePrompt() {
+function showQueuePrompt(transcribingUrl) {
   if (!pageInfo?.videoId) {
+    el.queuePrompt.hidden = true;
+    return;
+  }
+  // Don't show queue prompt if this video is already being transcribed
+  if (transcribingUrl && pageInfo.url === transcribingUrl) {
     el.queuePrompt.hidden = true;
     return;
   }
@@ -238,7 +243,7 @@ async function init() {
       el.transcribingTitle.textContent = pending.title || "Transcribing...";
       showState("Transcribing");
       startIndeterminate();
-      showQueuePrompt();
+      showQueuePrompt(pending.url);
       renderQueueList();
       pollTranscriptionStatus();
       loadRecent();
