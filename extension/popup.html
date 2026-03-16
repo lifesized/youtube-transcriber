@@ -6,14 +6,6 @@
 </head>
 <body>
   <div class="popup">
-    <!-- Header -->
-    <div class="header">
-      <div class="header-left">
-        <img class="logo" src="icons/icon48.png" width="20" height="20" alt="">
-        <span class="header-title">YouTube Transcriber</span>
-      </div>
-    </div>
-
     <!-- No Service -->
     <div id="stateNoService" class="state" hidden>
       <p class="message">Service offline</p>
@@ -27,7 +19,7 @@
       <p class="submessage">Open any YouTube video to transcribe it</p>
     </div>
 
-    <!-- Ready -->
+    <!-- Ready (not yet transcribed) -->
     <div id="stateReady" class="state" hidden>
       <div class="video-info">
         <div class="video-title" id="videoTitle"></div>
@@ -52,11 +44,15 @@
       <div id="queueList" class="queue-list" hidden></div>
     </div>
 
-    <!-- Done -->
-    <div id="stateDone" class="state" hidden>
-      <div class="success-icon">&#10003;</div>
-      <p class="message">Transcription complete</p>
-      <a class="btn-open" id="btnOpen" target="_blank">Open in app</a>
+    <!-- Transcribed (already exists or just finished) -->
+    <div id="stateTranscribed" class="state" hidden>
+      <div class="video-info transcribed-info">
+        <div class="transcribed-row">
+          <div class="video-title" id="transcribedTitle"></div>
+          <span class="transcribed-badge">&#10003;</span>
+        </div>
+      </div>
+      <button class="btn-view" id="btnView">View transcript</button>
     </div>
 
     <!-- Error -->

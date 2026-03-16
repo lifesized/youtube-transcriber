@@ -6,13 +6,14 @@ const el = {
   stateNotYoutube: document.getElementById("stateNotYoutube"),
   stateReady: document.getElementById("stateReady"),
   stateTranscribing: document.getElementById("stateTranscribing"),
-  stateDone: document.getElementById("stateDone"),
+  stateTranscribed: document.getElementById("stateTranscribed"),
   stateError: document.getElementById("stateError"),
   videoTitle: document.getElementById("videoTitle"),
   transcribingTitle: document.getElementById("transcribingTitle"),
   btnTranscribe: document.getElementById("btnTranscribe"),
   progressText: document.getElementById("progressText"),
-  btnOpen: document.getElementById("btnOpen"),
+  transcribedTitle: document.getElementById("transcribedTitle"),
+  btnView: document.getElementById("btnView"),
   errorMessage: document.getElementById("errorMessage"),
   btnRetry: document.getElementById("btnRetry"),
   recentSection: document.getElementById("recentSection"),
@@ -25,6 +26,7 @@ const el = {
 
 let pageInfo = null;
 let progressTimer = null;
+let currentTranscriptUrl = null;
 
 // ---------------------------------------------------------------------------
 // Progress bar
@@ -95,7 +97,7 @@ const ALL_STATES = [
   "NotYoutube",
   "Ready",
   "Transcribing",
-  "Done",
+  "Transcribed",
   "Error",
 ];
 
@@ -117,6 +119,21 @@ function formatDate(iso) {
     month: "short",
     day: "numeric",
   });
+}
+
+// ---------------------------------------------------------------------------
+// Open transcript in app — reuse existing app tab
+// ---------------------------------------------------------------------------
+
+async function openTranscript(url) {
+  const transcriptId = new URL(url).searchParams.get("id");
+  await sendMsg({ type: "OPEN_TRANSCRIPT", id: transcriptId });
+}
+
+function showTranscribed(title, transcriptUrl) {
+  currentTranscriptUrl = transcriptUrl;
+  el.transcribedTitle.textContent = title || "Untitled";
+  showState("Transcribed");
 }
 
 // ---------------------------------------------------------------------------
@@ -164,8 +181,11 @@ async function loadRecent() {
   for (const t of res.data) {
     const item = document.createElement("a");
     item.className = "recent-item";
-    item.href = `${API_APP_BASE}/transcripts/${t.id}`;
-    item.target = "_blank";
+    item.href = "#";
+    item.addEventListener("click", (e) => {
+      e.preventDefault();
+      openTranscript(`${API_APP_BASE}/?id=${t.id}`);
+    });
     item.innerHTML = `
       <span class="recent-title">${escapeHtml(t.title)}</span>
       <span class="recent-meta">${escapeHtml(t.author)} &middot; ${formatDate(t.createdAt)}</span>
@@ -190,7 +210,7 @@ function extractVideoId(url) {
 }
 
 async function init() {
-  // Get active tab directly — no dependency on content script or background messaging
+  // Get active tab directly
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab) {
@@ -214,8 +234,8 @@ async function init() {
       return;
     }
     if (pending.status === "done" && pending.result) {
-      el.btnOpen.href = `${API_APP_BASE}/transcripts/${pending.result.id}`;
-      showState("Done");
+      const url = `${API_APP_BASE}/?id=${pending.result.id}`;
+      showTranscribed(pending.result.title || pending.title, url);
       await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
       loadRecent();
       return;
@@ -242,8 +262,15 @@ async function init() {
   if (!pageInfo?.videoId) {
     showState("NotYoutube");
   } else {
-    el.videoTitle.textContent = pageInfo.title || pageInfo.url;
-    showState("Ready");
+    // Check if this video was already transcribed
+    const existingRes = await sendMsg({ type: "CHECK_EXISTING", videoId: pageInfo.videoId });
+    if (existingRes?.success && existingRes.data) {
+      const url = `${API_APP_BASE}/?id=${existingRes.data.id}`;
+      showTranscribed(existingRes.data.title || pageInfo.title, url);
+    } else {
+      el.videoTitle.textContent = pageInfo.title || pageInfo.url;
+      showState("Ready");
+    }
   }
 
   // 3. Load recent
@@ -265,8 +292,8 @@ function pollTranscriptionStatus() {
     if (pending.status === "done" && pending.result) {
       clearInterval(interval);
       stopProgress();
-      el.btnOpen.href = `${API_APP_BASE}/transcripts/${pending.result.id}`;
-      showState("Done");
+      const url = `${API_APP_BASE}/?id=${pending.result.id}`;
+      showTranscribed(pending.result.title || pending.title, url);
       await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
       loadRecent();
     } else if (pending.status === "error") {
@@ -300,8 +327,8 @@ async function doTranscribe() {
   stopProgress();
 
   if (res?.success && res.data?.id) {
-    el.btnOpen.href = `${API_APP_BASE}/transcripts/${res.data.id}`;
-    showState("Done");
+    const url = `${API_APP_BASE}/?id=${res.data.id}`;
+    showTranscribed(pageInfo.title || res.data.title, url);
     await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
     // Process next in queue
     processQueue();
@@ -316,7 +343,6 @@ async function doTranscribe() {
 async function processQueue() {
   const res = await sendMsg({ type: "PROCESS_QUEUE" });
   if (res?.success && res.data?.processing) {
-    // A queued item is now being transcribed — switch to transcribing state
     el.transcribingTitle.textContent = res.data.title || "Transcribing...";
     showState("Transcribing");
     startIndeterminate();
@@ -332,6 +358,10 @@ async function processQueue() {
 
 el.btnTranscribe.addEventListener("click", doTranscribe);
 el.btnRetry.addEventListener("click", doTranscribe);
+
+el.btnView.addEventListener("click", () => {
+  if (currentTranscriptUrl) openTranscript(currentTranscriptUrl);
+});
 
 el.btnQueue.addEventListener("click", async () => {
   if (!pageInfo?.url) return;

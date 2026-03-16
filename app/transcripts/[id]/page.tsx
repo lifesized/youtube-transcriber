@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
 
-export default function TranscriptPage({
+export default async function TranscriptPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  redirect(`/?id=${encodeURIComponent(params.id)}`);
+  const { id } = await params;
+  redirect(`/?id=${encodeURIComponent(id)}`);
 }

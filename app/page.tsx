@@ -435,6 +435,12 @@ function HomeInner() {
 
     addDebugEvent("video.selection.change", `selectedId=${selectedId}`);
     fetchSelectedVideo(selectedId);
+
+    // Auto-scroll to the selected transcript
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-transcript-id="${selectedId}"]`);
+      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }, [addDebugEvent, selectedId]);
 
   useEffect(() => {

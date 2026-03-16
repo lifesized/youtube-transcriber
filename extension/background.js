@@ -84,6 +84,13 @@ async function getRecent() {
   return all.slice(0, 5);
 }
 
+async function checkExisting(videoId) {
+  const res = await fetch(`${API_BASE}/api/transcripts`);
+  if (!res.ok) return null;
+  const all = await res.json();
+  return all.find((t) => t.videoId === videoId) || null;
+}
+
 // ---------------------------------------------------------------------------
 // Core transcribe — runs in background, persists state
 // ---------------------------------------------------------------------------
@@ -163,6 +170,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "GET_RECENT":
         return await getRecent();
 
+      case "CHECK_EXISTING":
+        return await checkExisting(message.videoId);
+
       case "QUEUE_ADD": {
         const queue = await getQueue();
         const already = queue.some((q) => q.url === message.url);
@@ -178,6 +188,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case "PROCESS_QUEUE":
         return await processNextInQueue();
+
+      case "OPEN_TRANSCRIPT": {
+        const transcriptId = message.id;
+        const fullUrl = `${API_BASE}/?id=${transcriptId}`;
+
+        // Find existing app tab
+        const allTabs = await chrome.tabs.query({});
+        const appTab = allTabs.find((t) => t.url && t.url.includes("localhost:19720"));
+
+        if (appTab) {
+          // Reuse existing tab — navigate it to the transcript
+          await chrome.tabs.update(appTab.id, { url: fullUrl, active: true });
+          await chrome.windows.update(appTab.windowId, { focused: true });
+        } else {
+          await chrome.tabs.create({ url: fullUrl, active: true });
+        }
+        return { ok: true };
+      }
 
       case "PAGE_INFO":
       case "PAGE_CHANGED":
