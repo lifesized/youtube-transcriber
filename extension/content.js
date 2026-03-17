@@ -65,3 +65,23 @@ function onFullscreenChange() {
 }
 document.addEventListener("fullscreenchange", onFullscreenChange);
 document.addEventListener("webkitfullscreenchange", onFullscreenChange);
+
+// YouTube's theater/fullscreen can also be detected via player class changes
+const ytObserver = new MutationObserver(() => {
+  const player = document.getElementById("movie_player");
+  if (player?.classList.contains("ytp-fullscreen")) {
+    try {
+      chrome.runtime.sendMessage({ type: "CLOSE_PANEL" });
+    } catch { /* ignore */ }
+  }
+});
+// Observe the player element once it exists
+function watchPlayer() {
+  const player = document.getElementById("movie_player");
+  if (player) {
+    ytObserver.observe(player, { attributes: true, attributeFilter: ["class"] });
+  } else {
+    setTimeout(watchPlayer, 1000);
+  }
+}
+watchPlayer();

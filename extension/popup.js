@@ -30,6 +30,7 @@ let pageInfo = null;
 let progressTimer = null;
 let justCompletedId = null;
 let pollInterval = null;
+let isTranscribing = false;
 
 // ---------------------------------------------------------------------------
 // Progress bar
@@ -330,6 +331,7 @@ async function init() {
   if (statusRes?.success && statusRes.data) {
     const pending = statusRes.data;
     if (pending.status === "transcribing") {
+      isTranscribing = true;
       el.transcribingTitle.textContent = pending.title || "Transcribing...";
       showState("Transcribing");
       // Only restart animation/polling if not already running — prevents
@@ -416,6 +418,7 @@ function pollTranscriptionStatus() {
 async function doTranscribe() {
   if (!pageInfo?.url) return;
 
+  isTranscribing = true;
   el.transcribingTitle.textContent = pageInfo.title || "Transcribing...";
   showState("Transcribing");
   startProgress();
@@ -427,6 +430,7 @@ async function doTranscribe() {
     title: pageInfo.title,
   });
 
+  isTranscribing = false;
   stopProgress();
 
   if (res?.success && res.data?.id) {
@@ -467,6 +471,7 @@ el.btnAlreadyTranscribed.addEventListener("click", (e) => {
 });
 
 el.btnCancel.addEventListener("click", async () => {
+  isTranscribing = false;
   stopProgress();
   stopPolling();
   await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
@@ -500,7 +505,15 @@ chrome.tabs.onActivated?.addListener(async () => {
     if (tab?.url && tab.url !== currentTabUrl) {
       currentTabUrl = tab.url;
       currentTabId = tab.id;
-      init();
+      // During active transcription, only update page info for queue prompt —
+      // don't re-init which would clobber the progress animation
+      if (isTranscribing) {
+        const videoId = extractVideoId(tab.url || "");
+        pageInfo = { url: tab.url, title: tab.title, videoId };
+        showQueuePrompt();
+      } else {
+        init();
+      }
     }
   } catch { /* ignore */ }
 });
@@ -508,14 +521,15 @@ chrome.tabs.onActivated?.addListener(async () => {
 chrome.tabs.onUpdated?.addListener((tabId, changeInfo) => {
   // Only react to changes in the active tab
   if (tabId !== currentTabId) return;
+  // Skip all tab-change events during active transcription
+  if (isTranscribing) return;
 
   if (changeInfo.url && changeInfo.url !== currentTabUrl) {
     currentTabUrl = changeInfo.url;
     init();
   }
   // YouTube SPA navigations update the title after the URL — re-init to pick up the new title
-  // But skip during active transcription to avoid clobbering the progress UI
-  if (changeInfo.title && !pollInterval) {
+  if (changeInfo.title) {
     init();
   }
 });
