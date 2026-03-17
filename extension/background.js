@@ -153,6 +153,22 @@ async function processNextInQueue() {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const handle = async () => {
     switch (message.type) {
+      case "CLOSE_PANEL": {
+        const tabWindowId = sender.tab?.windowId;
+        if (tabWindowId) {
+          try {
+            await chrome.sidePanel.close({ windowId: tabWindowId });
+          } catch {
+            // Fallback: disable and re-enable to force close
+            try {
+              await chrome.sidePanel.setOptions({ enabled: false });
+              await chrome.sidePanel.setOptions({ enabled: true, path: "popup.html" });
+            } catch { /* ignore */ }
+          }
+        }
+        return { ok: true };
+      }
+
       case "CHECK_SERVICE":
         return await checkService();
 

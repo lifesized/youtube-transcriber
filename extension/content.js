@@ -54,3 +54,14 @@ observer.observe(document.body, { childList: true, subtree: true });
 window.addEventListener("yt-navigate-finish", () => {
   setTimeout(reportPageInfo, 300);
 });
+
+// Close side panel when entering fullscreen
+function onFullscreenChange() {
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
+    try {
+      chrome.runtime.sendMessage({ type: "CLOSE_PANEL" });
+    } catch { /* ignore */ }
+  }
+}
+document.addEventListener("fullscreenchange", onFullscreenChange);
+document.addEventListener("webkitfullscreenchange", onFullscreenChange);
