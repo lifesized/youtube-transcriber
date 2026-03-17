@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState, useRef, useCallback } from "react";
+import { Suspense, useEffect, useState, useRef, useCallback, Fragment } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LayoutGroup, motion } from "framer-motion";
 import type { TranscriptSegment } from "@/lib/types";
@@ -154,6 +154,7 @@ function HomeInner() {
   const [transcripts, setTranscripts] = useState<VideoSummary[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const [video, setVideo] = useState<VideoRecord | null>(null);
   const [videoLoading, setVideoLoading] = useState(false);
@@ -1107,44 +1108,53 @@ function HomeInner() {
                   onChange={(e) => setSearch(e.target.value)}
                 />
                 <IconButton
-                  onClick={() => setLibraryLayout("tiles")}
-                  className={`h-10 w-10 shrink-0 ${libraryLayout === "tiles" ? "bg-white/10 text-white" : ""}`}
-                  title="Tiles view"
+                  onClick={() => setLibraryLayout(libraryLayout === "list" ? "tiles" : "list")}
+                  className="h-9 w-9 shrink-0"
+                  title={libraryLayout === "list" ? "Switch to tiles" : "Switch to list"}
                 >
-                  <svg
-                    className="h-5 w-5 shrink-0"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.9"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    preserveAspectRatio="xMidYMid meet"
-                  >
-                    <rect x="3" y="3" width="7" height="7" rx="1.2" />
-                    <rect x="14" y="3" width="7" height="7" rx="1.2" />
-                    <rect x="3" y="14" width="7" height="7" rx="1.2" />
-                    <rect x="14" y="14" width="7" height="7" rx="1.2" />
-                  </svg>
+                  {libraryLayout === "list" ? (
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="7" height="7" rx="1.2" />
+                      <rect x="14" y="3" width="7" height="7" rx="1.2" />
+                      <rect x="3" y="14" width="7" height="7" rx="1.2" />
+                      <rect x="14" y="14" width="7" height="7" rx="1.2" />
+                    </svg>
+                  ) : (
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 7h16M4 12h16M4 17h16" />
+                    </svg>
+                  )}
                 </IconButton>
-                <IconButton
-                  onClick={() => setLibraryLayout("list")}
-                  className={`h-10 w-10 shrink-0 ${libraryLayout === "list" ? "bg-white/10 text-white" : ""}`}
-                  title="List view"
-                >
-                  <svg
-                    className="h-5 w-5 shrink-0"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.9"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    preserveAspectRatio="xMidYMid meet"
+                <div className="relative shrink-0">
+                  <IconButton
+                    onClick={() => setMenuOpen((v) => !v)}
+                    className="h-9 w-9"
+                    title="More options"
                   >
-                    <path d="M4 7h16M4 12h16M4 17h16" />
-                  </svg>
-                </IconButton>
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                      <circle cx="12" cy="5" r="1.5" />
+                      <circle cx="12" cy="12" r="1.5" />
+                      <circle cx="12" cy="19" r="1.5" />
+                    </svg>
+                  </IconButton>
+                  {menuOpen && (
+                    <Fragment>
+                      <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                      <div className="absolute right-0 top-full z-50 mt-1 min-w-[160px] rounded-lg border border-white/10 bg-[hsl(var(--panel-2))] py-1 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.8)]">
+                        <a
+                          href="/settings"
+                          className="flex items-center gap-2.5 px-3 py-2 text-sm text-white/70 transition-colors hover:bg-white/5 hover:text-white/90"
+                          onClick={() => setMenuOpen(false)}
+                        >
+                          <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                            <path fillRule="evenodd" d="M11.078 2.25c-.917 0-1.699.663-1.85 1.567L9.05 4.889c-.02.12-.115.26-.297.348a7.454 7.454 0 0 0-.986.57c-.166.115-.334.126-.45.083L6.3 5.508a1.875 1.875 0 0 0-2.282.819l-.922 1.597a1.875 1.875 0 0 0 .432 2.385l.84.692c.095.078.17.229.154.43a7.598 7.598 0 0 0 0 1.139c.015.2-.059.352-.153.43l-.841.692a1.875 1.875 0 0 0-.432 2.385l.922 1.597a1.875 1.875 0 0 0 2.282.818l1.019-.382c.115-.043.283-.031.45.082.312.214.641.405.985.57.182.088.277.228.297.35l.178 1.071c.151.904.933 1.567 1.85 1.567h1.844c.916 0 1.699-.663 1.85-1.567l.178-1.072c.02-.12.114-.26.297-.349.344-.165.673-.356.985-.57.167-.114.335-.125.45-.082l1.02.382a1.875 1.875 0 0 0 2.28-.819l.923-1.597a1.875 1.875 0 0 0-.432-2.385l-.84-.692c-.095-.078-.17-.229-.154-.43a7.614 7.614 0 0 0 0-1.139c-.016-.2.059-.352.153-.43l.84-.692c.708-.582.891-1.59.433-2.385l-.922-1.597a1.875 1.875 0 0 0-2.282-.818l-1.02.382c-.114.043-.282.031-.449-.083a7.49 7.49 0 0 0-.985-.57c-.183-.087-.277-.227-.297-.348l-.179-1.072a1.875 1.875 0 0 0-1.85-1.567h-1.843ZM12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5Z" clipRule="evenodd" />
+                          </svg>
+                          Settings
+                        </a>
+                      </div>
+                    </Fragment>
+                  )}
+                </div>
               </div>
 
               {libraryLoading ? (
@@ -1466,21 +1476,7 @@ function HomeInner() {
               )}
 
               {/* Footer */}
-              <div className="mt-8 flex items-center justify-between">
-                <a
-                  href="/settings"
-                  className="text-white/35 transition-colors hover:text-white/60"
-                  title="Settings"
-                >
-                  <svg
-                    className="h-5 w-5"
-                    fill="currentColor"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <path fillRule="evenodd" d="M11.078 2.25c-.917 0-1.699.663-1.85 1.567L9.05 4.889c-.02.12-.115.26-.297.348a7.454 7.454 0 0 0-.986.57c-.166.115-.334.126-.45.083L6.3 5.508a1.875 1.875 0 0 0-2.282.819l-.922 1.597a1.875 1.875 0 0 0 .432 2.385l.84.692c.095.078.17.229.154.43a7.598 7.598 0 0 0 0 1.139c.015.2-.059.352-.153.43l-.841.692a1.875 1.875 0 0 0-.432 2.385l.922 1.597a1.875 1.875 0 0 0 2.282.818l1.019-.382c.115-.043.283-.031.45.082.312.214.641.405.985.57.182.088.277.228.297.35l.178 1.071c.151.904.933 1.567 1.85 1.567h1.844c.916 0 1.699-.663 1.85-1.567l.178-1.072c.02-.12.114-.26.297-.349.344-.165.673-.356.985-.57.167-.114.335-.125.45-.082l1.02.382a1.875 1.875 0 0 0 2.28-.819l.923-1.597a1.875 1.875 0 0 0-.432-2.385l-.84-.692c-.095-.078-.17-.229-.154-.43a7.614 7.614 0 0 0 0-1.139c-.016-.2.059-.352.153-.43l.84-.692c.708-.582.891-1.59.433-2.385l-.922-1.597a1.875 1.875 0 0 0-2.282-.818l-1.02.382c-.114.043-.282.031-.449-.083a7.49 7.49 0 0 0-.985-.57c-.183-.087-.277-.227-.297-.348l-.179-1.072a1.875 1.875 0 0 0-1.85-1.567h-1.843ZM12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5Z" clipRule="evenodd" />
-                  </svg>
-                </a>
+              <div className="mt-8 flex items-center justify-end">
                 <a
                     href="https://github.com/lifesized/youtube-transcriber"
                     target="_blank"
