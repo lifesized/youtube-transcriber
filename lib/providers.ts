@@ -32,14 +32,15 @@ const PROVIDER_MODELS_ENDPOINTS: Record<Exclude<ProviderType, "custom">, string>
 
 export const DEFAULT_MODELS: Record<Exclude<ProviderType, "custom">, string> = {
   groq: "whisper-large-v3-turbo",
-  openrouter: "google/gemini-2.5-flash-lite",
+  openrouter: "google/gemini-2.5-flash",
 };
 
 export const OPENROUTER_MODELS = [
-  { id: "google/gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite (recommended)" },
-  { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-  { id: "openai/whisper-large-v3", label: "Whisper Large V3" },
-  { id: "deepgram/nova-2", label: "Deepgram Nova 2" },
+  { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash", tag: "recommended" },
+  { id: "google/gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", tag: "budget" },
+  { id: "google/gemini-2.0-flash-001", label: "Gemini 2.0 Flash", tag: "google" },
+  { id: "mistralai/voxtral-small-24b-2507", label: "Voxtral Small 24B", tag: "transcription" },
+  { id: "openai/gpt-audio-mini", label: "GPT Audio Mini", tag: "openai" },
 ];
 
 // ---------------------------------------------------------------------------

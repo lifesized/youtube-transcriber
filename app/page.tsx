@@ -914,7 +914,7 @@ function HomeInner() {
                 {url.trim() && (
                   <button
                     type="submit"
-                    className="btn-dither shrink-0 rounded-full border border-white/20 bg-white/10 px-8 py-3 font-(family-name:--font-geist-pixel) text-base font-medium tracking-wide text-white shadow-[0_8px_32px_-12px_rgba(0,0,0,0.4)] backdrop-blur-xl transition-all duration-150 hover:border-white/30 hover:bg-white/15 active:bg-white/10 active:scale-[0.98]"
+                    className="shrink-0 rounded-full border border-white/20 bg-white/10 px-8 py-3 font-(family-name:--font-geist-pixel) text-base font-medium tracking-wide text-white shadow-[0_8px_32px_-12px_rgba(0,0,0,0.4)] backdrop-blur-xl transition-all duration-150 hover:border-white/30 hover:bg-white/15 active:bg-white/10 active:scale-[0.98]"
                   >
                     {isProcessing ? "Add" : "Extract"}
                   </button>

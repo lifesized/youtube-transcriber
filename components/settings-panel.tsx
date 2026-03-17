@@ -41,22 +41,11 @@ const PROVIDER_PLACEHOLDERS: Record<ProviderType, string> = {
 };
 
 const OPENROUTER_MODELS = [
-  { id: "google/gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", tag: "recommended" },
   { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash", tag: "recommended" },
-  { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro", tag: "google" },
-  { id: "google/gemini-2.0-flash", label: "Gemini 2.0 Flash", tag: "google" },
-  { id: "google/gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite", tag: "google" },
-  { id: "openai/whisper-large-v3", label: "Whisper Large V3", tag: "openai" },
-  { id: "openai/gpt-4o-audio-preview", label: "GPT-4o Audio Preview", tag: "openai" },
-  { id: "openai/gpt-4o-mini-audio-preview", label: "GPT-4o Mini Audio Preview", tag: "openai" },
-  { id: "anthropic/claude-sonnet-4", label: "Claude Sonnet 4", tag: "anthropic" },
-  { id: "anthropic/claude-haiku-4", label: "Claude Haiku 4", tag: "anthropic" },
-  { id: "deepgram/nova-2", label: "Deepgram Nova 2", tag: "deepgram" },
-  { id: "deepgram/nova-3", label: "Deepgram Nova 3", tag: "deepgram" },
-  { id: "meta-llama/llama-4-scout", label: "Llama 4 Scout", tag: "meta" },
-  { id: "meta-llama/llama-4-maverick", label: "Llama 4 Maverick", tag: "meta" },
-  { id: "qwen/qwen-2.5-omni-7b", label: "Qwen 2.5 Omni 7B", tag: "qwen" },
-  { id: "elevenlabs/scribe", label: "ElevenLabs Scribe", tag: "elevenlabs" },
+  { id: "google/gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", tag: "budget" },
+  { id: "google/gemini-2.0-flash-001", label: "Gemini 2.0 Flash", tag: "google" },
+  { id: "mistralai/voxtral-small-24b-2507", label: "Voxtral Small 24B", tag: "transcription" },
+  { id: "openai/gpt-audio-mini", label: "GPT Audio Mini", tag: "openai" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -242,6 +231,10 @@ export function SettingsPanel() {
   const [providers, setProviders] = useState<ProviderRow[]>([]);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, { success: boolean; error?: string }>>({});
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newProvider, setNewProvider] = useState<ProviderType>("openrouter");
+  const [newApiKey, setNewApiKey] = useState("");
+  const [addSaving, setAddSaving] = useState(false);
   const [usageSeconds, setUsageSeconds] = useState(0);
   const [usageDate, setUsageDate] = useState("");
   const [loading, setLoading] = useState(true);
@@ -452,7 +445,7 @@ export function SettingsPanel() {
                       <ModelSelect
                         value={p.model || ""}
                         onChange={(val) => handleUpdateModel(p.id, val)}
-                        placeholder="google/gemini-2.5-flash-lite"
+                        placeholder="google/gemini-2.5-flash"
                         models={OPENROUTER_MODELS}
                       />
                     </div>
@@ -468,6 +461,79 @@ export function SettingsPanel() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {!showAddForm ? (
+          <button
+            onClick={() => {
+              const used = new Set(providers.map((p) => p.provider));
+              const available: ProviderType[] = (["openrouter", "groq", "custom"] as ProviderType[]).filter((t) => !used.has(t));
+              if (available.length === 0) return;
+              setNewProvider(available[0]);
+              setNewApiKey("");
+              setShowAddForm(true);
+            }}
+            className="text-sm text-white/30 transition-colors hover:text-white/60"
+          >
+            + Add provider
+          </button>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <select
+                value={newProvider}
+                onChange={(e) => setNewProvider(e.target.value as ProviderType)}
+                className="h-9 rounded-lg border border-white/10 bg-[hsl(var(--panel))] px-3 text-sm text-white/90 focus:outline-none"
+              >
+                {!providers.some((p) => p.provider === "openrouter") && <option value="openrouter">OpenRouter</option>}
+                {!providers.some((p) => p.provider === "groq") && <option value="groq">Groq</option>}
+                <option value="custom">Custom</option>
+              </select>
+              <input
+                type="password"
+                value={newApiKey}
+                onChange={(e) => setNewApiKey(e.target.value)}
+                placeholder="API key"
+                className="h-9 flex-1 rounded-lg border border-white/10 bg-[hsl(var(--panel))] px-3 text-sm text-white/90 placeholder:text-white/25 focus:outline-none"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={async () => {
+                  if (!newApiKey.trim()) return;
+                  setAddSaving(true);
+                  try {
+                    const res = await fetch("/api/settings/providers", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        provider: newProvider,
+                        apiKey: newApiKey.trim(),
+                        priority: providers.length,
+                      }),
+                    });
+                    if (res.ok) {
+                      setShowAddForm(false);
+                      setNewApiKey("");
+                      await loadSettings();
+                    }
+                  } finally {
+                    setAddSaving(false);
+                  }
+                }}
+                disabled={addSaving || !newApiKey.trim()}
+                className="text-sm text-white/50 transition-colors hover:text-white/80 disabled:opacity-40"
+              >
+                {addSaving ? "Saving..." : "Save"}
+              </button>
+              <button
+                onClick={() => { setShowAddForm(false); setNewApiKey(""); }}
+                className="text-sm text-white/30 transition-colors hover:text-white/50"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         )}
 
