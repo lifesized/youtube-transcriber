@@ -8,6 +8,7 @@ const ALLOWED_KEYS = [
   "groq_usage_seconds",
   "groq_usage_date",
   "whisper_enabled",
+  "whisper_priority",
 ];
 
 function maskApiKey(key: string): string {

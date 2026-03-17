@@ -3,7 +3,7 @@ import { promises as fs } from "fs";
 import { extractVideoId } from "./youtube";
 import { transcribeWithWhisper, downloadAudio, type ProgressCallback } from "./whisper";
 import { transcribeWithCloudWhisper, getCloudWhisperConfig } from "./whisper-cloud";
-import { isWhisperEnabled, getEnabledProviders, transcribeWithProviderChain } from "./providers";
+import { isWhisperEnabled, getWhisperPriority, getEnabledProviders, transcribeWithProvider } from "./providers";
 import type {
   TranscriptSegment,
   VideoMetadata,
@@ -520,52 +520,90 @@ async function fetchTranscriptWebFallback(
 }
 
 /**
- * Audio transcription fallback: local Whisper (if enabled) → cloud providers (priority order).
+ * Audio transcription fallback — respects user-defined priority order.
+ * Local Whisper and cloud providers are interleaved based on their priority.
  * Called when YouTube captions are unavailable.
  */
 async function transcribeAudioFallback(
   videoId: string
 ): Promise<{ segments: TranscriptSegment[]; source: string }> {
-  const whisperEnabled = await isWhisperEnabled();
+  const [whisperEnabled, whisperPriority, providers] = await Promise.all([
+    isWhisperEnabled(),
+    getWhisperPriority(),
+    getEnabledProviders(),
+  ]);
 
-  // 1. Try local Whisper first (if enabled)
+  // Build a unified ordered list of steps
+  type Step = { type: "local" } | { type: "cloud"; index: number };
+  const steps: Step[] = [];
+
+  for (let i = 0; i < providers.length; i++) {
+    steps.push({ type: "cloud", index: i });
+  }
   if (whisperEnabled) {
-    try {
-      console.log(`[transcript] Trying local Whisper for ${videoId}...`);
-      const segments = await transcribeWithWhisper(videoId);
-      return { segments, source: "whisper_local" };
-    } catch (err) {
-      console.log(
-        `[transcript] Local Whisper failed for ${videoId}: ${err instanceof Error ? err.message : err}. Trying cloud providers...`
-      );
-    }
+    steps.push({ type: "local" });
   }
 
-  // 2. Try cloud providers in priority order
-  const providers = await getEnabledProviders();
-  if (providers.length > 0) {
-    const audioDir = path.join("/tmp", "yt-audio");
-    const audioPath = await downloadAudio(videoId, audioDir);
-    try {
-      return await transcribeWithProviderChain(audioPath);
-    } finally {
-      await fs.unlink(audioPath).catch(() => {});
-    }
-  }
+  // Sort by priority: cloud providers use their array index (already sorted by DB priority),
+  // local whisper uses its stored priority position
+  steps.sort((a, b) => {
+    const pa = a.type === "local" ? whisperPriority : a.index;
+    const pb = b.type === "local" ? whisperPriority : b.index;
+    return pa - pb;
+  });
 
-  // 3. Nothing available
-  if (!whisperEnabled) {
+  if (steps.length === 0) {
     throw new Error(
       "This video has no captions. Enable local Whisper or add a cloud provider in Settings."
     );
   }
 
-  throw new Error("All transcription methods failed for this video.");
+  const errors: string[] = [];
+  let audioPath: string | null = null;
+
+  for (const step of steps) {
+    if (step.type === "local") {
+      try {
+        console.log(`[transcript] Trying local Whisper for ${videoId}...`);
+        const segments = await transcribeWithWhisper(videoId);
+        // Clean up cloud audio file if we downloaded one
+        if (audioPath) await fs.unlink(audioPath).catch(() => {});
+        return { segments, source: "whisper_local" };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.log(`[transcript] Local Whisper failed: ${msg}`);
+        errors.push(`local-whisper: ${msg}`);
+      }
+    } else {
+      const config = providers[step.index];
+      try {
+        // Download audio once for all cloud providers
+        if (!audioPath) {
+          const audioDir = path.join("/tmp", "yt-audio");
+          audioPath = await downloadAudio(videoId, audioDir);
+        }
+        const result = await transcribeWithProvider(audioPath, config);
+        await fs.unlink(audioPath).catch(() => {});
+        return result;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.log(`[transcript] ${config.provider} failed: ${msg}`);
+        errors.push(`${config.provider}: ${msg}`);
+      }
+    }
+  }
+
+  // Clean up
+  if (audioPath) await fs.unlink(audioPath).catch(() => {});
+
+  throw new Error(
+    `All transcription methods failed:\n${errors.map((e) => `  - ${e}`).join("\n")}`
+  );
 }
 
 /**
  * Fetch time-coded transcript segments for a YouTube video.
- * Fallback chain: WEB page scrape → ANDROID InnerTube → WEB InnerTube → Cloud Whisper → Local Whisper.
+ * Fallback chain: WEB page scrape → ANDROID InnerTube → WEB InnerTube → Cloud providers (priority order) → Local Whisper.
  *
  * Web scrape is tried first because YouTube's InnerTube API now requires
  * Proof-of-Origin (PO) tokens via BotGuard attestation (as of early 2026).

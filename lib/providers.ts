@@ -221,3 +221,18 @@ export async function isWhisperEnabled(): Promise<boolean> {
     return true;
   }
 }
+
+/**
+ * Get local Whisper's priority position (default: 999 = last).
+ */
+export async function getWhisperPriority(): Promise<number> {
+  try {
+    const setting = await prisma.setting.findUnique({
+      where: { key: "whisper_priority" },
+    });
+    if (!setting) return 999;
+    return parseInt(setting.value, 10);
+  } catch {
+    return 999;
+  }
+}

@@ -9,7 +9,8 @@
   --muted-2: rgba(255, 255, 255, 0.55);
   --muted-3: rgba(255, 255, 255, 0.35);
   --error: #ef4444;
-  --success: #22c55e;
+  --accent: #a58959;
+  --success: #a58959;
 }
 
 * {
@@ -221,6 +222,23 @@ body::-webkit-scrollbar-thumb:hover {
   100% { transform: translateX(350%); }
 }
 
+/* Cancel link */
+.btn-cancel {
+  display: block;
+  margin-top: 10px;
+  margin-bottom: 4px;
+  border: none;
+  background: none;
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s;
+}
+.btn-cancel:hover {
+  color: rgba(255, 255, 255, 0.50);
+}
+
 /* Queue prompt */
 .queue-card-prompt {
   opacity: 0.7;
@@ -325,13 +343,9 @@ body::-webkit-scrollbar-thumb:hover {
 .recent-item-content {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0;
   min-width: 0;
   flex: 1;
-  transition: gap 0.3s ease;
-}
-.recent-item-content:not(:has(.recent-tick)) {
-  gap: 0;
 }
 .recent-text {
   min-width: 0;
@@ -353,13 +367,23 @@ body::-webkit-scrollbar-thumb:hover {
 }
 .recent-arrow {
   flex-shrink: 0;
+  margin-left: 8px;
   color: rgba(255, 255, 255, 0.25);
-  animation: fadeArrowOut 2s ease-out forwards;
+  overflow: hidden;
+  animation: fadeArrowOut 1.4s ease-out forwards;
+  transition: width 0.4s cubic-bezier(0.25, 0.1, 0.25, 1),
+              margin-left 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 @keyframes fadeArrowOut {
   0% { opacity: 1; }
-  60% { opacity: 1; }
-  100% { opacity: 0; width: 0; }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.recent-arrow.collapsing {
+  animation: none;
+  opacity: 0;
+  width: 0;
+  margin-left: 0;
 }
 
 /* Just-completed tick */
@@ -367,28 +391,41 @@ body::-webkit-scrollbar-thumb:hover {
   flex-shrink: 0;
   width: 18px;
   height: 18px;
-  background: rgba(34, 197, 94, 0.12);
+  margin-right: 8px;
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--success);
+  color: rgba(255, 255, 255, 0.50);
   font-size: 10px;
-  animation: fadeTickOut 2s ease-out forwards;
+  overflow: hidden;
+  /* Phase 1: visual fade only (opacity + scale). No layout change. */
+  animation: fadeTickOut 1.4s ease-out forwards;
+  /* Phase 2 (triggered by .collapsing class): smooth spatial collapse */
+  transition: width 0.4s cubic-bezier(0.25, 0.1, 0.25, 1),
+              margin-right 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 @keyframes fadeTickOut {
-  0% { opacity: 1; transform: scale(1); width: 18px; }
-  60% { opacity: 1; transform: scale(1); width: 18px; }
-  85% { opacity: 0; transform: scale(0.6); width: 18px; }
-  100% { opacity: 0; transform: scale(0); width: 0; }
+  0%   { opacity: 1; transform: scale(1); }
+  70%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.6); }
+}
+/* Spatial collapse — width + margin collapse together, single smooth shift */
+.recent-tick.collapsing {
+  animation: none;
+  opacity: 0;
+  transform: scale(0.6);
+  width: 0;
+  margin-right: 0;
 }
 
 .recent-item-new {
-  background: rgba(34, 197, 94, 0.04);
-  animation: newItemFade 2s ease-in-out forwards;
+  background: rgba(255, 255, 255, 0.04);
+  animation: newItemFade 1.8s ease-in-out forwards;
 }
 @keyframes newItemFade {
-  0% { background: rgba(34, 197, 94, 0.04); }
-  70% { background: rgba(34, 197, 94, 0.04); }
+  0% { background: rgba(255, 255, 255, 0.04); }
+  70% { background: rgba(255, 255, 255, 0.04); }
   100% { background: transparent; }
 }

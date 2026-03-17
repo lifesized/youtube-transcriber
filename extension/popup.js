@@ -23,11 +23,13 @@ const el = {
   queueVideoTitle: document.getElementById("queueVideoTitle"),
   btnQueue: document.getElementById("btnQueue"),
   queueList: document.getElementById("queueList"),
+  btnCancel: document.getElementById("btnCancel"),
 };
 
 let pageInfo = null;
 let progressTimer = null;
 let justCompletedId = null;
+let pollInterval = null;
 
 // ---------------------------------------------------------------------------
 // Progress bar
@@ -133,7 +135,7 @@ async function openTranscript(url) {
 function showCompletedAndReturn(completedId) {
   // Highlight the new transcript in the recent list, then show normal page state
   justCompletedId = completedId;
-  setTimeout(() => { justCompletedId = null; }, 2000);
+  setTimeout(() => { justCompletedId = null; }, 1900);
   showCurrentPageState();
   loadRecent();
 }
@@ -149,6 +151,13 @@ async function showQueuePrompt(transcribingUrl) {
   }
   // Don't show queue prompt if this video is already being transcribed
   if (transcribingUrl && pageInfo.url === transcribingUrl) {
+    el.queuePrompt.hidden = true;
+    return;
+  }
+  // Don't show queue prompt if this video is already in the queue
+  const queueRes = await sendMsg({ type: "GET_QUEUE" });
+  const queue = queueRes?.success ? queueRes.data : [];
+  if (queue.some((q) => q.url === pageInfo.url)) {
     el.queuePrompt.hidden = true;
     return;
   }
@@ -222,15 +231,23 @@ async function loadRecent() {
     `;
     el.recentList.appendChild(item);
 
-    // After animation ends, remove tick + arrow and reset item to normal
+    // Two-phase animation: visual fade, then smooth spatial collapse
     if (isNew) {
+      // Phase 1 complete (1.4s) — tick is visually gone, now collapse space
+      setTimeout(() => {
+        const tick = item.querySelector(".recent-tick");
+        const arrow = item.querySelector(".recent-arrow");
+        if (tick) tick.classList.add("collapsing");
+        if (arrow) arrow.classList.add("collapsing");
+      }, 1400);
+      // Phase 2 complete (1.4s + 0.4s) — remove from DOM cleanly
       setTimeout(() => {
         item.classList.remove("recent-item-new");
         const tick = item.querySelector(".recent-tick");
         const arrow = item.querySelector(".recent-arrow");
         if (tick) tick.remove();
         if (arrow) arrow.remove();
-      }, 2000);
+      }, 1850);
     }
   }
 }
@@ -315,10 +332,14 @@ async function init() {
     if (pending.status === "transcribing") {
       el.transcribingTitle.textContent = pending.title || "Transcribing...";
       showState("Transcribing");
-      startIndeterminate();
+      // Only restart animation/polling if not already running — prevents
+      // glitchy restart when switching tabs during an active transcription
+      if (!pollInterval) {
+        startIndeterminate();
+        pollTranscriptionStatus();
+      }
       showQueuePrompt(pending.url);
       renderQueueList();
-      pollTranscriptionStatus();
       loadRecent();
       return;
     }
@@ -357,21 +378,29 @@ async function init() {
 // Poll for transcription completion
 // ---------------------------------------------------------------------------
 
+function stopPolling() {
+  if (pollInterval) {
+    clearInterval(pollInterval);
+    pollInterval = null;
+  }
+}
+
 function pollTranscriptionStatus() {
-  const interval = setInterval(async () => {
+  stopPolling();
+  pollInterval = setInterval(async () => {
     const res = await sendMsg({ type: "GET_TRANSCRIPTION_STATUS" });
     if (!res?.success || !res.data) {
-      clearInterval(interval);
+      stopPolling();
       return;
     }
     const pending = res.data;
     if (pending.status === "done" && pending.result) {
-      clearInterval(interval);
+      stopPolling();
       stopProgress();
       await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
       showCompletedAndReturn(pending.result.id);
     } else if (pending.status === "error") {
-      clearInterval(interval);
+      stopPolling();
       stopProgress();
       el.errorMessage.textContent = pending.error || "Transcription failed";
       showState("Error");
@@ -437,6 +466,16 @@ el.btnAlreadyTranscribed.addEventListener("click", (e) => {
   }
 });
 
+el.btnCancel.addEventListener("click", async () => {
+  stopProgress();
+  stopPolling();
+  await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
+  // Also clear the queue
+  await sendMsg({ type: "CLEAR_QUEUE" });
+  showCurrentPageState();
+  loadRecent();
+});
+
 el.btnQueue.addEventListener("click", async () => {
   if (!pageInfo?.url) return;
   await sendMsg({
@@ -475,7 +514,8 @@ chrome.tabs.onUpdated?.addListener((tabId, changeInfo) => {
     init();
   }
   // YouTube SPA navigations update the title after the URL — re-init to pick up the new title
-  if (changeInfo.title) {
+  // But skip during active transcription to avoid clobbering the progress UI
+  if (changeInfo.title && !pollInterval) {
     init();
   }
 });

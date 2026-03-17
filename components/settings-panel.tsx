@@ -12,6 +12,7 @@ interface SettingsData {
   groq_usage_seconds?: string;
   groq_usage_date?: string;
   whisper_enabled?: string;
+  whisper_priority?: string;
 }
 
 interface ProviderRow {
@@ -24,6 +25,11 @@ interface ProviderRow {
   priority: number;
 }
 
+// Unified item: either local whisper or a cloud provider
+type FallbackItem =
+  | { type: "local"; id: "__local_whisper__"; enabled: boolean; priority: number }
+  | { type: "cloud"; id: string; provider: string; apiKey: string; model: string | null; baseUrl: string | null; enabled: boolean; priority: number };
+
 type ProviderType = "openrouter" | "groq" | "custom";
 
 const DAILY_LIMIT = 14_400;
@@ -32,12 +38,6 @@ const PROVIDER_LABELS: Record<ProviderType, string> = {
   openrouter: "OpenRouter",
   groq: "Groq",
   custom: "Custom Endpoint",
-};
-
-const PROVIDER_PLACEHOLDERS: Record<ProviderType, string> = {
-  openrouter: "sk-or-...",
-  groq: "gsk_...",
-  custom: "sk-...",
 };
 
 const OPENROUTER_MODELS = [
@@ -223,11 +223,29 @@ function Toggle({
 }
 
 // ---------------------------------------------------------------------------
+// DragHandle
+// ---------------------------------------------------------------------------
+
+function DragHandle() {
+  return (
+    <svg className="h-4 w-4 text-white/15" viewBox="0 0 16 16" fill="currentColor">
+      <circle cx="5" cy="3" r="1.2" />
+      <circle cx="11" cy="3" r="1.2" />
+      <circle cx="5" cy="8" r="1.2" />
+      <circle cx="11" cy="8" r="1.2" />
+      <circle cx="5" cy="13" r="1.2" />
+      <circle cx="11" cy="13" r="1.2" />
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // SettingsPanel
 // ---------------------------------------------------------------------------
 
 export function SettingsPanel() {
   const [whisperEnabled, setWhisperEnabled] = useState(true);
+  const [whisperPriority, setWhisperPriority] = useState(0);
   const [providers, setProviders] = useState<ProviderRow[]>([]);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, { success: boolean; error?: string }>>({});
@@ -240,6 +258,10 @@ export function SettingsPanel() {
   const [loading, setLoading] = useState(true);
   const [completionAlertsEnabled, setCompletionAlertsEnabled] = useState(true);
 
+  // Drag state
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
   const loadSettings = useCallback(async () => {
     try {
       const [settingsRes, providersRes] = await Promise.all([
@@ -251,6 +273,11 @@ export function SettingsPanel() {
         const data: SettingsData = await settingsRes.json();
         if (data.whisper_enabled !== undefined) {
           setWhisperEnabled(data.whisper_enabled !== "false");
+        }
+        if (data.whisper_priority !== undefined) {
+          setWhisperPriority(parseInt(data.whisper_priority, 10));
+        } else {
+          setWhisperPriority(0);
         }
         const today = new Date().toISOString().slice(0, 10);
         if (data.groq_usage_date === today && data.groq_usage_seconds) {
@@ -286,15 +313,113 @@ export function SettingsPanel() {
     if (stored !== null) setCompletionAlertsEnabled(stored === "true");
   }, [loadSettings]);
 
-  async function handleWhisperToggle(enabled: boolean) {
-    setWhisperEnabled(enabled);
-    await fetch("/api/settings", {
-      method: "PUT",
+  // Build unified ordered list
+  const items: FallbackItem[] = [
+    { type: "local" as const, id: "__local_whisper__" as const, enabled: whisperEnabled, priority: whisperPriority },
+    ...providers.map((p) => ({
+      type: "cloud" as const,
+      id: p.id,
+      provider: p.provider,
+      apiKey: p.apiKey,
+      model: p.model,
+      baseUrl: p.baseUrl,
+      enabled: p.enabled,
+      priority: p.priority,
+    })),
+  ].sort((a, b) => a.priority - b.priority);
+
+  // Fallback order text (enabled items only)
+  const enabledNames = items
+    .filter((i) => i.enabled)
+    .map((i) => i.type === "local" ? "Local Whisper" : PROVIDER_LABELS[i.provider as ProviderType] || i.provider);
+
+  // ---------------------------------------------------------------------------
+  // Reorder
+  // ---------------------------------------------------------------------------
+
+  async function persistOrder(newItems: FallbackItem[]) {
+    const order = newItems.map((i) => i.id);
+    await fetch("/api/settings/providers/reorder", {
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ whisper_enabled: String(enabled) }),
+      body: JSON.stringify({ order }),
     }).catch(() => {});
   }
 
+  function handleDragStart(id: string) {
+    setDragId(id);
+  }
+
+  function handleDragOver(e: React.DragEvent, id: string) {
+    e.preventDefault();
+    if (id !== dragId) setDragOverId(id);
+  }
+
+  function handleDragLeave() {
+    setDragOverId(null);
+  }
+
+  function handleDrop(targetId: string) {
+    if (!dragId || dragId === targetId) {
+      setDragId(null);
+      setDragOverId(null);
+      return;
+    }
+
+    const oldIndex = items.findIndex((i) => i.id === dragId);
+    const newIndex = items.findIndex((i) => i.id === targetId);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = [...items];
+    const [moved] = reordered.splice(oldIndex, 1);
+    reordered.splice(newIndex, 0, moved);
+
+    // Assign new priorities
+    const updated = reordered.map((item, idx) => ({ ...item, priority: idx }));
+
+    // Update local state
+    const newWhisperPri = updated.find((i) => i.id === "__local_whisper__")!.priority;
+    setWhisperPriority(newWhisperPri);
+    setProviders((prev) =>
+      prev.map((p) => {
+        const match = updated.find((i) => i.id === p.id);
+        return match ? { ...p, priority: match.priority } : p;
+      })
+    );
+
+    persistOrder(updated);
+    setDragId(null);
+    setDragOverId(null);
+  }
+
+  function handleDragEnd() {
+    setDragId(null);
+    setDragOverId(null);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Provider actions
+  // ---------------------------------------------------------------------------
+
+  async function handleToggleItem(id: string, enabled: boolean) {
+    if (id === "__local_whisper__") {
+      setWhisperEnabled(enabled);
+      await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ whisper_enabled: String(enabled) }),
+      }).catch(() => {});
+    } else {
+      setProviders((prev) => prev.map((p) => (p.id === id ? { ...p, enabled } : p)));
+      const provider = providers.find((p) => p.id === id);
+      if (!provider) return;
+      await fetch("/api/settings/providers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, provider: provider.provider, apiKey: provider.apiKey, enabled }),
+      }).catch(() => {});
+    }
+  }
 
   async function handleDeleteProvider(id: string) {
     await fetch(`/api/settings/providers/${id}`, { method: "DELETE" });
@@ -321,17 +446,6 @@ export function SettingsPanel() {
     }
   }
 
-  async function handleToggleProvider(id: string, enabled: boolean) {
-    setProviders((prev) => prev.map((p) => (p.id === id ? { ...p, enabled } : p)));
-    const provider = providers.find((p) => p.id === id);
-    if (!provider) return;
-    await fetch("/api/settings/providers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, provider: provider.provider, apiKey: provider.apiKey, enabled }),
-    }).catch(() => {});
-  }
-
   async function handleUpdateModel(id: string, model: string) {
     setProviders((prev) => prev.map((p) => (p.id === id ? { ...p, model } : p)));
     const provider = providers.find((p) => p.id === id);
@@ -353,66 +467,58 @@ export function SettingsPanel() {
 
   return (
     <div className="space-y-8">
-      {/* Fallback order */}
+      {/* Fallback order summary */}
       <p className="text-sm text-white/40">
-        <span className="font-medium text-white/75">Transcription fallback order:</span> {whisperEnabled ? "Local Whisper \u2192 " : ""}
-        {providers.filter((p) => p.enabled).length > 0
-          ? providers.filter((p) => p.enabled).map((p) => PROVIDER_LABELS[p.provider as ProviderType] || p.provider).join(" \u2192 ")
-          : "None configured"}
+        <span className="font-medium text-white/75">Transcription fallback order:</span>{" "}
+        {enabledNames.length > 0 ? enabledNames.join(" \u2192 ") : "None configured"}
       </p>
 
-      {/* Local Whisper Toggle */}
-      <div className="space-y-3">
-        <div className="-mx-3 flex items-center justify-between rounded-lg px-3 py-2 transition-colors hover:bg-white/3">
-          <div className="space-y-1">
-            <h2 className="text-sm font-medium text-white/75">Local Whisper</h2>
-            <p className="text-sm text-white/40">
-              Use local Whisper for transcription when YouTube captions are unavailable
-            </p>
-          </div>
-          <Toggle checked={whisperEnabled} onChange={handleWhisperToggle} />
-        </div>
-        {!whisperEnabled && (
-          <p className="text-sm text-white/40">
-            Whisper is disabled. Videos without captions will use your configured cloud provider
-            {providers.filter((p) => p.enabled).length === 0 && (
-              <span className="text-[hsl(var(--accent))]">
-                {" "}&mdash; no providers configured yet. Add one below or transcription will fail for caption-less videos
-              </span>
-            )}.
-          </p>
-        )}
-      </div>
+      {/* Unified reorderable list */}
+      <div className="space-y-1">
+        {items.map((item) => {
+          const isDragging = dragId === item.id;
+          const isDragOver = dragOverId === item.id;
+          const result = item.type === "cloud" ? testResults[item.id] : null;
 
-      {/* Cloud Providers */}
-      <div className="space-y-5">
-
-        {providers.length > 0 && (
-          <div className="space-y-6">
-            {providers.map((p) => {
-              const result = testResults[p.id];
-              return (
-                <div
-                  key={p.id}
-                  className={`-mx-3 rounded-lg px-3 py-2 transition-all ${
-                    p.enabled ? "hover:bg-white/3" : "opacity-40 hover:opacity-60"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-medium text-white/70">
-                        {PROVIDER_LABELS[p.provider as ProviderType] || p.provider}
-                      </span>
-                      <span className="text-sm text-white/25">{p.apiKey.replace(/\*/g, "\u2022")}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
+          return (
+            <div
+              key={item.id}
+              draggable
+              onDragStart={() => handleDragStart(item.id)}
+              onDragOver={(e) => handleDragOver(e, item.id)}
+              onDragLeave={handleDragLeave}
+              onDrop={() => handleDrop(item.id)}
+              onDragEnd={handleDragEnd}
+              className={`-mx-3 rounded-lg px-3 py-2.5 transition-all ${
+                isDragging ? "opacity-30" : ""
+              } ${isDragOver ? "border-t-2 border-white/20" : "border-t-2 border-transparent"} ${
+                item.enabled ? "hover:bg-white/3" : "opacity-40 hover:opacity-60"
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="cursor-grab active:cursor-grabbing">
+                    <DragHandle />
+                  </div>
+                  <span className="text-sm font-medium text-white/70">
+                    {item.type === "local"
+                      ? "Local Whisper"
+                      : PROVIDER_LABELS[item.provider as ProviderType] || item.provider}
+                  </span>
+                  {item.type === "cloud" && (
+                    <span className="text-sm text-white/25">{item.apiKey.replace(/\*/g, "\u2022")}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {item.type === "cloud" && (
+                    <>
                       <button
-                        onClick={() => handleTestProvider(p.id)}
-                        disabled={testingId === p.id}
+                        onClick={() => handleTestProvider(item.id)}
+                        disabled={testingId === item.id}
                         title="Test connection"
                         className="rounded-lg p-1.5 text-white/20 transition-colors hover:text-white/50 disabled:cursor-not-allowed disabled:opacity-40"
                       >
-                        {testingId === p.id ? (
+                        {testingId === item.id ? (
                           <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -426,7 +532,7 @@ export function SettingsPanel() {
                       <button
                         onClick={() => {
                           if (window.confirm("Are you sure you want to delete this provider?")) {
-                            handleDeleteProvider(p.id);
+                            handleDeleteProvider(item.id);
                           }
                         }}
                         title="Remove provider"
@@ -436,34 +542,45 @@ export function SettingsPanel() {
                           <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
                       </button>
-                      <Toggle checked={p.enabled} onChange={(val) => handleToggleProvider(p.id, val)} />
-                    </div>
-                  </div>
-
-                  {p.provider === "openrouter" ? (
-                    <div className="mt-1">
-                      <ModelSelect
-                        value={p.model || ""}
-                        onChange={(val) => handleUpdateModel(p.id, val)}
-                        placeholder="google/gemini-2.5-flash"
-                        models={OPENROUTER_MODELS}
-                      />
-                    </div>
-                  ) : p.model ? (
-                    <p className="mt-1 text-xs text-white/25">{p.model}</p>
-                  ) : null}
-
-                  {result && (
-                    <p className={`mt-1 text-xs ${result.success ? "text-[hsl(var(--accent))]" : "text-red-400"}`}>
-                      {result.success ? "Connection successful" : result.error || "Test failed"}
-                    </p>
+                    </>
                   )}
+                  <Toggle checked={item.enabled} onChange={(val) => handleToggleItem(item.id, val)} />
                 </div>
-              );
-            })}
-          </div>
-        )}
+              </div>
 
+              {/* Model selector for OpenRouter */}
+              {item.type === "cloud" && item.provider === "openrouter" && (
+                <div className="mt-1 pl-7">
+                  <ModelSelect
+                    value={item.model || ""}
+                    onChange={(val) => handleUpdateModel(item.id, val)}
+                    placeholder="google/gemini-2.5-flash"
+                    models={OPENROUTER_MODELS}
+                  />
+                </div>
+              )}
+              {item.type === "cloud" && item.provider !== "openrouter" && item.model && (
+                <p className="mt-1 pl-7 text-xs text-white/25">{item.model}</p>
+              )}
+
+              {/* Local Whisper description */}
+              {item.type === "local" && (
+                <p className="mt-1 pl-7 text-xs text-white/30">
+                  Runs locally — no file size limit, no API key needed
+                </p>
+              )}
+
+              {/* Test results */}
+              {result && (
+                <p className={`mt-1 pl-7 text-xs ${result.success ? "text-[hsl(var(--accent))]" : "text-red-400"}`}>
+                  {result.success ? "Connection successful" : result.error || "Test failed"}
+                </p>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Add provider */}
         {!showAddForm ? (
           <button
             onClick={() => {
@@ -474,12 +591,12 @@ export function SettingsPanel() {
               setNewApiKey("");
               setShowAddForm(true);
             }}
-            className="text-sm text-white/30 transition-colors hover:text-white/60"
+            className="ml-4 mt-2 text-sm text-white/30 transition-colors hover:text-white/60"
           >
             + Add provider
           </button>
         ) : (
-          <div className="space-y-3">
+          <div className="mt-2 space-y-3 pl-7">
             <div className="flex items-center gap-3">
               <select
                 value={newProvider}
@@ -510,7 +627,7 @@ export function SettingsPanel() {
                       body: JSON.stringify({
                         provider: newProvider,
                         apiKey: newApiKey.trim(),
-                        priority: providers.length,
+                        priority: items.length,
                       }),
                     });
                     if (res.ok) {
@@ -536,7 +653,6 @@ export function SettingsPanel() {
             </div>
           </div>
         )}
-
       </div>
 
       {/* Groq Usage */}

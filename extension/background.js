@@ -105,14 +105,14 @@ async function doTranscribe(url, title) {
     startedAt: Date.now(),
   };
   await setState(state);
-  setBadge("...", "#f59e0b");
+  setBadge("...", "#a58959");
 
   try {
     const data = await transcribeRequest(url);
     state.status = "done";
     state.result = data;
     await setState(state);
-    setBadge("✓", "#22c55e");
+    setBadge("✓", "#a58959");
     // Auto-process queue
     await processNextInQueue();
     return data;
@@ -201,6 +201,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case "GET_QUEUE":
         return await getQueue();
+
+      case "CLEAR_QUEUE":
+        await setQueue([]);
+        return { ok: true };
 
       case "PROCESS_QUEUE":
         return await processNextInQueue();
