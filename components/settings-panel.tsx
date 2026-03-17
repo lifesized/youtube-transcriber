@@ -419,7 +419,7 @@ export function SettingsPanel() {
 
       {/* Local Whisper Toggle */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="-mx-3 flex items-center justify-between rounded-lg px-3 py-2 transition-colors hover:bg-white/3">
           <div className="space-y-1">
             <h2 className="text-sm font-medium text-white/75">Local Whisper</h2>
             <p className="text-sm text-white/40">
@@ -450,8 +450,8 @@ export function SettingsPanel() {
               return (
                 <div
                   key={p.id}
-                  className={`transition-opacity ${
-                    p.enabled ? "" : "opacity-40"
+                  className={`-mx-3 rounded-lg px-3 py-2 transition-all ${
+                    p.enabled ? "hover:bg-white/3" : "opacity-40 hover:opacity-60"
                   }`}
                 >
                   <div className="flex items-center justify-between">
@@ -480,9 +480,13 @@ export function SettingsPanel() {
                         )}
                       </button>
                       <button
-                        onClick={() => handleDeleteProvider(p.id)}
+                        onClick={() => {
+                          if (window.confirm("Are you sure you want to delete this provider?")) {
+                            handleDeleteProvider(p.id);
+                          }
+                        }}
                         title="Remove provider"
-                        className="rounded-lg p-1.5 text-white/20 transition-colors hover:text-red-400"
+                        className="rounded-lg p-1.5 text-white/20 transition-colors hover:text-white/50"
                       >
                         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -644,7 +648,7 @@ export function SettingsPanel() {
       <div className="border-t border-white/5" />
 
       {/* Notifications */}
-      <div className="flex items-center justify-between">
+      <div className="-mx-3 flex items-center justify-between rounded-lg px-3 py-2 transition-colors hover:bg-white/3">
         <div className="space-y-1">
           <h2 className="text-sm font-medium text-white/75">Completion alerts</h2>
           <p className="text-sm text-white/30">
