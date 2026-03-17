@@ -8,8 +8,7 @@ export default function SettingsPage() {
       <div className="mx-auto max-w-[800px]">
         <div className="space-y-6 sm:space-y-8">
           <div>
-            <a href="/" className="text-sm text-white/30 transition-colors hover:text-white/60">&larr; Back</a>
-            <h1 className="mt-3 text-base font-semibold text-white/90">Settings</h1>
+            <h1 className="text-base font-semibold text-white/90">Settings</h1>
             <p className="mt-1 text-sm text-white/40">
               Configure transcription providers and preferences
             </p>
