@@ -285,10 +285,20 @@ async function showCurrentPageState() {
   }
 }
 
+let initVersion = 0;
+
 async function init() {
+  const thisInit = ++initVersion;
+
+  // Reset stale UI from previous state
+  el.btnAlreadyTranscribed.hidden = true;
+  el.btnTranscribe.hidden = false;
+  existingTranscriptId = null;
+
   // Get active tab directly
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (thisInit !== initVersion) return;
     if (tab) {
       const videoId = extractVideoId(tab.url || "");
       pageInfo = { url: tab.url, title: tab.title, videoId };
@@ -299,6 +309,7 @@ async function init() {
 
   // Check if there's an in-flight transcription from a previous popup open
   const statusRes = await sendMsg({ type: "GET_TRANSCRIPTION_STATUS" });
+  if (thisInit !== initVersion) return;
   if (statusRes?.success && statusRes.data) {
     const pending = statusRes.data;
     if (pending.status === "transcribing") {
@@ -327,6 +338,7 @@ async function init() {
 
   // 1. Check service
   const serviceRes = await sendMsg({ type: "CHECK_SERVICE" });
+  if (thisInit !== initVersion) return;
   const online = serviceRes?.success && serviceRes.data?.online;
 
   if (!online) {
