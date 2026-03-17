@@ -26,8 +26,6 @@ interface ProviderRow {
 
 type ProviderType = "openrouter" | "groq" | "custom";
 
-type Status = "idle" | "saving" | "testing" | "saved" | "tested" | "error";
-
 const DAILY_LIMIT = 14_400;
 
 const PROVIDER_LABELS: Record<ProviderType, string> = {
@@ -244,14 +242,6 @@ export function SettingsPanel() {
   const [providers, setProviders] = useState<ProviderRow[]>([]);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, { success: boolean; error?: string }>>({});
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newProvider, setNewProvider] = useState<ProviderType>("openrouter");
-  const [newApiKey, setNewApiKey] = useState("");
-  const [newModel, setNewModel] = useState("");
-  const [newBaseUrl, setNewBaseUrl] = useState("");
-  const [showNewKey, setShowNewKey] = useState(false);
-  const [addStatus, setAddStatus] = useState<Status>("idle");
-  const [addMessage, setAddMessage] = useState("");
   const [usageSeconds, setUsageSeconds] = useState(0);
   const [usageDate, setUsageDate] = useState("");
   const [loading, setLoading] = useState(true);
@@ -312,45 +302,6 @@ export function SettingsPanel() {
     }).catch(() => {});
   }
 
-  async function handleAddProvider() {
-    const key = newApiKey.trim();
-    if (!key) return;
-    if (newProvider === "custom" && !newBaseUrl.trim()) {
-      setAddStatus("error");
-      setAddMessage("Base URL is required for custom providers");
-      return;
-    }
-    setAddStatus("saving");
-    setAddMessage("");
-    try {
-      const res = await fetch("/api/settings/providers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          provider: newProvider,
-          apiKey: key,
-          model: newModel.trim() || null,
-          baseUrl: newBaseUrl.trim() || null,
-          priority: providers.length,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Failed to save");
-      }
-      setAddStatus("saved");
-      setAddMessage("Provider added");
-      setNewApiKey("");
-      setNewModel("");
-      setNewBaseUrl("");
-      setShowNewKey(false);
-      setShowAddForm(false);
-      await loadSettings();
-    } catch (e) {
-      setAddStatus("error");
-      setAddMessage(e instanceof Error ? e.message : "Failed to save provider");
-    }
-  }
 
   async function handleDeleteProvider(id: string) {
     await fetch(`/api/settings/providers/${id}`, { method: "DELETE" });
@@ -520,102 +471,6 @@ export function SettingsPanel() {
           </div>
         )}
 
-        {!showAddForm ? (
-          <button
-            onClick={() => { setShowAddForm(true); setAddStatus("idle"); setAddMessage(""); }}
-            className="text-sm text-white/30 transition-colors hover:text-white/60"
-          >
-            + Add provider
-          </button>
-        ) : (
-          <div className="space-y-4 rounded-xl border border-white/15 bg-[hsl(var(--panel-2))] p-4">
-            <div className="space-y-2">
-              <label className="block text-sm text-white/50">Provider</label>
-              <select
-                value={newProvider}
-                onChange={(e) => { setNewProvider(e.target.value as ProviderType); setNewModel(""); }}
-                className="h-11 w-full rounded-xl border border-white/10 bg-[hsl(var(--panel))] px-4 text-sm text-white/90 focus:border-white/20 focus:outline-none focus:ring-2 focus:ring-white/10"
-              >
-                <option value="openrouter">OpenRouter</option>
-                <option value="groq">Groq</option>
-                <option value="custom">Custom Endpoint (OpenAI-compatible)</option>
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm text-white/50">API Key</label>
-              <div className="relative">
-                <input
-                  type={showNewKey ? "text" : "password"}
-                  value={newApiKey}
-                  onChange={(e) => { setNewApiKey(e.target.value); if (addStatus !== "idle") { setAddStatus("idle"); setAddMessage(""); } }}
-                  onPaste={(e) => { const pasted = e.clipboardData.getData("text").trim(); if (pasted.length >= 10) { e.preventDefault(); setNewApiKey(pasted); } }}
-                  placeholder={PROVIDER_PLACEHOLDERS[newProvider]}
-                  className="h-11 w-full rounded-xl border border-white/10 bg-[hsl(var(--panel))] px-4 pr-20 text-sm text-white/90 placeholder:text-white/25 focus:border-white/20 focus:outline-none focus:ring-2 focus:ring-white/10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowNewKey(!showNewKey)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-white/40 transition-colors hover:text-white/70"
-                >
-                  {showNewKey ? "Hide" : "Show"}
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm text-white/50">
-                Model{newProvider !== "openrouter" && <span className="text-white/30"> (optional)</span>}
-              </label>
-              {newProvider === "openrouter" ? (
-                <ModelSelect value={newModel} onChange={setNewModel} placeholder="google/gemini-2.5-flash-lite" models={OPENROUTER_MODELS} />
-              ) : (
-                <input
-                  type="text"
-                  value={newModel}
-                  onChange={(e) => setNewModel(e.target.value)}
-                  placeholder={newProvider === "groq" ? "whisper-large-v3-turbo" : "whisper-1"}
-                  className="h-11 w-full rounded-xl border border-white/10 bg-[hsl(var(--panel))] px-4 text-sm text-white/90 placeholder:text-white/25 focus:border-white/20 focus:outline-none focus:ring-2 focus:ring-white/10"
-                />
-              )}
-            </div>
-
-            {newProvider === "custom" && (
-              <div className="space-y-2">
-                <label className="block text-sm text-white/50">Base URL</label>
-                <input
-                  type="text"
-                  value={newBaseUrl}
-                  onChange={(e) => setNewBaseUrl(e.target.value)}
-                  placeholder="https://your-server.com/v1"
-                  className="h-11 w-full rounded-xl border border-white/10 bg-[hsl(var(--panel))] px-4 text-sm text-white/90 placeholder:text-white/25 focus:border-white/20 focus:outline-none focus:ring-2 focus:ring-white/10"
-                />
-              </div>
-            )}
-
-            {addMessage && (
-              <p className={`text-sm ${addStatus === "error" ? "text-red-400" : "text-[hsl(var(--accent))]"}`}>
-                {addMessage}
-              </p>
-            )}
-
-            <div className="flex gap-3">
-              <button
-                onClick={handleAddProvider}
-                disabled={addStatus === "saving" || !newApiKey.trim()}
-                className="rounded-xl bg-white/10 px-4 py-2 text-sm text-white/80 transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {addStatus === "saving" ? "Saving..." : "Add Provider"}
-              </button>
-              <button
-                onClick={() => { setShowAddForm(false); setNewApiKey(""); setNewModel(""); setNewBaseUrl(""); setAddStatus("idle"); setAddMessage(""); }}
-                className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/50 transition-colors hover:bg-white/10"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Groq Usage */}
