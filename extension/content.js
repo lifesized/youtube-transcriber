@@ -56,26 +56,27 @@ window.addEventListener("yt-navigate-finish", () => {
 });
 
 // Close side panel when entering fullscreen
+function closePanel() {
+  try {
+    chrome.runtime.sendMessage({ type: "CLOSE_PANEL" });
+  } catch { /* ignore */ }
+}
+
 function onFullscreenChange() {
   if (document.fullscreenElement || document.webkitFullscreenElement) {
-    try {
-      chrome.runtime.sendMessage({ type: "CLOSE_PANEL" });
-    } catch { /* ignore */ }
+    closePanel();
   }
 }
 document.addEventListener("fullscreenchange", onFullscreenChange);
 document.addEventListener("webkitfullscreenchange", onFullscreenChange);
 
-// YouTube's theater/fullscreen can also be detected via player class changes
+// YouTube's player class changes when entering fullscreen
 const ytObserver = new MutationObserver(() => {
   const player = document.getElementById("movie_player");
   if (player?.classList.contains("ytp-fullscreen")) {
-    try {
-      chrome.runtime.sendMessage({ type: "CLOSE_PANEL" });
-    } catch { /* ignore */ }
+    closePanel();
   }
 });
-// Observe the player element once it exists
 function watchPlayer() {
   const player = document.getElementById("movie_player");
   if (player) {
@@ -85,3 +86,15 @@ function watchPlayer() {
   }
 }
 watchPlayer();
+
+// Catch YouTube's 'f' fullscreen shortcut — close panel after a short delay
+// to let YouTube's fullscreen kick in
+document.addEventListener("keydown", (e) => {
+  if (e.key === "f" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const tag = e.target?.tagName;
+    // Only act if not typing in an input/textarea
+    if (tag !== "INPUT" && tag !== "TEXTAREA" && !e.target?.isContentEditable) {
+      setTimeout(closePanel, 100);
+    }
+  }
+});

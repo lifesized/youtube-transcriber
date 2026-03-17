@@ -1,7 +1,14 @@
 const API_APP_BASE = "http://localhost:19720";
 
 // Keep a port open so the background script knows the side panel is active
-chrome.runtime.connect({ name: "sidepanel" });
+const port = chrome.runtime.connect({ name: "sidepanel" });
+
+// Listen for close requests from background (e.g. fullscreen)
+port.onMessage.addListener((msg) => {
+  if (msg.type === "CLOSE") {
+    window.close();
+  }
+});
 
 // DOM refs
 const el = {

@@ -154,17 +154,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const handle = async () => {
     switch (message.type) {
       case "CLOSE_PANEL": {
+        // Tell the side panel to close itself via the port
+        if (sidePanelPort) {
+          try { sidePanelPort.postMessage({ type: "CLOSE" }); } catch { /* ignore */ }
+        }
+        // Also try the sidePanel API as backup
         const tabWindowId = sender.tab?.windowId;
         if (tabWindowId) {
           try {
-            await chrome.sidePanel.close({ windowId: tabWindowId });
-          } catch {
-            // Fallback: disable and re-enable to force close
-            try {
-              await chrome.sidePanel.setOptions({ enabled: false });
-              await chrome.sidePanel.setOptions({ enabled: true, path: "popup.html" });
-            } catch { /* ignore */ }
-          }
+            if (chrome.sidePanel.close) {
+              await chrome.sidePanel.close({ windowId: tabWindowId });
+            }
+          } catch { /* ignore */ }
         }
         return { ok: true };
       }
@@ -281,13 +282,14 @@ chrome.runtime.onConnect.addListener((port) => {
 
 chrome.action.onClicked.addListener(async (tab) => {
   if (sidePanelPort) {
+    // Ask the side panel to close itself
+    try { sidePanelPort.postMessage({ type: "CLOSE" }); } catch { /* ignore */ }
+    // Also try the API
     try {
-      await chrome.sidePanel.close({ windowId: tab.windowId });
-    } catch {
-      // Fallback: disable and re-enable the panel to force close
-      await chrome.sidePanel.setOptions({ enabled: false });
-      await chrome.sidePanel.setOptions({ enabled: true, path: "popup.html" });
-    }
+      if (chrome.sidePanel.close) {
+        await chrome.sidePanel.close({ windowId: tab.windowId });
+      }
+    } catch { /* ignore */ }
   } else {
     await chrome.sidePanel.open({ tabId: tab.id });
   }
