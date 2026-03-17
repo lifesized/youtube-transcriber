@@ -127,6 +127,9 @@ body::-webkit-scrollbar-thumb:hover {
   text-decoration: none;
   cursor: pointer;
 }
+.already-transcribed[hidden] {
+  display: none;
+}
 .already-transcribed-text {
   font-size: 13px;
   color: var(--muted-3);
