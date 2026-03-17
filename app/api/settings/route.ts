@@ -7,6 +7,7 @@ const ALLOWED_KEYS = [
   "whisper_cloud_model",
   "groq_usage_seconds",
   "groq_usage_date",
+  "whisper_enabled",
 ];
 
 function maskApiKey(key: string): string {

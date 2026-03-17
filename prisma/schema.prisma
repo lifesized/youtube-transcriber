@@ -15,6 +15,18 @@ model Setting {
   updatedAt DateTime @updatedAt
 }
 
+model ProviderConfig {
+  id        String   @id @default(cuid())
+  provider  String   // "openrouter" | "groq" | "custom"
+  apiKey    String
+  model     String?
+  baseUrl   String?  // for custom endpoints only
+  enabled   Boolean  @default(true)
+  priority  Int      @default(0) // lower = higher priority in fallback chain
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Video {
   id           String   @id @default(cuid())
   videoId      String   @unique

@@ -113,7 +113,7 @@ function parseCloudWhisperResponse(
 // Usage tracking
 // ---------------------------------------------------------------------------
 
-async function trackGroqUsage(audioSeconds: number): Promise<void> {
+export async function trackGroqUsage(audioSeconds: number): Promise<void> {
   const today = new Date().toISOString().slice(0, 10);
 
   const [dateSetting, usageSetting] = await Promise.all([
@@ -148,7 +148,68 @@ async function trackGroqUsage(audioSeconds: number): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Transcription
+// Transcription (low-level, reusable)
+// ---------------------------------------------------------------------------
+
+/**
+ * Send an audio file to any OpenAI-compatible transcription endpoint.
+ * Used by both the legacy single-provider path and the new multi-provider chain.
+ */
+export async function sendCloudTranscription(
+  endpoint: string,
+  apiKey: string,
+  model: string,
+  audioPath: string
+): Promise<{ segments: TranscriptSegment[]; duration: number }> {
+  const startTime = Date.now();
+
+  const audioBuffer = await fs.readFile(audioPath);
+  const fileName = audioPath.split("/").pop() || "audio.mp3";
+
+  const formData = new FormData();
+  formData.append(
+    "file",
+    new Blob([audioBuffer], { type: "audio/mpeg" }),
+    fileName
+  );
+  formData.append("model", model);
+  formData.append("response_format", "verbose_json");
+  formData.append("timestamp_granularities[]", "segment");
+
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: formData,
+    signal: AbortSignal.timeout(300_000), // 5 min
+  });
+
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    const message =
+      (errBody as Record<string, { message?: string }>)?.error?.message ||
+      `API error (HTTP ${res.status})`;
+    throw new Error(`[whisper-cloud] Transcription failed: ${message}`);
+  }
+
+  const data = (await res.json()) as CloudWhisperResponse;
+  const segments = parseCloudWhisperResponse(data);
+
+  // Compute audio duration: prefer top-level duration, fall back to last segment end
+  let audioDuration = data.duration ?? 0;
+  if (!audioDuration && data.segments && data.segments.length > 0) {
+    audioDuration = data.segments[data.segments.length - 1].end;
+  }
+
+  const wallTime = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(
+    `[whisper-cloud] Done: ${segments.length} segments, model=${model}, audio=${audioDuration.toFixed(0)}s, wall-clock=${wallTime}s`
+  );
+
+  return { segments, duration: audioDuration };
+}
+
+// ---------------------------------------------------------------------------
+// Legacy single-provider transcription (backward compat)
 // ---------------------------------------------------------------------------
 
 export async function transcribeWithCloudWhisper(
@@ -168,54 +229,14 @@ export async function transcribeWithCloudWhisper(
   console.log(
     `[whisper-cloud] Transcribing with ${provider} (model=${resolvedModel})...`
   );
-  const startTime = Date.now();
 
-  const audioBuffer = await fs.readFile(audioPath);
-  const fileName = audioPath.split("/").pop() || "audio.mp3";
-
-  const formData = new FormData();
-  formData.append(
-    "file",
-    new Blob([audioBuffer], { type: "audio/mpeg" }),
-    fileName
-  );
-  formData.append("model", resolvedModel);
-  formData.append("response_format", "verbose_json");
-  formData.append("timestamp_granularities[]", "segment");
-
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}` },
-    body: formData,
-    signal: AbortSignal.timeout(300_000), // 5 min
-  });
-
-  if (!res.ok) {
-    const errBody = await res.json().catch(() => ({}));
-    const message =
-      (errBody as Record<string, { message?: string }>)?.error?.message ||
-      `${provider} API error (HTTP ${res.status})`;
-    throw new Error(`[whisper-cloud] ${provider} transcription failed: ${message}`);
-  }
-
-  const data = (await res.json()) as CloudWhisperResponse;
-  const segments = parseCloudWhisperResponse(data);
-
-  const wallTime = ((Date.now() - startTime) / 1000).toFixed(1);
-
-  // Compute audio duration: prefer top-level duration, fall back to last segment end
-  let audioDuration = data.duration ?? 0;
-  if (!audioDuration && data.segments && data.segments.length > 0) {
-    audioDuration = data.segments[data.segments.length - 1].end;
-  }
-
-  console.log(
-    `[whisper-cloud] Done: ${segments.length} segments, provider=${provider}, model=${resolvedModel}, audio=${audioDuration.toFixed(0)}s, wall-clock=${wallTime}s`
+  const { segments, duration } = await sendCloudTranscription(
+    endpoint, apiKey, resolvedModel, audioPath
   );
 
   // Track daily usage for the settings page meter
-  if (audioDuration > 0) {
-    trackGroqUsage(audioDuration).catch((err) =>
+  if (duration > 0 && provider === "groq") {
+    trackGroqUsage(duration).catch((err) =>
       console.warn("[whisper-cloud] Failed to track usage:", err)
     );
   }
