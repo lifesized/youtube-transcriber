@@ -59,10 +59,16 @@ The agent will return clean transcript text. You can then ask it to summarize, t
 - "Search my transcripts for [topic]"
 - "Delete transcript [ID]"
 
+## Skip the setup — hosted version coming soon
+
+A cloud version is in the works — no install, no Python, no local Whisper. Just sign up and go.
+
+[Join the waitlist →](https://tally.so/r/XXXXXX)
+
 ## Stack
 
 Built on Next.js + Prisma. Whisper transcription runs as a local Python subprocess. Transcript data is stored locally in a SQLite database.
 
 ## Source
 
-[github.com/lifesized/youtube-transcriber](https://github.com/lifesized/youtube-transcriber) — open source, MIT licensed.
+[github.com/lifesized/youtube-transcriber](https://github.com/lifesized/youtube-transcriber) — open source, AGPL-3.0 licensed.

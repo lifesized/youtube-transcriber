@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Clean, LLM-ready transcripts from any YouTube video. Uses YouTube captions with local Whisper fallback.",
   "author": "lifesized",
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "homepage": "https://github.com/lifesized/youtube-transcriber",
   "repository": {
     "type": "git",
