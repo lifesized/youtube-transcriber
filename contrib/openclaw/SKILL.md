@@ -17,6 +17,66 @@ Use when the user wants to:
 - Save what was said in a video
 - Uses a shorthand like "s", "t", or "ts" followed by a YouTube URL (e.g. "ts https://youtube.com/watch?v=..." to transcribe and summarize)
 
+## Prerequisites
+
+### Check if the service is running
+
+Before making any API calls, check if the service is available:
+
+```bash
+curl -s http://127.0.0.1:19720/api/health | jq -r '.status'
+```
+
+- If this returns `"healthy"` — you're ready to go, skip to the API section.
+- If this returns `"unhealthy"` — check `.checks[]` for which component failed.
+- If this returns connection refused — the service needs to be set up and started (see below).
+
+### First-time setup
+
+The service requires these system dependencies:
+- **Node.js 18+** and npm
+- **Python 3.8+**
+- **yt-dlp** — YouTube audio download
+- **ffmpeg** — Audio processing
+
+Install system dependencies (macOS):
+```bash
+brew install yt-dlp ffmpeg
+```
+
+Install system dependencies (Ubuntu/Debian):
+```bash
+sudo apt install ffmpeg
+pip install yt-dlp
+```
+
+Then clone and set up the service:
+```bash
+git clone https://github.com/lifesized/youtube-transcriber.git
+cd youtube-transcriber
+npm run setup   # Installs deps, creates Python venv with Whisper, initializes database
+npm run dev     # Starts the service at http://127.0.0.1:19720
+```
+
+`npm run setup` handles everything: Node dependencies, Python virtual environment, Whisper installation, Prisma database initialization, and `.env` configuration.
+
+### Starting the service (already set up)
+
+If the service was previously set up but isn't running:
+```bash
+cd youtube-transcriber
+npm run dev
+```
+
+### Verify setup
+
+After starting, confirm everything is working:
+```bash
+curl -s http://127.0.0.1:19720/api/health | jq .
+```
+
+All checks should show `"status": "pass"`. If any show `"fail"`, run `npm run test:setup` for detailed diagnostics.
+
 ## API
 
 Base URL: `http://127.0.0.1:19720`
@@ -85,9 +145,11 @@ def format_transcript(transcript_json):
 
 When user asks to transcribe a video:
 
-1. POST the URL to `/api/transcripts`
-2. Parse the response
-3. Format and display the transcript with timestamps
+1. Check the service is running: `curl -s http://127.0.0.1:19720/api/health | jq -r '.status'`
+2. If not running, inform the user and provide setup instructions
+3. POST the URL to `/api/transcripts`
+4. Parse the response
+5. Format and display the transcript with timestamps
 
 ```bash
 RESP=$(curl -s -X POST 'http://127.0.0.1:19720/api/transcripts' \
@@ -107,13 +169,17 @@ for s in json.load(sys.stdin):
 
 ## Errors
 
-- **Connection refused**: Service not running. Start with `npm run dev`
-- **400**: Invalid URL format
-- **404**: Video not found
-- **429**: Rate limited, wait and retry
+| Error | Cause | Fix |
+|---|---|---|
+| Connection refused | Service not running | `cd youtube-transcriber && npm run dev` |
+| 400 | Invalid URL format | Ask user for a valid youtube.com or youtu.be URL |
+| 404 | Video not found | Video may be private or deleted |
+| 429 | Rate limited | Wait 30–60 seconds and retry |
+| 503 (health) | Dependency missing | Run `npm run test:setup` for diagnostics |
 
 ## Notes
 
 - Duplicate URLs return existing transcript (no re-transcription)
 - Videos without captions use Whisper (takes 1-5 minutes)
 - Supports: youtube.com/watch, youtu.be, youtube.com/shorts
+- The web UI is also available at http://127.0.0.1:19720 for browsing transcripts
