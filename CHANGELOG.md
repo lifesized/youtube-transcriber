@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-03-18
+
+### Added
+- **Waitlist page** — Self-hosted waitlist with Resend email notifications and Google Sheets sync. Deployed standalone site to Vercel.
+- **Entrance animations** — Staggered fade-up animations on page load for header, input, and library sections with `prefers-reduced-motion` support.
+- **Empty state illustration** — Library shows an icon and helpful prompt when no transcripts exist yet.
+- **Shimmer loading skeletons** — Library loading state uses animated shimmer effect instead of static placeholders.
+- **Ambient glow** — Subtle pulsing radial glow behind the URL input when idle.
+- **First-visit subtitle** — "Local transcription powered by Whisper. No data leaves your machine." shown to new users.
+
+### Changed
+- **Home page full redesign** — Glassmorphic input card, refined tile cards with gradient overlays and bronze thumbnails, polished list view with softer borders, centered footer with icon dividers, backdrop-blur dialogs and toasts.
+- **Transcribe button** — Renamed from "Extract" to "Transcribe", color changed to `#a0a0a0` for reduced brightness.
+- **Completion animations** — Reworked with Framer Motion spring physics. Queue items spring in/out with `AnimatePresence`, list entries get a spring-animated grayscale tick (no more green), smoother layout reflow with soft spring easing.
+- **Tile thumbnails** — Bronze/sepia filter with hover transition to increased opacity.
+- **Library section** — Removed enclosing panel card, view toggle buttons moved to top-right, search bar full-width.
+- **Footer** — Centered layout with vertical line dividers, GitHub text link replaced with octocat icon.
+- **Delete dialog** — Backdrop blur overlay, refined copy and spacing.
+- **Waitlist page design** — Outfit font, left-aligned layout, entrance animations, benefit-focused marketing copy.
+
 ## 2026-03-15
 
 ### Added
