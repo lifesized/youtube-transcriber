@@ -63,7 +63,7 @@ The agent will return clean transcript text. You can then ask it to summarize, t
 
 A cloud version is in the works — no install, no Python, no local Whisper. Just sign up and go.
 
-[Join the waitlist →](https://tally.so/r/kdZOvM)
+[Join the waitlist →](http://localhost:19720/waitlist)
 
 ## Stack
 

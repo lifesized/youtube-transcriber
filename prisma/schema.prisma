@@ -36,6 +36,12 @@ model DailyUsage {
   @@unique([date, provider])
 }
 
+model WaitlistSignup {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+}
+
 model Video {
   id           String   @id @default(cuid())
   videoId      String   @unique

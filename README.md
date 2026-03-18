@@ -14,7 +14,7 @@ https://github.com/user-attachments/assets/32491284-5c78-4a74-a580-ff3a8c256243
 
 Don't want to run it locally? A hosted version is in progress — no install, no Python, no local Whisper. Just sign up and go.
 
-**[Join the waitlist →](https://tally.so/r/kdZOvM)**
+**[Join the waitlist →](http://localhost:19720/waitlist)**
 
 ## Get Running in 60 Seconds
 
