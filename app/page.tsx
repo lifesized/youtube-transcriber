@@ -861,18 +861,16 @@ function HomeInner() {
       <div className="mx-auto max-w-[800px]">
         <div className="space-y-8">
           <section>
-            <div className="mb-6 flex items-center justify-between">
-              <div>
-                <h1 className="text-xl font-semibold text-white/90">
-                  YouTube Transcriber
-                </h1>
-                <p className="mt-2 text-base text-white/50">
-                  YouTube to LLM-ready transcript in one click.
-                </p>
-              </div>
+            <div className="mb-6">
+              <p className="anim-fade-up text-[11px] font-medium uppercase tracking-[0.08em] text-white/20">
+                YouTube Transcriber
+              </p>
+              <h1 className="anim-fade-up-d1 mt-2 text-[22px] font-semibold tracking-tight text-white/90">
+                Paste a link. Get the transcript.
+              </h1>
             </div>
 
-            <form onSubmit={handleSubmit} className="w-full">
+            <form onSubmit={handleSubmit} className="anim-fade-up-d2 w-full">
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <Input
@@ -1098,7 +1096,7 @@ function HomeInner() {
           </section>
 
           {hasCreatedTranscript && (
-            <section className="rounded-2xl border border-white/10 bg-[hsl(var(--panel))] p-6 shadow-[0_20px_70px_-55px_rgba(0,0,0,0.9)]">
+            <section className="anim-fade-up-d3 rounded-2xl border border-white/10 bg-[hsl(var(--panel))] p-6 shadow-[0_20px_70px_-55px_rgba(0,0,0,0.9)]">
               <div className="mb-6 flex items-center gap-2">
                 <Input
                   type="text"
@@ -1448,14 +1446,14 @@ function HomeInner() {
               )}
 
               {/* Footer */}
-              <div className="mt-8 flex items-center justify-between">
+              <div className="anim-fade-in-d2 mt-10 flex items-center gap-4 text-[11px] text-white/18">
                 <a
                   href="/settings"
-                  className="text-white/35 transition-colors hover:text-white/60"
+                  className="transition-colors duration-200 hover:text-white/45"
                   title="Settings"
                 >
                   <svg
-                    className="h-5 w-5"
+                    className="h-4 w-4"
                     fill="currentColor"
                     viewBox="0 0 24 24"
                     aria-hidden="true"
@@ -1463,34 +1461,21 @@ function HomeInner() {
                     <path fillRule="evenodd" d="M11.078 2.25c-.917 0-1.699.663-1.85 1.567L9.05 4.889c-.02.12-.115.26-.297.348a7.454 7.454 0 0 0-.986.57c-.166.115-.334.126-.45.083L6.3 5.508a1.875 1.875 0 0 0-2.282.819l-.922 1.597a1.875 1.875 0 0 0 .432 2.385l.84.692c.095.078.17.229.154.43a7.598 7.598 0 0 0 0 1.139c.015.2-.059.352-.153.43l-.841.692a1.875 1.875 0 0 0-.432 2.385l.922 1.597a1.875 1.875 0 0 0 2.282.818l1.019-.382c.115-.043.283-.031.45.082.312.214.641.405.985.57.182.088.277.228.297.35l.178 1.071c.151.904.933 1.567 1.85 1.567h1.844c.916 0 1.699-.663 1.85-1.567l.178-1.072c.02-.12.114-.26.297-.349.344-.165.673-.356.985-.57.167-.114.335-.125.45-.082l1.02.382a1.875 1.875 0 0 0 2.28-.819l.923-1.597a1.875 1.875 0 0 0-.432-2.385l-.84-.692c-.095-.078-.17-.229-.154-.43a7.614 7.614 0 0 0 0-1.139c-.016-.2.059-.352.153-.43l.84-.692c.708-.582.891-1.59.433-2.385l-.922-1.597a1.875 1.875 0 0 0-2.282-.818l-1.02.382c-.114.043-.282.031-.449-.083a7.49 7.49 0 0 0-.985-.57c-.183-.087-.277-.227-.297-.348l-.179-1.072a1.875 1.875 0 0 0-1.85-1.567h-1.843ZM12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5Z" clipRule="evenodd" />
                   </svg>
                 </a>
+                <span className="opacity-40">/</span>
                 <a
-                  href="https://tally.so/r/kdZOvM"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[13px] text-white/25 transition-colors hover:text-white/50"
-                  title="Join the waitlist for the hosted version"
+                  href="/waitlist"
+                  className="transition-colors duration-200 hover:text-white/45"
                 >
                   Cloud waitlist
                 </a>
+                <span className="opacity-40">/</span>
                 <a
-                    href="https://github.com/lifesized/youtube-transcriber"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-white/35 transition-colors hover:text-white/60"
-                    title="View on GitHub"
-                  >
-                    <svg
-                      className="h-5 w-5"
-                      fill="currentColor"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
+                  href="https://github.com/lifesized/youtube-transcriber"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="transition-colors duration-200 hover:text-white/45"
+                >
+                  GitHub
                 </a>
               </div>
             </section>
