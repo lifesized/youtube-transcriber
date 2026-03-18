@@ -63,7 +63,7 @@ The agent will return clean transcript text. You can then ask it to summarize, t
 
 A cloud version is in the works — no install, no Python, no local Whisper. Just sign up and go.
 
-[Join the waitlist →](http://localhost:19720/waitlist)
+[Join the waitlist →](https://waitlist-site-alpha.vercel.app)
 
 ## Stack
 

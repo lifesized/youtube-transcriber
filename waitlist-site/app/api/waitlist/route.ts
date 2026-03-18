@@ -9,18 +9,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Valid email required" }, { status: 400 });
     }
 
-    // Store in SQLite if Prisma is available (local dev)
-    try {
-      const { prisma } = await import("@/lib/prisma");
-      const existing = await prisma.waitlistSignup.findUnique({ where: { email } });
-      if (existing) {
-        return NextResponse.json({ status: "already_signed_up" });
-      }
-      await prisma.waitlistSignup.create({ data: { email } });
-    } catch {
-      // Prisma/SQLite unavailable (e.g. Vercel) — continue with Resend + Sheet
-    }
-
     // Send notification email via Resend
     const apiKey = process.env.RESEND_API_KEY;
     const notifyEmail = process.env.WAITLIST_NOTIFY_EMAIL;
