@@ -870,7 +870,15 @@ function HomeInner() {
               </h1>
             </div>
 
-            <form onSubmit={handleSubmit} className="anim-fade-up-d2 w-full">
+            <div className="anim-fade-up-d2 relative">
+              {/* Ambient glow behind input */}
+              {!url && !hasQueue && (
+                <div
+                  className="pointer-events-none absolute -top-12 left-1/2 h-[200px] w-[400px] -translate-x-1/2 rounded-full opacity-[0.04]"
+                  style={{ background: "radial-gradient(circle, rgba(255,255,255,1) 0%, transparent 70%)", animation: "subtleGlow 6s ease-in-out infinite" }}
+                />
+              )}
+            <form onSubmit={handleSubmit} className="relative w-full">
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <Input
@@ -919,6 +927,7 @@ function HomeInner() {
                 )}
               </div>
             </form>
+            </div>
 
             {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
             {duplicateHint && (
@@ -1097,6 +1106,9 @@ function HomeInner() {
 
           {hasCreatedTranscript && (
             <section className="anim-fade-up-d3 rounded-2xl border border-white/10 bg-[hsl(var(--panel))] p-6 shadow-[0_20px_70px_-55px_rgba(0,0,0,0.9)]">
+              <p className="mb-3 text-[11px] font-medium uppercase tracking-[0.08em] text-white/20">
+                Library
+              </p>
               <div className="mb-6 flex items-center gap-2">
                 <Input
                   type="text"
@@ -1132,19 +1144,24 @@ function HomeInner() {
                   {[1, 2, 3, 4].map((i) => (
                     <div
                       key={i}
-                      className="animate-pulse rounded-lg border border-white/10 bg-[hsl(var(--panel-2))] p-4"
+                      className="rounded-lg border border-white/6 bg-[hsl(var(--panel-2))] p-4"
                     >
-                      <div className="mb-2 h-24 rounded bg-white/10" />
-                      <div className="mb-2 h-4 w-3/4 rounded bg-white/10" />
-                      <div className="h-4 w-1/2 rounded bg-white/10" />
+                      <div className="mb-2 h-24 rounded bg-white/6" style={{ backgroundImage: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 50%, transparent 100%)", backgroundSize: "200% 100%", animation: "shimmer 1.8s infinite" }} />
+                      <div className="mb-2 h-4 w-3/4 rounded bg-white/6" />
+                      <div className="h-4 w-1/2 rounded bg-white/6" />
                     </div>
                   ))}
                 </div>
               ) : transcripts.length === 0 ? (
-                <div className="py-12 text-center">
-                  <p className="text-base text-white/50">
-                    {search ? "No transcripts match your search." : "No transcripts yet."}
-                  </p>
+                <div className="py-16 text-center">
+                  {search ? (
+                    <p className="text-sm text-white/40">No transcripts match &ldquo;{search}&rdquo;</p>
+                  ) : (
+                    <>
+                      <p className="text-sm text-white/50">Your transcripts will appear here.</p>
+                      <p className="mt-2 text-xs text-white/25">Paste a YouTube URL above to get started.</p>
+                    </>
+                  )}
                 </div>
               ) : (
                 <>
@@ -1163,7 +1180,7 @@ function HomeInner() {
                             className={`group relative w-full overflow-hidden rounded-lg border text-left transition-all duration-200 ${
                               isSelected
                                 ? "border-white/20 bg-white/5"
-                                : "border-white/[0.06] hover:border-white/[0.12] hover:bg-white/[0.03]"
+                                : "border-white/6 hover:border-white/12 hover:bg-white/[0.03] hover:-translate-y-0.5"
                             }`}
                             title={t.title}
                           >
