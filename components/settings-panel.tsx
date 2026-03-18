@@ -13,6 +13,7 @@ interface SettingsData {
   groq_usage_date?: string;
   whisper_enabled?: string;
   whisper_priority?: string;
+  groq_rate_limit?: string;
 }
 
 interface ProviderRow {
@@ -33,6 +34,7 @@ type FallbackItem =
 type ProviderType = "openrouter" | "groq" | "custom";
 
 const DAILY_LIMIT = 14_400;
+const GROQ_COST_PER_SECOND = 0.0001; // $0.006/min beyond free tier
 
 const PROVIDER_LABELS: Record<ProviderType, string> = {
   openrouter: "OpenRouter",
@@ -69,6 +71,13 @@ function formatSeconds(s: number): string {
   if (h > 0) return `${h}h ${m}m`;
   if (m > 0) return `${m}m ${sec}s`;
   return `${sec}s`;
+}
+
+function estimateOverageCost(seconds: number): string | null {
+  if (seconds <= DAILY_LIMIT) return null;
+  const overage = seconds - DAILY_LIMIT;
+  const cost = overage * GROQ_COST_PER_SECOND;
+  return cost < 0.01 ? "< $0.01" : `~$${cost.toFixed(2)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -255,6 +264,15 @@ export function SettingsPanel() {
   const [addSaving, setAddSaving] = useState(false);
   const [usageSeconds, setUsageSeconds] = useState(0);
   const [usageDate, setUsageDate] = useState("");
+  const [monthlyCost, setMonthlyCost] = useState<number | null>(null);
+  const [monthLabel, setMonthLabel] = useState("");
+  const [monthlyDays, setMonthlyDays] = useState<{ date: string; seconds: number; cost: number }[]>([]);
+  const [showDailyBreakdown, setShowDailyBreakdown] = useState(false);
+  const [groqRateLimit, setGroqRateLimit] = useState<{
+    remainingSeconds: number | null;
+    limitSeconds: number | null;
+    resetSeconds: string | null;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [completionAlertsEnabled, setCompletionAlertsEnabled] = useState(true);
 
@@ -264,9 +282,10 @@ export function SettingsPanel() {
 
   const loadSettings = useCallback(async () => {
     try {
-      const [settingsRes, providersRes] = await Promise.all([
+      const [settingsRes, providersRes, usageRes] = await Promise.all([
         fetch("/api/settings"),
         fetch("/api/settings/providers"),
+        fetch("/api/usage"),
       ]);
 
       if (settingsRes.ok) {
@@ -279,7 +298,8 @@ export function SettingsPanel() {
         } else {
           setWhisperPriority(0);
         }
-        const today = new Date().toISOString().slice(0, 10);
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
         if (data.groq_usage_date === today && data.groq_usage_seconds) {
           setUsageSeconds(parseFloat(data.groq_usage_seconds));
           setUsageDate(data.groq_usage_date);
@@ -294,11 +314,23 @@ export function SettingsPanel() {
             }).catch(() => {});
           }
         }
+        if (data.groq_rate_limit) {
+          try {
+            setGroqRateLimit(JSON.parse(data.groq_rate_limit));
+          } catch { /* ignore parse errors */ }
+        }
       }
 
       if (providersRes.ok) {
         const data: ProviderRow[] = await providersRes.json();
         setProviders(data);
+      }
+
+      if (usageRes.ok) {
+        const data = await usageRes.json();
+        setMonthlyCost(data.totalCost);
+        setMonthLabel(data.month);
+        setMonthlyDays(data.days);
       }
     } catch {
       // Settings may not exist yet
@@ -458,8 +490,12 @@ export function SettingsPanel() {
   }
 
   const hasGroqProvider = providers.some((p) => p.provider === "groq");
-  const pct = Math.min((usageSeconds / DAILY_LIMIT) * 100, 100);
-  const tier = usageTier(usageSeconds);
+  const groqLimit = groqRateLimit?.limitSeconds ?? DAILY_LIMIT;
+  const groqUsed = groqRateLimit?.remainingSeconds != null
+    ? groqLimit - groqRateLimit.remainingSeconds
+    : usageSeconds;
+  const pct = Math.min((groqUsed / groqLimit) * 100, 100);
+  const tier = usageTier(groqUsed);
 
   if (loading) {
     return <div className="py-4 text-sm text-white/40">Loading settings...</div>;
@@ -669,12 +705,47 @@ export function SettingsPanel() {
                 <div className={`h-full rounded-full transition-all duration-500 ${tier.barColor}`} style={{ width: `${pct}%` }} />
               </div>
               <div className="flex justify-between text-xs text-white/40">
-                <span>{formatSeconds(usageSeconds)} used</span>
-                <span>{formatSeconds(DAILY_LIMIT)} limit</span>
+                <span>{formatSeconds(groqUsed)} used</span>
+                <span>{formatSeconds(groqLimit)} limit</span>
               </div>
             </div>
+            {groqRateLimit?.remainingSeconds != null && (
+              <p className="text-xs text-white/40">
+                {formatSeconds(groqRateLimit.remainingSeconds)} remaining
+                {groqRateLimit.resetSeconds && ` · resets in ${groqRateLimit.resetSeconds}`}
+              </p>
+            )}
+            {estimateOverageCost(groqUsed) && (
+              <p className="text-sm font-medium text-red-400">
+                Estimated cost today: {estimateOverageCost(groqUsed)} ({formatSeconds(groqUsed - DAILY_LIMIT)} beyond free tier)
+              </p>
+            )}
+            {monthlyCost !== null && monthlyCost > 0 && (
+              <div className="space-y-2">
+                <button
+                  onClick={() => setShowDailyBreakdown((v) => !v)}
+                  className="flex items-center gap-1.5 text-sm text-white/50 transition-colors hover:text-white/70"
+                >
+                  <span className={`inline-block transition-transform duration-200 ${showDailyBreakdown ? "rotate-90" : ""}`}>&#9654;</span>
+                  Month total ({monthLabel}): ~${monthlyCost.toFixed(2)}
+                </button>
+                {showDailyBreakdown && monthlyDays.length > 0 && (
+                  <div className="ml-4 space-y-1 border-l border-white/5 pl-3">
+                    {monthlyDays.map((day) => (
+                      <div key={day.date} className="flex justify-between text-xs text-white/40">
+                        <span>{day.date}</span>
+                        <span>
+                          {formatSeconds(day.seconds)}
+                          {day.cost > 0 && <span className="ml-2 text-red-400/70">~${day.cost.toFixed(2)}</span>}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <p className="text-sm text-white/30">
-              Groq free tier allows 14,400 audio-seconds per day (~4 hours).
+              Groq free tier allows {formatSeconds(groqLimit)} per day.
               {usageDate && ` Tracking for ${usageDate}.`}
               {" "}Usage resets daily.
             </p>

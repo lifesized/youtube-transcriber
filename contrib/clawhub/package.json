@@ -1,0 +1,21 @@
+{
+  "name": "youtube-transcriber",
+  "version": "1.0.0",
+  "description": "Clean, LLM-ready transcripts from any YouTube video. Uses YouTube captions with local Whisper fallback.",
+  "author": "lifesized",
+  "license": "MIT",
+  "homepage": "https://github.com/lifesized/youtube-transcriber",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lifesized/youtube-transcriber"
+  },
+  "keywords": [
+    "youtube",
+    "transcript",
+    "whisper",
+    "llm",
+    "transcription",
+    "captions",
+    "openclaw"
+  ]
+}

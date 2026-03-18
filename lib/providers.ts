@@ -113,7 +113,7 @@ export async function transcribeWithProvider(
     `[providers] Transcribing with ${config.provider} (model=${config.model})...`
   );
 
-  const { segments, duration } = await sendCloudTranscription(
+  const { segments, duration, rateLimit } = await sendCloudTranscription(
     config.endpoint,
     config.apiKey,
     config.model,
@@ -122,7 +122,7 @@ export async function transcribeWithProvider(
 
   // Track Groq daily usage
   if (config.provider === "groq" && duration > 0) {
-    trackGroqUsage(duration).catch((err) =>
+    trackGroqUsage(duration, rateLimit).catch((err) =>
       console.warn("[providers] Failed to track Groq usage:", err)
     );
   }

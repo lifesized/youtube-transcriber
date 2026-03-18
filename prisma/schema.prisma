@@ -27,6 +27,15 @@ model ProviderConfig {
   updatedAt DateTime @updatedAt
 }
 
+model DailyUsage {
+  id       String @id @default(cuid())
+  date     String // ISO date "2026-03-17"
+  provider String // "groq" | "openrouter" | "custom"
+  seconds  Float  @default(0)
+
+  @@unique([date, provider])
+}
+
 model Video {
   id           String   @id @default(cuid())
   videoId      String   @unique

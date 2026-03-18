@@ -113,20 +113,29 @@ function parseCloudWhisperResponse(
 // Usage tracking
 // ---------------------------------------------------------------------------
 
-export async function trackGroqUsage(audioSeconds: number): Promise<void> {
-  const today = new Date().toISOString().slice(0, 10);
+export async function trackGroqUsage(audioSeconds: number, rateLimit?: RateLimitInfo | null): Promise<void> {
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
   const [dateSetting, usageSetting] = await Promise.all([
     prisma.setting.findUnique({ where: { key: "groq_usage_date" } }),
     prisma.setting.findUnique({ where: { key: "groq_usage_seconds" } }),
   ]);
 
-  // Reset if it's a new day
-  const currentSeconds =
-    dateSetting?.value === today
-      ? parseFloat(usageSetting?.value || "0")
-      : 0;
+  // If day rolled over, persist yesterday's total before resetting
+  const isNewDay = dateSetting?.value && dateSetting.value !== today;
+  if (isNewDay) {
+    const previousSeconds = parseFloat(usageSetting?.value || "0");
+    if (previousSeconds > 0) {
+      await prisma.dailyUsage.upsert({
+        where: { date_provider: { date: dateSetting.value, provider: "groq" } },
+        update: { seconds: previousSeconds },
+        create: { date: dateSetting.value, provider: "groq", seconds: previousSeconds },
+      });
+    }
+  }
 
+  const currentSeconds = isNewDay ? 0 : parseFloat(usageSetting?.value || "0");
   const newSeconds = currentSeconds + audioSeconds;
 
   await Promise.all([
@@ -140,7 +149,20 @@ export async function trackGroqUsage(audioSeconds: number): Promise<void> {
       update: { value: String(newSeconds) },
       create: { key: "groq_usage_seconds", value: String(newSeconds) },
     }),
+    prisma.dailyUsage.upsert({
+      where: { date_provider: { date: today, provider: "groq" } },
+      update: { seconds: newSeconds },
+      create: { date: today, provider: "groq", seconds: newSeconds },
+    }),
   ]);
+
+  if (rateLimit) {
+    await prisma.setting.upsert({
+      where: { key: "groq_rate_limit" },
+      update: { value: JSON.stringify(rateLimit) },
+      create: { key: "groq_rate_limit", value: JSON.stringify(rateLimit) },
+    });
+  }
 
   console.log(
     `[whisper-cloud] Usage: ${newSeconds.toFixed(0)}s / 14400s today`
@@ -155,12 +177,40 @@ export async function trackGroqUsage(audioSeconds: number): Promise<void> {
  * Send an audio file to any OpenAI-compatible transcription endpoint.
  * Used by both the legacy single-provider path and the new multi-provider chain.
  */
+export interface RateLimitInfo {
+  remainingRequests: number | null;
+  limitRequests: number | null;
+  remainingSeconds: number | null;
+  limitSeconds: number | null;
+  resetRequests: string | null;
+  resetSeconds: string | null;
+}
+
+function parseRateLimitHeaders(headers: Headers): RateLimitInfo | null {
+  const remaining = headers.get("x-ratelimit-remaining-requests");
+  if (remaining === null) return null;
+  return {
+    remainingRequests: toNum(headers.get("x-ratelimit-remaining-requests")),
+    limitRequests: toNum(headers.get("x-ratelimit-limit-requests")),
+    remainingSeconds: toNum(headers.get("x-ratelimit-remaining-audio-seconds")),
+    limitSeconds: toNum(headers.get("x-ratelimit-limit-audio-seconds")),
+    resetRequests: headers.get("x-ratelimit-reset-requests"),
+    resetSeconds: headers.get("x-ratelimit-reset-audio-seconds"),
+  };
+}
+
+function toNum(v: string | null): number | null {
+  if (v === null) return null;
+  const n = parseFloat(v);
+  return isNaN(n) ? null : n;
+}
+
 export async function sendCloudTranscription(
   endpoint: string,
   apiKey: string,
   model: string,
   audioPath: string
-): Promise<{ segments: TranscriptSegment[]; duration: number }> {
+): Promise<{ segments: TranscriptSegment[]; duration: number; rateLimit: RateLimitInfo | null }> {
   const startTime = Date.now();
 
   const audioBuffer = await fs.readFile(audioPath);
@@ -200,12 +250,19 @@ export async function sendCloudTranscription(
     audioDuration = data.segments[data.segments.length - 1].end;
   }
 
+  const rateLimit = parseRateLimitHeaders(res.headers);
+
   const wallTime = ((Date.now() - startTime) / 1000).toFixed(1);
   console.log(
     `[whisper-cloud] Done: ${segments.length} segments, model=${model}, audio=${audioDuration.toFixed(0)}s, wall-clock=${wallTime}s`
   );
+  if (rateLimit) {
+    console.log(
+      `[whisper-cloud] Rate limit: ${rateLimit.remainingSeconds ?? "?"}s remaining / ${rateLimit.limitSeconds ?? "?"}s limit, resets ${rateLimit.resetSeconds ?? "?"}`
+    );
+  }
 
-  return { segments, duration: audioDuration };
+  return { segments, duration: audioDuration, rateLimit };
 }
 
 // ---------------------------------------------------------------------------
@@ -230,13 +287,13 @@ export async function transcribeWithCloudWhisper(
     `[whisper-cloud] Transcribing with ${provider} (model=${resolvedModel})...`
   );
 
-  const { segments, duration } = await sendCloudTranscription(
+  const { segments, duration, rateLimit } = await sendCloudTranscription(
     endpoint, apiKey, resolvedModel, audioPath
   );
 
   // Track daily usage for the settings page meter
   if (duration > 0 && provider === "groq") {
-    trackGroqUsage(duration).catch((err) =>
+    trackGroqUsage(duration, rateLimit).catch((err) =>
       console.warn("[whisper-cloud] Failed to track usage:", err)
     );
   }

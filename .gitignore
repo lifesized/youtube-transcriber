@@ -45,3 +45,6 @@ backups/
 HANDOVER.md
 plan.md
 scripts/check-handover.sh
+
+# Playground pages
+app/dither/

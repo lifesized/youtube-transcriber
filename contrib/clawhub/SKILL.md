@@ -1,0 +1,158 @@
+---
+name: youtube-transcriber
+description: Get clean, LLM-ready transcripts from any YouTube video. No timestamps, no clutter — just the text, ready to paste into any AI workflow. Falls back to local Whisper when captions aren't available.
+emoji: 📝
+---
+
+# YouTube Transcriber
+
+Fetch clean, LLM-ready transcripts from any YouTube video. Uses official YouTube captions when available; falls back to local Whisper transcription when they're not. Output is plain text — no timestamps, no formatting noise — ready to drop straight into any AI prompt or workflow.
+
+## When to Use
+
+Activate when the user wants to:
+- Transcribe a YouTube video
+- Get the full text of what was said in a video
+- Feed a video's content into an LLM (summarize, analyze, Q&A, translate, etc.)
+- Extract dialogue, quotes, or research material from a video
+- Use shorthand like `t`, `ts`, or `transcribe` followed by a YouTube URL
+
+## Prerequisites
+
+The YouTube Transcriber service must be running locally:
+
+```bash
+# Clone and start the service
+git clone https://github.com/lifesized/youtube-transcriber.git
+cd youtube-transcriber
+npm install
+npm run dev
+# Now running at http://127.0.0.1:19720
+```
+
+No external MCP servers to clone. No third-party repos to audit. Just a local Next.js service with a clean REST API.
+
+## API
+
+Base URL: `http://127.0.0.1:19720`
+
+### Transcribe a Video
+
+```bash
+curl -X POST 'http://127.0.0.1:19720/api/transcripts' \
+  -H 'Content-Type: application/json' \
+  -d '{"url": "YOUTUBE_URL"}'
+```
+
+**Response:**
+```json
+{
+  "id": "abc123",
+  "title": "Video Title",
+  "author": "Channel Name",
+  "videoUrl": "https://youtube.com/watch?v=...",
+  "transcript": "[{\"text\":\"Hello world\",\"startMs\":0,\"durationMs\":1500}]",
+  "source": "youtube_captions"
+}
+```
+
+The `transcript` field is a JSON string. Parse it to get segments with `text`, `startMs`, and `durationMs`.
+
+### Get Clean Text (LLM-Ready)
+
+To extract plain text with no timestamps:
+
+```bash
+RESP=$(curl -s -X POST 'http://127.0.0.1:19720/api/transcripts' \
+  -H 'Content-Type: application/json' \
+  -d '{"url": "USER_URL"}')
+
+echo "$RESP" | jq -r '.transcript' | python3 -c "
+import json, sys
+segments = json.load(sys.stdin)
+print(' '.join(s['text'] for s in segments))
+"
+```
+
+This is the primary output format — clean, continuous text ready for any LLM.
+
+### Get Text with Timestamps (optional)
+
+If the user specifically wants timestamps:
+
+```bash
+echo "$RESP" | jq -r '.transcript' | python3 -c "
+import json, sys
+for s in json.load(sys.stdin):
+    m, sec = s['startMs']//60000, (s['startMs']%60000)//1000
+    print(f'[{m}:{sec:02d}] {s[\"text\"]}')
+"
+```
+
+### List Saved Transcripts
+
+```bash
+curl 'http://127.0.0.1:19720/api/transcripts'
+```
+
+### Search Transcripts
+
+```bash
+curl 'http://127.0.0.1:19720/api/transcripts?q=SEARCH_TERM'
+```
+
+### Get by ID
+
+```bash
+curl 'http://127.0.0.1:19720/api/transcripts/ID'
+```
+
+### Delete
+
+```bash
+curl -X DELETE 'http://127.0.0.1:19720/api/transcripts/ID'
+```
+
+## Recommended Workflow
+
+When a user shares a YouTube URL and wants the transcript:
+
+1. POST the URL to `/api/transcripts`
+2. Parse the response
+3. Extract clean text (no timestamps) using the snippet above
+4. Return the clean text directly — it's ready to use
+
+```bash
+RESP=$(curl -s -X POST 'http://127.0.0.1:19720/api/transcripts' \
+  -H 'Content-Type: application/json' \
+  -d '{"url": "USER_URL"}')
+
+TITLE=$(echo "$RESP" | jq -r '.title')
+AUTHOR=$(echo "$RESP" | jq -r '.author')
+TEXT=$(echo "$RESP" | jq -r '.transcript' | python3 -c "
+import json, sys
+segments = json.load(sys.stdin)
+print(' '.join(s['text'] for s in segments))
+")
+
+echo "📹 $TITLE — $AUTHOR"
+echo ""
+echo "$TEXT"
+```
+
+## Error Handling
+
+| Error | Cause | Fix |
+|---|---|---|
+| Connection refused | Service not running | `npm run dev` in the project directory |
+| 400 | Invalid or unsupported URL | Ask user for a valid youtube.com or youtu.be URL |
+| 404 | Video not found or unavailable | Inform user the video may be private or deleted |
+| 429 | Rate limited | Wait 30–60 seconds and retry |
+
+## Notes
+
+- Submitting the same URL twice returns the cached transcript — no re-transcription
+- Videos without captions fall back to local Whisper (may take 1–5 minutes depending on video length and hardware)
+- `source` in the response will be `"youtube_captions"` or `"whisper"` — useful for informing the user
+- Supported URL formats: `youtube.com/watch?v=`, `youtu.be/`, `youtube.com/shorts/`
+- Each user runs their own local instance — transcripts stay on your machine
