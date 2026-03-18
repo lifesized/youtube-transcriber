@@ -10,7 +10,6 @@ https://github.com/user-attachments/assets/32491284-5c78-4a74-a580-ff3a8c256243
 
 
 
-
 ## Hosted Version (Coming Soon)
 
 Don't want to run it locally? A hosted version is in progress — no install, no Python, no local Whisper. Just sign up and go.
@@ -29,6 +28,31 @@ npm run dev
 Open [http://localhost:19720](http://localhost:19720) — paste a YouTube URL, hit Extract, done.
 
 > `npm run setup` installs all dependencies (yt-dlp, ffmpeg, Whisper, MLX on Apple Silicon) and configures everything automatically. Requires Node.js 18+, Python 3.8+, and a package manager (Homebrew / apt / dnf / pacman).
+
+## Chrome Extension
+
+Transcribe any YouTube video directly from your browser without leaving the page. The extension opens as a persistent side panel — it stays open as you navigate between videos and detects each one automatically.
+
+> **Note:** The extension is not yet on the Chrome Web Store. Install it manually in a few steps while we go through the review process.
+
+### Install
+
+1. Make sure the service is running (`npm run dev`)
+2. Open Chrome and go to `chrome://extensions`
+3. Enable **Developer mode** (toggle, top right)
+4. Click **Load unpacked**
+5. Select the `extension/` folder inside this repo
+6. Click the YouTube Transcriber icon in your toolbar to open the side panel
+
+### Usage
+
+Navigate to any YouTube video, open the side panel, and click **Transcribe**. The extension uses the same transcription pipeline as the web app — captions first, Whisper fallback, cloud providers if configured.
+
+Transcripts open directly in the web app at `http://localhost:19720` where you can search, copy, export, or send to an LLM.
+
+> A Chrome Web Store listing is coming soon — once published, installation will be one click.
+
+---
 
 ## Use as a Skill
 
@@ -126,6 +150,7 @@ Works fully offline by default. Cloud Whisper is optional — bring your own API
 ## Features
 
 - **Local + cloud transcription** — free local Whisper by default, optional cloud providers (Groq, OpenRouter, or custom endpoint) for faster results with your own API key
+- **Chrome extension** — persistent side panel that transcribes from your browser as you watch
 - **Multi-language captions** — request captions in any language YouTube supports (see [Language Preference](#language-preference) below)
 - **Summarize with LLM** — send any transcript straight to ChatGPT or Claude. ChatGPT opens with the prompt pre-filled; Claude copies it to your clipboard so you can paste (⌘V) into a new chat
 - **Queue system** — batch-process multiple videos
@@ -291,6 +316,8 @@ Returns JSON with per-check pass/fail — useful for Docker health checks or deb
 ## Contributing
 
 Contributions welcome — feel free to submit issues or pull requests.
+
+If this saves you time, a ⭐ on GitHub helps others find it.
 
 ## License
 
