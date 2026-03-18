@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LayoutGroup, motion } from "framer-motion";
+import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import type { TranscriptSegment } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -711,7 +711,7 @@ function HomeInner() {
                 next.delete(data.id);
                 return next;
               });
-            }, 1500);
+            }, 3000);
           }
 
           // Animate progress bar to 100% while still showing it
@@ -740,10 +740,10 @@ function HomeInner() {
             )
           );
 
-          // Remove completed item from queue after a short delay
+          // Remove completed item from queue after the CSS fade-out animation finishes
           setTimeout(() => {
             updateQueue((prev) => prev.filter((_, i) => i !== idx));
-          }, 2500);
+          }, 2800);
         } else {
           let errorMsg = data.error || "Failed";
           if (res.status === 429) {
@@ -861,12 +861,11 @@ function HomeInner() {
       <div className="mx-auto max-w-[800px]">
         <div className="space-y-10">
           <section>
-            {/* Hero header — more vertical presence when no transcripts yet */}
-            <div className={`mb-8 ${!hasCreatedTranscript ? 'pt-12 pb-4 text-center' : ''}`}>
+            <div className="mb-8">
               <p className="anim-fade-up text-[11px] font-medium uppercase tracking-[0.12em] text-white/25">
                 YouTube Transcriber
               </p>
-              <h1 className={`anim-fade-up-d1 mt-3 font-semibold tracking-tight text-white/90 ${!hasCreatedTranscript ? 'text-[28px]' : 'text-[22px]'}`}>
+              <h1 className="anim-fade-up-d1 mt-3 text-[22px] font-semibold tracking-tight text-white/90">
                 Paste a link. Get the transcript.
               </h1>
               {!hasCreatedTranscript && (
@@ -885,7 +884,7 @@ function HomeInner() {
                 />
               )}
             <form onSubmit={handleSubmit} className="relative w-full">
-              <div className="glass-card flex items-center gap-2 rounded-2xl p-2 transition-all duration-300">
+              <div className="flex items-center gap-3">
                 <div className="relative flex-1">
                   <Input
                     type="text"
@@ -896,7 +895,7 @@ function HomeInner() {
                       if (duplicateHint) setDuplicateHint(null);
                     }}
                     placeholder="https://www.youtube.com/watch?v=..."
-                    className="h-11 border-0 bg-transparent pr-10 shadow-none focus-visible:ring-0"
+                    className="h-12 pr-10"
                   />
                   {url && (
                     <IconButton
@@ -905,7 +904,7 @@ function HomeInner() {
                         setUrl("");
                         setError(null);
                       }}
-                      className="absolute right-1 top-1/2 -translate-y-1/2"
+                      className="absolute right-3 top-1/2 -translate-y-1/2"
                       title="Clear"
                     >
                       <svg
@@ -926,18 +925,19 @@ function HomeInner() {
                 {url.trim() && (
                   <button
                     type="submit"
-                    className="shrink-0 rounded-xl bg-white/90 px-6 py-2.5 text-sm font-semibold text-black/90 shadow-[0_2px_12px_rgba(255,255,255,0.1)] transition-all duration-150 hover:bg-white hover:shadow-[0_2px_20px_rgba(255,255,255,0.15)] active:scale-[0.97]"
+                    className="shrink-0 rounded-full px-6 py-3 text-sm font-semibold text-black/90 transition-all duration-150 hover:brightness-110 active:scale-[0.97]"
+                    style={{ backgroundColor: "#a0a0a0" }}
                   >
-                    {isProcessing ? "Add" : "Extract"}
+                    {isProcessing ? "Add" : "Transcribe"}
                   </button>
                 )}
               </div>
             </form>
             </div>
 
-            {error && <p className="mt-3 text-center text-sm text-red-400/90">{error}</p>}
+            {error && <p className="mt-3 text-sm text-red-400/90">{error}</p>}
             {duplicateHint && (
-              <p className="mt-3 flex items-center justify-center gap-1.5 text-sm text-white/50">
+              <p className="mt-3 flex items-center gap-1.5 text-sm text-white/50">
                 <span>{duplicateHint.message}</span>
                 <button
                   type="button"
@@ -979,10 +979,21 @@ function HomeInner() {
                   </div>
                 </div>
 
-                <div className="space-y-3">
+                <AnimatePresence mode="popLayout">
                   {queue.map((item, idx) => (
-                    <div
-                      key={idx}
+                    <motion.div
+                      key={item.url + idx}
+                      layout
+                      initial={{ opacity: 0, y: -12, scale: 0.97 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -8, scale: 0.95, height: 0, marginBottom: 0 }}
+                      transition={{
+                        layout: { type: "spring", stiffness: 400, damping: 30 },
+                        opacity: { duration: 0.25 },
+                        y: { type: "spring", stiffness: 300, damping: 25 },
+                        scale: { type: "spring", stiffness: 400, damping: 28 },
+                        height: { type: "spring", stiffness: 300, damping: 30, delay: 0.1 },
+                      }}
                       role="button"
                       tabIndex={item.status === "completed" ? 0 : -1}
                       onClick={() => {
@@ -998,9 +1009,9 @@ function HomeInner() {
                           }
                         }
                       }}
-                      className={`group/queue relative w-full overflow-hidden rounded-2xl border px-5 py-4 text-left transition-all duration-200 ${
+                      className={`group/queue relative w-full overflow-hidden rounded-2xl border px-5 py-4 mb-3 text-left ${
                         item.status === "completed"
-                          ? "cursor-pointer border-green-500/10 bg-green-500/[0.03] hover:border-green-500/20 hover:bg-green-500/[0.05]"
+                          ? "cursor-pointer border-white/10 bg-white/[0.03] hover:border-white/15 hover:bg-white/[0.05]"
                           : item.status === "failed"
                           ? "cursor-default border-red-500/10 bg-red-500/[0.03]"
                           : item.status === "processing"
@@ -1022,7 +1033,7 @@ function HomeInner() {
                             <span className="inline-block h-2.5 w-2.5 rounded-full bg-white/50 shadow-[0_0_8px_rgba(255,255,255,0.2)]" />
                           )}
                           {item.status === "completed" && (
-                            <svg className="h-4 w-4 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                            <svg className="h-4 w-4 text-white/50" viewBox="0 0 20 20" fill="currentColor">
                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L7 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
                           )}
@@ -1096,9 +1107,9 @@ function HomeInner() {
                           </div>
                         </div>
                       )}
-                    </div>
+                    </motion.div>
                   ))}
-                </div>
+                </AnimatePresence>
               </div>
             )}
           </section>
@@ -1199,7 +1210,7 @@ function HomeInner() {
                                 <img
                                   src={t.thumbnailUrl}
                                   alt={t.title}
-                                  className="h-28 w-full object-cover opacity-35 grayscale-[30%] transition-all duration-300 group-hover:opacity-45 group-hover:grayscale-0"
+                                  className="h-28 w-full object-cover opacity-40 sepia saturate-50 brightness-110 transition-all duration-300 group-hover:opacity-50"
                                 />
                               ) : (
                                 <div className="flex h-28 items-center justify-center bg-white/[0.03] text-sm text-white/15">
@@ -1243,9 +1254,9 @@ function HomeInner() {
                             transition={{
                               layout: {
                                 type: "spring",
-                                stiffness: 300,
-                                damping: 36,
-                                mass: 0.9,
+                                stiffness: 120,
+                                damping: 20,
+                                mass: 0.8,
                               },
                             }}
                             onLayoutAnimationStart={() => {
@@ -1262,15 +1273,24 @@ function HomeInner() {
                                   : "hover:bg-white/[0.03]"
                               }`}
                             >
+                              <AnimatePresence>
                               {justCompletedIds.has(t.id) && (
-                                <span
-                                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-500/15 text-green-400 animate-[fadeTickOut_1.5s_ease-in-out_forwards]"
+                                <motion.span
+                                  initial={{ opacity: 0, scale: 0.3 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  exit={{ opacity: 0, scale: 0.6 }}
+                                  transition={{
+                                    scale: { type: "spring", stiffness: 500, damping: 20 },
+                                    opacity: { duration: 0.3 },
+                                  }}
+                                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/8 text-white/50"
                                 >
                                   <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor">
                                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L7 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                                   </svg>
-                                </span>
+                                </motion.span>
                               )}
+                              </AnimatePresence>
                               <button
                                 onClick={() => selectTranscript(t.id)}
                                 className="min-w-0 flex-1 text-left"
@@ -1501,8 +1521,11 @@ function HomeInner() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="transition-colors duration-200 hover:text-white/40"
+                  title="GitHub"
                 >
-                  GitHub
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" />
+                  </svg>
                 </a>
               </div>
             </section>
