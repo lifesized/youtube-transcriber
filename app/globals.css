@@ -68,13 +68,35 @@ body {
   0%, 100% { opacity: 0.03; }
   50% { opacity: 0.06; }
 }
+@keyframes borderGlow {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.35; }
+}
+@keyframes pulseRing {
+  0% { transform: scale(0.95); opacity: 0.4; }
+  50% { transform: scale(1); opacity: 0.15; }
+  100% { transform: scale(0.95); opacity: 0.4; }
+}
 
 .anim-fade-up { animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .anim-fade-up-d1 { animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.08s both; }
 .anim-fade-up-d2 { animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.16s both; }
 .anim-fade-up-d3 { animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.24s both; }
+.anim-fade-up-d4 { animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.32s both; }
 .anim-fade-in { animation: fadeIn 0.6s ease-out both; }
 .anim-fade-in-d2 { animation: fadeIn 0.6s ease-out 0.3s both; }
+
+/* Glassmorphic input card */
+.glass-card {
+  background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.glass-card:focus-within {
+  border-color: rgba(255,255,255,0.15);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05), 0 0 0 1px rgba(255,255,255,0.05);
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

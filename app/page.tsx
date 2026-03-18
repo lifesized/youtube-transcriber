@@ -859,27 +859,33 @@ function HomeInner() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-12">
       <div className="mx-auto max-w-[800px]">
-        <div className="space-y-8">
+        <div className="space-y-10">
           <section>
-            <div className="mb-6">
-              <p className="anim-fade-up text-[11px] font-medium uppercase tracking-[0.08em] text-white/20">
+            {/* Hero header — more vertical presence when no transcripts yet */}
+            <div className={`mb-8 ${!hasCreatedTranscript ? 'pt-12 pb-4 text-center' : ''}`}>
+              <p className="anim-fade-up text-[11px] font-medium uppercase tracking-[0.12em] text-white/25">
                 YouTube Transcriber
               </p>
-              <h1 className="anim-fade-up-d1 mt-2 text-[22px] font-semibold tracking-tight text-white/90">
+              <h1 className={`anim-fade-up-d1 mt-3 font-semibold tracking-tight text-white/90 ${!hasCreatedTranscript ? 'text-[28px]' : 'text-[22px]'}`}>
                 Paste a link. Get the transcript.
               </h1>
+              {!hasCreatedTranscript && (
+                <p className="anim-fade-up-d2 mt-3 text-sm text-white/30">
+                  Local transcription powered by Whisper. No data leaves your machine.
+                </p>
+              )}
             </div>
 
             <div className="anim-fade-up-d2 relative">
               {/* Ambient glow behind input */}
               {!url && !hasQueue && (
                 <div
-                  className="pointer-events-none absolute -top-12 left-1/2 h-[200px] w-[400px] -translate-x-1/2 rounded-full opacity-[0.04]"
-                  style={{ background: "radial-gradient(circle, rgba(255,255,255,1) 0%, transparent 70%)", animation: "subtleGlow 6s ease-in-out infinite" }}
+                  className="pointer-events-none absolute -top-16 left-1/2 h-[240px] w-[500px] -translate-x-1/2 rounded-full opacity-[0.035]"
+                  style={{ background: "radial-gradient(ellipse, rgba(255,255,255,1) 0%, transparent 70%)", animation: "subtleGlow 6s ease-in-out infinite" }}
                 />
               )}
             <form onSubmit={handleSubmit} className="relative w-full">
-              <div className="flex gap-2">
+              <div className="glass-card flex items-center gap-2 rounded-2xl p-2 transition-all duration-300">
                 <div className="relative flex-1">
                   <Input
                     type="text"
@@ -890,7 +896,7 @@ function HomeInner() {
                       if (duplicateHint) setDuplicateHint(null);
                     }}
                     placeholder="https://www.youtube.com/watch?v=..."
-                    className="h-12 pr-12"
+                    className="h-11 border-0 bg-transparent pr-10 shadow-none focus-visible:ring-0"
                   />
                   {url && (
                     <IconButton
@@ -899,7 +905,7 @@ function HomeInner() {
                         setUrl("");
                         setError(null);
                       }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2"
+                      className="absolute right-1 top-1/2 -translate-y-1/2"
                       title="Clear"
                     >
                       <svg
@@ -920,7 +926,7 @@ function HomeInner() {
                 {url.trim() && (
                   <button
                     type="submit"
-                    className="shrink-0 rounded-full border border-white/20 bg-white/10 px-8 py-3 font-(family-name:--font-geist-pixel) text-base font-medium tracking-wide text-white shadow-[0_8px_32px_-12px_rgba(0,0,0,0.4)] backdrop-blur-xl transition-all duration-150 hover:border-white/30 hover:bg-white/15 active:bg-white/10 active:scale-[0.98]"
+                    className="shrink-0 rounded-xl bg-white/90 px-6 py-2.5 text-sm font-semibold text-black/90 shadow-[0_2px_12px_rgba(255,255,255,0.1)] transition-all duration-150 hover:bg-white hover:shadow-[0_2px_20px_rgba(255,255,255,0.15)] active:scale-[0.97]"
                   >
                     {isProcessing ? "Add" : "Extract"}
                   </button>
@@ -929,9 +935,9 @@ function HomeInner() {
             </form>
             </div>
 
-            {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+            {error && <p className="mt-3 text-center text-sm text-red-400/90">{error}</p>}
             {duplicateHint && (
-              <p className="mt-2 flex items-center gap-1.5 text-sm text-white/50">
+              <p className="mt-3 flex items-center justify-center gap-1.5 text-sm text-white/50">
                 <span>{duplicateHint.message}</span>
                 <button
                   type="button"
@@ -953,9 +959,9 @@ function HomeInner() {
             {hasQueue && (
               <div className="mt-8">
                 <div className="mb-4 flex items-center justify-between">
-                  <h2 className="font-mono text-sm font-medium uppercase tracking-wider text-white/50">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-white/25">
                     {completedCount}/{totalCount} completed
-                  </h2>
+                  </p>
                   <div className="flex items-center gap-2">
                     {!isProcessing && (
                       <Button
@@ -965,7 +971,7 @@ function HomeInner() {
                         }}
                         variant="ghost"
                         size="sm"
-                        className="font-mono text-xs uppercase tracking-wider text-white/45 hover:text-white"
+                        className="text-xs text-white/30 hover:text-white/60"
                       >
                         Clear
                       </Button>
@@ -973,7 +979,7 @@ function HomeInner() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {queue.map((item, idx) => (
                     <div
                       key={idx}
@@ -992,45 +998,37 @@ function HomeInner() {
                           }
                         }
                       }}
-                      className={`w-full rounded-xl border border-white/10 bg-[hsl(var(--panel-2))] px-4 py-4 text-left transition ${
+                      className={`group/queue relative w-full overflow-hidden rounded-2xl border px-5 py-4 text-left transition-all duration-200 ${
                         item.status === "completed"
-                          ? "cursor-pointer hover:bg-white/5"
-                          : "cursor-default"
+                          ? "cursor-pointer border-green-500/10 bg-green-500/[0.03] hover:border-green-500/20 hover:bg-green-500/[0.05]"
+                          : item.status === "failed"
+                          ? "cursor-default border-red-500/10 bg-red-500/[0.03]"
+                          : item.status === "processing"
+                          ? "cursor-default border-white/10 bg-white/[0.02]"
+                          : "cursor-default border-white/6 bg-white/[0.015]"
                       }`}
                     >
+                      {/* Processing pulse ring */}
+                      {item.status === "processing" && (
+                        <div className="pointer-events-none absolute -left-4 -top-4 h-12 w-12 rounded-full border border-white/10" style={{ animation: "pulseRing 2s ease-in-out infinite" }} />
+                      )}
                       <div className="flex items-center gap-4">
                         {/* Status indicator */}
                         <div className="shrink-0">
                           {item.status === "pending" && (
-                            <span className="inline-block h-3 w-3 animate-pulse rounded-full bg-white/30" />
+                            <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-white/20" />
                           )}
                           {item.status === "processing" && (
-                            <span className="inline-block h-3 w-3 rounded-full bg-white/40" />
+                            <span className="inline-block h-2.5 w-2.5 rounded-full bg-white/50 shadow-[0_0_8px_rgba(255,255,255,0.2)]" />
                           )}
                           {item.status === "completed" && (
-                            <svg
-                              className="h-3 w-3 text-green-500"
-                              viewBox="0 0 20 20"
-                              fill="currentColor"
-                            >
-                              <path
-                                fillRule="evenodd"
-                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L7 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                clipRule="evenodd"
-                              />
+                            <svg className="h-4 w-4 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L7 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
                           )}
                           {item.status === "failed" && (
-                            <svg
-                              className="h-3 w-3 text-red-500"
-                              viewBox="0 0 20 20"
-                              fill="currentColor"
-                            >
-                              <path
-                                fillRule="evenodd"
-                                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                                clipRule="evenodd"
-                              />
+                            <svg className="h-4 w-4 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                             </svg>
                           )}
                         </div>
@@ -1038,25 +1036,25 @@ function HomeInner() {
                         {/* Content */}
                         <div className="min-w-0 flex-1">
                           {item.title ? (
-                            <p className="truncate text-sm font-medium text-white/75">
+                            <p className="truncate text-sm font-medium text-white/80">
                               {item.title}
                             </p>
                           ) : (
-                            <p className="truncate text-sm text-white/50">
+                            <p className="truncate text-sm text-white/40">
                               {item.url}
                             </p>
                           )}
                           {item.title && (
-                            <p className="truncate text-xs text-white/35">
+                            <p className="mt-0.5 truncate text-xs text-white/25">
                               {item.url}
                             </p>
                           )}
                           {item.status === "pending" && (
-                            <p className="mt-1 text-xs text-white/35">Queued</p>
+                            <p className="mt-1 text-xs text-white/25">Queued</p>
                           )}
                           {item.status === "failed" && item.error && (
-                            <div className="mt-1 flex items-start justify-between gap-2">
-                              <p className="text-sm text-red-500">
+                            <div className="mt-2 flex items-start justify-between gap-2">
+                              <p className="text-sm text-red-400/80">
                                 {item.error}
                               </p>
                               <button
@@ -1065,7 +1063,7 @@ function HomeInner() {
                                   e.stopPropagation();
                                   retryItem(idx);
                                 }}
-                                className="shrink-0 rounded px-2 py-0.5 text-xs text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+                                className="shrink-0 rounded-lg border border-white/10 px-3 py-1 text-xs text-white/50 transition-all hover:border-white/20 hover:bg-white/5 hover:text-white/80"
                               >
                                 Retry
                               </button>
@@ -1079,19 +1077,20 @@ function HomeInner() {
                         <div className="mt-4">
                           <div className="mb-2 flex items-center justify-between">
                             {item.statusText && (
-                              <p className="font-(family-name:--font-geist-pixel-square) text-xs uppercase tracking-wider text-white/50">
+                              <p className="text-[11px] uppercase tracking-wider text-white/35">
                                 {item.statusText}
                               </p>
                             )}
-                            <span className="font-mono text-xs font-medium tabular-nums text-white/60">
+                            <span className="font-mono text-[11px] font-medium tabular-nums text-white/45">
                               {Math.round(item.progress)}%
                             </span>
                           </div>
-                          <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
                             <div
-                              className="h-full rounded-full bg-white/30 transition-all duration-700 ease-out"
+                              className="h-full rounded-full transition-all duration-700 ease-out"
                               style={{
                                 width: `${item.progress}%`,
+                                background: "linear-gradient(90deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.4) 100%)",
                               }}
                             />
                           </div>
@@ -1105,38 +1104,42 @@ function HomeInner() {
           </section>
 
           {hasCreatedTranscript && (
-            <section className="anim-fade-up-d3 rounded-2xl border border-white/10 bg-[hsl(var(--panel))] p-6 shadow-[0_20px_70px_-55px_rgba(0,0,0,0.9)]">
-              <p className="mb-3 text-[11px] font-medium uppercase tracking-[0.08em] text-white/20">
-                Library
-              </p>
-              <div className="mb-6 flex items-center gap-2">
+            <section className="anim-fade-up-d3">
+              <div className="mb-5 flex items-center justify-between">
+                <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-white/25">
+                  Library
+                </p>
+                <div className="flex items-center gap-1">
+                  <IconButton
+                    onClick={() => setLibraryLayout("tiles")}
+                    className={`h-8 w-8 shrink-0 rounded-lg ${libraryLayout === "tiles" ? "bg-white/10 text-white/70" : "text-white/25"}`}
+                    title="Tiles view"
+                  >
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="7" height="7" rx="1.2" />
+                      <rect x="14" y="3" width="7" height="7" rx="1.2" />
+                      <rect x="3" y="14" width="7" height="7" rx="1.2" />
+                      <rect x="14" y="14" width="7" height="7" rx="1.2" />
+                    </svg>
+                  </IconButton>
+                  <IconButton
+                    onClick={() => setLibraryLayout("list")}
+                    className={`h-8 w-8 shrink-0 rounded-lg ${libraryLayout === "list" ? "bg-white/10 text-white/70" : "text-white/25"}`}
+                    title="List view"
+                  >
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 7h16M4 12h16M4 17h16" />
+                    </svg>
+                  </IconButton>
+                </div>
+              </div>
+              <div className="mb-5">
                 <Input
                   type="text"
                   placeholder="Search by title or author..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
-                <IconButton
-                  onClick={() => setLibraryLayout("tiles")}
-                  className={`h-9 w-9 shrink-0 ${libraryLayout === "tiles" ? "bg-white/10 text-white" : ""}`}
-                  title="Tiles view"
-                >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="3" width="7" height="7" rx="1.2" />
-                    <rect x="14" y="3" width="7" height="7" rx="1.2" />
-                    <rect x="3" y="14" width="7" height="7" rx="1.2" />
-                    <rect x="14" y="14" width="7" height="7" rx="1.2" />
-                  </svg>
-                </IconButton>
-                <IconButton
-                  onClick={() => setLibraryLayout("list")}
-                  className={`h-9 w-9 shrink-0 ${libraryLayout === "list" ? "bg-white/10 text-white" : ""}`}
-                  title="List view"
-                >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M4 7h16M4 12h16M4 17h16" />
-                  </svg>
-                </IconButton>
               </div>
 
               {libraryLoading ? (
@@ -1144,22 +1147,29 @@ function HomeInner() {
                   {[1, 2, 3, 4].map((i) => (
                     <div
                       key={i}
-                      className="rounded-lg border border-white/6 bg-[hsl(var(--panel-2))] p-4"
+                      className="overflow-hidden rounded-2xl border border-white/[0.04] bg-white/[0.02]"
                     >
-                      <div className="mb-2 h-24 rounded bg-white/6" style={{ backgroundImage: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 50%, transparent 100%)", backgroundSize: "200% 100%", animation: "shimmer 1.8s infinite" }} />
-                      <div className="mb-2 h-4 w-3/4 rounded bg-white/6" />
-                      <div className="h-4 w-1/2 rounded bg-white/6" />
+                      <div className="h-28 bg-white/[0.03]" style={{ backgroundImage: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.03) 50%, transparent 100%)", backgroundSize: "200% 100%", animation: "shimmer 1.8s infinite" }} />
+                      <div className="p-4">
+                        <div className="mb-2.5 h-4 w-4/5 rounded-md bg-white/[0.04]" />
+                        <div className="h-3 w-1/2 rounded-md bg-white/[0.03]" />
+                      </div>
                     </div>
                   ))}
                 </div>
               ) : transcripts.length === 0 ? (
-                <div className="py-16 text-center">
+                <div className="rounded-2xl border border-dashed border-white/[0.06] py-20 text-center">
                   {search ? (
-                    <p className="text-sm text-white/40">No transcripts match &ldquo;{search}&rdquo;</p>
+                    <p className="text-sm text-white/30">No transcripts match &ldquo;{search}&rdquo;</p>
                   ) : (
                     <>
-                      <p className="text-sm text-white/50">Your transcripts will appear here.</p>
-                      <p className="mt-2 text-xs text-white/25">Paste a YouTube URL above to get started.</p>
+                      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/[0.03]">
+                        <svg className="h-5 w-5 text-white/15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
+                      </div>
+                      <p className="text-sm text-white/35">Your transcripts will appear here</p>
+                      <p className="mt-1.5 text-xs text-white/18">Paste a YouTube URL above to get started</p>
                     </>
                   )}
                 </div>
@@ -1177,29 +1187,33 @@ function HomeInner() {
                             href={t.videoUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className={`group relative w-full overflow-hidden rounded-lg border text-left transition-all duration-200 ${
+                            className={`group relative w-full overflow-hidden rounded-2xl border text-left transition-all duration-300 ${
                               isSelected
-                                ? "border-white/20 bg-white/5"
-                                : "border-white/6 hover:border-white/12 hover:bg-white/[0.03] hover:-translate-y-0.5"
+                                ? "border-white/15 bg-white/[0.04] shadow-[0_4px_24px_-8px_rgba(0,0,0,0.5)]"
+                                : "border-white/[0.05] hover:border-white/10 hover:-translate-y-1 hover:shadow-[0_12px_40px_-16px_rgba(0,0,0,0.5)]"
                             }`}
                             title={t.title}
                           >
-                            {t.thumbnailUrl ? (
-                              <img
-                                src={t.thumbnailUrl}
-                                alt={t.title}
-                                className="h-24 w-full object-cover opacity-40 sepia saturate-50 brightness-110"
-                              />
-                            ) : (
-                              <div className="flex h-24 items-center justify-center bg-white/5 text-sm text-white/30">
-                                No thumbnail
-                              </div>
-                            )}
-                            <div className="p-3">
-                              <p className="line-clamp-2 text-sm font-medium text-white/75">
+                            <div className="relative">
+                              {t.thumbnailUrl ? (
+                                <img
+                                  src={t.thumbnailUrl}
+                                  alt={t.title}
+                                  className="h-28 w-full object-cover opacity-35 grayscale-[30%] transition-all duration-300 group-hover:opacity-45 group-hover:grayscale-0"
+                                />
+                              ) : (
+                                <div className="flex h-28 items-center justify-center bg-white/[0.03] text-sm text-white/15">
+                                  No thumbnail
+                                </div>
+                              )}
+                              {/* Gradient overlay on thumbnail */}
+                              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[hsl(var(--bg))] via-transparent to-transparent opacity-80" />
+                            </div>
+                            <div className="p-3.5">
+                              <p className="line-clamp-2 text-[13px] font-medium leading-snug text-white/75 group-hover:text-white/90">
                                 {t.title}
                               </p>
-                              <p className="mt-1 truncate text-xs text-white/40">
+                              <p className="mt-1.5 truncate text-[11px] text-white/30">
                                 {t.author}
                               </p>
                             </div>
@@ -1209,7 +1223,7 @@ function HomeInner() {
                     </div>
                   ) : (
                     <LayoutGroup>
-                      <div className="overflow-hidden rounded-lg border border-white/10 bg-[hsl(var(--panel-2))]">
+                      <div className="overflow-hidden rounded-2xl border border-white/[0.06]">
                       {transcripts.map((t) => {
                         const isSelected = selectedId === t.id;
                         const isClosing = closingVideo?.id === t.id;
@@ -1242,10 +1256,10 @@ function HomeInner() {
                             }}
                           >
                             <div
-                              className={`group/row relative flex w-full items-center gap-4 px-4 py-3 transition-all ${
+                              className={`group/row relative flex w-full items-center gap-4 px-5 py-3.5 transition-all duration-200 ${
                                 isSelected
-                                  ? "bg-white/10 shadow-[inset_3px_0_0_0_rgba(255,255,255,0.3)]"
-                                  : "hover:bg-white/5"
+                                  ? "bg-white/[0.06] shadow-[inset_2px_0_0_0_rgba(255,255,255,0.25)]"
+                                  : "hover:bg-white/[0.03]"
                               }`}
                             >
                               {justCompletedIds.has(t.id) && (
@@ -1411,7 +1425,7 @@ function HomeInner() {
                                 }}
                                 className="overflow-hidden"
                               >
-                                <div className="border-t border-white/10 bg-white/5 px-6 py-6">
+                                <div className="border-t border-white/[0.06] bg-white/[0.02] px-6 py-6">
                                   {videoLoading ? (
                                     <div className="flex items-center justify-center py-8">
                                       <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/15 border-t-white/50" />
@@ -1463,34 +1477,30 @@ function HomeInner() {
               )}
 
               {/* Footer */}
-              <div className="anim-fade-in-d2 mt-10 flex items-center gap-4 text-[11px] text-white/18">
+              <div className="anim-fade-in-d2 mt-12 flex items-center justify-center gap-6 text-[11px] text-white/15">
                 <a
                   href="/settings"
-                  className="transition-colors duration-200 hover:text-white/45"
+                  className="flex items-center gap-1.5 transition-colors duration-200 hover:text-white/40"
                   title="Settings"
                 >
-                  <svg
-                    className="h-4 w-4"
-                    fill="currentColor"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
+                  <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path fillRule="evenodd" d="M11.078 2.25c-.917 0-1.699.663-1.85 1.567L9.05 4.889c-.02.12-.115.26-.297.348a7.454 7.454 0 0 0-.986.57c-.166.115-.334.126-.45.083L6.3 5.508a1.875 1.875 0 0 0-2.282.819l-.922 1.597a1.875 1.875 0 0 0 .432 2.385l.84.692c.095.078.17.229.154.43a7.598 7.598 0 0 0 0 1.139c.015.2-.059.352-.153.43l-.841.692a1.875 1.875 0 0 0-.432 2.385l.922 1.597a1.875 1.875 0 0 0 2.282.818l1.019-.382c.115-.043.283-.031.45.082.312.214.641.405.985.57.182.088.277.228.297.35l.178 1.071c.151.904.933 1.567 1.85 1.567h1.844c.916 0 1.699-.663 1.85-1.567l.178-1.072c.02-.12.114-.26.297-.349.344-.165.673-.356.985-.57.167-.114.335-.125.45-.082l1.02.382a1.875 1.875 0 0 0 2.28-.819l.923-1.597a1.875 1.875 0 0 0-.432-2.385l-.84-.692c-.095-.078-.17-.229-.154-.43a7.614 7.614 0 0 0 0-1.139c-.016-.2.059-.352.153-.43l.84-.692c.708-.582.891-1.59.433-2.385l-.922-1.597a1.875 1.875 0 0 0-2.282-.818l-1.02.382c-.114.043-.282.031-.449-.083a7.49 7.49 0 0 0-.985-.57c-.183-.087-.277-.227-.297-.348l-.179-1.072a1.875 1.875 0 0 0-1.85-1.567h-1.843ZM12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5Z" clipRule="evenodd" />
                   </svg>
+                  Settings
                 </a>
-                <span className="opacity-40">/</span>
+                <span className="h-3 w-px bg-white/8" />
                 <a
                   href="/waitlist"
-                  className="transition-colors duration-200 hover:text-white/45"
+                  className="transition-colors duration-200 hover:text-white/40"
                 >
                   Cloud waitlist
                 </a>
-                <span className="opacity-40">/</span>
+                <span className="h-3 w-px bg-white/8" />
                 <a
                   href="https://github.com/lifesized/youtube-transcriber"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="transition-colors duration-200 hover:text-white/45"
+                  className="transition-colors duration-200 hover:text-white/40"
                 >
                   GitHub
                 </a>
@@ -1502,19 +1512,18 @@ function HomeInner() {
 
       {/* Toast notification */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-white/15 bg-[hsl(var(--panel))] px-4 py-2.5 text-sm text-white/80 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7)]">
+        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-white/10 bg-[hsl(var(--panel))]/95 px-5 py-3 text-sm text-white/75 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7)] backdrop-blur-xl">
           {toast}
         </div>
       )}
 
       {/* Delete confirmation dialog */}
       {deleteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="mx-4 w-full max-w-sm rounded-2xl border border-white/10 bg-[hsl(var(--panel))] p-8 shadow-[0_30px_120px_-60px_rgba(0,0,0,0.95)]">
-            <h2 className="mb-3 text-xl font-semibold text-white/90">Delete transcript?</h2>
-            <p className="mb-6 text-base text-white/60">
-              Are you sure you want to delete this transcript? This action cannot
-              be undone.
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-sm rounded-2xl border border-white/8 bg-[hsl(var(--panel))]/95 p-8 shadow-[0_30px_120px_-40px_rgba(0,0,0,0.95)] backdrop-blur-xl">
+            <h2 className="mb-2 text-lg font-semibold text-white/90">Delete transcript?</h2>
+            <p className="mb-6 text-sm leading-relaxed text-white/45">
+              This action cannot be undone. The transcript will be permanently removed.
             </p>
             <div className="flex justify-end gap-4">
               <Button
