@@ -79,12 +79,12 @@ export default function WaitlistPage() {
 
           {/* Subline */}
           <p className="anim-fade-up-2 text-[15px] leading-relaxed text-white/45 mt-5 max-w-[360px]">
-            Paste any YouTube link. Get a clean, searchable transcript you can send straight to an LLM.
+            Paste any YouTube link. Get a clean, searchable transcript you can send straight to an LLM. No setup required.
           </p>
 
           {/* Feature pills */}
           <div className="anim-fade-up-3 flex gap-2 mt-4 flex-wrap">
-            {["Works with or without captions", "Searchable library", "Private by default"].map((label) => (
+            {["No install needed", "Works with or without captions", "Searchable library"].map((label) => (
               <span
                 key={label}
                 className="text-[11px] text-white/25 border border-white/[0.08] rounded-full px-3 py-1 transition-colors hover:text-white/40"
@@ -133,18 +133,16 @@ export default function WaitlistPage() {
           </div>
 
           {/* Footer */}
-          <div className="anim-fade-in-late mt-14 flex items-center gap-3 text-[11px] text-white/[0.18]">
+          <div className="anim-fade-in-late mt-14 text-[11px] text-white/[0.18]">
+            <span>Want to self-host instead? </span>
             <a
               href="https://github.com/lifesized/youtube-transcriber"
               target="_blank"
               rel="noopener noreferrer"
-              className="transition-colors duration-200 hover:text-white/40"
-              style={{ color: "inherit", textDecoration: "none" }}
+              className="text-white/30 underline underline-offset-2 decoration-white/10 transition-colors duration-200 hover:text-white/50"
             >
-              GitHub
+              View on GitHub
             </a>
-            <span className="opacity-50">/</span>
-            <span>Open source</span>
           </div>
         </div>
       </div>
