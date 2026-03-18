@@ -400,9 +400,7 @@ body::-webkit-scrollbar-thumb:hover {
   color: rgba(255, 255, 255, 0.50);
   font-size: 10px;
   overflow: hidden;
-  /* Phase 1: visual fade only (opacity + scale). No layout change. */
   animation: fadeTickOut 1.4s ease-out forwards;
-  /* Phase 2 (triggered by .collapsing class): smooth spatial collapse */
   transition: width 0.4s cubic-bezier(0.25, 0.1, 0.25, 1),
               margin-right 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
@@ -411,7 +409,6 @@ body::-webkit-scrollbar-thumb:hover {
   70%  { opacity: 1; transform: scale(1); }
   100% { opacity: 0; transform: scale(0.6); }
 }
-/* Spatial collapse — width + margin collapse together, single smooth shift */
 .recent-tick.collapsing {
   animation: none;
   opacity: 0;
@@ -428,4 +425,30 @@ body::-webkit-scrollbar-thumb:hover {
   0% { background: rgba(255, 255, 255, 0.04); }
   70% { background: rgba(255, 255, 255, 0.04); }
   100% { background: transparent; }
+}
+
+/* Panel footer — GitHub link + star prompt, persistent across all states */
+.panel-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 10px;
+}
+.github-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  opacity: 0.3;
+  transition: opacity 0.15s;
+}
+.github-link:hover {
+  opacity: 0.7;
+}
+.github-icon {
+  flex-shrink: 0;
+  fill: currentColor;
+  color: rgba(255, 255, 255, 0.9);
+}
+.github-star-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.9);
 }

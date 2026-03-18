@@ -554,7 +554,7 @@ async function transcribeAudioFallback(
 
   if (steps.length === 0) {
     throw new Error(
-      "This video has no captions. Enable local Whisper or add a cloud provider in Settings."
+      "No transcription services enabled. Turn on at least one provider in Settings."
     );
   }
 

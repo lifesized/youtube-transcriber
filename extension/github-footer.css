@@ -1,0 +1,25 @@
+
+/* Panel footer — GitHub link + star prompt */
+.panel-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 10px;
+  margin-top: 4px;
+}
+.github-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  opacity: 0.3;
+  transition: opacity 0.15s;
+}
+.github-link:hover {
+  opacity: 0.7;
+}
+.github-icon {
+  flex-shrink: 0;
+}
+.github-star-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.9);
+}
