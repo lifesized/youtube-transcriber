@@ -63,7 +63,7 @@ The agent will return clean transcript text. You can then ask it to summarize, t
 
 A cloud version is in the works — no install, no Python, no local Whisper. Just sign up and go.
 
-[Join the waitlist →](https://tally.so/r/XXXXXX)
+[Join the waitlist →](https://tally.so/r/kdZOvM)
 
 ## Stack
 
@@ -72,3 +72,7 @@ Built on Next.js + Prisma. Whisper transcription runs as a local Python subproce
 ## Source
 
 [github.com/lifesized/youtube-transcriber](https://github.com/lifesized/youtube-transcriber) — open source, AGPL-3.0 licensed.
+
+---
+
+If this saves you time, a ⭐ on GitHub helps others find it.

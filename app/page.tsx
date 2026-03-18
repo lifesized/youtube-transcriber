@@ -1464,6 +1464,15 @@ function HomeInner() {
                   </svg>
                 </a>
                 <a
+                  href="https://tally.so/r/kdZOvM"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[13px] text-white/25 transition-colors hover:text-white/50"
+                  title="Join the waitlist for the hosted version"
+                >
+                  Cloud waitlist
+                </a>
+                <a
                     href="https://github.com/lifesized/youtube-transcriber"
                     target="_blank"
                     rel="noopener noreferrer"

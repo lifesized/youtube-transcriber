@@ -11,6 +11,12 @@ https://github.com/user-attachments/assets/32491284-5c78-4a74-a580-ff3a8c256243
 
 
 
+## Hosted Version (Coming Soon)
+
+Don't want to run it locally? A hosted version is in progress — no install, no Python, no local Whisper. Just sign up and go.
+
+**[Join the waitlist →](https://tally.so/r/kdZOvM)**
+
 ## Get Running in 60 Seconds
 
 ```bash
@@ -111,7 +117,7 @@ You can also just paste a YouTube URL — Claude will offer to transcribe it.
 Paste a URL. The app grabs the transcript using the fastest method available on your system:
 
 1. **YouTube Captions** — fetches official captions when they exist (< 5 sec)
-2. **Cloud Whisper** — optional Groq or OpenAI API with your own key (10-30 sec for 10 min)
+2. **Cloud Whisper** — optional Groq, OpenRouter, or custom API with your own key (10-30 sec for 10 min)
 3. **MLX Whisper** — local GPU transcription on Apple Silicon (30-60 sec for 10 min)
 4. **OpenAI Whisper** — local CPU fallback that works everywhere (2-5 min for 10 min)
 
@@ -119,7 +125,7 @@ Works fully offline by default. Cloud Whisper is optional — bring your own API
 
 ## Features
 
-- **Local + cloud transcription** — free local Whisper by default, optional cloud Whisper (Groq/OpenAI) for faster results with your own API key
+- **Local + cloud transcription** — free local Whisper by default, optional cloud providers (Groq, OpenRouter, or custom endpoint) for faster results with your own API key
 - **Multi-language captions** — request captions in any language YouTube supports (see [Language Preference](#language-preference) below)
 - **Summarize with LLM** — send any transcript straight to ChatGPT or Claude. ChatGPT opens with the prompt pre-filled; Claude copies it to your clipboard so you can paste (⌘V) into a new chat
 - **Queue system** — batch-process multiple videos
@@ -132,19 +138,31 @@ Works fully offline by default. Cloud Whisper is optional — bring your own API
 
 Full REST API docs: [`docs/API.md`](./docs/API.md) | OpenAPI spec: [`docs/openapi.yaml`](./docs/openapi.yaml)
 
-## Groq Cloud Transcription (Free)
+## Cloud Transcription Providers
 
-The fastest transcription option — uses Groq's free Whisper API instead of local processing. No credit card required.
+Add one or more cloud providers in **Settings** (gear icon, bottom-left). Drag to reorder priority — the app tries each enabled provider in order, then falls back to local Whisper.
+
+### Groq (Free)
+
+The fastest option — uses Groq's free Whisper API. No credit card required.
 
 1. Sign up at [console.groq.com](https://console.groq.com)
 2. Go to **API Keys** → **Create API Key**
-3. Open the app's **Settings** page (gear icon, bottom-left) and paste your key
+3. Paste the key in Settings
 
-That's it. Transcriptions now use Groq as the primary method and fall back to YouTube captions or local Whisper if Groq is unavailable.
+**Free tier limits:** 14,400 audio-seconds per day (~4 hours). The Settings page shows a usage meter so you can track your quota.
 
-**Free tier limits:** 14,400 audio-seconds per day (~4 hours). The Settings page shows a usage meter so you can track how much you've used. Rate limit is ~20 requests/minute.
+### OpenRouter
 
-> You can also set the key via environment variable instead: `WHISPER_CLOUD_API_KEY="gsk_..."` in `.env`. The Settings page takes priority over the env var.
+Access dozens of transcription models through a single API key, including Gemini 2.5 Flash.
+
+1. Sign up at [openrouter.ai/keys](https://openrouter.ai/keys)
+2. Create an API key
+3. Paste the key in Settings — pick your model from the dropdown
+
+### Custom Endpoint
+
+Point to any OpenAI-compatible transcription API by providing a base URL, API key, and model name.
 
 ## Language Preference
 
@@ -212,10 +230,9 @@ WHISPER_PYTHON_BIN="/path/to/your/.venv/bin/python3"
 # WHISPER_DEVICE="auto"     # auto, cpu, mps
 # WHISPER_TIMEOUT_MS="480000"
 
-# Optional — cloud Whisper (BYOK)
-# WHISPER_CLOUD_PROVIDER="groq"   # groq (default) or openai
+# Optional — cloud providers are configured in Settings (UI)
+# Legacy env var still works for a single Groq key:
 # WHISPER_CLOUD_API_KEY="gsk_..."
-# WHISPER_CLOUD_MODEL=""          # optional model override
 ```
 
 **Windows paths:**

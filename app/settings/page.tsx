@@ -17,6 +17,19 @@ export default function SettingsPage() {
           <section className="space-y-8 rounded-2xl border border-white/10 bg-[hsl(var(--panel))] p-4 sm:p-6">
             <SettingsPanel />
           </section>
+
+          <p className="text-center text-xs text-white/20">
+            Enjoying it?{" "}
+            <a
+              href="https://github.com/lifesized/youtube-transcriber"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-white/30 underline decoration-white/10 transition-colors hover:text-white/50 hover:decoration-white/30"
+            >
+              ⭐ Star on GitHub
+            </a>{" "}
+            — it helps others find the project.
+          </p>
         </div>
       </div>
     </div>
