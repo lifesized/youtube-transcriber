@@ -146,6 +146,8 @@ function showCompletedAndReturn(completedId) {
   setTimeout(() => { justCompletedId = null; }, 1900);
   showCurrentPageState();
   loadRecent();
+  // Check if there are queued items to process next
+  processQueue();
 }
 
 // ---------------------------------------------------------------------------
@@ -156,6 +158,13 @@ async function showQueuePrompt(transcribingUrl) {
   if (!pageInfo?.videoId) {
     el.queuePrompt.hidden = true;
     return;
+  }
+  // Resolve the currently-transcribing URL from state if not passed explicitly
+  if (!transcribingUrl) {
+    const statusRes = await sendMsg({ type: "GET_TRANSCRIPTION_STATUS" });
+    if (statusRes?.success && statusRes.data?.status === "transcribing") {
+      transcribingUrl = statusRes.data.url;
+    }
   }
   // Don't show queue prompt if this video is already being transcribed
   if (transcribingUrl && pageInfo.url === transcribingUrl) {
@@ -353,6 +362,9 @@ async function init() {
       return;
     }
     if (pending.status === "done" && pending.result) {
+      isTranscribing = false;
+      stopProgress();
+      stopPolling();
       await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
       showCompletedAndReturn(pending.result.id);
       return;
@@ -404,11 +416,13 @@ function pollTranscriptionStatus() {
     }
     const pending = res.data;
     if (pending.status === "done" && pending.result) {
+      isTranscribing = false;
       stopPolling();
       stopProgress();
       await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
       showCompletedAndReturn(pending.result.id);
     } else if (pending.status === "error") {
+      isTranscribing = false;
       stopPolling();
       stopProgress();
       el.errorMessage.textContent = pending.error || "Transcription failed";

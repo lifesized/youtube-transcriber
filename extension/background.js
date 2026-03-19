@@ -112,7 +112,14 @@ async function doTranscribe(url, title) {
     state.status = "done";
     state.result = data;
     await setState(state);
-    setBadge("✓", "#a58959");
+    setBadge("✓", "#22c55e");
+    // Auto-clear badge after 5 seconds
+    setTimeout(() => {
+      getState().then((s) => {
+        // Only clear if still showing the same completion (not a new transcription)
+        if (s?.status === "done" || !s) setBadge("");
+      });
+    }, 5000);
     // Auto-process queue
     await processNextInQueue();
     return data;
