@@ -46,19 +46,8 @@ body {
 }
 
 @keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
-.shimmer-container {
-  position: relative;
-  overflow: hidden;
-}
-.shimmer-container::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.03) 50%, transparent 100%);
-  animation: shimmer 1.8s infinite;
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
 @keyframes fadeTickOut {
@@ -79,9 +68,9 @@ body {
   0%, 100% { opacity: 0.03; }
   50% { opacity: 0.06; }
 }
-@keyframes dropdownIn {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
+@keyframes borderGlow {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.35; }
 }
 @keyframes pulseRing {
   0% { transform: scale(0.95); opacity: 0.4; }
@@ -106,13 +95,6 @@ body {
 }
 .glass-card:focus-within {
   box-shadow: none;
-}
-
-/* Gate hover transforms behind pointer capability to prevent touch false-positives */
-@media not all and (hover: hover) and (pointer: fine) {
-  .hover-lift:hover {
-    transform: none !important;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

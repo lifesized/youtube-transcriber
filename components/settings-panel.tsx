@@ -525,7 +525,7 @@ export function SettingsPanel() {
               onDragLeave={handleDragLeave}
               onDrop={() => handleDrop(item.id)}
               onDragEnd={handleDragEnd}
-              className={`-mx-3 rounded-lg px-3 py-2.5 transition-[opacity,background-color] duration-200 ${
+              className={`-mx-3 rounded-lg px-3 py-2.5 transition-all ${
                 isDragging ? "opacity-30" : ""
               } ${isDragOver ? "border-t-2 border-white/20" : "border-t-2 border-transparent"} ${
                 item.enabled ? "hover:bg-white/3" : "opacity-40 hover:opacity-60"
@@ -702,7 +702,7 @@ export function SettingsPanel() {
             </div>
             <div className="space-y-2">
               <div className="h-2 w-full overflow-hidden rounded-full bg-white/5">
-                <div className={`h-full rounded-full transition-[width] duration-300 ease-out ${tier.barColor}`} style={{ width: `${pct}%` }} />
+                <div className={`h-full rounded-full transition-all duration-500 ${tier.barColor}`} style={{ width: `${pct}%` }} />
               </div>
               <div className="flex justify-between text-xs text-white/40">
                 <span>{formatSeconds(groqUsed)} used</span>

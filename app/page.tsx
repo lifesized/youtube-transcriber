@@ -925,7 +925,7 @@ function HomeInner() {
                 {url.trim() && (
                   <button
                     type="submit"
-                    className="shrink-0 rounded-full px-6 py-3 text-sm font-semibold text-black/90 transition-[transform,filter] duration-150 ease-out hover:brightness-110 active:scale-[0.97]"
+                    className="shrink-0 rounded-full px-6 py-3 text-sm font-semibold text-black/90 transition-all duration-150 hover:brightness-110 active:scale-[0.97]"
                     style={{ backgroundColor: "#a0a0a0" }}
                   >
                     {isProcessing ? "Add" : "Transcribe"}
@@ -984,13 +984,14 @@ function HomeInner() {
                     <motion.div
                       key={item.url + idx}
                       layout
-                      initial={{ opacity: 0, transform: "translateY(-12px) scale(0.97)" }}
-                      animate={{ opacity: 1, transform: "translateY(0px) scale(1)" }}
-                      exit={{ opacity: 0, transform: "translateY(-8px) scale(0.95)", height: 0, marginBottom: 0 }}
+                      initial={{ opacity: 0, y: -12, scale: 0.97 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -8, scale: 0.95, height: 0, marginBottom: 0 }}
                       transition={{
                         layout: { type: "spring", stiffness: 400, damping: 30 },
                         opacity: { duration: 0.25 },
-                        transform: { type: "spring", stiffness: 350, damping: 26 },
+                        y: { type: "spring", stiffness: 300, damping: 25 },
+                        scale: { type: "spring", stiffness: 400, damping: 28 },
                         height: { type: "spring", stiffness: 300, damping: 30, delay: 0.1 },
                       }}
                       role="button"
@@ -1073,7 +1074,7 @@ function HomeInner() {
                                   e.stopPropagation();
                                   retryItem(idx);
                                 }}
-                                className="shrink-0 rounded-lg border border-white/10 px-3 py-1 text-xs text-white/50 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white/80"
+                                className="shrink-0 rounded-lg border border-white/10 px-3 py-1 text-xs text-white/50 transition-all hover:border-white/20 hover:bg-white/5 hover:text-white/80"
                               >
                                 Retry
                               </button>
@@ -1097,7 +1098,7 @@ function HomeInner() {
                           </div>
                           <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
                             <div
-                              className="h-full rounded-full transition-[width] duration-700 ease-out"
+                              className="h-full rounded-full transition-all duration-700 ease-out"
                               style={{
                                 width: `${item.progress}%`,
                                 background: "linear-gradient(90deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.4) 100%)",
@@ -1159,7 +1160,7 @@ function HomeInner() {
                       key={i}
                       className="overflow-hidden rounded-2xl border border-white/[0.04] bg-white/[0.02]"
                     >
-                      <div className="shimmer-container h-28 bg-white/[0.03]" />
+                      <div className="h-28 bg-white/[0.03]" style={{ backgroundImage: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.03) 50%, transparent 100%)", backgroundSize: "200% 100%", animation: "shimmer 1.8s infinite" }} />
                       <div className="p-4">
                         <div className="mb-2.5 h-4 w-4/5 rounded-md bg-white/[0.04]" />
                         <div className="h-3 w-1/2 rounded-md bg-white/[0.03]" />
@@ -1197,7 +1198,7 @@ function HomeInner() {
                             href={t.videoUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className={`group hover-lift relative w-full overflow-hidden rounded-2xl border text-left transition-[transform,box-shadow,border-color] duration-300 ease-out ${
+                            className={`group relative w-full overflow-hidden rounded-2xl border text-left transition-all duration-300 ${
                               isSelected
                                 ? "border-white/15 bg-white/[0.04] shadow-[0_4px_24px_-8px_rgba(0,0,0,0.5)]"
                                 : "border-white/[0.05] hover:border-white/10 hover:-translate-y-1 hover:shadow-[0_12px_40px_-16px_rgba(0,0,0,0.5)]"
@@ -1209,7 +1210,7 @@ function HomeInner() {
                                 <img
                                   src={t.thumbnailUrl}
                                   alt={t.title}
-                                  className="h-28 w-full object-cover opacity-40 sepia saturate-50 brightness-110 transition-opacity duration-300 ease-out group-hover:opacity-50"
+                                  className="h-28 w-full object-cover opacity-40 sepia saturate-50 brightness-110 transition-all duration-300 group-hover:opacity-50"
                                 />
                               ) : (
                                 <div className="flex h-28 items-center justify-center bg-white/[0.03] text-sm text-white/15">
@@ -1266,7 +1267,7 @@ function HomeInner() {
                             }}
                           >
                             <div
-                              className={`group/row relative flex w-full items-center gap-4 px-5 py-3.5 transition-[background-color,box-shadow] duration-200 ease-out ${
+                              className={`group/row relative flex w-full items-center gap-4 px-5 py-3.5 transition-all duration-200 ${
                                 isSelected
                                   ? "bg-white/[0.06] shadow-[inset_2px_0_0_0_rgba(255,255,255,0.25)]"
                                   : "hover:bg-white/[0.03]"
@@ -1275,11 +1276,11 @@ function HomeInner() {
                               <AnimatePresence>
                               {justCompletedIds.has(t.id) && (
                                 <motion.span
-                                  initial={{ opacity: 0, transform: "scale(0.3)" }}
-                                  animate={{ opacity: 1, transform: "scale(1)" }}
-                                  exit={{ opacity: 0, transform: "scale(0.6)" }}
+                                  initial={{ opacity: 0, scale: 0.3 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  exit={{ opacity: 0, scale: 0.6 }}
                                   transition={{
-                                    transform: { type: "spring", stiffness: 500, damping: 20 },
+                                    scale: { type: "spring", stiffness: 500, damping: 20 },
                                     opacity: { duration: 0.3 },
                                   }}
                                   className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/8 text-white/50"

@@ -155,7 +155,7 @@ export function LlmLauncher({ videoId, videoTitle, onToast }: LlmLauncherProps) 
 
       {open && (
         <div
-          className="absolute right-0 top-full z-50 mt-1 min-w-[180px] origin-top-right animate-[dropdownIn_150ms_cubic-bezier(0.23,1,0.32,1)_both] overflow-hidden rounded-lg border border-white/15 bg-[hsl(var(--panel))] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7)]"
+          className="absolute right-0 top-full z-50 mt-1 min-w-[180px] overflow-hidden rounded-lg border border-white/15 bg-[hsl(var(--panel))] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7)]"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="px-3 py-2">
