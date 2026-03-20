@@ -4,6 +4,7 @@ import { extractVideoId } from "./youtube";
 import { transcribeWithWhisper, downloadAudio, type ProgressCallback } from "./whisper";
 import { transcribeWithCloudWhisper, getCloudWhisperConfig } from "./whisper-cloud";
 import { isWhisperEnabled, getWhisperPriority, getEnabledProviders, transcribeWithProvider } from "./providers";
+import { transcriptionProgress } from "./progress";
 import type {
   TranscriptSegment,
   VideoMetadata,
@@ -565,7 +566,29 @@ async function transcribeAudioFallback(
     if (step.type === "local") {
       try {
         console.log(`[transcript] Trying local Whisper for ${videoId}...`);
-        const segments = await transcribeWithWhisper(videoId);
+        transcriptionProgress.emit("progress", {
+          stage: "downloading",
+          progress: 15,
+          statusText: "Downloading audio from YouTube...",
+          videoId,
+        });
+        const segments = await transcribeWithWhisper(videoId, "base", (evt) => {
+          if (evt.stage === "transcribing") {
+            transcriptionProgress.emit("progress", {
+              stage: "transcribing",
+              progress: 40,
+              statusText: "Transcribing audio with Whisper...",
+              videoId,
+            });
+          } else if (evt.stage === "diarizing") {
+            transcriptionProgress.emit("progress", {
+              stage: "diarizing",
+              progress: 85,
+              statusText: "Identifying speakers...",
+              videoId,
+            });
+          }
+        });
         // Clean up cloud audio file if we downloaded one
         if (audioPath) await fs.unlink(audioPath).catch(() => {});
         return { segments, source: "whisper_local" };
@@ -579,9 +602,21 @@ async function transcribeAudioFallback(
       try {
         // Download audio once for all cloud providers
         if (!audioPath) {
+          transcriptionProgress.emit("progress", {
+            stage: "downloading",
+            progress: 15,
+            statusText: "Downloading audio from YouTube...",
+            videoId,
+          });
           const audioDir = path.join("/tmp", "yt-audio");
           audioPath = await downloadAudio(videoId, audioDir);
         }
+        transcriptionProgress.emit("progress", {
+          stage: "transcribing",
+          progress: 40,
+          statusText: `Transcribing with ${config.provider}...`,
+          videoId,
+        });
         const result = await transcribeWithProvider(audioPath, config);
         await fs.unlink(audioPath).catch(() => {});
         return result;
@@ -614,6 +649,12 @@ async function fetchTranscript(
   lang?: string
 ): Promise<{ segments: TranscriptSegment[]; source: string }> {
   // 1. Web page scrape — most reliable caption method as of 2026
+  transcriptionProgress.emit("progress", {
+    stage: "fetching_captions",
+    progress: 5,
+    statusText: "Checking for YouTube captions...",
+    videoId,
+  });
   try {
     const segments = await fetchTranscriptWebFallback(videoId, lang);
     return { segments, source: "youtube_captions" };
@@ -700,6 +741,13 @@ export async function getVideoTranscript(
       )
     ),
   ]);
+
+  transcriptionProgress.emit("progress", {
+    stage: "done",
+    progress: 100,
+    statusText: "Transcription complete",
+    videoId,
+  });
 
   return result;
 }

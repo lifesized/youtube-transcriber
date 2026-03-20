@@ -60,6 +60,80 @@ async function apiJSON<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 // ---------------------------------------------------------------------------
+// Progress streaming via SSE
+// ---------------------------------------------------------------------------
+
+interface ProgressEvent {
+  stage: string;
+  progress: number;
+  statusText: string;
+  videoId?: string;
+}
+
+/**
+ * Connect to the SSE progress endpoint and relay events as MCP log messages.
+ * Returns an AbortController to disconnect when the transcription completes.
+ */
+function streamProgress(log: (msg: string) => void): AbortController {
+  const controller = new AbortController();
+
+  (async () => {
+    try {
+      const res = await fetch(`${BASE_URL}/api/transcripts/progress`, {
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) return;
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const evt: ProgressEvent = JSON.parse(line.slice(6));
+            if (evt.statusText && evt.stage !== "connected") {
+              log(`[${evt.progress}%] ${evt.statusText}`);
+            }
+          } catch { /* ignore parse errors */ }
+        }
+      }
+    } catch {
+      // Aborted or connection failed — both are fine
+    }
+  })();
+
+  return controller;
+}
+
+/**
+ * Call the transcription API with progress logging.
+ */
+async function transcribeWithProgress(
+  url: string,
+  lang: string | undefined,
+  log: (msg: string) => void
+): Promise<Video> {
+  const progress = streamProgress(log);
+  try {
+    return await apiJSON<Video>("/api/transcripts", {
+      method: "POST",
+      body: JSON.stringify({ url, lang }),
+    });
+  } finally {
+    progress.abort();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -121,10 +195,10 @@ server.tool(
   },
   async ({ url, lang }) => {
     try {
-      const video = await apiJSON<Video>("/api/transcripts", {
-        method: "POST",
-        body: JSON.stringify({ url, lang }),
-      });
+      const log = (msg: string) => {
+        server.server.sendLoggingMessage({ level: "info", logger: "transcribe", data: msg }).catch(() => {});
+      };
+      const video = await transcribeWithProgress(url, lang, log);
       const segments: TranscriptSegment[] = JSON.parse(video.transcript);
       const preview = segments.slice(0, 10).map((s) => s.text).join(" ");
       return text(
@@ -155,10 +229,10 @@ server.tool(
   },
   async ({ url, lang }) => {
     try {
-      const video = await apiJSON<Video>("/api/transcripts", {
-        method: "POST",
-        body: JSON.stringify({ url, lang }),
-      });
+      const log = (msg: string) => {
+        server.server.sendLoggingMessage({ level: "info", logger: "transcribe", data: msg }).catch(() => {});
+      };
+      const video = await transcribeWithProgress(url, lang, log);
       const segments: TranscriptSegment[] = JSON.parse(video.transcript);
       const transcript = segments
         .map((s, i) => {
