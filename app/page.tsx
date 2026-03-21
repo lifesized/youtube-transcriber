@@ -925,7 +925,7 @@ function HomeInner() {
                 {url.trim() && (
                   <button
                     type="submit"
-                    className="shrink-0 rounded-full px-6 py-3 text-sm font-semibold text-black/90 transition-all duration-150 hover:brightness-110 active:scale-[0.97]"
+                    className="shrink-0 rounded-full px-6 py-3 text-sm font-semibold text-black/90 transition-all duration-150 hover:brightness-110 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 disabled:opacity-50 disabled:pointer-events-none"
                     style={{ backgroundColor: "#a0a0a0" }}
                   >
                     {isProcessing ? "Add" : "Transcribe"}
@@ -1074,7 +1074,7 @@ function HomeInner() {
                                   e.stopPropagation();
                                   retryItem(idx);
                                 }}
-                                className="shrink-0 rounded-lg border border-white/10 px-3 py-1 text-xs text-white/50 transition-all hover:border-white/20 hover:bg-white/5 hover:text-white/80"
+                                className="shrink-0 whitespace-nowrap rounded-lg border border-white/10 px-4 py-1.5 text-xs text-white/50 transition-all hover:border-white/20 hover:bg-white/5 hover:text-white/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
                               >
                                 Retry
                               </button>
@@ -1198,7 +1198,7 @@ function HomeInner() {
                             href={t.videoUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className={`group relative w-full overflow-hidden rounded-2xl border text-left transition-all duration-300 ${
+                            className={`group relative w-full overflow-hidden rounded-2xl border text-left transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
                               isSelected
                                 ? "border-white/15 bg-white/[0.04] shadow-[0_4px_24px_-8px_rgba(0,0,0,0.5)]"
                                 : "border-white/[0.05] hover:border-white/10 hover:-translate-y-1 hover:shadow-[0_12px_40px_-16px_rgba(0,0,0,0.5)]"

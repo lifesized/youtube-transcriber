@@ -1,8 +1,23 @@
 # Changelog
 
+## 2026-03-21
+
+### Added
+- **Focus-visible rings** on submit button, retry button, and library tile links for keyboard accessibility.
+- **Input disabled state** — reduced opacity and `not-allowed` cursor when disabled.
+- **Input error state** — red border and ring when `aria-invalid="true"` is set.
+- **Toggle hover feedback** — subtle brightness/opacity shift on hover for both on and off states.
+
+### Fixed
+- **Retry button spacing** — increased padding and added `whitespace-nowrap` to prevent text wrapping in failed queue items.
+
 ## 2026-03-18
 
 ### Added
+- **Cost tracking for paid Groq usage** (YTT-108) — Estimated cost displayed below the usage bar when exceeding the free tier. Shows daily cost and collapsible monthly breakdown with per-day details.
+- **Daily usage history** — New `DailyUsage` database table persists usage per provider per day. Previous day's data is preserved on day rollover instead of being discarded.
+- **Real Groq rate limits** — Usage bar now reads `x-ratelimit-*` headers from Groq API responses, showing actual remaining quota and reset time instead of local estimates.
+- **Usage history API** — `GET /api/usage` returns current month's daily breakdown with overage cost calculations.
 - **Waitlist page** — Self-hosted waitlist with Resend email notifications and Google Sheets sync. Deployed standalone site to Vercel.
 - **Entrance animations** — Staggered fade-up animations on page load for header, input, and library sections with `prefers-reduced-motion` support.
 - **Empty state illustration** — Library shows an icon and helpful prompt when no transcripts exist yet.
@@ -19,6 +34,25 @@
 - **Footer** — Centered layout with vertical line dividers, GitHub text link replaced with octocat icon.
 - **Delete dialog** — Backdrop blur overlay, refined copy and spacing.
 - **Waitlist page design** — Outfit font, left-aligned layout, entrance animations, benefit-focused marketing copy.
+
+### Fixed
+- **Usage day boundary** — Daily usage now resets at local midnight instead of UTC midnight.
+
+## 2026-03-17
+
+### Added
+- **Multi-provider transcription** (YTT-102) — Configure multiple cloud providers (Groq, OpenRouter, custom endpoints) with automatic fallback chain.
+- **Drag-and-drop provider ordering** — Reorder transcription providers and local Whisper in settings with drag-and-drop. Priority persists to database.
+- **Provider reorder API** — `POST /api/settings/providers/reorder` for bulk priority updates.
+
+### Changed
+- **OpenRouter defaults** — Default model changed to `google/gemini-2.5-flash`, trimmed model list to verified audio models.
+- **Settings panel redesign** — Extracted to standalone component with dither toggles, hover states, and confirm-before-delete for providers.
+- **Library toolbar** — Simplified to single view toggle with dropdown menu.
+
+### Fixed
+- **Extension fullscreen** — Side panel now closes when entering YouTube fullscreen via button or 'f' shortcut.
+- **Progress animation** — Fixed animation resetting to pulsing pattern when switching browser tabs during transcription.
 
 ## 2026-03-15
 
