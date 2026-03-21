@@ -32,6 +32,9 @@ export default function WaitlistPage() {
 
   return (
     <>
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&display=swap" rel="stylesheet" />
       <style>{`
         @keyframes fadeUp {
           from { opacity: 0; transform: translateY(16px); }
@@ -45,20 +48,18 @@ export default function WaitlistPage() {
           0%, 100% { opacity: 0.03; }
           50% { opacity: 0.06; }
         }
-        .waitlist-input:focus {
-          border-color: rgba(255,255,255,0.25) !important;
-          background: rgba(255,255,255,0.07) !important;
+        .waitlist-form-container:focus-within {
+          border-color: rgba(255,255,255,0.2) !important;
         }
         .waitlist-btn:hover:not(:disabled) {
           background: rgba(255,255,255,0.18) !important;
-          border-color: rgba(255,255,255,0.25) !important;
           color: rgba(255,255,255,0.95) !important;
         }
         .waitlist-btn:active:not(:disabled) {
           transform: scale(0.97);
         }
         .footer-link:hover {
-          color: rgba(255,255,255,0.4) !important;
+          color: rgba(255,255,255,0.5) !important;
         }
         .pill:hover {
           color: rgba(255,255,255,0.4) !important;
@@ -72,12 +73,12 @@ export default function WaitlistPage() {
         justifyContent: "center",
         background: "#0a0a0a",
         padding: "24px 16px",
-        fontFamily: '"Outfit", sans-serif',
+        fontFamily: '"Outfit", -apple-system, sans-serif',
         WebkitFontSmoothing: "antialiased",
         position: "relative",
         overflow: "hidden",
       }}>
-        {/* Subtle radial glow behind content */}
+        {/* Ambient glow */}
         <div style={{
           position: "absolute",
           top: "35%",
@@ -91,11 +92,7 @@ export default function WaitlistPage() {
           pointerEvents: "none",
         }} />
 
-        <div style={{
-          width: "100%",
-          maxWidth: 440,
-          position: "relative",
-        }}>
+        <div style={{ width: "100%", maxWidth: 440, position: "relative" }}>
           {/* Label */}
           <p style={{
             fontSize: 11,
@@ -131,7 +128,7 @@ export default function WaitlistPage() {
             maxWidth: 360,
             animation: "fadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both",
           }}>
-            Paste any YouTube link. Get a clean, searchable transcript you can send straight to an LLM.
+            Paste any YouTube link. Get a clean, searchable transcript you can send straight to an LLM. No setup required.
           </p>
 
           {/* Feature pills */}
@@ -142,7 +139,7 @@ export default function WaitlistPage() {
             flexWrap: "wrap",
             animation: "fadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both",
           }}>
-            {["Works with or without captions", "Searchable library", "Private by default"].map((label) => (
+            {["No install needed", "Works with or without captions", "Searchable library"].map((label) => (
               <span
                 key={label}
                 className="pill"
@@ -176,25 +173,32 @@ export default function WaitlistPage() {
               </div>
             ) : (
               <form onSubmit={handleSubmit} style={{ marginTop: 36 }}>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div
+                  className="waitlist-form-container"
+                  style={{
+                    display: "flex",
+                    borderRadius: 12,
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    background: "rgba(255,255,255,0.03)",
+                    overflow: "hidden",
+                    transition: "border-color 0.2s",
+                  }}
+                >
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@email.com"
                     required
-                    className="waitlist-input"
                     style={{
                       flex: 1,
-                      borderRadius: 8,
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      background: "rgba(255,255,255,0.04)",
-                      padding: "11px 16px",
+                      border: "none",
+                      background: "transparent",
+                      padding: "12px 16px",
                       fontSize: 14,
                       fontFamily: '"Outfit", sans-serif',
                       color: "rgba(255,255,255,0.9)",
                       outline: "none",
-                      transition: "border-color 0.2s, background 0.2s",
                     }}
                   />
                   <button
@@ -202,11 +206,12 @@ export default function WaitlistPage() {
                     disabled={status === "loading"}
                     className="waitlist-btn"
                     style={{
+                      margin: 5,
                       borderRadius: 8,
-                      border: "1px solid rgba(255,255,255,0.15)",
+                      border: "none",
                       background: "rgba(255,255,255,0.1)",
-                      padding: "11px 22px",
-                      fontSize: 14,
+                      padding: "8px 20px",
+                      fontSize: 13,
                       fontWeight: 500,
                       fontFamily: '"Outfit", sans-serif',
                       color: "rgba(255,255,255,0.8)",
@@ -231,24 +236,25 @@ export default function WaitlistPage() {
           {/* Footer */}
           <div style={{
             marginTop: 56,
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
             fontSize: 11,
             color: "rgba(255,255,255,0.18)",
             animation: "fadeIn 0.8s ease-out 0.6s both",
           }}>
+            <span>Want to self-host instead? </span>
             <a
               href="https://github.com/lifesized/youtube-transcriber"
               target="_blank"
               rel="noopener noreferrer"
               className="footer-link"
-              style={{ color: "inherit", textDecoration: "none", transition: "color 0.2s" }}
+              style={{
+                color: "rgba(255,255,255,0.3)",
+                textDecoration: "underline",
+                textUnderlineOffset: 2,
+                transition: "color 0.2s",
+              }}
             >
-              GitHub
+              View on GitHub
             </a>
-            <span style={{ opacity: 0.5 }}>/</span>
-            <span>Open source</span>
           </div>
         </div>
       </div>
