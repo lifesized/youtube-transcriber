@@ -10,6 +10,7 @@ export type ProgressCallback = (event: { stage: string; progress: number; status
 let transcriptionInProgress = false;
 
 const YTDLP_PATH = "/opt/homebrew/bin/yt-dlp";
+const YTDLP_BROWSER = process.env.YTDLP_BROWSER?.trim() || "chrome";
 // Avoid hard-referencing `.venv/*` so builds don't depend on local symlinks.
 const PYTHON_BIN = process.env.WHISPER_PYTHON_BIN?.trim() || "python3";
 const OPENAI_WHISPER_CLI = process.env.WHISPER_CLI?.trim() || "whisper";
@@ -260,7 +261,7 @@ export async function downloadAudio(videoId: string, outputDir: string, onProgre
   await fs.mkdir(outputDir, { recursive: true });
 
   const outputTemplate = path.join(outputDir, `${videoId}.%(ext)s`);
-  const args = [
+  const baseArgs = [
     "-x",
     "--audio-format", "mp3",
     "--audio-quality", "9",
@@ -273,7 +274,7 @@ export async function downloadAudio(videoId: string, outputDir: string, onProgre
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     console.log(`[whisper] Downloading audio for ${videoId} (attempt ${attempt}/${maxAttempts})...`);
     try {
-      const { stderr } = await execFileAsync(YTDLP_PATH, args, { timeout: 120000 });
+      const { stderr } = await execFileAsync(YTDLP_PATH, baseArgs, { timeout: 120000 });
 
       if (stderr) {
         console.log(`[whisper] yt-dlp stderr: ${stderr.slice(0, 500)}`);
@@ -292,6 +293,25 @@ export async function downloadAudio(videoId: string, outputDir: string, onProgre
         console.log(`[whisper] Network error on attempt ${attempt}, retrying in 3s...`);
         await new Promise((r) => setTimeout(r, 3000));
         continue;
+      }
+
+      // If auth-related, retry once with browser cookies
+      const isAuthError = /sign in to confirm|age-restricted/i.test(raw);
+      if (isAuthError && attempt < maxAttempts) {
+        const browser = YTDLP_BROWSER;
+        console.log(`[whisper] Auth required, retrying with ${browser} cookies...`);
+        try {
+          const cookieArgs = [...baseArgs.slice(0, -1), "--cookies-from-browser", browser, baseArgs[baseArgs.length - 1]];
+          const { stderr: stderr2 } = await execFileAsync(YTDLP_PATH, cookieArgs, { timeout: 120000 });
+          if (stderr2) console.log(`[whisper] yt-dlp stderr (cookie retry): ${stderr2.slice(0, 500)}`);
+          const audioPath = path.join(outputDir, `${videoId}.mp3`);
+          await fs.access(audioPath);
+          onProgress?.({ stage: "transcribing", progress: 40, statusText: "Transcribing with Whisper..." });
+          return audioPath;
+        } catch (cookieErr) {
+          const cookieRaw = cookieErr instanceof Error ? cookieErr.message : String(cookieErr);
+          console.log(`[whisper] Cookie retry also failed: ${cookieRaw.slice(0, 300)}`);
+        }
       }
 
       const friendly = classifyYtdlpError(raw);
