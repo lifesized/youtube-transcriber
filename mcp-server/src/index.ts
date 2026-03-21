@@ -70,11 +70,16 @@ interface ProgressEvent {
   videoId?: string;
 }
 
+interface ProgressReporter {
+  log: (msg: string) => void;
+  report: (progress: number, total: number, message: string) => void;
+}
+
 /**
- * Connect to the SSE progress endpoint and relay events as MCP log messages.
+ * Connect to the SSE progress endpoint and relay events as MCP log + progress notifications.
  * Returns an AbortController to disconnect when the transcription completes.
  */
-function streamProgress(log: (msg: string) => void): AbortController {
+function streamProgress(reporter: ProgressReporter): AbortController {
   const controller = new AbortController();
 
   (async () => {
@@ -101,7 +106,8 @@ function streamProgress(log: (msg: string) => void): AbortController {
           try {
             const evt: ProgressEvent = JSON.parse(line.slice(6));
             if (evt.statusText && evt.stage !== "connected") {
-              log(`[${evt.progress}%] ${evt.statusText}`);
+              reporter.log(`[${evt.progress}%] ${evt.statusText}`);
+              reporter.report(evt.progress, 100, evt.statusText);
             }
           } catch { /* ignore parse errors */ }
         }
@@ -115,14 +121,14 @@ function streamProgress(log: (msg: string) => void): AbortController {
 }
 
 /**
- * Call the transcription API with progress logging.
+ * Call the transcription API with progress reporting.
  */
 async function transcribeWithProgress(
   url: string,
   lang: string | undefined,
-  log: (msg: string) => void
+  reporter: ProgressReporter
 ): Promise<Video> {
-  const progress = streamProgress(log);
+  const progress = streamProgress(reporter);
   try {
     return await apiJSON<Video>("/api/transcripts", {
       method: "POST",
@@ -193,23 +199,32 @@ server.tool(
     url: z.string().describe("YouTube video URL"),
     lang: z.string().optional().describe("Preferred caption language(s), comma-separated (e.g. 'en', 'zh-Hans,en', 'es,pt,en'). Defaults to English."),
   },
-  async ({ url, lang }) => {
+  async ({ url, lang }, extra) => {
     try {
-      const log = (msg: string) => {
-        server.server.sendLoggingMessage({ level: "info", logger: "transcribe", data: msg }).catch(() => {});
+      const progressToken = extra._meta?.progressToken;
+      const reporter: ProgressReporter = {
+        log: (msg) => {
+          server.server.sendLoggingMessage({ level: "info", logger: "transcribe", data: msg }).catch(() => {});
+        },
+        report: (progress, total, message) => {
+          if (progressToken !== undefined) {
+            extra.sendNotification({
+              method: "notifications/progress",
+              params: { progressToken, progress, total, message },
+            }).catch(() => {});
+          }
+        },
       };
-      const video = await transcribeWithProgress(url, lang, log);
-      const segments: TranscriptSegment[] = JSON.parse(video.transcript);
-      const preview = segments.slice(0, 10).map((s) => s.text).join(" ");
+      const video = await transcribeWithProgress(url, lang, reporter);
       return text(
         [
           `Transcribed: ${video.title}`,
           `Author: ${video.author}`,
           `Source: ${video.source}`,
           `ID: ${video.id}`,
-          `Segments: ${segments.length}`,
+          `Segments: ${JSON.parse(video.transcript).length}`,
           "",
-          `Preview: ${preview}...`,
+          `Preview: ${JSON.parse(video.transcript).slice(0, 10).map((s: TranscriptSegment) => s.text).join(" ")}...`,
           "",
           `Use get_transcript with id "${video.id}" for the full timestamped text.`,
         ].join("\n")
@@ -227,12 +242,23 @@ server.tool(
     url: z.string().describe("YouTube video URL"),
     lang: z.string().optional().describe("Preferred caption language(s), comma-separated (e.g. 'en', 'zh-Hans,en', 'es,pt,en'). Defaults to English."),
   },
-  async ({ url, lang }) => {
+  async ({ url, lang }, extra) => {
     try {
-      const log = (msg: string) => {
-        server.server.sendLoggingMessage({ level: "info", logger: "transcribe", data: msg }).catch(() => {});
+      const progressToken = extra._meta?.progressToken;
+      const reporter: ProgressReporter = {
+        log: (msg) => {
+          server.server.sendLoggingMessage({ level: "info", logger: "transcribe", data: msg }).catch(() => {});
+        },
+        report: (progress, total, message) => {
+          if (progressToken !== undefined) {
+            extra.sendNotification({
+              method: "notifications/progress",
+              params: { progressToken, progress, total, message },
+            }).catch(() => {});
+          }
+        },
       };
-      const video = await transcribeWithProgress(url, lang, log);
+      const video = await transcribeWithProgress(url, lang, reporter);
       const segments: TranscriptSegment[] = JSON.parse(video.transcript);
       const transcript = segments
         .map((s, i) => {
