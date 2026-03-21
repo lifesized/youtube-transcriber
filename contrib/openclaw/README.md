@@ -9,7 +9,7 @@ This folder contains an [OpenClaw](https://openclaw.ai/) skill for the YouTube T
 ```bash
 # In the project root
 npm run dev
-# Running at http://127.0.0.1:3000
+# Running at http://127.0.0.1:19720
 ```
 
 ### 2. Install the Skill
