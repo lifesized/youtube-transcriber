@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { IconButton, iconButtonClassName } from "@/components/ui/icon-button";
 import { LlmLauncher } from "@/components/ui/llm-launcher";
+import { AnimationTuner, DEFAULT_TUNING } from "@/components/animation-tuner";
+import type { MotionTuning } from "@/components/animation-tuner";
 
 interface QueueItem {
   url: string;
@@ -50,16 +52,6 @@ interface DebugFilters {
   animation: boolean;
   layout: boolean;
   state: boolean;
-}
-
-interface MotionTuning {
-  drawerStiffness: number;
-  drawerDamping: number;
-  drawerMass: number;
-  opacityDuration: number;
-  rowStiffness: number;
-  rowDamping: number;
-  rowMass: number;
 }
 
 function isYouTubeUrl(url: string): boolean {
@@ -172,6 +164,7 @@ function HomeInner() {
   const [debugEvents, setDebugEvents] = useState<DebugEvent[]>([]);
   const [debugPaused, setDebugPaused] = useState(false);
   const [debugCollapsed, setDebugCollapsed] = useState(false);
+  const [motionTuning, setMotionTuning] = useState<MotionTuning>({ ...DEFAULT_TUNING });
 
   const queueRef = useRef<QueueItem[]>([]);
   const processingRef = useRef(false);
@@ -1254,9 +1247,9 @@ function HomeInner() {
                             transition={{
                               layout: {
                                 type: "spring",
-                                stiffness: 120,
-                                damping: 20,
-                                mass: 0.8,
+                                stiffness: motionTuning.rowStiffness,
+                                damping: motionTuning.rowDamping,
+                                mass: motionTuning.rowMass,
                               },
                             }}
                             onLayoutAnimationStart={() => {
@@ -1425,13 +1418,13 @@ function HomeInner() {
                                 transition={{
                                   height: {
                                     type: "spring",
-                                    stiffness: 240,
-                                    damping: 32,
-                                    mass: 0.95,
+                                    stiffness: isSelected ? motionTuning.drawerOpen.stiffness : motionTuning.drawerClose.stiffness,
+                                    damping: isSelected ? motionTuning.drawerOpen.damping : motionTuning.drawerClose.damping,
+                                    mass: isSelected ? motionTuning.drawerOpen.mass : motionTuning.drawerClose.mass,
                                   },
                                   opacity: {
-                                    duration: 0.28,
-                                    ease: "easeOut",
+                                    duration: isSelected ? motionTuning.drawerOpen.opacityDuration : motionTuning.drawerClose.opacityDuration,
+                                    ease: isSelected ? motionTuning.drawerOpen.ease : motionTuning.drawerClose.ease,
                                   },
                                 }}
                                 onAnimationComplete={() => {
@@ -1538,6 +1531,10 @@ function HomeInner() {
         <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-white/10 bg-[hsl(var(--panel))]/95 px-5 py-3 text-sm text-white/75 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7)] backdrop-blur-xl">
           {toast}
         </div>
+      )}
+
+      {process.env.NODE_ENV === "development" && (
+        <AnimationTuner tuning={motionTuning} onChange={setMotionTuning} />
       )}
 
       {/* Delete confirmation dialog */}
