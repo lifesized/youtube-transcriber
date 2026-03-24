@@ -33,6 +33,8 @@ const el = {
   btnCancel: document.getElementById("btnCancel"),
   btnCheckAgain: document.getElementById("btnCheckAgain"),
   btnCopyCommand: document.getElementById("btnCopyCommand"),
+  offlinePath: document.getElementById("offlinePath"),
+  offlineCommand: document.getElementById("offlineCommand"),
 };
 
 let pageInfo = null;
@@ -137,6 +139,18 @@ function startOfflinePolling() {
       init();
     }
   }, 5000);
+}
+
+function loadCachedPath() {
+  chrome.storage.local.get("projectPath", ({ projectPath }) => {
+    el.offlinePath.hidden = true;
+    el.offlineCommand.textContent = "npm run dev";
+    if (projectPath) {
+      el.offlineCommand.dataset.fullCmd = `cd ${projectPath} && npm run dev`;
+    } else {
+      delete el.offlineCommand.dataset.fullCmd;
+    }
+  });
 }
 
 function isServerDownError(msg) {
@@ -355,6 +369,11 @@ async function init() {
   const thisInit = ++initVersion;
 
   // Reset stale UI from previous state
+  for (const s of ALL_STATES) {
+    const elem = el[`state${s}`];
+    if (elem) elem.hidden = true;
+  }
+  stopOfflinePolling();
   el.btnAlreadyTranscribed.hidden = true;
   el.btnTranscribe.hidden = false;
   existingTranscriptId = null;
@@ -419,6 +438,7 @@ async function init() {
 
   if (!online) {
     showState("NoService");
+    loadCachedPath();
     startOfflinePolling();
     return;
   }
@@ -530,7 +550,8 @@ el.btnRetry.addEventListener("click", doTranscribe);
 el.btnCheckAgain.addEventListener("click", init);
 
 el.btnCopyCommand.addEventListener("click", () => {
-  navigator.clipboard.writeText("npm run dev");
+  const cmd = el.offlineCommand.dataset.fullCmd || el.offlineCommand.textContent;
+  navigator.clipboard.writeText(cmd);
   el.btnCopyCommand.classList.add("copied");
   setTimeout(() => el.btnCopyCommand.classList.remove("copied"), 1500);
 });

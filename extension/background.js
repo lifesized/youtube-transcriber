@@ -54,11 +54,17 @@ function setBadge(text, color) {
 
 async function checkService() {
   try {
-    const res = await fetch(`${API_BASE}/api/transcripts`, {
+    const res = await fetch(`${API_BASE}/api/health`, {
       method: "GET",
       signal: AbortSignal.timeout(3000),
     });
-    return { online: res.ok };
+    if (res.ok) {
+      const data = await res.json();
+      if (data.projectPath) {
+        chrome.storage.local.set({ projectPath: data.projectPath });
+      }
+    }
+    return { online: res.ok || res.status === 503 };
   } catch {
     return { online: false };
   }

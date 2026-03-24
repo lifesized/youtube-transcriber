@@ -119,7 +119,7 @@ export async function GET() {
   const status = hasFail ? "unhealthy" : "healthy";
 
   return NextResponse.json(
-    { status, checks },
+    { status, checks, projectPath: process.cwd() },
     { status: hasFail ? 503 : 200 }
   );
 }
