@@ -9,7 +9,12 @@ export type ProgressCallback = (event: { stage: string; progress: number; status
 // Concurrency lock: only one transcription at a time to prevent memory exhaustion
 let transcriptionInProgress = false;
 
-const YTDLP_PATH = "/opt/homebrew/bin/yt-dlp";
+const YTDLP_PATH = process.env.YTDLP_PATH?.trim() || "/opt/homebrew/bin/yt-dlp";
+
+/** Get the resolved yt-dlp path for use by other modules. */
+export function getYtdlpPath(): string {
+  return YTDLP_PATH;
+}
 const YTDLP_BROWSER = process.env.YTDLP_BROWSER?.trim() || "chrome";
 // Avoid hard-referencing `.venv/*` so builds don't depend on local symlinks.
 const PYTHON_BIN = process.env.WHISPER_PYTHON_BIN?.trim() || "python3";

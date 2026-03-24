@@ -1,10 +1,15 @@
 import path from "path";
+import os from "os";
 import { promises as fs } from "fs";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import { extractVideoId } from "./youtube";
-import { transcribeWithWhisper, downloadAudio, type ProgressCallback } from "./whisper";
+import { transcribeWithWhisper, downloadAudio, type ProgressCallback, getYtdlpPath } from "./whisper";
 import { transcribeWithCloudWhisper, getCloudWhisperConfig } from "./whisper-cloud";
 import { isWhisperEnabled, getWhisperPriority, getEnabledProviders, transcribeWithProvider } from "./providers";
 import { transcriptionProgress } from "./progress";
+
+const execFileAsync = promisify(execFile);
 import type {
   TranscriptSegment,
   VideoMetadata,
@@ -239,10 +244,10 @@ async function fetchTranscriptAndroid(
         hl: "en",
         gl: "US",
         clientName: "ANDROID",
-        clientVersion: "19.35.36",
+        clientVersion: "19.47.53",
         androidSdkVersion: 34,
         userAgent:
-          "com.google.android.youtube/19.35.36 (Linux; U; Android 14) gzip",
+          "com.google.android.youtube/19.47.53 (Linux; U; Android 14) gzip",
       },
     },
     videoId,
@@ -257,7 +262,7 @@ async function fetchTranscriptAndroid(
       headers: {
         "Content-Type": "application/json",
         "User-Agent":
-          "com.google.android.youtube/19.35.36 (Linux; U; Android 14) gzip",
+          "com.google.android.youtube/19.47.53 (Linux; U; Android 14) gzip",
       },
       body: JSON.stringify(playerPayload),
     }
@@ -337,9 +342,9 @@ async function fetchTranscriptWebClient(
         hl: "en",
         gl: "US",
         clientName: "WEB",
-        clientVersion: "2.20241126.01.00",
+        clientVersion: "2.20250312.04.00",
         userAgent:
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
       },
     },
     videoId,
@@ -354,7 +359,7 @@ async function fetchTranscriptWebClient(
       headers: {
         "Content-Type": "application/json",
         "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
       },
       body: JSON.stringify(playerPayload),
     },
@@ -435,7 +440,7 @@ async function fetchTranscriptWebFallback(
     {
       headers: {
         "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         "Accept-Language": "en-US,en;q=0.9",
       },
     }
@@ -637,18 +642,140 @@ async function transcribeAudioFallback(
 }
 
 /**
+ * Parse a WebVTT (.vtt) file into TranscriptSegment[].
+ * Handles cue timestamps like "00:01:23.456 --> 00:01:26.789".
+ */
+function parseVtt(vtt: string): TranscriptSegment[] {
+  const segments: TranscriptSegment[] = [];
+  const cueRegex = /(\d{2}:\d{2}:\d{2}\.\d{3})\s+-->\s+(\d{2}:\d{2}:\d{2}\.\d{3})[^\n]*\n([\s\S]*?)(?=\n\n|\n\d{2}:\d{2}:\d{2}|$)/g;
+  let match;
+
+  while ((match = cueRegex.exec(vtt)) !== null) {
+    const startMs = vttTimestampToMs(match[1]);
+    const endMs = vttTimestampToMs(match[2]);
+    // Decode HTML entities first, then strip VTT/XML tags and clean up
+    const text = decodeEntities(match[3])
+      .replace(/&nbsp;/g, " ")
+      .replace(/<[^>]+>/g, "")
+      .replace(/^.*-->.*$/gm, "")
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    if (text) {
+      segments.push({ text, startMs, durationMs: endMs - startMs });
+    }
+  }
+
+  return segments;
+}
+
+function vttTimestampToMs(ts: string): number {
+  const [h, m, s] = ts.split(":");
+  const [sec, ms] = s.split(".");
+  return parseInt(h) * 3600000 + parseInt(m) * 60000 + parseInt(sec) * 1000 + parseInt(ms);
+}
+
+/**
+ * Fetch subtitles using yt-dlp --write-auto-subs.
+ * This leverages yt-dlp's PO token plugin ecosystem to access
+ * auto-generated captions that require BotGuard attestation.
+ */
+async function fetchSubtitlesViaYtdlp(
+  videoId: string,
+  lang?: string
+): Promise<TranscriptSegment[]> {
+  const ytdlpPath = getYtdlpPath();
+  const langs = lang ? getCaptionLangs(lang) : getCaptionLangs();
+  const subLang = langs[0] || "en";
+  const tmpDir = path.join(os.tmpdir(), "yt-subs");
+  await fs.mkdir(tmpDir, { recursive: true });
+
+  const outputTemplate = path.join(tmpDir, videoId);
+
+  // Clean up any previous subtitle files for this video
+  const cleanup = async () => {
+    try {
+      const files = await fs.readdir(tmpDir);
+      for (const f of files) {
+        if (f.startsWith(videoId)) {
+          await fs.unlink(path.join(tmpDir, f)).catch(() => {});
+        }
+      }
+    } catch {}
+  };
+  await cleanup();
+
+  const args = [
+    "--write-auto-subs",
+    "--write-subs",
+    "--sub-lang", subLang,
+    "--sub-format", "vtt",
+    "--skip-download",
+    "--no-playlist",
+    "-o", outputTemplate,
+    `https://www.youtube.com/watch?v=${videoId}`,
+  ];
+
+  console.log(`[transcript] Trying yt-dlp subtitle download for ${videoId} (lang: ${subLang})...`);
+
+  try {
+    const { stderr } = await execFileAsync(ytdlpPath, args, { timeout: 30000 });
+    if (stderr) {
+      console.log(`[transcript] yt-dlp subs stderr: ${stderr.slice(0, 500)}`);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.log(`[transcript] yt-dlp subtitle download failed: ${msg.slice(0, 300)}`);
+    await cleanup();
+    throw new Error(`yt-dlp subtitle download failed: ${msg.slice(0, 300)}`);
+  }
+
+  // Look for the downloaded subtitle file (.vtt)
+  const files = await fs.readdir(tmpDir);
+  const subFile = files.find(
+    (f) => f.startsWith(videoId) && f.endsWith(".vtt")
+  );
+
+  if (!subFile) {
+    await cleanup();
+    throw new NoCaptionsError(
+      `yt-dlp found no subtitle files for video ${videoId}.`
+    );
+  }
+
+  const vttContent = await fs.readFile(path.join(tmpDir, subFile), "utf-8");
+  await cleanup();
+
+  const segments = parseVtt(vttContent);
+  if (segments.length === 0) {
+    throw new NoCaptionsError(
+      `yt-dlp downloaded subtitles for ${videoId} but they were empty.`
+    );
+  }
+
+  console.log(`[transcript] yt-dlp subtitles: ${segments.length} segments from ${subFile}`);
+  return segments;
+}
+
+// InnerTube methods are disabled by default — YouTube requires PO tokens as of March 2026.
+// Set YTT_INNERTUBE_ENABLED=1 to re-enable if YouTube relaxes enforcement.
+const INNERTUBE_ENABLED = process.env.YTT_INNERTUBE_ENABLED === "1";
+
+/**
  * Fetch time-coded transcript segments for a YouTube video.
- * Fallback chain: WEB page scrape → ANDROID InnerTube → WEB InnerTube → Cloud providers (priority order) → Local Whisper.
- *
- * Web scrape is tried first because YouTube's InnerTube API now requires
- * Proof-of-Origin (PO) tokens via BotGuard attestation (as of early 2026).
- * Without PO tokens, ANDROID returns 400 FAILED_PRECONDITION and WEB returns UNPLAYABLE.
+ * Fallback chain:
+ *   1. WEB page scrape (works for manually uploaded captions)
+ *   2. yt-dlp subtitle download (handles auto-captions via PO tokens)
+ *   3. [disabled] ANDROID / WEB InnerTube (broken without PO tokens since March 2026)
+ *   4. Cloud Whisper / Local Whisper (universal audio transcription fallback)
  */
 async function fetchTranscript(
   videoId: string,
   lang?: string
 ): Promise<{ segments: TranscriptSegment[]; source: string }> {
-  // 1. Web page scrape — most reliable caption method as of 2026
+  // 1. Web page scrape — works for videos with manually uploaded captions
   transcriptionProgress.emit("progress", {
     stage: "fetching_captions",
     progress: 5,
@@ -661,47 +788,69 @@ async function fetchTranscript(
   } catch (err) {
     if (err instanceof NoCaptionsError) {
       console.log(
-        `[transcript] No captions available for ${videoId}, falling back to audio transcription...`
+        `[transcript] No manual captions for ${videoId}, trying yt-dlp subtitles...`
       );
-      return await transcribeAudioFallback(videoId);
+    } else {
+      console.log(
+        `[transcript] WEB scrape failed for ${videoId}: ${err instanceof Error ? err.message : err}. Trying yt-dlp subtitles...`
+      );
     }
-    console.log(
-      `[transcript] WEB scrape failed for ${videoId}: ${err instanceof Error ? err.message : err}. Trying ANDROID InnerTube...`
-    );
   }
 
-  // 2. ANDROID InnerTube — kept as fallback in case YouTube relaxes PO token requirements
+  // 2. yt-dlp subtitle download — handles auto-generated captions via PO token ecosystem
+  transcriptionProgress.emit("progress", {
+    stage: "fetching_captions",
+    progress: 8,
+    statusText: "Trying yt-dlp subtitle download...",
+    videoId,
+  });
   try {
-    const segments = await fetchTranscriptAndroid(videoId, lang);
-    return { segments, source: "youtube_captions" };
+    const segments = await fetchSubtitlesViaYtdlp(videoId, lang);
+    return { segments, source: "youtube_captions_ytdlp" };
   } catch (err) {
     if (err instanceof NoCaptionsError) {
       console.log(
-        `[transcript] No captions available for ${videoId}, falling back to audio transcription...`
+        `[transcript] No subtitles via yt-dlp for ${videoId}, falling back to audio transcription...`
       );
-      return await transcribeAudioFallback(videoId);
+    } else {
+      console.log(
+        `[transcript] yt-dlp subtitles failed for ${videoId}: ${err instanceof Error ? err.message : err}`
+      );
     }
-    console.log(
-      `[transcript] ANDROID client failed for ${videoId}: ${err instanceof Error ? err.message : err}. Trying WEB InnerTube...`
-    );
   }
 
-  // 3. WEB InnerTube — last caption attempt before audio transcription
-  try {
-    const segments = await fetchTranscriptWebClient(videoId, lang);
-    return { segments, source: "youtube_captions" };
-  } catch (err) {
-    if (err instanceof NoCaptionsError) {
+  // 3. InnerTube methods — disabled by default (require PO tokens since March 2026)
+  if (INNERTUBE_ENABLED) {
+    try {
+      const segments = await fetchTranscriptAndroid(videoId, lang);
+      return { segments, source: "youtube_captions" };
+    } catch (err) {
+      if (err instanceof NoCaptionsError) {
+        return await transcribeAudioFallback(videoId);
+      }
       console.log(
-        `[transcript] No captions available for ${videoId}, falling back to audio transcription...`
+        `[transcript] ANDROID client failed for ${videoId}: ${err instanceof Error ? err.message : err}`
       );
-      return await transcribeAudioFallback(videoId);
     }
-    console.log(
-      `[transcript] All caption methods failed for ${videoId}: ${err instanceof Error ? err.message : err}. Falling back to audio transcription...`
-    );
-    return await transcribeAudioFallback(videoId);
+
+    try {
+      const segments = await fetchTranscriptWebClient(videoId, lang);
+      return { segments, source: "youtube_captions" };
+    } catch (err) {
+      if (err instanceof NoCaptionsError) {
+        return await transcribeAudioFallback(videoId);
+      }
+      console.log(
+        `[transcript] WEB InnerTube failed for ${videoId}: ${err instanceof Error ? err.message : err}`
+      );
+    }
   }
+
+  // 4. Audio transcription fallback (Whisper cloud/local)
+  console.log(
+    `[transcript] All caption methods failed for ${videoId}, falling back to audio transcription...`
+  );
+  return await transcribeAudioFallback(videoId);
 }
 
 /**

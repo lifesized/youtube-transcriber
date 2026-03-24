@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-03-24
+
+### Added
+- **yt-dlp subtitle fallback** (YTT-119) — New fallback step between web scrape and Whisper audio transcription. Uses `yt-dlp --write-auto-subs` to download auto-generated captions via YouTube's PO token ecosystem, recovering captions that broke after YouTube's March 2026 BotGuard enforcement. Tagged as `youtube_captions_ytdlp` source.
+- **VTT subtitle parser** — Parses WebVTT files from yt-dlp into timestamped transcript segments, handling HTML entities, VTT tags, and alignment metadata.
+- **Configurable yt-dlp path** — `YTDLP_PATH` env var overrides the default `/opt/homebrew/bin/yt-dlp`.
+
+### Changed
+- **InnerTube methods disabled by default** — ANDROID and WEB InnerTube caption methods are skipped (broken without PO tokens since March 2026). Re-enable with `YTT_INNERTUBE_ENABLED=1`.
+- **Updated User-Agent** — Chrome/120 (2023) updated to Chrome/131 to reduce bot-detection risk on web scrape.
+- **Updated InnerTube client versions** — ANDROID `19.35.36` to `19.47.53`, WEB `2.20241126.01.00` to `2.20250312.04.00`.
+
+### Fixed
+- **Auto-generated captions broken since March 5** — YouTube began requiring PO tokens for auto-caption access. All 133 transcriptions since March 5 fell through to Whisper. The new yt-dlp subtitle fallback restores fast caption retrieval for these videos.
+
 ## 2026-03-21
 
 ### Added
