@@ -68,6 +68,12 @@ export function LlmLauncher({ videoId, videoTitle, onToast }: LlmLauncherProps) 
   }, []);
 
   useEffect(() => {
+    if (open) {
+      setLastProvider(localStorage.getItem(STORAGE_KEY));
+    }
+  }, [open]);
+
+  useEffect(() => {
     if (!open) return;
     function handleClickOutside(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -171,7 +177,7 @@ export function LlmLauncher({ videoId, videoTitle, onToast }: LlmLauncherProps) 
 
       {open && (
         <div
-          className="absolute right-0 top-full z-50 mt-1 min-w-[180px] overflow-hidden rounded-lg border border-white/15 bg-[hsl(var(--panel))] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7)]"
+          className="absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-lg border border-white/15 bg-[hsl(var(--panel))] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7)]"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="px-3 py-2">
@@ -184,12 +190,17 @@ export function LlmLauncher({ videoId, videoTitle, onToast }: LlmLauncherProps) 
               key={provider.id}
               type="button"
               onClick={() => launchWithProvider(provider)}
-              className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/5 hover:text-white"
+              className="group/btn relative flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/5 hover:text-white"
             >
               {provider.icon}
               <span className="flex-1">{provider.name}</span>
               {provider.id === lastProvider && (
                 <span className="text-[10px] text-white/30">last used</span>
+              )}
+              {provider.clipboardFallback && (
+                <span className="pointer-events-none absolute bottom-full left-1/2 z-10 -mb-1.5 -translate-x-[calc(50%-10px)] whitespace-nowrap rounded-md border border-white/10 bg-[hsl(var(--panel))] px-2.5 py-1.5 text-[11px] text-white/50 opacity-0 shadow-lg transition-opacity duration-200 group-hover/btn:opacity-100 group-hover/btn:delay-400">
+                  <span className="text-white/70">{typeof navigator !== "undefined" && /mac/i.test(navigator.userAgent) ? "⌘+V" : "Ctrl+V"}</span>{" "}to paste transcript
+                </span>
               )}
             </button>
           ))}
