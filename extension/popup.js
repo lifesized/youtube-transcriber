@@ -31,6 +31,8 @@ const el = {
   btnQueue: document.getElementById("btnQueue"),
   queueList: document.getElementById("queueList"),
   btnCancel: document.getElementById("btnCancel"),
+  btnCheckAgain: document.getElementById("btnCheckAgain"),
+  btnCopyCommand: document.getElementById("btnCopyCommand"),
 };
 
 let pageInfo = null;
@@ -38,6 +40,7 @@ let progressTimer = null;
 let justCompletedId = null;
 let pollInterval = null;
 let isTranscribing = false;
+let offlinePollTimer = null;
 
 // ---------------------------------------------------------------------------
 // Progress bar
@@ -116,6 +119,33 @@ function showState(name) {
     const elem = el[`state${s}`];
     if (elem) elem.hidden = s !== name;
   }
+}
+
+function stopOfflinePolling() {
+  if (offlinePollTimer) {
+    clearInterval(offlinePollTimer);
+    offlinePollTimer = null;
+  }
+}
+
+function startOfflinePolling() {
+  stopOfflinePolling();
+  offlinePollTimer = setInterval(async () => {
+    const res = await sendMsg({ type: "CHECK_SERVICE" });
+    if (res?.success && res.data?.online) {
+      stopOfflinePolling();
+      init();
+    }
+  }, 5000);
+}
+
+function isServerDownError(msg) {
+  if (!msg) return false;
+  const lower = msg.toLowerCase();
+  return lower.includes("failed to fetch") ||
+    lower.includes("network error") ||
+    lower.includes("econnrefused") ||
+    lower.includes("net::err_connection_refused");
 }
 
 function escapeHtml(str) {
@@ -370,9 +400,13 @@ async function init() {
       return;
     }
     if (pending.status === "error") {
-      el.errorMessage.textContent = pending.error || "Transcription failed";
-      showState("Error");
       await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
+      if (isServerDownError(pending.error)) {
+        showState("NoService");
+      } else {
+        el.errorMessage.textContent = pending.error || "Transcription failed";
+        showState("Error");
+      }
       loadRecent();
       return;
     }
@@ -385,8 +419,10 @@ async function init() {
 
   if (!online) {
     showState("NoService");
+    startOfflinePolling();
     return;
   }
+  stopOfflinePolling();
 
   // 2. Show page state
   showCurrentPageState();
@@ -425,9 +461,13 @@ function pollTranscriptionStatus() {
       isTranscribing = false;
       stopPolling();
       stopProgress();
-      el.errorMessage.textContent = pending.error || "Transcription failed";
-      showState("Error");
       await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
+      if (isServerDownError(pending.error)) {
+        showState("NoService");
+      } else {
+        el.errorMessage.textContent = pending.error || "Transcription failed";
+        showState("Error");
+      }
     }
   }, 2000);
 }
@@ -459,9 +499,13 @@ async function doTranscribe() {
     showCompletedAndReturn(res.data.id);
     processQueue();
   } else {
-    el.errorMessage.textContent = res?.error || "Transcription failed";
-    showState("Error");
     await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
+    if (isServerDownError(res?.error)) {
+      showState("NoService");
+    } else {
+      el.errorMessage.textContent = res?.error || "Transcription failed";
+      showState("Error");
+    }
   }
 }
 
@@ -483,6 +527,13 @@ async function processQueue() {
 
 el.btnTranscribe.addEventListener("click", doTranscribe);
 el.btnRetry.addEventListener("click", doTranscribe);
+el.btnCheckAgain.addEventListener("click", init);
+
+el.btnCopyCommand.addEventListener("click", () => {
+  navigator.clipboard.writeText("npm run dev");
+  el.btnCopyCommand.classList.add("copied");
+  setTimeout(() => el.btnCopyCommand.classList.remove("copied"), 1500);
+});
 
 el.btnAlreadyTranscribed.addEventListener("click", (e) => {
   e.preventDefault();

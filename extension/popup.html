@@ -8,11 +8,32 @@
 <body>
   <div class="popup">
     <!-- No Service -->
-    <div id="stateNoService" class="state" hidden>
-      <p class="message">Service offline</p>
-      <p class="submessage">Start the YouTube Transcriber service to use this extension.</p>
-      <p class="submessage"><code>npm run dev</code> — runs at localhost:19720</p>
-      <a class="setup-link" href="https://github.com/lifesized/youtube-transcriber" target="_blank">Get started → github.com/lifesized/youtube-transcriber</a>
+    <div id="stateNoService" class="state state-offline" hidden>
+      <div class="offline-orb">
+        <div class="offline-orb-ring"></div>
+        <div class="offline-orb-dot"></div>
+      </div>
+      <p class="offline-heading">Waiting for server</p>
+      <p class="offline-sub">The transcriber service isn't running yet</p>
+      <div class="offline-copybox">
+        <code class="offline-copybox-code">npm run dev</code>
+        <button class="offline-copybox-btn" id="btnCopyCommand" title="Copy to clipboard">
+          <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+          </svg>
+          <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </button>
+      </div>
+      <button class="btn-check-again" id="btnCheckAgain">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"/>
+          <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+        </svg>
+        Check again
+      </button>
     </div>
 
     <!-- Not YouTube -->
