@@ -272,6 +272,9 @@ body::-webkit-scrollbar-thumb:hover {
 }
 
 /* Offline state */
+.state-offline[hidden] {
+  display: none;
+}
 .state-offline {
   display: flex;
   flex-direction: column;

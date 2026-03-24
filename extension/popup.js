@@ -43,6 +43,7 @@ let justCompletedId = null;
 let pollInterval = null;
 let isTranscribing = false;
 let offlinePollTimer = null;
+let heartbeatTimer = null;
 
 // ---------------------------------------------------------------------------
 // Progress bar
@@ -121,6 +122,10 @@ function showState(name) {
     const elem = el[`state${s}`];
     if (elem) elem.hidden = s !== name;
   }
+  // Hide recent list when offline or errored — only show alongside Ready/Transcribing
+  if (name === "NoService" || name === "NotYoutube") {
+    el.recentSection.hidden = true;
+  }
 }
 
 function stopOfflinePolling() {
@@ -132,6 +137,7 @@ function stopOfflinePolling() {
 
 function startOfflinePolling() {
   stopOfflinePolling();
+  stopHeartbeat();
   offlinePollTimer = setInterval(async () => {
     const res = await sendMsg({ type: "CHECK_SERVICE" });
     if (res?.success && res.data?.online) {
@@ -139,6 +145,25 @@ function startOfflinePolling() {
       init();
     }
   }, 5000);
+}
+
+function stopHeartbeat() {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+}
+
+function startHeartbeat() {
+  stopHeartbeat();
+  heartbeatTimer = setInterval(async () => {
+    if (isTranscribing) return;
+    const res = await sendMsg({ type: "CHECK_SERVICE" });
+    if (!res?.success || !res.data?.online) {
+      stopHeartbeat();
+      init();
+    }
+  }, 10000);
 }
 
 function loadCachedPath() {
@@ -373,6 +398,7 @@ async function init() {
     const elem = el[`state${s}`];
     if (elem) elem.hidden = true;
   }
+  el.recentSection.hidden = true;
   stopOfflinePolling();
   el.btnAlreadyTranscribed.hidden = true;
   el.btnTranscribe.hidden = false;
@@ -443,6 +469,7 @@ async function init() {
     return;
   }
   stopOfflinePolling();
+  startHeartbeat();
 
   // 2. Show page state
   showCurrentPageState();
