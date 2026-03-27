@@ -2,7 +2,7 @@
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
-**YouTube to LLM-ready transcript in one click. Runs locally, costs nothing.**
+**YouTube & Spotify podcast to LLM-ready transcript in one click. Runs locally, costs nothing.**
 
 
 https://github.com/user-attachments/assets/32491284-5c78-4a74-a580-ff3a8c256243
@@ -10,11 +10,7 @@ https://github.com/user-attachments/assets/32491284-5c78-4a74-a580-ff3a8c256243
 
 
 
-## Hosted Version (Coming Soon)
-
-Don't want to run it locally? A hosted version is in progress — no install, no Python, no local Whisper. Just sign up and go.
-
-**[Join the waitlist →](https://waitlist-site-alpha.vercel.app)**
+**Don't want to install anything?** A hosted version is coming soon — no setup required. **[Join the waitlist →](https://waitlist-site-alpha.vercel.app)**
 
 ## Get Running in 60 Seconds
 
@@ -25,14 +21,14 @@ npm run setup
 npm run dev
 ```
 
-Open [http://localhost:19720](http://localhost:19720) — paste a YouTube URL, hit Extract, done.
+Open [http://localhost:19720](http://localhost:19720) — paste a YouTube or Spotify podcast URL, hit Transcribe, done.
 
 > `npm run setup` installs all dependencies (yt-dlp, ffmpeg, Whisper, MLX on Apple Silicon) and configures everything automatically. Requires Node.js 18+, Python 3.8+, and a package manager (Homebrew / apt / dnf / pacman).
 
 ## Chrome Extension
 <img width="375" height="565" alt="CleanShot 2026-03-17 at 22 53 31@2x" src="https://github.com/user-attachments/assets/d4bccf92-9941-46cc-b4f4-b7bbc3454ff7" />
 
-Transcribe any YouTube video directly from your browser without leaving the page. The extension opens as a persistent side panel — it stays open as you navigate between videos and detects each one automatically.
+Transcribe any YouTube video or Spotify podcast episode directly from your browser without leaving the page. The extension opens as a persistent side panel — it stays open as you navigate between videos and detects each one automatically.
 
 > **Note:** The extension is not yet on the Chrome Web Store. Install it manually in a few steps while we go through the review process.
 
@@ -47,7 +43,7 @@ Transcribe any YouTube video directly from your browser without leaving the page
 
 ### Usage
 
-Navigate to any YouTube video, open the side panel, and click **Transcribe**. The extension uses the same transcription pipeline as the web app — captions first, Whisper fallback, cloud providers if configured.
+Navigate to any YouTube video or Spotify episode, open the side panel, and click **Transcribe**. The extension uses the same transcription pipeline as the web app — captions first, Whisper fallback, cloud providers if configured. For Spotify, it discovers the podcast's public RSS feed and transcribes the audio.
 
 Transcripts open directly in the web app at `http://localhost:19720` where you can search, copy, export, or send to an LLM.
 
@@ -141,17 +137,27 @@ You can also just paste a YouTube URL — Claude will offer to transcribe it.
 
 Paste a URL. The app grabs the transcript using the fastest method available on your system:
 
+**YouTube:**
 1. **YouTube Captions** — fetches official captions when they exist (< 5 sec)
 2. **Cloud Whisper** — optional Groq, OpenRouter, or custom API with your own key (10-30 sec for 10 min)
 3. **MLX Whisper** — local GPU transcription on Apple Silicon (30-60 sec for 10 min)
 4. **OpenAI Whisper** — local CPU fallback that works everywhere (2-5 min for 10 min)
 
-Works fully offline by default. Cloud Whisper is optional — bring your own API key to enable it.
+**Spotify Podcasts:**
+1. Fetches episode metadata from Spotify's official API
+2. Discovers the podcast's public RSS feed via iTunes
+3. Downloads full episode audio from the podcast CDN
+4. Transcribes via Cloud Whisper or local Whisper
+
+> Spotify support requires `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` in `.env` (free from [developer.spotify.com](https://developer.spotify.com/dashboard)). Spotify-exclusive podcasts without a public RSS feed are not supported.
+
+Works fully offline by default for YouTube. Cloud Whisper is optional — bring your own API key to enable it.
 
 ## Features
 
+- **YouTube + Spotify** — paste a YouTube video URL or Spotify podcast episode URL
 - **Local + cloud transcription** — free local Whisper by default, optional cloud providers (Groq, OpenRouter, or custom endpoint) for faster results with your own API key
-- **Chrome extension** — persistent side panel that transcribes from your browser as you watch
+- **Chrome extension** — persistent side panel that transcribes YouTube videos and Spotify episodes from your browser
 - **Multi-language captions** — request captions in any language YouTube supports (see [Language Preference](#language-preference) below)
 - **Summarize with LLM** — send any transcript straight to ChatGPT or Claude. ChatGPT opens with the prompt pre-filled; Claude copies it to your clipboard so you can paste (⌘V) into a new chat
 - **Queue system** — batch-process multiple videos

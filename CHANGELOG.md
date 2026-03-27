@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-03-27
+
+### Added
+- **Spotify podcast transcription** (YTT-143) — Paste a Spotify episode URL to get a transcript. Uses Spotify's official API for metadata, iTunes Search API to discover the podcast's public RSS feed, then downloads audio and transcribes via Groq/OpenRouter/Whisper. No undocumented APIs or TOS violations.
+- **Unified URL parser** (`lib/url-parser.ts`) — Detects YouTube vs Spotify URLs and extracts content IDs. Extensible for future platforms.
+- **Spotify module** (`lib/spotify.ts`) — Client Credentials auth, RSS feed discovery via iTunes, RSS XML parsing with episode matching by title/duration, podcast audio download from CDN.
+- **Chrome extension Spotify support** (YTT-144) — Extension now detects Spotify episode pages and enables one-click transcription from the side panel.
+- **`platform` field** on Video model — Tracks whether a transcript came from YouTube or Spotify.
+
+### Changed
+- **URL input** accepts both YouTube and Spotify URLs with updated validation and placeholder text.
+- **Chrome extension** updated to v1.2.0 with multi-platform URL detection in content scripts, background worker, and popup.
+
 ## 2026-03-24
 
 ### Added
@@ -33,7 +46,6 @@
 - **Daily usage history** — New `DailyUsage` database table persists usage per provider per day. Previous day's data is preserved on day rollover instead of being discarded.
 - **Real Groq rate limits** — Usage bar now reads `x-ratelimit-*` headers from Groq API responses, showing actual remaining quota and reset time instead of local estimates.
 - **Usage history API** — `GET /api/usage` returns current month's daily breakdown with overage cost calculations.
-- **Waitlist page** — Self-hosted waitlist with Resend email notifications and Google Sheets sync. Deployed standalone site to Vercel.
 - **Entrance animations** — Staggered fade-up animations on page load for header, input, and library sections with `prefers-reduced-motion` support.
 - **Empty state illustration** — Library shows an icon and helpful prompt when no transcripts exist yet.
 - **Shimmer loading skeletons** — Library loading state uses animated shimmer effect instead of static placeholders.
@@ -48,8 +60,6 @@
 - **Library section** — Removed enclosing panel card, view toggle buttons moved to top-right, search bar full-width.
 - **Footer** — Centered layout with vertical line dividers, GitHub text link replaced with octocat icon.
 - **Delete dialog** — Backdrop blur overlay, refined copy and spacing.
-- **Waitlist page design** — Outfit font, left-aligned layout, entrance animations, benefit-focused marketing copy.
-
 ### Fixed
 - **Usage day boundary** — Daily usage now resets at local midnight instead of UTC midnight.
 
