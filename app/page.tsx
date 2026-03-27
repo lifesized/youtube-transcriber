@@ -54,8 +54,11 @@ interface DebugFilters {
   state: boolean;
 }
 
-function isYouTubeUrl(url: string): boolean {
-  return /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\/.+/.test(url);
+function isSupportedUrl(url: string): boolean {
+  return (
+    /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\/.+/.test(url) ||
+    /^https?:\/\/open\.spotify\.com\/episode\/.+/.test(url)
+  );
 }
 
 function formatDate(iso: string): string {
@@ -828,12 +831,12 @@ function HomeInner() {
 
     const trimmed = url.trim();
     if (!trimmed) {
-      setError("Please enter a YouTube URL.");
+      setError("Please enter a URL.");
       return;
     }
 
-    if (!isYouTubeUrl(trimmed)) {
-      setError("Please enter a valid YouTube URL.");
+    if (!isSupportedUrl(trimmed)) {
+      setError("Please enter a valid YouTube or Spotify podcast URL.");
       return;
     }
 
@@ -1503,7 +1506,9 @@ function HomeInner() {
                 </a>
                 <span className="h-3 w-px bg-white/8" />
                 <a
-                  href="/waitlist"
+                  href="https://waitlist-site-alpha.vercel.app"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="transition-colors duration-200 hover:text-white/40"
                 >
                   Cloud waitlist
