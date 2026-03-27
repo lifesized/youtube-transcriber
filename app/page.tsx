@@ -138,6 +138,7 @@ function HomeInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectedId = searchParams.get("id");
+  const scrollHint = searchParams.get("t");
   const libraryLayout = searchParams.get("layout") === "tiles" ? "tiles" : "list";
 
   const [url, setUrl] = useState("");
@@ -433,12 +434,26 @@ function HomeInner() {
     addDebugEvent("video.selection.change", `selectedId=${selectedId}`);
     fetchSelectedVideo(selectedId);
 
-    // Auto-scroll to the selected transcript
-    requestAnimationFrame(() => {
+    // Auto-scroll to the selected transcript — retry until the element
+    // exists in the DOM (library loads async, so it may not be rendered yet).
+    // Uses window.scrollTo to avoid conflicts with browser scroll restoration.
+    let cancelled = false;
+    let attempts = 0;
+    const tryScroll = () => {
+      if (cancelled) return;
       const el = document.querySelector(`[data-transcript-id="${selectedId}"]`);
-      el?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  }, [addDebugEvent, selectedId]);
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        window.scrollTo({ top: scrollTop + rect.top - 80, behavior: "smooth" });
+      } else if (attempts++ < 30) {
+        setTimeout(tryScroll, 100);
+      }
+    };
+    // Wait for page load and browser scroll restoration to settle
+    setTimeout(tryScroll, 500);
+    return () => { cancelled = true; };
+  }, [addDebugEvent, selectedId, scrollHint]);
 
   useEffect(() => {
     addDebugEvent(

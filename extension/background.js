@@ -235,7 +235,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case "OPEN_TRANSCRIPT": {
         const transcriptId = message.id;
-        const fullUrl = `${API_BASE}/?layout=list&id=${transcriptId}`;
+        // Append timestamp to bust Chrome's same-URL no-op optimization
+        const fullUrl = `${API_BASE}/?layout=list&id=${transcriptId}&t=${Date.now()}`;
 
         // Find existing app tab
         const allTabs = await chrome.tabs.query({});
