@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { extractVideoId } from "@/lib/youtube";
+import { parseContentUrl } from "@/lib/url-parser";
 import { getVideoTranscript, RateLimitError, BotDetectionError, NoCaptionsError } from "@/lib/transcript";
 import { isTranscriptionInProgress } from "@/lib/whisper";
 
@@ -18,14 +18,17 @@ export async function POST(request: NextRequest) {
   const { url, lang } = body;
   if (!url || typeof url !== "string") {
     return NextResponse.json(
-      { error: "A YouTube URL is required" },
+      { error: "A YouTube or Spotify URL is required" },
       { status: 400 }
     );
   }
 
   let videoId: string;
+  let platform: string;
   try {
-    videoId = extractVideoId(url);
+    const parsed = parseContentUrl(url);
+    videoId = parsed.contentId;
+    platform = parsed.platform;
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Invalid URL";
     return NextResponse.json({ error: message }, { status: 400 });
@@ -57,10 +60,11 @@ export async function POST(request: NextRequest) {
       title: result.title,
       author: result.author,
       channelUrl: result.channelUrl,
-      thumbnailUrl: result.thumbnailUrl ?? `https://i.ytimg.com/vi/${result.videoId}/hqdefault.jpg`,
+      thumbnailUrl: result.thumbnailUrl || (platform === "youtube" ? `https://i.ytimg.com/vi/${result.videoId}/hqdefault.jpg` : ""),
       videoUrl: url,
       transcript: JSON.stringify(result.transcript),
       source: result.source,
+      platform,
     };
 
     const video = existing

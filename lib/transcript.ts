@@ -4,6 +4,8 @@ import { promises as fs } from "fs";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { extractVideoId } from "./youtube";
+import { parseContentUrl } from "./url-parser";
+import { getSpotifyTranscript } from "./spotify";
 import { transcribeWithWhisper, downloadAudio, type ProgressCallback, getYtdlpPath } from "./whisper";
 import { transcribeWithCloudWhisper, getCloudWhisperConfig } from "./whisper-cloud";
 import { isWhisperEnabled, getWhisperPriority, getEnabledProviders, transcribeWithProvider } from "./providers";
@@ -863,7 +865,13 @@ export async function getVideoTranscript(
   url: string,
   lang?: string
 ): Promise<VideoTranscriptResult & { source: string }> {
-  const videoId = extractVideoId(url);
+  const parsed = parseContentUrl(url);
+
+  if (parsed.platform === "spotify") {
+    return getSpotifyTranscript(parsed.contentId, parsed.originalUrl);
+  }
+
+  const videoId = parsed.contentId;
 
   // Use a longer timeout when Whisper fallback might be needed (up to 10 minutes)
   const result = await Promise.race([
