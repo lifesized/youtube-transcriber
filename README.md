@@ -333,6 +333,6 @@ If this saves you time, a ⭐ on GitHub helps others find it.
 
 ## Credits
 
-Built by [lifesized](https://github.com/lifesized).
+Designed and built by [lifesized](https://github.com/lifesized).
 
 **Built with:** [Intent by Augment](https://www.augmentcode.com/intent), [Cursor](https://cursor.sh), [Codex](https://openai.com/index/openai-codex/), [Claude Code](https://github.com/anthropics/claude-code), and [Ghostty](https://ghostty.org).
