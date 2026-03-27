@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "YouTube Transcriber",
-  "version": "1.1.0",
-  "description": "One-click YouTube transcription via your local YouTube Transcriber service",
+  "version": "1.2.0",
+  "description": "One-click transcription for YouTube videos and Spotify podcasts via your local transcriber service",
   "permissions": [
     "activeTab",
     "tabs",
@@ -20,6 +20,11 @@
     {
       "matches": ["*://*.youtube.com/*"],
       "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://open.spotify.com/*"],
+      "js": ["content-spotify.js"],
       "run_at": "document_idle"
     }
   ],
