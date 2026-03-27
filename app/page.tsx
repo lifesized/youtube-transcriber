@@ -887,7 +887,7 @@ function HomeInner() {
                       if (error) setError(null);
                       if (duplicateHint) setDuplicateHint(null);
                     }}
-                    placeholder="https://www.youtube.com/watch?v=..."
+                    placeholder="Paste a YouTube or Spotify podcast URL..."
                     className="h-12 pr-10"
                   />
                   {url && (
@@ -1173,7 +1173,7 @@ function HomeInner() {
                         </svg>
                       </div>
                       <p className="text-sm text-white/35">Your transcripts will appear here</p>
-                      <p className="mt-1.5 text-xs text-white/18">Paste a YouTube URL above to get started</p>
+                      <p className="mt-1.5 text-xs text-white/18">Paste a YouTube or Spotify podcast URL above to get started</p>
                     </>
                   )}
                 </div>
