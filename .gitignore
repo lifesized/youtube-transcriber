@@ -48,3 +48,6 @@ scripts/check-handover.sh
 
 # Playground pages
 app/dither/
+
+# Private local docs (cloud prompts, notes — not for public repo)
+.private/
