@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100vh;
+      background: #0a0a0a;
+      overflow: hidden;
+    }
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+    .shell-error {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      padding: 24px;
+      text-align: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 13px;
+      gap: 12px;
+    }
+    .shell-error a {
+      color: rgba(255, 255, 255, 0.5);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .shell-error a:hover {
+      color: rgba(255, 255, 255, 0.8);
+    }
+  </style>
+</head>
+<body>
+  <iframe id="appFrame" src="https://transcribed.dev/extension"></iframe>
+
+  <div class="shell-error" id="shellError">
+    <p>Couldn't load the panel</p>
+    <a href="#" id="btnRetryLoad">Try again</a>
+  </div>
+
+  <script>
+    const port = chrome.runtime.connect({ name: "sidepanel" });
+
+    port.onMessage.addListener((msg) => {
+      if (msg.type === "CLOSE") window.close();
+    });
+
+    const frame = document.getElementById("appFrame");
+    const error = document.getElementById("shellError");
+
+    // Show error state if iframe fails to load
+    let loaded = false;
+    frame.addEventListener("load", () => { loaded = true; });
+
+    setTimeout(() => {
+      if (!loaded) {
+        frame.style.display = "none";
+        error.style.display = "flex";
+      }
+    }, 8000);
+
+    document.getElementById("btnRetryLoad").addEventListener("click", (e) => {
+      e.preventDefault();
+      error.style.display = "none";
+      frame.style.display = "block";
+      frame.src = frame.src;
+      loaded = false;
+      setTimeout(() => {
+        if (!loaded) {
+          frame.style.display = "none";
+          error.style.display = "flex";
+        }
+      }, 8000);
+    });
+
+    // Forward messages between iframe and background
+    window.addEventListener("message", (event) => {
+      if (event.source !== frame.contentWindow) return;
+      if (event.data?.type) {
+        chrome.runtime.sendMessage(event.data, (response) => {
+          frame.contentWindow.postMessage(
+            { _responseId: event.data._requestId, ...response },
+            "*"
+          );
+        });
+      }
+    });
+  </script>
+</body>
+</html>
