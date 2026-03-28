@@ -1,5 +1,60 @@
 const API_BASE = "http://localhost:19720";
 
+// ---------------------------------------------------------------------------
+// Dynamic content script registration (replaces static content_scripts block)
+// ---------------------------------------------------------------------------
+
+const CONTENT_SCRIPTS = [
+  {
+    id: "youtube-content",
+    matches: ["*://*.youtube.com/*"],
+    js: ["content.js"],
+    runAt: "document_idle",
+  },
+  {
+    id: "spotify-content",
+    matches: ["*://open.spotify.com/*"],
+    js: ["content-spotify.js"],
+    runAt: "document_idle",
+  },
+];
+
+async function registerContentScripts() {
+  // Unregister existing scripts first to avoid duplicates
+  try {
+    const existing = await chrome.scripting.getRegisteredContentScripts();
+    if (existing.length) {
+      await chrome.scripting.unregisterContentScripts({
+        ids: existing.map((s) => s.id),
+      });
+    }
+  } catch {
+    // First install — nothing to unregister
+  }
+
+  // Register all known content scripts
+  await chrome.scripting.registerContentScripts(CONTENT_SCRIPTS);
+}
+
+// Register on install and startup
+chrome.runtime.onInstalled.addListener(() => {
+  registerContentScripts();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  registerContentScripts();
+  recoverInterruptedTranscription();
+});
+
+// When a new optional host permission is granted, register a content script
+// for it if one is defined. This lets future platforms be added without a
+// manifest update — just call chrome.permissions.request() from the UI.
+chrome.permissions.onAdded.addListener((permissions) => {
+  if (permissions.origins?.length) {
+    registerContentScripts();
+  }
+});
+
 function extractContentId(url) {
   try {
     const u = new URL(url);
@@ -320,15 +375,14 @@ chrome.action.onClicked.addListener(async (tab) => {
 });
 
 // ---------------------------------------------------------------------------
-// On startup — check if a transcription was interrupted
+// Interrupted transcription recovery (called from onStartup above)
 // ---------------------------------------------------------------------------
-chrome.runtime.onStartup.addListener(async () => {
+async function recoverInterruptedTranscription() {
   const state = await getState();
   if (state?.status === "transcribing") {
-    // Service worker restarted mid-transcription — mark as error
     state.status = "error";
     state.error = "Transcription was interrupted. Please retry.";
     await setState(state);
     setBadge("!", "#ef4444");
   }
-});
+}

@@ -7,27 +7,29 @@
     "activeTab",
     "tabs",
     "storage",
-    "sidePanel"
+    "sidePanel",
+    "scripting"
+  ],
+  "optional_permissions": [
+    "notifications",
+    "downloads",
+    "clipboardWrite",
+    "contextMenus"
   ],
   "host_permissions": [
     "http://localhost:19720/*",
-    "http://127.0.0.1:19720/*"
+    "http://127.0.0.1:19720/*",
+    "*://*.youtube.com/*",
+    "*://open.spotify.com/*"
+  ],
+  "optional_host_permissions": [
+    "*://*.vimeo.com/*",
+    "*://podcasts.apple.com/*",
+    "*://*.twitch.tv/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
-  "content_scripts": [
-    {
-      "matches": ["*://*.youtube.com/*"],
-      "js": ["content.js"],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": ["*://open.spotify.com/*"],
-      "js": ["content-spotify.js"],
-      "run_at": "document_idle"
-    }
-  ],
   "side_panel": {
     "default_path": "popup.html"
   },
