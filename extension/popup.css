@@ -561,6 +561,27 @@ body::-webkit-scrollbar-thumb:hover {
   100% { background: transparent; }
 }
 
+/* Cloud nudge — shown in no-service state to convert to paid cloud */
+.cloud-nudge {
+  margin-top: 20px;
+  text-align: center;
+}
+.cloud-nudge-cta {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+.cloud-nudge-cta:hover {
+  opacity: 0.8;
+}
+.cloud-nudge-copy {
+  margin-top: 4px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.2);
+}
+
 /* Panel footer — GitHub link + star prompt, persistent across all states */
 .panel-footer {
   border-top: 1px solid rgba(255, 255, 255, 0.06);
