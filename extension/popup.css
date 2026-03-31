@@ -47,6 +47,7 @@ body::-webkit-scrollbar-thumb:hover {
 }
 
 .popup {
+  position: relative;
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -559,6 +560,165 @@ body::-webkit-scrollbar-thumb:hover {
   0% { background: rgba(255, 255, 255, 0.04); }
   70% { background: rgba(255, 255, 255, 0.04); }
   100% { background: transparent; }
+}
+
+/* Settings toggle — gear icon, top-right */
+.btn-settings-toggle {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+  border: none;
+  background: none;
+  color: rgba(255, 255, 255, 0.20);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+.btn-settings-toggle:hover {
+  color: rgba(255, 255, 255, 0.50);
+}
+.btn-settings-toggle.active {
+  color: rgba(255, 255, 255, 0.60);
+}
+
+/* Settings panel */
+.settings-panel {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-2);
+  padding: 14px;
+}
+.settings-panel[hidden] {
+  display: none;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+}
+.settings-label {
+  font-size: 12px;
+  color: var(--muted-2);
+  font-weight: 500;
+}
+.settings-toggle-group {
+  display: flex;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  padding: 2px;
+}
+.settings-mode-btn {
+  padding: 4px 12px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted-3);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.settings-mode-btn:hover {
+  color: var(--muted);
+}
+.settings-mode-btn.active {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--accent);
+  color: var(--text);
+}
+.settings-api-key {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.settings-api-key[hidden] {
+  display: none;
+}
+.settings-input-row {
+  display: flex;
+  gap: 6px;
+}
+.settings-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-size: 12px;
+  font-family: "SF Mono", "Menlo", monospace;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.settings-input:focus {
+  border-color: rgba(255, 255, 255, 0.20);
+}
+.settings-input::placeholder {
+  color: var(--muted-3);
+}
+.settings-test-btn {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.settings-test-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: var(--border-hover);
+}
+.settings-status {
+  font-size: 11px;
+  padding: 0 2px;
+}
+.settings-status[hidden] {
+  display: none;
+}
+.settings-status.testing {
+  color: var(--muted-3);
+}
+.settings-status.success {
+  color: #22c55e;
+}
+.settings-status.error {
+  color: var(--error);
+}
+.settings-help-link {
+  font-size: 11px;
+  color: var(--accent);
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+.settings-help-link:hover {
+  opacity: 0.8;
+}
+.btn-settings-save {
+  width: 100%;
+  margin-top: 14px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-settings-save:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: var(--border-hover);
 }
 
 /* Cloud nudge — shown in no-service state to convert to paid cloud */

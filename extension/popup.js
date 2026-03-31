@@ -1,5 +1,3 @@
-const API_APP_BASE = "http://localhost:19720";
-
 // Keep a port open so the background script knows the side panel is active
 const port = chrome.runtime.connect({ name: "sidepanel" });
 
@@ -35,6 +33,19 @@ const el = {
   btnCopyCommand: document.getElementById("btnCopyCommand"),
   offlinePath: document.getElementById("offlinePath"),
   offlineCommand: document.getElementById("offlineCommand"),
+  offlineLocalMsg: document.getElementById("offlineLocalMsg"),
+  offlineCloudMsg: document.getElementById("offlineCloudMsg"),
+  offlineCloudSub: document.getElementById("offlineCloudSub"),
+  cloudNudge: document.getElementById("cloudNudge"),
+  btnSettings: document.getElementById("btnSettings"),
+  settingsPanel: document.getElementById("settingsPanel"),
+  btnModeLocal: document.getElementById("btnModeLocal"),
+  btnModeCloud: document.getElementById("btnModeCloud"),
+  apiKeySection: document.getElementById("apiKeySection"),
+  apiKeyInput: document.getElementById("apiKeyInput"),
+  btnTestConnection: document.getElementById("btnTestConnection"),
+  connectionStatus: document.getElementById("connectionStatus"),
+  btnSaveSettings: document.getElementById("btnSaveSettings"),
 };
 
 let pageInfo = null;
@@ -204,9 +215,8 @@ function formatDate(iso) {
 // Open transcript in app — reuse existing app tab
 // ---------------------------------------------------------------------------
 
-async function openTranscript(url) {
-  const transcriptId = new URL(url).searchParams.get("id");
-  await sendMsg({ type: "OPEN_TRANSCRIPT", id: transcriptId });
+async function openTranscript(id) {
+  await sendMsg({ type: "OPEN_TRANSCRIPT", id });
 }
 
 function showCompletedAndReturn(completedId) {
@@ -301,7 +311,7 @@ async function loadRecent() {
     item.href = "#";
     item.addEventListener("click", (e) => {
       e.preventDefault();
-      openTranscript(`${API_APP_BASE}/?id=${t.id}`);
+      openTranscript(t.id);
     });
     item.innerHTML = `
       <div class="recent-item-content">
@@ -457,11 +467,12 @@ async function init() {
     if (pending.status === "error") {
       await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
       if (isServerDownError(pending.error)) {
-        showState("NoService");
-      } else {
-        el.errorMessage.textContent = pending.error || "Transcription failed";
-        showState("Error");
+        // Trigger full init to get mode-aware offline messaging
+        init();
+        return;
       }
+      el.errorMessage.textContent = pending.error || "Transcription failed";
+      showState("Error");
       loadRecent();
       return;
     }
@@ -473,8 +484,28 @@ async function init() {
   const online = serviceRes?.success && serviceRes.data?.online;
 
   if (!online) {
+    const cfgRes = await sendMsg({ type: "GET_SETTINGS" });
+    if (thisInit !== initVersion) return;
+    const cfgMode = cfgRes?.data?.mode || "local";
+    const authError = serviceRes?.data?.authError;
+
+    if (cfgMode === "cloud") {
+      el.offlineLocalMsg.hidden = true;
+      el.offlineCloudMsg.hidden = false;
+      el.cloudNudge.hidden = true;
+      if (authError) {
+        el.offlineCloudSub.textContent = "Your API key is invalid. Update it in settings.";
+      } else {
+        el.offlineCloudSub.textContent = "Check your API key or try again later";
+      }
+    } else {
+      el.offlineLocalMsg.hidden = false;
+      el.offlineCloudMsg.hidden = true;
+      el.cloudNudge.hidden = false;
+      loadCachedPath();
+    }
+
     showState("NoService");
-    loadCachedPath();
     startOfflinePolling();
     return;
   }
@@ -520,7 +551,7 @@ function pollTranscriptionStatus() {
       stopProgress();
       await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
       if (isServerDownError(pending.error)) {
-        showState("NoService");
+        init();
       } else {
         el.errorMessage.textContent = pending.error || "Transcription failed";
         showState("Error");
@@ -558,7 +589,7 @@ async function doTranscribe() {
   } else {
     await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
     if (isServerDownError(res?.error)) {
-      showState("NoService");
+      init();
     } else {
       el.errorMessage.textContent = res?.error || "Transcription failed";
       showState("Error");
@@ -596,7 +627,7 @@ el.btnCopyCommand.addEventListener("click", () => {
 el.btnAlreadyTranscribed.addEventListener("click", (e) => {
   e.preventDefault();
   if (existingTranscriptId) {
-    openTranscript(`${API_APP_BASE}/?id=${existingTranscriptId}`);
+    openTranscript(existingTranscriptId);
   }
 });
 
@@ -662,6 +693,94 @@ chrome.tabs.onUpdated?.addListener((tabId, changeInfo) => {
   if (changeInfo.title) {
     init();
   }
+});
+
+// ---------------------------------------------------------------------------
+// Settings panel
+// ---------------------------------------------------------------------------
+
+let currentSettingsMode = "local";
+
+el.btnSettings.addEventListener("click", () => {
+  const isOpen = !el.settingsPanel.hidden;
+  el.settingsPanel.hidden = isOpen;
+  el.btnSettings.classList.toggle("active", !isOpen);
+  if (!isOpen) loadSettings();
+});
+
+async function loadSettings() {
+  const res = await sendMsg({ type: "GET_SETTINGS" });
+  if (!res?.success) return;
+  const { mode, hasApiKey } = res.data;
+  setModeUI(mode);
+  el.connectionStatus.hidden = true;
+  if (hasApiKey) {
+    el.apiKeyInput.value = "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
+    el.apiKeyInput.dataset.unchanged = "true";
+  } else {
+    el.apiKeyInput.value = "";
+    delete el.apiKeyInput.dataset.unchanged;
+  }
+}
+
+function setModeUI(mode) {
+  currentSettingsMode = mode;
+  el.btnModeLocal.classList.toggle("active", mode === "local");
+  el.btnModeCloud.classList.toggle("active", mode === "cloud");
+  el.apiKeySection.hidden = mode !== "cloud";
+}
+
+el.btnModeLocal.addEventListener("click", () => setModeUI("local"));
+el.btnModeCloud.addEventListener("click", () => setModeUI("cloud"));
+
+el.apiKeyInput.addEventListener("focus", () => {
+  if (el.apiKeyInput.dataset.unchanged === "true") {
+    el.apiKeyInput.value = "";
+    delete el.apiKeyInput.dataset.unchanged;
+  }
+});
+
+el.btnTestConnection.addEventListener("click", async () => {
+  el.connectionStatus.hidden = false;
+  el.connectionStatus.textContent = "Testing...";
+  el.connectionStatus.className = "settings-status testing";
+
+  // Use the entered key, or fetch the stored one if unchanged
+  let apiKey;
+  if (el.apiKeyInput.dataset.unchanged === "true") {
+    const stored = await chrome.storage.sync.get("apiKey");
+    apiKey = stored.apiKey || "";
+  } else {
+    apiKey = el.apiKeyInput.value;
+  }
+
+  const res = await sendMsg({
+    type: "TEST_CONNECTION",
+    mode: currentSettingsMode,
+    apiKey,
+  });
+
+  if (res?.success && res.data?.online) {
+    el.connectionStatus.textContent = "Connected";
+    el.connectionStatus.className = "settings-status success";
+  } else if (res?.data?.authError) {
+    el.connectionStatus.textContent = "Invalid API key";
+    el.connectionStatus.className = "settings-status error";
+  } else {
+    el.connectionStatus.textContent = "Connection failed";
+    el.connectionStatus.className = "settings-status error";
+  }
+});
+
+el.btnSaveSettings.addEventListener("click", async () => {
+  const payload = { type: "SAVE_SETTINGS", mode: currentSettingsMode };
+  if (currentSettingsMode === "cloud" && el.apiKeyInput.dataset.unchanged !== "true") {
+    payload.apiKey = el.apiKeyInput.value;
+  }
+  await sendMsg(payload);
+  el.settingsPanel.hidden = true;
+  el.btnSettings.classList.remove("active");
+  init();
 });
 
 // Start
