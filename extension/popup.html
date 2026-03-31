@@ -7,36 +7,6 @@
 </head>
 <body>
   <div class="popup">
-    <!-- Settings toggle -->
-    <button class="btn-settings-toggle" id="btnSettings" title="Settings">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="3"/>
-        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
-      </svg>
-    </button>
-
-    <!-- Settings Panel -->
-    <div id="settingsPanel" class="settings-panel" hidden>
-      <div class="section-label">Settings</div>
-      <div class="settings-row">
-        <span class="settings-label">Mode</span>
-        <div class="settings-toggle-group">
-          <button class="settings-mode-btn active" id="btnModeLocal" data-mode="local">Local</button>
-          <button class="settings-mode-btn" id="btnModeCloud" data-mode="cloud">Cloud</button>
-        </div>
-      </div>
-      <div id="apiKeySection" class="settings-api-key" hidden>
-        <label class="settings-label" for="apiKeyInput">API Key</label>
-        <div class="settings-input-row">
-          <input type="password" id="apiKeyInput" class="settings-input" placeholder="ytt_sk_..." autocomplete="off" spellcheck="false" />
-          <button class="settings-test-btn" id="btnTestConnection">Test</button>
-        </div>
-        <div id="connectionStatus" class="settings-status" hidden></div>
-        <a class="settings-help-link" href="https://transcribed.dev/developers" target="_blank">Get an API key →</a>
-      </div>
-      <button class="btn-settings-save" id="btnSaveSettings">Save</button>
-    </div>
-
     <!-- No Service -->
     <div id="stateNoService" class="state state-offline" hidden>
       <div class="offline-orb">
@@ -67,7 +37,7 @@
       <div id="offlineCloudMsg" hidden>
         <p class="offline-heading">Can't reach cloud</p>
         <p class="offline-sub" id="offlineCloudSub">Check your API key or try again later</p>
-        <a class="settings-help-link" href="https://transcribed.dev/developers" target="_blank" style="margin-top: 4px; display: inline-block;">Manage API key →</a>
+        <a class="settings-help-link" href="https://www.transcribed.dev/developers#keys" target="_blank" style="margin-top: 4px; display: inline-block;">Manage API key →</a>
       </div>
 
       <button class="btn-check-again" id="btnCheckAgain">
@@ -146,13 +116,50 @@
       <div id="recentList" class="recent-list"></div>
     </div>
 
-    <!-- Footer — GitHub link + star prompt, persistent across all states -->
+    <!-- Settings Panel (exclusive view — hides all other content when open) -->
+    <div id="settingsPanel" class="settings-panel" hidden>
+      <div class="section-label">Settings</div>
+      <div class="settings-row">
+        <span class="settings-label">Mode</span>
+        <div class="settings-toggle-group">
+          <button class="settings-mode-btn active" id="btnModeLocal" data-mode="local">Local</button>
+          <button class="settings-mode-btn" id="btnModeCloud" data-mode="cloud">Cloud</button>
+        </div>
+      </div>
+      <div id="apiKeySection" class="settings-api-key" hidden>
+        <label class="settings-label" for="apiKeyInput">API Key</label>
+        <div class="settings-input-row">
+          <input type="password" id="apiKeyInput" class="settings-input" placeholder="ytt_sk_..." autocomplete="off" spellcheck="false" />
+          <button class="settings-test-btn" id="btnTestConnection">Test</button>
+        </div>
+        <div id="connectionStatus" class="settings-status" hidden></div>
+        <div class="settings-api-key-footer">
+          <a class="settings-help-link" href="https://www.transcribed.dev/developers#keys" target="_blank">Get an API key →</a>
+          <button class="btn-settings-save" id="btnSaveSettings">Save key</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer nav — view switcher + GitHub -->
     <div class="panel-footer">
+      <div class="footer-nav">
+        <button class="footer-nav-btn active" id="btnNavLibrary" title="Library">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+            <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+        </button>
+        <button class="footer-nav-btn" id="btnNavSettings" title="Settings">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+          </svg>
+        </button>
+      </div>
       <a class="github-link" href="https://github.com/lifesized/youtube-transcriber" target="_blank" title="View on GitHub">
         <svg class="github-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
           <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
         </svg>
-        <span class="github-star-label">⭐ Star if it saves you time</span>
       </a>
     </div>
   </div>

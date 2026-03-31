@@ -37,7 +37,8 @@ const el = {
   offlineCloudMsg: document.getElementById("offlineCloudMsg"),
   offlineCloudSub: document.getElementById("offlineCloudSub"),
   cloudNudge: document.getElementById("cloudNudge"),
-  btnSettings: document.getElementById("btnSettings"),
+  btnNavLibrary: document.getElementById("btnNavLibrary"),
+  btnNavSettings: document.getElementById("btnNavSettings"),
   settingsPanel: document.getElementById("settingsPanel"),
   btnModeLocal: document.getElementById("btnModeLocal"),
   btnModeCloud: document.getElementById("btnModeCloud"),
@@ -413,6 +414,11 @@ let initVersion = 0;
 async function init() {
   const thisInit = ++initVersion;
 
+  // Close settings if open, mark library active
+  el.settingsPanel.hidden = true;
+  el.btnNavLibrary.classList.add("active");
+  el.btnNavSettings.classList.remove("active");
+
   // Reset stale UI from previous state
   for (const s of ALL_STATES) {
     const elem = el[`state${s}`];
@@ -701,11 +707,25 @@ chrome.tabs.onUpdated?.addListener((tabId, changeInfo) => {
 
 let currentSettingsMode = "local";
 
-el.btnSettings.addEventListener("click", () => {
-  const isOpen = !el.settingsPanel.hidden;
-  el.settingsPanel.hidden = isOpen;
-  el.btnSettings.classList.toggle("active", !isOpen);
-  if (!isOpen) loadSettings();
+function showSettingsView() {
+  for (const s of ALL_STATES) {
+    const elem = el[`state${s}`];
+    if (elem) elem.hidden = true;
+  }
+  el.recentSection.hidden = true;
+  el.settingsPanel.hidden = false;
+  el.btnNavSettings.classList.add("active");
+  el.btnNavLibrary.classList.remove("active");
+  loadSettings();
+}
+
+el.btnNavSettings.addEventListener("click", () => {
+  if (!el.settingsPanel.hidden) return; // already showing
+  showSettingsView();
+});
+
+el.btnNavLibrary.addEventListener("click", () => {
+  init();
 });
 
 async function loadSettings() {
@@ -730,8 +750,14 @@ function setModeUI(mode) {
   el.apiKeySection.hidden = mode !== "cloud";
 }
 
-el.btnModeLocal.addEventListener("click", () => setModeUI("local"));
-el.btnModeCloud.addEventListener("click", () => setModeUI("cloud"));
+el.btnModeLocal.addEventListener("click", async () => {
+  setModeUI("local");
+  await sendMsg({ type: "SAVE_SETTINGS", mode: "local" });
+});
+el.btnModeCloud.addEventListener("click", async () => {
+  setModeUI("cloud");
+  await sendMsg({ type: "SAVE_SETTINGS", mode: "cloud" });
+});
 
 el.apiKeyInput.addEventListener("focus", () => {
   if (el.apiKeyInput.dataset.unchanged === "true") {
@@ -773,13 +799,10 @@ el.btnTestConnection.addEventListener("click", async () => {
 });
 
 el.btnSaveSettings.addEventListener("click", async () => {
-  const payload = { type: "SAVE_SETTINGS", mode: currentSettingsMode };
-  if (currentSettingsMode === "cloud" && el.apiKeyInput.dataset.unchanged !== "true") {
-    payload.apiKey = el.apiKeyInput.value;
-  }
-  await sendMsg(payload);
-  el.settingsPanel.hidden = true;
-  el.btnSettings.classList.remove("active");
+  if (el.apiKeyInput.dataset.unchanged === "true") return;
+  await sendMsg({ type: "SAVE_SETTINGS", apiKey: el.apiKeyInput.value });
+  el.apiKeyInput.dataset.unchanged = "true";
+  el.apiKeyInput.value = "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
   init();
 });
 

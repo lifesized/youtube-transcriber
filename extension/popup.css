@@ -47,7 +47,6 @@ body::-webkit-scrollbar-thumb:hover {
 }
 
 .popup {
-  position: relative;
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -562,25 +561,32 @@ body::-webkit-scrollbar-thumb:hover {
   100% { background: transparent; }
 }
 
-/* Settings toggle — gear icon, top-right */
-.btn-settings-toggle {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  z-index: 10;
+/* Footer nav — view switcher tabs */
+.footer-nav {
+  display: flex;
+  gap: 4px;
+}
+.footer-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
   border: none;
+  border-radius: 6px;
   background: none;
-  color: rgba(255, 255, 255, 0.20);
+  color: rgba(255, 255, 255, 0.9);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  transition: color 0.15s;
+  opacity: 0.25;
+  transition: opacity 0.15s, background 0.15s;
 }
-.btn-settings-toggle:hover {
-  color: rgba(255, 255, 255, 0.50);
+.footer-nav-btn:hover {
+  opacity: 0.55;
+  background: rgba(255, 255, 255, 0.05);
 }
-.btn-settings-toggle.active {
-  color: rgba(255, 255, 255, 0.60);
+.footer-nav-btn.active {
+  opacity: 0.7;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* Settings panel */
@@ -703,15 +709,18 @@ body::-webkit-scrollbar-thumb:hover {
 .settings-help-link:hover {
   opacity: 0.8;
 }
+.settings-api-key-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
 .btn-settings-save {
-  width: 100%;
-  margin-top: 14px;
-  padding: 8px;
+  padding: 4px 10px;
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
+  border-radius: 6px;
   background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
@@ -742,8 +751,11 @@ body::-webkit-scrollbar-thumb:hover {
   color: rgba(255, 255, 255, 0.2);
 }
 
-/* Panel footer — GitHub link + star prompt, persistent across all states */
+/* Panel footer — Settings + GitHub link, persistent across all states */
 .panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   padding-top: 10px;
 }
@@ -764,6 +776,5 @@ body::-webkit-scrollbar-thumb:hover {
   color: rgba(255, 255, 255, 0.9);
 }
 .github-star-label {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.9);
+  display: none;
 }

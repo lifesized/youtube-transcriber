@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 const LOCAL_BASE = "http://localhost:19720";
-const CLOUD_BASE = "https://transcribed.dev";
+const CLOUD_BASE = "https://www.transcribed.dev";
 
 let _apiConfigCache = null;
 
@@ -349,7 +349,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const fullUrl = `${appBase}/?layout=list&id=${transcriptId}&t=${Date.now()}`;
 
         // Find existing app tab
-        const matchHost = config.mode === "cloud" ? "transcribed.dev" : "localhost:19720";
+        const matchHost = config.mode === "cloud" ? "www.transcribed.dev" : "localhost:19720";
         const allTabs = await chrome.tabs.query({});
         const appTab = allTabs.find((t) => t.url && t.url.includes(matchHost));
 
