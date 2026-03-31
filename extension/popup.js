@@ -179,15 +179,9 @@ function startHeartbeat() {
 }
 
 function loadCachedPath() {
-  chrome.storage.local.get("projectPath", ({ projectPath }) => {
-    el.offlinePath.hidden = true;
-    el.offlineCommand.textContent = "npm run dev";
-    if (projectPath) {
-      el.offlineCommand.dataset.fullCmd = `cd ${projectPath} && npm run dev`;
-    } else {
-      delete el.offlineCommand.dataset.fullCmd;
-    }
-  });
+  el.offlinePath.hidden = true;
+  el.offlineCommand.textContent = "npm run dev";
+  delete el.offlineCommand.dataset.fullCmd;
 }
 
 function isServerDownError(msg) {
