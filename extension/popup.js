@@ -545,6 +545,10 @@ function pollTranscriptionStatus() {
       return;
     }
     const pending = res.data;
+    // Show real progress text from cloud polling
+    if (pending.status === "transcribing" && pending.progressText) {
+      el.progressText.textContent = pending.progressText;
+    }
     if (pending.status === "done" && pending.result) {
       isTranscribing = false;
       stopPolling();
@@ -576,8 +580,18 @@ async function doTranscribe() {
   isTranscribing = true;
   el.transcribingTitle.textContent = pageInfo.title || "Transcribing...";
   showState("Transcribing");
-  startProgress();
   el.queuePrompt.hidden = true;
+
+  // Cloud mode: indeterminate bar + poll for real progress
+  // Local mode: fake staged progress bar
+  const cfgRes = await sendMsg({ type: "GET_SETTINGS" });
+  const isCloud = cfgRes?.data?.mode === "cloud";
+  if (isCloud) {
+    startIndeterminate();
+    pollTranscriptionStatus();
+  } else {
+    startProgress();
+  }
 
   const res = await sendMsg({
     type: "TRANSCRIBE",

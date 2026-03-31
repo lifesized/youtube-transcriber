@@ -185,7 +185,41 @@ async function transcribeRequest(url) {
   if (!res.ok) {
     throw new Error(classifyError(res.status, data));
   }
+
+  // Cloud mode: poll until async job completes
+  if (res.status === 202 && data.status === "processing" && data.id) {
+    return await pollUntilDone(data.id, config);
+  }
+
   return data;
+}
+
+async function pollUntilDone(id, config) {
+  const maxAttempts = 120; // 6 minutes at 3s intervals
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise((r) => setTimeout(r, 3000));
+    try {
+      const res = await fetch(`${config.baseUrl}/api/transcripts/${id}`, {
+        headers: config.headers,
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data.status === "done") return data;
+      if (data.status === "failed") throw new Error(data.error || "Transcription failed");
+      // Update progress text for the popup to pick up
+      if (data.progress) {
+        const state = await getState();
+        if (state && state.status === "transcribing") {
+          state.progressText = data.progress;
+          await setState(state);
+        }
+      }
+    } catch (err) {
+      if (err.message === "Transcription failed") throw err;
+      // Network errors — keep polling
+    }
+  }
+  throw new Error("Transcription timed out");
 }
 
 function classifyError(status, data) {
