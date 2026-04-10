@@ -87,42 +87,27 @@ fi
 echo ""
 
 # ---------------------------------------------------------------------------
-# Initialize database
-# ---------------------------------------------------------------------------
-echo "🗄️  Initializing database..."
-npx prisma generate
-npx prisma db push
-echo "✓ Database ready"
-echo ""
-
-# ---------------------------------------------------------------------------
-# Python virtual environment + Whisper
+# Python virtual environment
 # ---------------------------------------------------------------------------
 echo "🐍 Setting up Python virtual environment..."
 if [ ! -d ".venv" ]; then
-    python3 -m venv .venv
+    if ! python3 -m venv .venv; then
+        echo "❌ Failed to create Python venv."
+        echo "   On Debian/Ubuntu, install the venv module: sudo apt-get install -y python3-venv"
+        exit 1
+    fi
     echo "✓ Created .venv"
 else
     echo "✓ .venv already exists"
 fi
 
-echo "📥 Installing Whisper..."
-source .venv/bin/activate
-pip install --upgrade pip
-pip install openai-whisper
-
-# Install MLX Whisper if on Apple Silicon
-if [[ $(uname -m) == "arm64" ]] && [[ $(uname) == "Darwin" ]]; then
-    echo "🍎 Detected Apple Silicon — installing MLX Whisper for faster transcription..."
-    pip install mlx-whisper
+if [ ! -f ".venv/bin/activate" ]; then
+    echo "❌ .venv exists but is incomplete (missing bin/activate). Delete it and re-run setup."
+    exit 1
 fi
 
-# Install pyannote.audio for speaker diarization (optional)
-echo "🔊 Installing pyannote.audio for speaker diarization..."
-pip install pyannote.audio || echo "⚠️  pyannote.audio install failed (speaker diarization will be unavailable)"
-
 # ---------------------------------------------------------------------------
-# Configure .env
+# Configure .env (must run before Prisma — prisma.config.ts loads DATABASE_URL from .env)
 # ---------------------------------------------------------------------------
 echo ""
 echo "📝 Configuring environment..."
@@ -142,6 +127,34 @@ if [ ! -f ".env" ]; then
 else
     echo "✓ .env already exists (not overwriting)"
 fi
+echo ""
+
+# ---------------------------------------------------------------------------
+# Initialize database
+# ---------------------------------------------------------------------------
+echo "🗄️  Initializing database..."
+npx prisma generate
+npx prisma db push
+echo "✓ Database ready"
+echo ""
+
+# ---------------------------------------------------------------------------
+# Install Whisper into the venv
+# ---------------------------------------------------------------------------
+echo "📥 Installing Whisper..."
+source .venv/bin/activate
+pip install --upgrade pip
+pip install openai-whisper
+
+# Install MLX Whisper if on Apple Silicon
+if [[ $(uname -m) == "arm64" ]] && [[ $(uname) == "Darwin" ]]; then
+    echo "🍎 Detected Apple Silicon — installing MLX Whisper for faster transcription..."
+    pip install mlx-whisper
+fi
+
+# Install pyannote.audio for speaker diarization (optional)
+echo "🔊 Installing pyannote.audio for speaker diarization..."
+pip install pyannote.audio || echo "⚠️  pyannote.audio install failed (speaker diarization will be unavailable)"
 
 # ---------------------------------------------------------------------------
 # MCP server (optional)

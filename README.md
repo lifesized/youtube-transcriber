@@ -65,9 +65,11 @@ https://github.com/user-attachments/assets/73a62192-746c-4ec0-b1d5-b46608441bdd
 
 ```bash
 # Claude Code
+mkdir -p ~/.claude/skills
 cp -r contrib/claude-code ~/.claude/skills/youtube-transcriber
 
 # OpenClaw
+mkdir -p ~/.openclaw/skills
 cp -r contrib/openclaw ~/.openclaw/skills/youtube-transcriber
 ```
 
