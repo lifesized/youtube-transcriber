@@ -33,11 +33,37 @@
         </div>
       </div>
 
-      <!-- Cloud mode offline -->
+      <!-- Cloud mode offline / onboarding -->
       <div id="offlineCloudMsg" hidden>
-        <p class="offline-heading">Can't reach cloud</p>
-        <p class="offline-sub" id="offlineCloudSub">Check your API key or try again later</p>
-        <a class="settings-help-link" href="https://www.transcribed.dev/developers#keys" target="_blank" style="margin-top: 4px; display: inline-block;">Manage API key →</a>
+        <!-- Shown when user has no API key (first-time onboarding) -->
+        <div id="cloudOnboarding">
+          <p class="offline-heading">Get started</p>
+          <p class="offline-sub">Transcribe 10 videos/month for free</p>
+
+          <div class="onboarding-steps">
+            <div class="onboarding-step">
+              <span class="onboarding-step-num">1</span>
+              <span class="onboarding-step-text">Create a free account</span>
+              <a class="onboarding-step-action" href="https://www.transcribed.dev/auth/signup" target="_blank">Sign up →</a>
+            </div>
+            <div class="onboarding-step">
+              <span class="onboarding-step-num">2</span>
+              <span class="onboarding-step-text">Copy your API key</span>
+              <a class="onboarding-step-action" href="https://www.transcribed.dev/developers#keys" target="_blank">Get key →</a>
+            </div>
+            <div class="onboarding-step">
+              <span class="onboarding-step-num">3</span>
+              <span class="onboarding-step-text">Paste it here</span>
+              <button class="onboarding-step-action" id="btnHaveAccount">Enter key →</button>
+            </div>
+          </div>
+        </div>
+        <!-- Shown when user has an API key but it's failing -->
+        <div id="cloudAuthError" hidden>
+          <p class="offline-heading">Can't reach cloud</p>
+          <p class="offline-sub" id="offlineCloudSub">Check your API key or try again later</p>
+          <a class="settings-help-link" href="https://www.transcribed.dev/developers#keys" target="_blank" style="margin-top: 4px; display: inline-block;">Manage API key →</a>
+        </div>
       </div>
 
       <button class="btn-check-again" id="btnCheckAgain">
@@ -53,6 +79,11 @@
         </a>
         <p class="cloud-nudge-copy">No install needed · 10 free/month</p>
       </div>
+      <!-- Local instance detected banner -->
+      <div id="localDetectedBanner" class="local-detected-banner" hidden>
+        <span class="local-detected-text">Local server detected</span>
+        <button class="btn-use-local" id="btnUseLocal">Switch to self-hosted</button>
+      </div>
     </div>
 
     <!-- Not a supported page -->
@@ -65,6 +96,10 @@
     <div id="stateReady" class="state" hidden>
       <h1 class="panel-title" id="videoTitle"></h1>
       <button class="btn-transcribe" id="btnTranscribe">Transcribe</button>
+      <div class="live-notice" id="liveNotice" hidden>
+        <span class="live-badge">LIVE</span>
+        <span class="live-text">Live streams can't be transcribed yet</span>
+      </div>
       <a class="already-transcribed" id="btnAlreadyTranscribed" href="#" hidden>
         <span class="already-transcribed-text">Already transcribed</span>
         <svg class="already-transcribed-arrow" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4l6 6-6 6"/></svg>
@@ -122,8 +157,8 @@
       <div class="settings-row">
         <span class="settings-label">Mode</span>
         <div class="settings-toggle-group">
-          <button class="settings-mode-btn active" id="btnModeLocal" data-mode="local">Local</button>
-          <button class="settings-mode-btn" id="btnModeCloud" data-mode="cloud">Cloud</button>
+          <button class="settings-mode-btn active" id="btnModeCloud" data-mode="cloud">Cloud</button>
+          <button class="settings-mode-btn" id="btnModeLocal" data-mode="local">Self-hosted</button>
         </div>
       </div>
       <div id="apiKeySection" class="settings-api-key" hidden>

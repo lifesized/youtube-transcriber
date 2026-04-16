@@ -16,7 +16,9 @@ mcp-server/dist/
 # IDE
 .idea/
 .vscode/
-.claude/
+.claude/*
+!.claude/mcp.json
+.cursor/
 *.swp
 *.swo
 

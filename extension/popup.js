@@ -36,7 +36,13 @@ const el = {
   offlineLocalMsg: document.getElementById("offlineLocalMsg"),
   offlineCloudMsg: document.getElementById("offlineCloudMsg"),
   offlineCloudSub: document.getElementById("offlineCloudSub"),
+  cloudOnboarding: document.getElementById("cloudOnboarding"),
+  cloudAuthError: document.getElementById("cloudAuthError"),
+  btnHaveAccount: document.getElementById("btnHaveAccount"),
+  localDetectedBanner: document.getElementById("localDetectedBanner"),
+  btnUseLocal: document.getElementById("btnUseLocal"),
   cloudNudge: document.getElementById("cloudNudge"),
+  liveNotice: document.getElementById("liveNotice"),
   btnNavLibrary: document.getElementById("btnNavLibrary"),
   btnNavSettings: document.getElementById("btnNavSettings"),
   settingsPanel: document.getElementById("settingsPanel"),
@@ -56,6 +62,8 @@ let pollInterval = null;
 let isTranscribing = false;
 let offlinePollTimer = null;
 let heartbeatTimer = null;
+// When true, direct TRANSCRIBE response owns completion/error handling.
+let suppressPollFinalization = false;
 
 // ---------------------------------------------------------------------------
 // Progress bar
@@ -105,6 +113,11 @@ function stopProgress() {
 }
 
 function startIndeterminate() {
+  // Clear any running local-mode progress timer to avoid conflicts
+  if (progressTimer) {
+    clearInterval(progressTimer);
+    progressTimer = null;
+  }
   const bar = document.getElementById("progressBar");
   bar.style.width = "";
   bar.classList.add("indeterminate");
@@ -382,10 +395,18 @@ async function showCurrentPageState() {
 
   el.videoTitle.textContent = pageInfo.title || pageInfo.url;
 
-  // Hide both buttons until we know which to show
+  // Hide all action elements until we know which to show
   el.btnTranscribe.hidden = true;
   el.btnAlreadyTranscribed.hidden = true;
+  el.liveNotice.hidden = true;
   showState("Ready");
+
+  // Block transcription for live streams
+  if (pageInfo.isLive) {
+    el.liveNotice.hidden = false;
+    loadRecent();
+    return;
+  }
 
   // Check if this video was already transcribed
   const existingRes = await sendMsg({ type: "CHECK_EXISTING", videoId: pageInfo.videoId });
@@ -430,7 +451,13 @@ async function init() {
     if (thisInit !== initVersion) return;
     if (tab) {
       const videoId = extractVideoId(tab.url || "");
-      pageInfo = { url: tab.url, title: tab.title, videoId };
+      // Read isLive flag from content script's stored page info
+      let isLive = false;
+      try {
+        const stored = await chrome.storage.session.get(`tab_${tab.id}`);
+        isLive = !!stored[`tab_${tab.id}`]?.isLive;
+      } catch { /* ignore */ }
+      pageInfo = { url: tab.url, title: tab.title, videoId, isLive };
       currentTabUrl = tab.url;
       currentTabId = tab.id;
     }
@@ -486,22 +513,42 @@ async function init() {
   if (!online) {
     const cfgRes = await sendMsg({ type: "GET_SETTINGS" });
     if (thisInit !== initVersion) return;
-    const cfgMode = cfgRes?.data?.mode || "local";
+    const cfgMode = cfgRes?.data?.mode || "cloud";
+    const hasApiKey = cfgRes?.data?.hasApiKey;
     const authError = serviceRes?.data?.authError;
 
     if (cfgMode === "cloud") {
       el.offlineLocalMsg.hidden = true;
       el.offlineCloudMsg.hidden = false;
       el.cloudNudge.hidden = true;
-      if (authError) {
-        el.offlineCloudSub.textContent = "Your API key is invalid. Update it in settings.";
+      el.localDetectedBanner.hidden = true;
+
+      if (hasApiKey) {
+        // Has a key but it's failing — show error state
+        el.cloudOnboarding.hidden = true;
+        el.cloudAuthError.hidden = false;
+        if (authError) {
+          el.offlineCloudSub.textContent = "Your API key is invalid. Update it in settings.";
+        } else {
+          el.offlineCloudSub.textContent = "Check your API key or try again later";
+        }
       } else {
-        el.offlineCloudSub.textContent = "Check your API key or try again later";
+        // No key — show onboarding
+        el.cloudOnboarding.hidden = false;
+        el.cloudAuthError.hidden = true;
+      }
+
+      // Auto-detect local instance and show banner
+      const localRes = await sendMsg({ type: "DETECT_LOCAL" });
+      if (thisInit !== initVersion) return;
+      if (localRes?.success && localRes.data?.available) {
+        el.localDetectedBanner.hidden = false;
       }
     } else {
       el.offlineLocalMsg.hidden = false;
       el.offlineCloudMsg.hidden = true;
       el.cloudNudge.hidden = false;
+      el.localDetectedBanner.hidden = true;
       loadCachedPath();
     }
 
@@ -510,6 +557,29 @@ async function init() {
     return;
   }
   stopOfflinePolling();
+
+  // Cloud mode without API key — show onboarding instead of Transcribe button
+  const cfgCheck = await sendMsg({ type: "GET_SETTINGS" });
+  if (thisInit !== initVersion) return;
+  if (cfgCheck?.data?.mode === "cloud" && !cfgCheck?.data?.hasApiKey) {
+    el.offlineLocalMsg.hidden = true;
+    el.offlineCloudMsg.hidden = false;
+    el.cloudNudge.hidden = true;
+    el.localDetectedBanner.hidden = true;
+    el.cloudOnboarding.hidden = false;
+    el.cloudAuthError.hidden = true;
+
+    // Auto-detect local instance and show banner
+    const localRes = await sendMsg({ type: "DETECT_LOCAL" });
+    if (thisInit !== initVersion) return;
+    if (localRes?.success && localRes.data?.available) {
+      el.localDetectedBanner.hidden = false;
+    }
+
+    showState("NoService");
+    return;
+  }
+
   startHeartbeat();
 
   // 2. Show page state
@@ -544,12 +614,20 @@ function pollTranscriptionStatus() {
       el.progressText.textContent = pending.progressText;
     }
     if (pending.status === "done" && pending.result) {
+      if (suppressPollFinalization) {
+        stopPolling();
+        return;
+      }
       isTranscribing = false;
       stopPolling();
       stopProgress();
       await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
       showCompletedAndReturn(pending.result.id);
     } else if (pending.status === "error") {
+      if (suppressPollFinalization) {
+        stopPolling();
+        return;
+      }
       isTranscribing = false;
       stopPolling();
       stopProgress();
@@ -581,9 +659,11 @@ async function doTranscribe() {
   const cfgRes = await sendMsg({ type: "GET_SETTINGS" });
   const isCloud = cfgRes?.data?.mode === "cloud";
   if (isCloud) {
+    suppressPollFinalization = true;
     startIndeterminate();
     pollTranscriptionStatus();
   } else {
+    suppressPollFinalization = false;
     startProgress();
   }
 
@@ -594,6 +674,8 @@ async function doTranscribe() {
   });
 
   isTranscribing = false;
+  suppressPollFinalization = false;
+  stopPolling();
   stopProgress();
 
   if (res?.success && res.data?.id) {
@@ -604,14 +686,26 @@ async function doTranscribe() {
     await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
     if (isServerDownError(res?.error)) {
       init();
-    } else {
-      el.errorMessage.textContent = res?.error || "Transcription failed";
-      showState("Error");
+      return;
     }
+    // In self-hosted mode, re-check server health before showing error —
+    // if the server is down, show the "Waiting for server" screen instead
+    // of a generic error message.
+    const mode = (await sendMsg({ type: "GET_SETTINGS" }))?.data?.mode || "cloud";
+    if (mode === "local") {
+      const health = await sendMsg({ type: "CHECK_SERVICE" });
+      if (!health?.success || !health.data?.online) {
+        init();
+        return;
+      }
+    }
+    el.errorMessage.textContent = res?.error || "Transcription failed";
+    showState("Error");
   }
 }
 
 async function processQueue() {
+  suppressPollFinalization = false;
   const res = await sendMsg({ type: "PROCESS_QUEUE" });
   if (res?.success && res.data?.processing) {
     el.transcribingTitle.textContent = res.data.title || "Transcribing...";
@@ -630,6 +724,17 @@ async function processQueue() {
 el.btnTranscribe.addEventListener("click", doTranscribe);
 el.btnRetry.addEventListener("click", doTranscribe);
 el.btnCheckAgain.addEventListener("click", init);
+
+// "Already have an API key?" — jump to settings with cloud mode
+el.btnHaveAccount.addEventListener("click", () => {
+  showSettingsView();
+});
+
+// "Switch to self-hosted" — auto-switch to local mode
+el.btnUseLocal.addEventListener("click", async () => {
+  await sendMsg({ type: "SAVE_SETTINGS", mode: "local" });
+  init();
+});
 
 el.btnCopyCommand.addEventListener("click", () => {
   const cmd = el.offlineCommand.dataset.fullCmd || el.offlineCommand.textContent;
@@ -684,7 +789,12 @@ chrome.tabs.onActivated?.addListener(async () => {
       // don't re-init which would clobber the progress animation
       if (isTranscribing) {
         const videoId = extractVideoId(tab.url || "");
-        pageInfo = { url: tab.url, title: tab.title, videoId };
+        let isLive = false;
+        try {
+          const stored = await chrome.storage.session.get(`tab_${tab.id}`);
+          isLive = !!stored[`tab_${tab.id}`]?.isLive;
+        } catch { /* ignore */ }
+        pageInfo = { url: tab.url, title: tab.title, videoId, isLive };
         showQueuePrompt();
       } else {
         init();
@@ -713,7 +823,7 @@ chrome.tabs.onUpdated?.addListener((tabId, changeInfo) => {
 // Settings panel
 // ---------------------------------------------------------------------------
 
-let currentSettingsMode = "local";
+let currentSettingsMode = "cloud";
 
 function showSettingsView() {
   for (const s of ALL_STATES) {
@@ -721,6 +831,8 @@ function showSettingsView() {
     if (elem) elem.hidden = true;
   }
   el.recentSection.hidden = true;
+  el.queuePrompt.hidden = true;
+  el.queueList.hidden = true;
   el.settingsPanel.hidden = false;
   el.btnNavSettings.classList.add("active");
   el.btnNavLibrary.classList.remove("active");
@@ -733,6 +845,19 @@ el.btnNavSettings.addEventListener("click", () => {
 });
 
 el.btnNavLibrary.addEventListener("click", () => {
+  if (el.settingsPanel.hidden) return; // already showing library
+  // During active transcription, restore the transcribing UI without
+  // re-initialising — avoids restarting progress animation from scratch
+  if (isTranscribing) {
+    el.settingsPanel.hidden = true;
+    el.btnNavLibrary.classList.add("active");
+    el.btnNavSettings.classList.remove("active");
+    showState("Transcribing");
+    loadRecent();
+    showQueuePrompt();
+    renderQueueList();
+    return;
+  }
   init();
 });
 

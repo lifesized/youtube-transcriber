@@ -144,6 +144,29 @@ body::-webkit-scrollbar-thumb:hover {
   opacity: 1;
 }
 
+/* Live stream notice */
+.live-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.live-notice[hidden] { display: none; }
+.live-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #fff;
+  background: #ef4444;
+  padding: 2px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.live-text {
+  font-size: 13px;
+  color: var(--muted-2);
+}
+
 /* Queue cards — matches web app queue items */
 .queue-card {
   border: 1px solid var(--border);
@@ -728,6 +751,94 @@ body::-webkit-scrollbar-thumb:hover {
 .btn-settings-save:hover {
   background: rgba(255, 255, 255, 0.14);
   border-color: var(--border-hover);
+}
+
+/* Onboarding steps */
+.onboarding-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  max-width: 260px;
+  margin-bottom: 12px;
+}
+.onboarding-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.onboarding-step:last-child {
+  border-bottom: none;
+}
+.onboarding-step-num {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted-3);
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.onboarding-step-text {
+  flex: 1;
+  font-size: 12px;
+  color: var(--muted-2);
+}
+.onboarding-step-action {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+.onboarding-step-action:hover {
+  opacity: 0.8;
+}
+
+/* Local detected banner — shown when local instance found during cloud onboarding */
+.local-detected-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  width: 100%;
+  max-width: 280px;
+}
+.local-detected-banner[hidden] {
+  display: none;
+}
+.local-detected-text {
+  font-size: 11px;
+  color: var(--muted-3);
+}
+.btn-use-local {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  transition: opacity 0.15s;
+}
+.btn-use-local:hover {
+  opacity: 0.8;
 }
 
 /* Cloud nudge — shown in no-service state to convert to paid cloud */

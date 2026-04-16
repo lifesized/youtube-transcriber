@@ -22,6 +22,20 @@ function getVideoTitle() {
   return document.title.replace(" - YouTube", "").trim();
 }
 
+function isLiveStream() {
+  // YouTube player has a .ytp-live class when playing a live stream
+  const player = document.getElementById("movie_player");
+  if (!player?.classList.contains("ytp-live")) return false;
+  // Confirm with the live badge — it must exist, not be disabled, and be visible.
+  // YouTube keeps .ytp-live-badge in the DOM for premiered/VOD videos but hides
+  // it or sets the disabled attribute.
+  const badge = document.querySelector(".ytp-live-badge");
+  if (!badge) return false;
+  if (badge.hasAttribute("disabled")) return false;
+  if (badge.offsetParent === null && getComputedStyle(badge).display === "none") return false;
+  return true;
+}
+
 function reportPageInfo() {
   const videoId = extractVideoId(window.location.href);
   try {
@@ -30,10 +44,11 @@ function reportPageInfo() {
       url: window.location.href,
       title: getVideoTitle(),
       videoId: videoId,
+      isLive: videoId ? isLiveStream() : false,
     });
   } catch {
     // Extension context invalidated (reloaded) — stop observing
-    observer.disconnect();
+    observer?.disconnect();
   }
 }
 
@@ -42,7 +57,7 @@ reportPageInfo();
 
 // YouTube SPA navigation — MutationObserver
 let lastUrl = window.location.href;
-const observer = new MutationObserver(() => {
+let observer = new MutationObserver(() => {
   if (window.location.href !== lastUrl) {
     lastUrl = window.location.href;
     setTimeout(reportPageInfo, 800);

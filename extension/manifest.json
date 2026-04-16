@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "YouTube Transcriber",
-  "version": "1.3.0",
-  "description": "One-click transcription for YouTube videos and Spotify podcasts via your local transcriber service",
+  "version": "1.4.0",
+  "description": "One-click transcription for YouTube videos and Spotify podcasts. Works with transcribed.dev or your own self-hosted instance.",
   "permissions": [
     "activeTab",
     "tabs",
