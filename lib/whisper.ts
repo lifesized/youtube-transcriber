@@ -9,7 +9,7 @@ export type ProgressCallback = (event: { stage: string; progress: number; status
 // Concurrency lock: only one transcription at a time to prevent memory exhaustion
 let transcriptionInProgress = false;
 
-const YTDLP_PATH = process.env.YTDLP_PATH?.trim() || "/opt/homebrew/bin/yt-dlp";
+const YTDLP_PATH = process.env.YTDLP_PATH?.trim() || "yt-dlp";
 
 /** Get the resolved yt-dlp path for use by other modules. */
 export function getYtdlpPath(): string {
@@ -496,6 +496,53 @@ function mergeSpeakers(
       speaker: bestSpeaker ? getSpeakerLabel(bestSpeaker) : undefined,
     };
   });
+}
+
+/**
+ * Transcribe a local audio file with Whisper. Caller owns the audio file
+ * (does not delete it). Used by non-YouTube sources that already have audio
+ * downloaded (Spotify RSS, uploaded files, etc.).
+ */
+export async function transcribeAudioFileWithWhisper(
+  audioPath: string,
+  model: string = "base",
+  onProgress?: ProgressCallback
+): Promise<TranscriptSegment[]> {
+  if (transcriptionInProgress) {
+    throw new Error("A transcription is already in progress. Please wait and try again.");
+  }
+
+  transcriptionInProgress = true;
+  const whisperOutDir = path.join("/tmp", "whisper-out", `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+
+  console.log(`[whisper] Starting local transcription for audio file ${audioPath}`);
+  const overallStart = Date.now();
+
+  try {
+    onProgress?.({ stage: "transcribing", progress: 40, statusText: "Transcribing with Whisper..." });
+    const segments = await runWhisper(audioPath, whisperOutDir, model);
+
+    let finalSegments = segments;
+    if (HF_TOKEN) {
+      onProgress?.({ stage: "diarizing", progress: 85, statusText: "Identifying speakers..." });
+      try {
+        const diarization = await runDiarization(audioPath, HF_TOKEN, whisperOutDir);
+        finalSegments = mergeSpeakers(segments, diarization);
+      } catch (err) {
+        console.log(`[whisper] Diarization failed, proceeding without speakers: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+
+    const totalTime = ((Date.now() - overallStart) / 1000).toFixed(1);
+    console.log(
+      `[whisper] Done (file): segments=${finalSegments.length}, model=${model}, total=${totalTime}s`
+    );
+
+    return finalSegments;
+  } finally {
+    transcriptionInProgress = false;
+    await fs.rm(whisperOutDir, { recursive: true, force: true }).catch(() => {});
+  }
 }
 
 /**
