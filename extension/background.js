@@ -1,4 +1,36 @@
-const API_BASE = "http://localhost:19720";
+// ---------------------------------------------------------------------------
+// API Configuration — runtime mode switching (local / cloud)
+// ---------------------------------------------------------------------------
+
+const LOCAL_BASE = "http://localhost:19720";
+const CLOUD_BASE = "https://www.transcribed.dev";
+
+let _apiConfigCache = null;
+
+async function getApiConfig() {
+  if (_apiConfigCache) return _apiConfigCache;
+  const { mode, apiKey } = await chrome.storage.sync.get(["mode", "apiKey"]);
+  _apiConfigCache = buildConfig(mode || "cloud", apiKey || "");
+  return _apiConfigCache;
+}
+
+function buildConfig(mode, apiKey) {
+  if (mode === "cloud") {
+    return {
+      mode: "cloud",
+      baseUrl: CLOUD_BASE,
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+    };
+  }
+  return { mode: "local", baseUrl: LOCAL_BASE, headers: {} };
+}
+
+// Invalidate cache when settings change
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "sync" && (changes.mode || changes.apiKey)) {
+    _apiConfigCache = null;
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Dynamic content script registration (replaces static content_scripts block)
@@ -118,9 +150,48 @@ function setBadge(text, color) {
 // ---------------------------------------------------------------------------
 
 async function checkService() {
+  const config = await getApiConfig();
+  const health = await tryHealthCheck(config.baseUrl, config.headers, config.mode);
+
+  // In cloud mode, the health endpoint doesn't require auth — so a 200 from
+  // /api/health doesn't mean the API key is valid. Validate the key separately
+  // by hitting an authenticated endpoint.
+  if (health.online && config.mode === "cloud" && config.headers.Authorization) {
+    try {
+      const res = await fetch(`${config.baseUrl}/api/account`, {
+        method: "GET",
+        headers: config.headers,
+        signal: AbortSignal.timeout(3000),
+      });
+      if (res.status === 401) {
+        return { online: false, mode: "cloud", authError: true };
+      }
+    } catch {
+      // Network error on key check — still treat as online since health passed
+    }
+  }
+
+  return health;
+}
+
+/** Probe localhost to see if a local instance is running. */
+async function detectLocalInstance() {
   try {
-    const res = await fetch(`${API_BASE}/api/health`, {
+    const res = await fetch(`${LOCAL_BASE}/api/health`, {
       method: "GET",
+      signal: AbortSignal.timeout(2000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function tryHealthCheck(baseUrl, headers, mode) {
+  try {
+    const res = await fetch(`${baseUrl}/api/health`, {
+      method: "GET",
+      headers,
       signal: AbortSignal.timeout(3000),
     });
     if (res.ok) {
@@ -129,34 +200,89 @@ async function checkService() {
         chrome.storage.local.set({ projectPath: data.projectPath });
       }
     }
-    return { online: res.ok || res.status === 503 };
+    if (res.status === 401) return { online: false, mode, authError: true };
+    return { online: res.ok || res.status === 503, mode };
   } catch {
-    return { online: false };
+    return { online: false, mode };
   }
 }
 
 async function transcribeRequest(url) {
-  const res = await fetch(`${API_BASE}/api/transcripts`, {
+  const config = await getApiConfig();
+  const res = await fetch(`${config.baseUrl}/api/transcripts`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...config.headers },
     body: JSON.stringify({ url }),
   });
   const data = await res.json();
   if (!res.ok) {
-    throw new Error(data.error || `HTTP ${res.status}`);
+    throw new Error(await classifyError(res.status, data));
   }
+
+  // Cloud mode: poll until async job completes
+  if (res.status === 202 && data.status === "processing" && data.id) {
+    return await pollUntilDone(data.id, config);
+  }
+
   return data;
 }
 
+async function pollUntilDone(id, config) {
+  const maxAttempts = 120; // 6 minutes at 3s intervals
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise((r) => setTimeout(r, 3000));
+    try {
+      const res = await fetch(`${config.baseUrl}/api/transcripts/${id}`, {
+        headers: config.headers,
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data.status === "done") return data;
+      if (data.status === "failed") throw new Error(data.error || "Transcription failed");
+      // Update progress text for the popup to pick up
+      if (data.progress) {
+        const state = await getState();
+        if (state && state.status === "transcribing") {
+          state.progressText = data.progress;
+          await setState(state);
+        }
+      }
+    } catch (err) {
+      if (err.message === "Transcription failed") throw err;
+      // Network errors — keep polling
+    }
+  }
+  throw new Error("Transcription timed out");
+}
+
+async function classifyError(status, data) {
+  const config = await getApiConfig();
+  if (config.mode === "local") {
+    if (status === 401) return "Server rejected the request. Check your local setup.";
+    if (status >= 500) return "Local server error. Check the terminal for details.";
+    return data?.error || `HTTP ${status}`;
+  }
+  if (status === 401) return "Invalid API key. Check your key in Settings or at transcribed.dev/developers";
+  if (status === 429) return "Quota reached. Upgrade your plan at transcribed.dev/pricing";
+  if (status >= 500) return "Cloud service error. Try again in a moment.";
+  return data?.error || `HTTP ${status}`;
+}
+
 async function getRecent() {
-  const res = await fetch(`${API_BASE}/api/transcripts`);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const config = await getApiConfig();
+  const res = await fetch(`${config.baseUrl}/api/transcripts`, {
+    headers: config.headers,
+  });
+  if (!res.ok) throw new Error(await classifyError(res.status, {}));
   const all = await res.json();
   return all.slice(0, 5);
 }
 
 async function checkExisting(videoId) {
-  const res = await fetch(`${API_BASE}/api/transcripts`);
+  const config = await getApiConfig();
+  const res = await fetch(`${config.baseUrl}/api/transcripts`, {
+    headers: config.headers,
+  });
   if (!res.ok) return null;
   const all = await res.json();
   return all.find((t) => t.videoId === videoId) || null;
@@ -290,12 +416,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case "OPEN_TRANSCRIPT": {
         const transcriptId = message.id;
+        const config = await getApiConfig();
+        const appBase = config.mode === "cloud" ? CLOUD_BASE : LOCAL_BASE;
         // Append timestamp to bust Chrome's same-URL no-op optimization
-        const fullUrl = `${API_BASE}/?layout=list&id=${transcriptId}&t=${Date.now()}`;
+        const fullUrl = `${appBase}/?layout=list&id=${transcriptId}&t=${Date.now()}`;
 
         // Find existing app tab
+        const matchHost = config.mode === "cloud" ? "www.transcribed.dev" : "localhost:19720";
         const allTabs = await chrome.tabs.query({});
-        const appTab = allTabs.find((t) => t.url && t.url.includes("localhost:19720"));
+        const appTab = allTabs.find((t) => t.url && t.url.includes(matchHost));
 
         if (appTab) {
           // Reuse existing tab — navigate it to the transcript
@@ -315,10 +444,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               url: message.url,
               title: message.title,
               videoId: message.videoId,
+              isLive: !!message.isLive,
             },
           });
         }
         return { ok: true };
+
+      case "GET_SETTINGS": {
+        const { mode, apiKey } = await chrome.storage.sync.get(["mode", "apiKey"]);
+        return { mode: mode || "cloud", hasApiKey: !!apiKey };
+      }
+
+      case "DETECT_LOCAL": {
+        const localAvailable = await detectLocalInstance();
+        return { available: localAvailable };
+      }
+
+      case "SAVE_SETTINGS": {
+        const settings = {};
+        if (message.mode !== undefined) settings.mode = message.mode;
+        if (message.apiKey !== undefined) settings.apiKey = message.apiKey;
+        await chrome.storage.sync.set(settings);
+        _apiConfigCache = null;
+        return { ok: true };
+      }
+
+      case "TEST_CONNECTION": {
+        const testConfig = buildConfig(message.mode, message.apiKey);
+        return await tryHealthCheck(testConfig.baseUrl, testConfig.headers, message.mode);
+      }
 
       case "GET_PAGE_INFO": {
         const [tab] = await chrome.tabs.query({

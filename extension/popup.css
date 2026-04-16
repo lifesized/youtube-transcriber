@@ -144,6 +144,29 @@ body::-webkit-scrollbar-thumb:hover {
   opacity: 1;
 }
 
+/* Live stream notice */
+.live-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.live-notice[hidden] { display: none; }
+.live-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #fff;
+  background: #ef4444;
+  padding: 2px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.live-text {
+  font-size: 13px;
+  color: var(--muted-2);
+}
+
 /* Queue cards — matches web app queue items */
 .queue-card {
   border: 1px solid var(--border);
@@ -561,6 +584,263 @@ body::-webkit-scrollbar-thumb:hover {
   100% { background: transparent; }
 }
 
+/* Footer nav — view switcher tabs */
+.footer-nav {
+  display: flex;
+  gap: 4px;
+}
+.footer-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  opacity: 0.25;
+  transition: opacity 0.15s, background 0.15s;
+}
+.footer-nav-btn:hover {
+  opacity: 0.55;
+  background: rgba(255, 255, 255, 0.05);
+}
+.footer-nav-btn.active {
+  opacity: 0.7;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Settings panel */
+.settings-panel {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-2);
+  padding: 14px;
+}
+.settings-panel[hidden] {
+  display: none;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+}
+.settings-label {
+  font-size: 12px;
+  color: var(--muted-2);
+  font-weight: 500;
+}
+.settings-toggle-group {
+  display: flex;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  padding: 2px;
+}
+.settings-mode-btn {
+  padding: 4px 12px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted-3);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.settings-mode-btn:hover {
+  color: var(--muted);
+}
+.settings-mode-btn.active {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--accent);
+  color: var(--text);
+}
+.settings-api-key {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.settings-api-key[hidden] {
+  display: none;
+}
+.settings-input-row {
+  display: flex;
+  gap: 6px;
+}
+.settings-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-size: 12px;
+  font-family: "SF Mono", "Menlo", monospace;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.settings-input:focus {
+  border-color: rgba(255, 255, 255, 0.20);
+}
+.settings-input::placeholder {
+  color: var(--muted-3);
+}
+.settings-test-btn {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.settings-test-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: var(--border-hover);
+}
+.settings-status {
+  font-size: 11px;
+  padding: 0 2px;
+}
+.settings-status[hidden] {
+  display: none;
+}
+.settings-status.testing {
+  color: var(--muted-3);
+}
+.settings-status.success {
+  color: #22c55e;
+}
+.settings-status.error {
+  color: var(--error);
+}
+.settings-help-link {
+  font-size: 11px;
+  color: var(--accent);
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+.settings-help-link:hover {
+  opacity: 0.8;
+}
+.settings-api-key-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.btn-settings-save {
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-settings-save:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: var(--border-hover);
+}
+
+/* Onboarding steps */
+.onboarding-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  max-width: 260px;
+  margin-bottom: 12px;
+}
+.onboarding-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.onboarding-step:last-child {
+  border-bottom: none;
+}
+.onboarding-step-num {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted-3);
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.onboarding-step-text {
+  flex: 1;
+  font-size: 12px;
+  color: var(--muted-2);
+}
+.onboarding-step-action {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+.onboarding-step-action:hover {
+  opacity: 0.8;
+}
+
+/* Local detected banner — shown when local instance found during cloud onboarding */
+.local-detected-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  width: 100%;
+  max-width: 280px;
+}
+.local-detected-banner[hidden] {
+  display: none;
+}
+.local-detected-text {
+  font-size: 11px;
+  color: var(--muted-3);
+}
+.btn-use-local {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  transition: opacity 0.15s;
+}
+.btn-use-local:hover {
+  opacity: 0.8;
+}
+
 /* Cloud nudge — shown in no-service state to convert to paid cloud */
 .cloud-nudge {
   margin-top: 20px;
@@ -582,8 +862,11 @@ body::-webkit-scrollbar-thumb:hover {
   color: rgba(255, 255, 255, 0.2);
 }
 
-/* Panel footer — GitHub link + star prompt, persistent across all states */
+/* Panel footer — Settings + GitHub link, persistent across all states */
 .panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   padding-top: 10px;
 }
@@ -604,6 +887,5 @@ body::-webkit-scrollbar-thumb:hover {
   color: rgba(255, 255, 255, 0.9);
 }
 .github-star-label {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.9);
+  display: none;
 }

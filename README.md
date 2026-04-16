@@ -30,32 +30,56 @@ Open [http://localhost:19720](http://localhost:19720) — paste a YouTube or Spo
 
 Transcribe any YouTube video or Spotify podcast episode directly from your browser without leaving the page. The extension opens as a persistent side panel — it stays open as you navigate between videos and detects each one automatically.
 
+The extension works in two modes:
+
+- **Cloud** (default) — transcribe via [transcribed.dev](https://www.transcribed.dev). Create a free account, enter your API key in extension settings, and go. No local setup needed.
+- **Self-hosted** — connect to your local instance at `localhost:19720`. Switch to "Self-hosted" in extension settings.
+
+### Install from Chrome Web Store
+
 > **Note:** The extension is not yet on the Chrome Web Store. Install it manually in a few steps while we go through the review process.
 
-### Install
+### Install from source (for self-hosted or development)
 
-1. Make sure the service is running (`npm run dev`)
+1. Make sure the local service is running (`npm run dev`)
 2. Open Chrome and go to `chrome://extensions`
 3. Enable **Developer mode** (toggle, top right)
 4. Click **Load unpacked**
 5. Select the `extension/` folder inside this repo
-6. Click the YouTube Transcriber icon in your toolbar to open the side panel
+6. Open extension settings and switch mode to **Self-hosted**
+7. Click the YouTube Transcriber icon in your toolbar to open the side panel
 
 ### Usage
 
-Navigate to any YouTube video or Spotify episode, open the side panel, and click **Transcribe**. The extension uses the same transcription pipeline as the web app — captions first, Whisper fallback, cloud providers if configured. For Spotify, it discovers the podcast's public RSS feed and transcribes the audio.
-
-Transcripts open directly in the web app at `http://localhost:19720` where you can search, copy, export, or send to an LLM.
-
-> A Chrome Web Store listing is coming soon — once published, installation will be one click.
+Navigate to any YouTube video or Spotify episode, open the side panel, and click **Transcribe**. In cloud mode, transcripts are available at [transcribed.dev](https://www.transcribed.dev). In self-hosted mode, they open in the local web app at `http://localhost:19720`.
 
 ---
 
-## Use as a Skill
+## Use with Claude Code, Claude Desktop & Cursor
 
-Two options — pick the one that fits your setup:
+Three ways to use this with AI assistants — pick the one that fits:
 
-### Full Skill (all features, requires running service)
+### MCP Server (recommended)
+
+The MCP server gives you tools like `transcribe_and_summarize` directly in your AI client. Requires the service running (`npm run dev`).
+
+**Claude Code** — already configured. Clone the repo and the `.claude/mcp.json` is included:
+
+```bash
+git clone https://github.com/lifesized/youtube-transcriber.git
+cd youtube-transcriber
+npm run setup && npm run dev
+# Open in Claude Code — MCP tools are ready to use
+```
+
+**Claude Desktop / Cursor** — run `npm run mcp:config` and add the output to your client config ([full setup guide](./docs/MCP.md)):
+
+| Client | Config file |
+|--------|-------------|
+| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Cursor | `.cursor/mcp.json` |
+
+### Skill (no server needed)
 
 
 
@@ -63,75 +87,34 @@ https://github.com/user-attachments/assets/73a62192-746c-4ec0-b1d5-b46608441bdd
 
 
 
-```bash
-# Claude Code
-mkdir -p ~/.claude/skills
-cp -r contrib/claude-code ~/.claude/skills/youtube-transcriber
-
-# OpenClaw
-mkdir -p ~/.openclaw/skills
-cp -r contrib/openclaw ~/.openclaw/skills/youtube-transcriber
-```
-
-Requires the app running at `localhost:19720` (`npm run dev`). Gives you Whisper fallback, speaker diarization, persistent library, and all API features.
-
-
-### Lite Skill (zero setup, just yt-dlp)
+Install as a Claude Code or OpenClaw skill. Two flavors: **Lite** (zero setup, just `yt-dlp`, YouTube subtitles only) or **Full** (requires the service running, adds Whisper fallback, diarization, and persistent library).
 
 ```bash
+# Lite skill (yt-dlp only, no server)
 cp contrib/claude-code/SKILL-lite.md ~/.claude/skills/youtube-transcriber/SKILL.md
+
+# Full skill (requires service running)
+cp -r contrib/claude-code ~/.claude/skills/youtube-transcriber
 ```
 
-Works with just `yt-dlp` installed — no server needed. Extracts YouTube subtitles directly. **Automatically upgrades to the full service when it detects it running.**
-
-| | Lite | Full |
+| | Lite Skill | Full Skill / MCP |
 |--|:---:|:----:|
 | YouTube captions | Yes | Yes |
 | Auto-generated subs | Yes | Yes |
 | Whisper transcription | — | Yes |
 | Speaker diarization | — | Yes |
 | Persistent library | — | Yes |
-| Setup | `yt-dlp` only | Node + Python + service |
+| Requires server | No | Yes |
 
 ### Triggers
 
+Once set up (MCP or skill), just type naturally:
+
 > *"summarize https://youtube.com/watch?v=..."*
-> *"transcribe https://youtube.com/watch?v=..."*
-> *"s https://youtube.com/watch?v=..."* / *"t https://youtube.com/watch?v=..."* / *"ts https://youtube.com/watch?v=..."*
+> *"ts https://youtube.com/watch?v=..."* (transcribe + summarize)
+> *"t https://youtube.com/watch?v=..."* (transcript only)
 
-Or just paste a YouTube URL — the skill auto-activates.
-
-## Use as an MCP Server
-
-Works with Claude Desktop, Cursor, and any MCP-compatible client. During `npm run setup`, choose "yes" when prompted to install the MCP server.
-
-```bash
-npm run mcp:config   # prints config with your absolute path
-```
-
-Add the output to your client config ([full setup guide](./docs/MCP.md)):
-
-| Client | Config file |
-|--------|-------------|
-| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| Claude Code | `.claude/mcp.json` or `claude mcp add` |
-| Cursor | `.cursor/mcp.json` |
-
-**Available tools:** `transcribe`, `transcribe_and_summarize`, `list_transcripts`, `search_transcripts`, `get_transcript`, `delete_transcript`, `summarize_transcript`
-
-### Usage Examples
-
-Once configured, just type naturally in Claude Desktop:
-
-| You type | What happens |
-|----------|-------------|
-| `transcribe https://youtube.com/watch?v=...` | Fetches and returns the full transcript |
-| `transcribe and summarize https://youtube.com/watch?v=...` | Fetches transcript, then Claude summarizes it |
-| `t https://youtube.com/watch?v=...` | Shorthand for transcribe |
-| `s https://youtube.com/watch?v=...` | Shorthand for summarize |
-| `ts https://youtube.com/watch?v=...` | Shorthand for transcribe + summarize |
-
-You can also just paste a YouTube URL — Claude will offer to transcribe it.
+Or just paste a YouTube URL — it auto-activates.
 
 ---
 

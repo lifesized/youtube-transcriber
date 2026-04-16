@@ -4,10 +4,10 @@
   "private": true,
   "scripts": {
     "setup": "bash scripts/setup.sh",
-    "dev": "next dev -p 19720",
+    "dev": "next dev -p 19720 --webpack",
     "build": "next build",
     "start": "next start -p 19720",
-    "lint": "next lint",
+    "lint": "eslint .",
     "postinstall": "prisma generate",
     "mcp:build": "cd mcp-server && npm run build",
     "mcp:config": "bash scripts/mcp-config.sh",

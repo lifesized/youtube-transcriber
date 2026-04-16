@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "YouTube Transcriber",
-  "version": "1.2.0",
-  "description": "One-click transcription for YouTube videos and Spotify podcasts via your local transcriber service",
+  "version": "1.4.0",
+  "description": "One-click transcription for YouTube videos and Spotify podcasts. Works with transcribed.dev or your own self-hosted instance.",
   "permissions": [
     "activeTab",
     "tabs",
@@ -19,6 +19,8 @@
   "host_permissions": [
     "http://localhost:19720/*",
     "http://127.0.0.1:19720/*",
+    "https://transcribed.dev/*",
+    "https://www.transcribed.dev/*",
     "*://*.youtube.com/*",
     "*://open.spotify.com/*"
   ],

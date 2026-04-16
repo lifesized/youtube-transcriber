@@ -6,6 +6,7 @@ import { promisify } from "util";
 import { extractVideoId } from "./youtube";
 import { parseContentUrl } from "./url-parser";
 import { getSpotifyTranscript } from "./spotify";
+import { getGenericTranscript } from "./generic-video";
 import { transcribeWithWhisper, downloadAudio, type ProgressCallback, getYtdlpPath } from "./whisper";
 import { transcribeWithCloudWhisper, getCloudWhisperConfig } from "./whisper-cloud";
 import { isWhisperEnabled, getWhisperPriority, getEnabledProviders, transcribeWithProvider } from "./providers";
@@ -648,13 +649,18 @@ async function transcribeAudioFallback(
  * Handles cue timestamps like "00:01:23.456 --> 00:01:26.789".
  */
 function parseVtt(vtt: string): TranscriptSegment[] {
-  const segments: TranscriptSegment[] = [];
+  const rawSegments: TranscriptSegment[] = [];
   const cueRegex = /(\d{2}:\d{2}:\d{2}\.\d{3})\s+-->\s+(\d{2}:\d{2}:\d{2}\.\d{3})[^\n]*\n([\s\S]*?)(?=\n\n|\n\d{2}:\d{2}:\d{2}|$)/g;
   let match;
 
   while ((match = cueRegex.exec(vtt)) !== null) {
     const startMs = vttTimestampToMs(match[1]);
     const endMs = vttTimestampToMs(match[2]);
+
+    // Skip near-zero-duration "holding" cues (≤10ms) from YouTube auto-captions.
+    // These are transitional cues that duplicate the previous line's text.
+    if (endMs - startMs <= 10) continue;
+
     // Decode HTML entities first, then strip VTT/XML tags and clean up
     const text = decodeEntities(match[3])
       .replace(/&nbsp;/g, " ")
@@ -666,7 +672,54 @@ function parseVtt(vtt: string): TranscriptSegment[] {
       .join(" ")
       .trim();
     if (text) {
-      segments.push({ text, startMs, durationMs: endMs - startMs });
+      rawSegments.push({ text, startMs, durationMs: endMs - startMs });
+    }
+  }
+
+  // Deduplicate: YouTube auto-generated VTT captions produce overlapping/rolling
+  // cues where each line appears multiple times with slightly different timestamps.
+  // 1. Remove consecutive segments with identical text
+  const deduped: TranscriptSegment[] = [];
+  for (const seg of rawSegments) {
+    if (deduped.length === 0 || seg.text !== deduped[deduped.length - 1].text) {
+      deduped.push(seg);
+    }
+  }
+
+  // 2. Remove rolling overlap: YouTube auto-captions produce two-line cues where
+  //    each cue repeats the tail of the previous cue. Strip the repeated prefix.
+  const segments: TranscriptSegment[] = [];
+  for (let i = 0; i < deduped.length; i++) {
+    const seg = deduped[i];
+    if (i === 0) {
+      segments.push(seg);
+      continue;
+    }
+    const prev = deduped[i - 1];
+    // Check if current text starts with previous text (full containment)
+    if (seg.text.startsWith(prev.text)) {
+      const newText = seg.text.slice(prev.text.length).trim();
+      if (newText) {
+        segments.push({ text: newText, startMs: seg.startMs, durationMs: seg.durationMs });
+      }
+      continue;
+    }
+    // Check for partial suffix/prefix overlap (prev tail = curr head)
+    let overlapLen = 0;
+    const minLen = Math.min(prev.text.length, seg.text.length);
+    for (let len = minLen; len > 10; len--) {
+      if (seg.text.startsWith(prev.text.slice(-len))) {
+        overlapLen = len;
+        break;
+      }
+    }
+    if (overlapLen > 0) {
+      const newText = seg.text.slice(overlapLen).trim();
+      if (newText) {
+        segments.push({ text: newText, startMs: seg.startMs, durationMs: seg.durationMs });
+      }
+    } else {
+      segments.push(seg);
     }
   }
 
@@ -869,6 +922,10 @@ export async function getVideoTranscript(
 
   if (parsed.platform === "spotify") {
     return getSpotifyTranscript(parsed.contentId, parsed.originalUrl);
+  }
+
+  if (parsed.platform === "generic") {
+    return getGenericTranscript(parsed.originalUrl);
   }
 
   const videoId = parsed.contentId;

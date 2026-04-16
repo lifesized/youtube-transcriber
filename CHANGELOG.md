@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-04-16
+
+### Added
+- **Generic video support via yt-dlp** — Any URL from a yt-dlp-supported site (Twitch, Vimeo, TikTok, Twitter/X, Dailymotion, Reddit, Instagram, Facebook, Rumble, BiliBili, Odysee, Streamable, and ~1,800 more) now routes through a generic transcription pipeline. Detects platform via yt-dlp extractor, downloads audio, transcribes via the existing provider fallback chain.
+- **New `lib/generic-video.ts` module** — Fetches metadata via `yt-dlp --dump-json`, downloads audio, re-encodes large files for cloud upload limits, falls back to local Whisper.
+- **`transcribeAudioFileWithWhisper`** (`lib/whisper.ts`) — New public helper that runs local Whisper on an arbitrary audio file path (not just YouTube videoIds). Reused by Spotify and the generic video route.
+
+### Changed
+- **Spotify transcription** — Wired up local Whisper fallback (previously stubbed out). Large podcast episodes are re-encoded to 48kbps mono MP3 before cloud upload so they fit under the Groq/OpenAI 25MB Whisper limit.
+- **Chrome extension dual-mode** (YTT-162) — Extension now supports both cloud (transcribed.dev) and self-hosted (localhost:19720) modes. Cloud mode is the default for new installs. Updated popup UI, background script, content script, and manifest.
+- **README** updated with dual-mode extension install instructions and cloud/self-hosted usage guide.
+- **Portable binary defaults** — `yt-dlp` and `ffmpeg` paths now default to bare command names (resolved via `PATH`) instead of `/opt/homebrew/bin/...`. Works on Intel Macs, Linux, and any system where the tools are in `PATH`. Override via `YTDLP_PATH` / `FFMPEG_PATH` env vars if needed.
+- **Dev server stability** — Switched dev script to `next dev --webpack` to work around a Turbopack HMR panic on Next.js 16.1.6 that caused the settings page to reload in a loop. Pinned `outputFileTracingRoot` and `turbopack.root` in `next.config.ts` to prevent Next from walking up to a stray parent-dir `package.json`.
+
+### Fixed
+- **Settings page reload loop** — Turbopack panic (`Next.js package not found` on `/settings` HMR) caused continuous full-page reloads; switched to webpack for dev.
+- **`.cursor/` added to `.gitignore`** — prevents IDE config from being tracked.
+
 ## 2026-03-27
 
 ### Added

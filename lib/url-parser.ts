@@ -1,6 +1,6 @@
 import { extractVideoId } from "./youtube";
 
-export type Platform = "youtube" | "spotify";
+export type Platform = "youtube" | "spotify" | "generic";
 
 export interface ParsedUrl {
   platform: Platform;
@@ -49,7 +49,8 @@ export function parseContentUrl(url: string): ParsedUrl {
     return { platform: "youtube", contentId: videoId, originalUrl: url };
   }
 
-  throw new Error(
-    `Unsupported URL: ${url}. Supported platforms: YouTube, Spotify podcasts.`
-  );
+  // Fall back to generic yt-dlp handler (Twitch, Vimeo, TikTok, Twitter/X,
+  // Dailymotion, Reddit, Instagram, Facebook, Rumble, BiliBili, Odysee,
+  // Streamable, etc. — any of the ~1,800 sites yt-dlp supports).
+  return { platform: "generic", contentId: url, originalUrl: url };
 }

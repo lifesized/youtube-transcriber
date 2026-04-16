@@ -1,9 +1,39 @@
 import path from "path";
 import { promises as fs } from "fs";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import type { TranscriptSegment, VideoMetadata, VideoTranscriptResult } from "./types";
 import { transcriptionProgress } from "./progress";
 import { isWhisperEnabled, getWhisperPriority, getEnabledProviders, transcribeWithProvider } from "./providers";
-import { transcribeWithWhisper } from "./whisper";
+import { transcribeAudioFileWithWhisper } from "./whisper";
+
+const execFileAsync = promisify(execFile);
+const FFMPEG_PATH = process.env.FFMPEG_PATH?.trim() || "ffmpeg";
+
+// Groq/OpenAI Whisper APIs cap uploads at 25MB. Re-encode anything larger
+// to mono 48kbps MP3 (plenty for speech) so long podcasts fit.
+const CLOUD_UPLOAD_LIMIT_BYTES = 24 * 1024 * 1024;
+
+async function reencodeForCloud(inputPath: string, episodeId: string): Promise<string> {
+  const outputPath = path.join(path.dirname(inputPath), `${episodeId}.compressed.mp3`);
+  await fs.unlink(outputPath).catch(() => {});
+
+  console.log(`[spotify] Re-encoding audio to 48kbps mono for cloud upload...`);
+  await execFileAsync(FFMPEG_PATH, [
+    "-y",
+    "-i", inputPath,
+    "-vn",
+    "-ac", "1",
+    "-ar", "16000",
+    "-b:a", "48k",
+    "-f", "mp3",
+    outputPath,
+  ], { timeout: 300_000, maxBuffer: 10 * 1024 * 1024 });
+
+  const { size } = await fs.stat(outputPath);
+  console.log(`[spotify] Re-encoded to ${(size / 1024 / 1024).toFixed(1)} MB`);
+  return outputPath;
+}
 
 // ---------------------------------------------------------------------------
 // Spotify Web API — Client Credentials auth + metadata
@@ -355,47 +385,64 @@ async function transcribeSpotifyAudio(
   }
 
   const errors: string[] = [];
+  let reencodedPath: string | null = null;
 
-  for (const step of steps) {
-    if (step.type === "cloud") {
-      const config = providers[step.index];
-      try {
-        transcriptionProgress.emit("progress", {
-          stage: "transcribing",
-          progress: 50,
-          statusText: `Transcribing with ${config.provider}...`,
-          videoId: episodeId,
-        });
-        const result = await transcribeWithProvider(audioPath, config);
-        return result;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.log(`[spotify] ${config.provider} failed: ${msg}`);
-        errors.push(`${config.provider}: ${msg}`);
-      }
-    } else {
-      try {
-        console.log(`[spotify] Trying local Whisper for ${episodeId}...`);
-        transcriptionProgress.emit("progress", {
-          stage: "transcribing",
-          progress: 50,
-          statusText: "Transcribing audio with Whisper...",
-          videoId: episodeId,
-        });
-        // Local whisper expects a videoId and downloads audio itself — but we already have audio.
-        // We need to pass the audio path directly. Use transcribeWithProvider pattern instead.
-        // For now, fall through to cloud providers. Local whisper for Spotify requires refactoring downloadAudio.
-        throw new Error("Local Whisper for Spotify not yet supported — use a cloud provider.");
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        errors.push(`local-whisper: ${msg}`);
+  try {
+    for (const step of steps) {
+      if (step.type === "cloud") {
+        const config = providers[step.index];
+        try {
+          transcriptionProgress.emit("progress", {
+            stage: "transcribing",
+            progress: 50,
+            statusText: `Transcribing with ${config.provider}...`,
+            videoId: episodeId,
+          });
+
+          let uploadPath = audioPath;
+          const { size } = await fs.stat(audioPath);
+          if (size > CLOUD_UPLOAD_LIMIT_BYTES) {
+            if (!reencodedPath) {
+              reencodedPath = await reencodeForCloud(audioPath, episodeId);
+            }
+            uploadPath = reencodedPath;
+          }
+
+          const result = await transcribeWithProvider(uploadPath, config);
+          return result;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.log(`[spotify] ${config.provider} failed: ${msg}`);
+          errors.push(`${config.provider}: ${msg}`);
+        }
+      } else {
+        try {
+          console.log(`[spotify] Trying local Whisper for ${episodeId}...`);
+          const segments = await transcribeAudioFileWithWhisper(audioPath, "base", (evt) => {
+            transcriptionProgress.emit("progress", {
+              stage: evt.stage,
+              progress: evt.progress,
+              statusText: evt.statusText,
+              videoId: episodeId,
+            });
+          });
+          return { segments, source: "local_whisper" };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.log(`[spotify] local Whisper failed: ${msg}`);
+          errors.push(`local-whisper: ${msg}`);
+        }
       }
     }
-  }
 
-  throw new Error(
-    `All transcription methods failed:\n${errors.map((e) => `  - ${e}`).join("\n")}`
-  );
+    throw new Error(
+      `All transcription methods failed:\n${errors.map((e) => `  - ${e}`).join("\n")}`
+    );
+  } finally {
+    if (reencodedPath) {
+      await fs.unlink(reencodedPath).catch(() => {});
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
