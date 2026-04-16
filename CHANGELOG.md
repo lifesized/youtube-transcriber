@@ -6,6 +6,7 @@
 - **Generic video support via yt-dlp** — Any URL from a yt-dlp-supported site (Twitch, Vimeo, TikTok, Twitter/X, Dailymotion, Reddit, Instagram, Facebook, Rumble, BiliBili, Odysee, Streamable, and ~1,800 more) now routes through a generic transcription pipeline. Detects platform via yt-dlp extractor, downloads audio, transcribes via the existing provider fallback chain.
 - **New `lib/generic-video.ts` module** — Fetches metadata via `yt-dlp --dump-json`, downloads audio, re-encodes large files for cloud upload limits, falls back to local Whisper.
 - **`transcribeAudioFileWithWhisper`** (`lib/whisper.ts`) — New public helper that runs local Whisper on an arbitrary audio file path (not just YouTube videoIds). Reused by Spotify and the generic video route.
+- **URL input accepts any video URL** — Home page validator loosened from a YouTube/Spotify-only regex to any `http(s)://` URL. Server-side `parseContentUrl` + the generic yt-dlp route handle detection and routing. Placeholder and error copy updated to reflect multi-platform support.
 
 ### Changed
 - **Spotify transcription** — Wired up local Whisper fallback (previously stubbed out). Large podcast episodes are re-encoded to 48kbps mono MP3 before cloud upload so they fit under the Groq/OpenAI 25MB Whisper limit.
