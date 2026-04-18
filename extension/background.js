@@ -9,25 +9,29 @@ let _apiConfigCache = null;
 
 async function getApiConfig() {
   if (_apiConfigCache) return _apiConfigCache;
-  const { mode, apiKey } = await chrome.storage.sync.get(["mode", "apiKey"]);
-  _apiConfigCache = buildConfig(mode || "cloud", apiKey || "");
+  const { mode } = await chrome.storage.sync.get(["mode"]);
+  _apiConfigCache = buildConfig(mode || "cloud");
   return _apiConfigCache;
 }
 
-function buildConfig(mode, apiKey) {
+function buildConfig(mode) {
   if (mode === "cloud") {
+    // Cloud auth rides on the user's transcribed.dev session cookie.
+    // `credentials: "include"` on fetch sends the cookie cross-origin;
+    // host_permissions for transcribed.dev allows it.
     return {
       mode: "cloud",
       baseUrl: CLOUD_BASE,
-      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+      headers: {},
+      credentials: "include",
     };
   }
-  return { mode: "local", baseUrl: LOCAL_BASE, headers: {} };
+  return { mode: "local", baseUrl: LOCAL_BASE, headers: {}, credentials: "omit" };
 }
 
 // Invalidate cache when settings change
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "sync" && (changes.mode || changes.apiKey)) {
+  if (area === "sync" && changes.mode) {
     _apiConfigCache = null;
   }
 });
@@ -151,23 +155,23 @@ function setBadge(text, color) {
 
 async function checkService() {
   const config = await getApiConfig();
-  const health = await tryHealthCheck(config.baseUrl, config.headers, config.mode);
+  const health = await tryHealthCheck(config.baseUrl, config.headers, config.mode, config.credentials);
 
-  // In cloud mode, the health endpoint doesn't require auth — so a 200 from
-  // /api/health doesn't mean the API key is valid. Validate the key separately
-  // by hitting an authenticated endpoint.
-  if (health.online && config.mode === "cloud" && config.headers.Authorization) {
+  // In cloud mode, /api/health doesn't require auth — so a 200 from it
+  // doesn't mean the user is signed in. Validate the session separately
+  // by hitting an authenticated endpoint with the cookie.
+  if (health.online && config.mode === "cloud") {
     try {
       const res = await fetch(`${config.baseUrl}/api/account`, {
         method: "GET",
-        headers: config.headers,
+        credentials: config.credentials,
         signal: AbortSignal.timeout(3000),
       });
       if (res.status === 401) {
         return { online: false, mode: "cloud", authError: true };
       }
     } catch {
-      // Network error on key check — still treat as online since health passed
+      // Network error on session check — still treat as online since health passed
     }
   }
 
@@ -187,11 +191,12 @@ async function detectLocalInstance() {
   }
 }
 
-async function tryHealthCheck(baseUrl, headers, mode) {
+async function tryHealthCheck(baseUrl, headers, mode, credentials) {
   try {
     const res = await fetch(`${baseUrl}/api/health`, {
       method: "GET",
       headers,
+      credentials: credentials || "omit",
       signal: AbortSignal.timeout(3000),
     });
     if (res.ok) {
@@ -212,6 +217,7 @@ async function transcribeRequest(url) {
   const res = await fetch(`${config.baseUrl}/api/transcripts`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...config.headers },
+    credentials: config.credentials,
     body: JSON.stringify({ url }),
   });
   const data = await res.json();
@@ -234,6 +240,7 @@ async function pollUntilDone(id, config) {
     try {
       const res = await fetch(`${config.baseUrl}/api/transcripts/${id}`, {
         headers: config.headers,
+        credentials: config.credentials,
       });
       if (!res.ok) continue;
       const data = await res.json();
@@ -262,7 +269,7 @@ async function classifyError(status, data) {
     if (status >= 500) return "Local server error. Check the terminal for details.";
     return data?.error || `HTTP ${status}`;
   }
-  if (status === 401) return "Invalid API key. Check your key in Settings or at transcribed.dev/developers";
+  if (status === 401) return "Sign in at transcribed.dev to continue.";
   if (status === 429) return "Quota reached. Upgrade your plan at transcribed.dev/pricing";
   if (status >= 500) return "Cloud service error. Try again in a moment.";
   return data?.error || `HTTP ${status}`;
@@ -272,6 +279,7 @@ async function getRecent() {
   const config = await getApiConfig();
   const res = await fetch(`${config.baseUrl}/api/transcripts`, {
     headers: config.headers,
+    credentials: config.credentials,
   });
   if (!res.ok) throw new Error(await classifyError(res.status, {}));
   const all = await res.json();
@@ -282,6 +290,7 @@ async function getTranscript(id) {
   const config = await getApiConfig();
   const res = await fetch(`${config.baseUrl}/api/transcripts/${id}`, {
     headers: config.headers,
+    credentials: config.credentials,
   });
   if (!res.ok) throw new Error(await classifyError(res.status, {}));
   return await res.json();
@@ -293,6 +302,7 @@ async function getPreferences() {
   try {
     const res = await fetch(`${config.baseUrl}/api/preferences`, {
       headers: config.headers,
+      credentials: config.credentials,
       signal: AbortSignal.timeout(3000),
     });
     if (!res.ok) return { summarizePrompt: null };
@@ -306,6 +316,7 @@ async function checkExisting(videoId) {
   const config = await getApiConfig();
   const res = await fetch(`${config.baseUrl}/api/transcripts`, {
     headers: config.headers,
+    credentials: config.credentials,
   });
   if (!res.ok) return null;
   const all = await res.json();
@@ -481,8 +492,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return { ok: true };
 
       case "GET_SETTINGS": {
-        const { mode, apiKey } = await chrome.storage.sync.get(["mode", "apiKey"]);
-        return { mode: mode || "cloud", hasApiKey: !!apiKey };
+        const { mode } = await chrome.storage.sync.get(["mode"]);
+        return { mode: mode || "cloud" };
       }
 
       case "DETECT_LOCAL": {
@@ -493,15 +504,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "SAVE_SETTINGS": {
         const settings = {};
         if (message.mode !== undefined) settings.mode = message.mode;
-        if (message.apiKey !== undefined) settings.apiKey = message.apiKey;
         await chrome.storage.sync.set(settings);
         _apiConfigCache = null;
         return { ok: true };
-      }
-
-      case "TEST_CONNECTION": {
-        const testConfig = buildConfig(message.mode, message.apiKey);
-        return await tryHealthCheck(testConfig.baseUrl, testConfig.headers, message.mode);
       }
 
       case "GET_PAGE_INFO": {

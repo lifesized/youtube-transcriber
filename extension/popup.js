@@ -35,10 +35,8 @@ const el = {
   offlineCommand: document.getElementById("offlineCommand"),
   offlineLocalMsg: document.getElementById("offlineLocalMsg"),
   offlineCloudMsg: document.getElementById("offlineCloudMsg"),
-  offlineCloudSub: document.getElementById("offlineCloudSub"),
   cloudOnboarding: document.getElementById("cloudOnboarding"),
   cloudAuthError: document.getElementById("cloudAuthError"),
-  btnHaveAccount: document.getElementById("btnHaveAccount"),
   localDetectedBanner: document.getElementById("localDetectedBanner"),
   btnUseLocal: document.getElementById("btnUseLocal"),
   cloudNudge: document.getElementById("cloudNudge"),
@@ -48,11 +46,7 @@ const el = {
   settingsPanel: document.getElementById("settingsPanel"),
   btnModeLocal: document.getElementById("btnModeLocal"),
   btnModeCloud: document.getElementById("btnModeCloud"),
-  apiKeySection: document.getElementById("apiKeySection"),
-  apiKeyInput: document.getElementById("apiKeyInput"),
-  btnTestConnection: document.getElementById("btnTestConnection"),
-  connectionStatus: document.getElementById("connectionStatus"),
-  btnSaveSettings: document.getElementById("btnSaveSettings"),
+  cloudAccountSection: document.getElementById("cloudAccountSection"),
 };
 
 let pageInfo = null;
@@ -784,7 +778,6 @@ async function init() {
     const cfgRes = await sendMsg({ type: "GET_SETTINGS" });
     if (thisInit !== initVersion) return;
     const cfgMode = cfgRes?.data?.mode || "cloud";
-    const hasApiKey = cfgRes?.data?.hasApiKey;
     const authError = serviceRes?.data?.authError;
 
     if (cfgMode === "cloud") {
@@ -793,17 +786,12 @@ async function init() {
       el.cloudNudge.hidden = true;
       el.localDetectedBanner.hidden = true;
 
-      if (hasApiKey) {
-        // Has a key but it's failing — show error state
+      if (authError) {
+        // Session expired or not signed in
         el.cloudOnboarding.hidden = true;
         el.cloudAuthError.hidden = false;
-        if (authError) {
-          el.offlineCloudSub.textContent = "Your API key is invalid. Update it in settings.";
-        } else {
-          el.offlineCloudSub.textContent = "Check your API key or try again later";
-        }
       } else {
-        // No key — show onboarding
+        // Service reachable but not signed in — first-time onboarding
         el.cloudOnboarding.hidden = false;
         el.cloudAuthError.hidden = true;
       }
@@ -827,28 +815,6 @@ async function init() {
     return;
   }
   stopOfflinePolling();
-
-  // Cloud mode without API key — show onboarding instead of Transcribe button
-  const cfgCheck = await sendMsg({ type: "GET_SETTINGS" });
-  if (thisInit !== initVersion) return;
-  if (cfgCheck?.data?.mode === "cloud" && !cfgCheck?.data?.hasApiKey) {
-    el.offlineLocalMsg.hidden = true;
-    el.offlineCloudMsg.hidden = false;
-    el.cloudNudge.hidden = true;
-    el.localDetectedBanner.hidden = true;
-    el.cloudOnboarding.hidden = false;
-    el.cloudAuthError.hidden = true;
-
-    // Auto-detect local instance and show banner
-    const localRes = await sendMsg({ type: "DETECT_LOCAL" });
-    if (thisInit !== initVersion) return;
-    if (localRes?.success && localRes.data?.available) {
-      el.localDetectedBanner.hidden = false;
-    }
-
-    showState("NoService");
-    return;
-  }
 
   startHeartbeat();
 
@@ -995,11 +961,6 @@ el.btnTranscribe.addEventListener("click", doTranscribe);
 el.btnRetry.addEventListener("click", doTranscribe);
 el.btnCheckAgain.addEventListener("click", init);
 
-// "Already have an API key?" — jump to settings with cloud mode
-el.btnHaveAccount.addEventListener("click", () => {
-  showSettingsView();
-});
-
 // "Switch to self-hosted" — auto-switch to local mode
 el.btnUseLocal.addEventListener("click", async () => {
   await sendMsg({ type: "SAVE_SETTINGS", mode: "local" });
@@ -1134,78 +1095,25 @@ el.btnNavLibrary.addEventListener("click", () => {
 async function loadSettings() {
   const res = await sendMsg({ type: "GET_SETTINGS" });
   if (!res?.success) return;
-  const { mode, hasApiKey } = res.data;
+  const { mode } = res.data;
   setModeUI(mode);
-  el.connectionStatus.hidden = true;
-  if (hasApiKey) {
-    el.apiKeyInput.value = "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
-    el.apiKeyInput.dataset.unchanged = "true";
-  } else {
-    el.apiKeyInput.value = "";
-    delete el.apiKeyInput.dataset.unchanged;
-  }
 }
 
 function setModeUI(mode) {
   currentSettingsMode = mode;
   el.btnModeLocal.classList.toggle("active", mode === "local");
   el.btnModeCloud.classList.toggle("active", mode === "cloud");
-  el.apiKeySection.hidden = mode !== "cloud";
+  el.cloudAccountSection.hidden = mode !== "cloud";
 }
 
 el.btnModeLocal.addEventListener("click", async () => {
   setModeUI("local");
   await sendMsg({ type: "SAVE_SETTINGS", mode: "local" });
+  init();
 });
 el.btnModeCloud.addEventListener("click", async () => {
   setModeUI("cloud");
   await sendMsg({ type: "SAVE_SETTINGS", mode: "cloud" });
-});
-
-el.apiKeyInput.addEventListener("focus", () => {
-  if (el.apiKeyInput.dataset.unchanged === "true") {
-    el.apiKeyInput.value = "";
-    delete el.apiKeyInput.dataset.unchanged;
-  }
-});
-
-el.btnTestConnection.addEventListener("click", async () => {
-  el.connectionStatus.hidden = false;
-  el.connectionStatus.textContent = "Testing...";
-  el.connectionStatus.className = "settings-status testing";
-
-  // Use the entered key, or fetch the stored one if unchanged
-  let apiKey;
-  if (el.apiKeyInput.dataset.unchanged === "true") {
-    const stored = await chrome.storage.sync.get("apiKey");
-    apiKey = stored.apiKey || "";
-  } else {
-    apiKey = el.apiKeyInput.value;
-  }
-
-  const res = await sendMsg({
-    type: "TEST_CONNECTION",
-    mode: currentSettingsMode,
-    apiKey,
-  });
-
-  if (res?.success && res.data?.online) {
-    el.connectionStatus.textContent = "Connected";
-    el.connectionStatus.className = "settings-status success";
-  } else if (res?.data?.authError) {
-    el.connectionStatus.textContent = "Invalid API key";
-    el.connectionStatus.className = "settings-status error";
-  } else {
-    el.connectionStatus.textContent = "Connection failed";
-    el.connectionStatus.className = "settings-status error";
-  }
-});
-
-el.btnSaveSettings.addEventListener("click", async () => {
-  if (el.apiKeyInput.dataset.unchanged === "true") return;
-  await sendMsg({ type: "SAVE_SETTINGS", apiKey: el.apiKeyInput.value });
-  el.apiKeyInput.dataset.unchanged = "true";
-  el.apiKeyInput.value = "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
   init();
 });
 
