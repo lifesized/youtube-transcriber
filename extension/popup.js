@@ -786,12 +786,13 @@ async function init() {
       el.cloudNudge.hidden = true;
       el.localDetectedBanner.hidden = true;
 
-      if (authError) {
-        // Session expired or not signed in
+      const firstTime = !!serviceRes?.data?.firstTime;
+      if (authError && !firstTime) {
+        // Returning user whose session expired
         el.cloudOnboarding.hidden = true;
         el.cloudAuthError.hidden = false;
       } else {
-        // Service reachable but not signed in — first-time onboarding
+        // First-time install OR service reachable but no auth — show onboarding
         el.cloudOnboarding.hidden = false;
         el.cloudAuthError.hidden = true;
       }

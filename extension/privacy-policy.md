@@ -4,7 +4,7 @@
 
 ## Overview
 
-YouTube Transcriber is a browser extension that transcribes YouTube videos and Spotify podcast episodes. It supports two modes: **local mode** (all processing on your machine) and **cloud mode** (processing via transcribed.dev). You choose which mode to use in the extension settings.
+This browser extension transcribes videos and podcasts from supported web pages. It supports two modes: **local mode** (all processing on your machine) and **cloud mode** (processing via transcribed.dev). You choose which mode to use in the extension settings.
 
 ## Local Mode
 
@@ -20,15 +20,15 @@ Your local transcription service may use third-party transcription providers (su
 
 In cloud mode, the extension sends requests to `transcribed.dev` using your API key.
 
-- **Data sent to the cloud** — the URL of the video or podcast episode you want to transcribe is sent to transcribed.dev for processing. Your API key is sent with each request for authentication.
-- **Account required** — you need a transcribed.dev account and API key.
+- **Data sent to the cloud** — the URL of the video or podcast episode you want to transcribe is sent to transcribed.dev for processing. Your signed-in session is sent with each request for authentication.
+- **Account required** — you need a transcribed.dev account to use cloud mode.
 - **Transcripts stored on the server** — completed transcripts are stored in your transcribed.dev account so you can access them from any device.
 - **No analytics or tracking in the extension** — the extension itself does not use telemetry. The transcribed.dev service has its own privacy policy at https://www.transcribed.dev/privacy.
 
 ## Data Stored in Your Browser
 
 The extension uses Chrome's `storage` API to save:
-- **Sync storage** — your selected mode (local or cloud) and API key (if using cloud mode). This syncs across your Chrome devices.
+- **Sync storage** — your selected mode (local or cloud). This syncs across your Chrome devices.
 - **Session storage** — current transcription progress and queue (cleared when the browser closes).
 - **Local storage** — cached preferences (persisted across sessions).
 
@@ -37,7 +37,7 @@ This data is stored within your browser profile and managed by Chrome.
 ## Permissions
 
 The extension requests the following permissions:
-- **activeTab / tabs** — to detect which YouTube video or Spotify episode you're viewing.
+- **activeTab / tabs** — to detect which video or podcast episode you're viewing.
 - **storage** — to persist settings, transcription state, and preferences.
 - **sidePanel** — to display the transcription panel alongside your browsing.
 - **scripting** — to register content scripts that detect video/episode pages.
