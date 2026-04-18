@@ -278,6 +278,30 @@ async function getRecent() {
   return all.slice(0, 5);
 }
 
+async function getTranscript(id) {
+  const config = await getApiConfig();
+  const res = await fetch(`${config.baseUrl}/api/transcripts/${id}`, {
+    headers: config.headers,
+  });
+  if (!res.ok) throw new Error(await classifyError(res.status, {}));
+  return await res.json();
+}
+
+async function getPreferences() {
+  const config = await getApiConfig();
+  if (config.mode !== "cloud") return { summarizePrompt: null };
+  try {
+    const res = await fetch(`${config.baseUrl}/api/preferences`, {
+      headers: config.headers,
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) return { summarizePrompt: null };
+    return await res.json();
+  } catch {
+    return { summarizePrompt: null };
+  }
+}
+
 async function checkExisting(videoId) {
   const config = await getApiConfig();
   const res = await fetch(`${config.baseUrl}/api/transcripts`, {
@@ -390,6 +414,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case "GET_RECENT":
         return await getRecent();
+
+      case "GET_TRANSCRIPT":
+        return await getTranscript(message.id);
+
+      case "GET_PREFERENCES":
+        return await getPreferences();
 
       case "CHECK_EXISTING":
         return await checkExisting(message.videoId);

@@ -39,7 +39,12 @@
   </style>
 </head>
 <body>
-  <iframe id="appFrame" src="https://transcribed.dev/extension"></iframe>
+  <iframe
+    id="appFrame"
+    src="https://transcribed.dev/extension"
+    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+    allow="clipboard-write"
+  ></iframe>
 
   <div class="shell-error" id="shellError">
     <p>Couldn't load the panel</p>
@@ -81,17 +86,22 @@
       }, 8000);
     });
 
-    // Forward messages between iframe and background
+    // Forward messages between iframe and background.
+    // Strict origin check — only accept frames from transcribed.dev, and
+    // post responses back to the same origin (no "*" wildcards).
+    const ALLOWED_ORIGIN = "https://transcribed.dev";
     window.addEventListener("message", (event) => {
+      if (event.origin !== ALLOWED_ORIGIN) return;
       if (event.source !== frame.contentWindow) return;
-      if (event.data?.type) {
-        chrome.runtime.sendMessage(event.data, (response) => {
-          frame.contentWindow.postMessage(
-            { _responseId: event.data._requestId, ...response },
-            "*"
-          );
-        });
-      }
+      if (!event.data || typeof event.data.type !== "string") return;
+      const requestId = event.data._requestId;
+      chrome.runtime.sendMessage(event.data, (response) => {
+        if (!frame.contentWindow) return;
+        frame.contentWindow.postMessage(
+          { _responseId: requestId, ...response },
+          ALLOWED_ORIGIN
+        );
+      });
     });
   </script>
 </body>
