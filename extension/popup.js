@@ -427,7 +427,11 @@ async function fetchDestinations() {
 }
 
 function connectedDestinations() {
-  return (destinationsCache?.destinations || []).filter((d) => d.connected);
+  // Exclude needsReauth — sending would hit expired tokens and 401 upstream.
+  // Users reconnect via Settings, where the row still renders with Reconnect.
+  return (destinationsCache?.destinations || []).filter(
+    (d) => d.connected && !d.needsReauth
+  );
 }
 
 async function renderDestinationsSettings() {
