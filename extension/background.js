@@ -351,9 +351,94 @@ const DESTINATIONS_UNAVAILABLE = {
   error: "Destinations not yet available",
 };
 
+// Dev-only stub: returns canned responses so the full Settings list + ⋯ menu
+// + Send flow + toast path can be exercised without the YTT-211 cloud
+// endpoints existing. Enabled per-install via chrome.storage.local so the
+// code always ships with the mock OFF — no constant to forget to flip.
+//
+// To enable:
+//   1. chrome://extensions → inspect "service worker" under this extension
+//   2. In that DevTools console:
+//        chrome.storage.local.set({ __destinationsDevMock: true })
+//   3. Reload the extension
+//
+// To disable:
+//        chrome.storage.local.remove("__destinationsDevMock")
+//        (then reload the extension)
+async function isDestinationsDevMockEnabled() {
+  try {
+    const { __destinationsDevMock } = await chrome.storage.local.get(
+      "__destinationsDevMock"
+    );
+    return !!__destinationsDevMock;
+  } catch {
+    return false;
+  }
+}
+
+function destinationsDevMock(path, init) {
+  const method = (init && init.method) || "GET";
+  if (path === "" && method === "GET") {
+    return {
+      ok: true,
+      data: [
+        {
+          adapterId: "notion",
+          name: "Notion",
+          icon: "",
+          connected: false,
+        },
+        {
+          adapterId: "obsidian-scheme",
+          name: "Obsidian",
+          icon: "",
+          connected: true,
+          connectedAt: new Date().toISOString(),
+        },
+        {
+          adapterId: "readwise",
+          name: "Readwise",
+          icon: "",
+          connected: true,
+          needsReauth: true,
+        },
+      ],
+    };
+  }
+  if (path === "/send" && method === "POST") {
+    let body = {};
+    try { body = JSON.parse(init.body || "{}"); } catch { /* ignore */ }
+    if (body.adapterId === "obsidian-scheme") {
+      return {
+        ok: true,
+        data: {
+          schemeUrl: "obsidian://new?vault=Test&name=Transcript&content=Hello",
+        },
+      };
+    }
+    return {
+      ok: true,
+      data: { url: "https://example.com/fake-destination-page" },
+    };
+  }
+  if (/\/oauth\/start$/.test(path) && method === "POST") {
+    return {
+      ok: true,
+      data: { authUrl: "https://example.com/oauth?mock=1" },
+    };
+  }
+  if (/\/connection$/.test(path) && method === "DELETE") {
+    return { ok: true, data: {} };
+  }
+  return { ok: false, error: "Mock: unknown path" };
+}
+
 async function destinationsFetch(path, init = {}) {
   const config = await getApiConfig();
   if (config.mode !== "cloud") return DESTINATIONS_UNAVAILABLE;
+  if (await isDestinationsDevMockEnabled()) {
+    return destinationsDevMock(path, init);
+  }
   try {
     const res = await fetch(`${config.baseUrl}/api/destinations${path}`, {
       credentials: config.credentials,
