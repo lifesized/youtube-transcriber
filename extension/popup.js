@@ -47,6 +47,9 @@ const el = {
   btnModeLocal: document.getElementById("btnModeLocal"),
   btnModeCloud: document.getElementById("btnModeCloud"),
   cloudAccountSection: document.getElementById("cloudAccountSection"),
+  destinationsSection: document.getElementById("destinationsSection"),
+  destinationsList: document.getElementById("destinationsList"),
+  destinationsEmpty: document.getElementById("destinationsEmpty"),
 };
 
 let pageInfo = null;
@@ -387,6 +390,420 @@ async function launchWithProvider(provider, transcriptId, videoTitle) {
 }
 
 // ---------------------------------------------------------------------------
+// Destinations (YTT-205 §2) — cloud-hosted adapter registry per YTT-211.
+// Extension surfaces: settings list (connect/disconnect) and a per-row
+// ⋯ menu (send-to connected destinations). The extension does zero adapter
+// work — cloud handles OAuth + token storage + the send() call.
+// ---------------------------------------------------------------------------
+
+// Cached destination list so the ⋯ menu can render without hitting the
+// network on every open. Refreshed when the settings panel loads and after
+// OAuth completes.
+let destinationsCache = null;
+let destinationsLoading = false;
+
+async function fetchDestinations() {
+  if (destinationsLoading) return destinationsCache;
+  destinationsLoading = true;
+  try {
+    const res = await sendMsg({ type: "LIST_DESTINATIONS" });
+    if (res?.success && res.data?.ok) {
+      destinationsCache = {
+        ok: true,
+        destinations: res.data.destinations || [],
+      };
+    } else {
+      destinationsCache = {
+        ok: false,
+        unavailable: !!res?.data?.unavailable,
+        authError: !!res?.data?.authError,
+        destinations: [],
+      };
+    }
+    return destinationsCache;
+  } finally {
+    destinationsLoading = false;
+  }
+}
+
+function connectedDestinations() {
+  return (destinationsCache?.destinations || []).filter((d) => d.connected);
+}
+
+async function renderDestinationsSettings() {
+  if (currentSettingsMode !== "cloud") {
+    el.destinationsSection.hidden = true;
+    return;
+  }
+  el.destinationsSection.hidden = false;
+  el.destinationsList.innerHTML = "";
+  el.destinationsEmpty.hidden = true;
+
+  const res = await fetchDestinations();
+  const list = res.destinations || [];
+
+  if (res.unavailable) {
+    el.destinationsEmpty.hidden = false;
+    el.destinationsEmpty.textContent = "Destinations aren't available yet.";
+    return;
+  }
+  if (res.authError) {
+    el.destinationsEmpty.hidden = false;
+    el.destinationsEmpty.textContent = "Sign in at transcribed.dev to manage destinations.";
+    return;
+  }
+  if (!list.length) {
+    el.destinationsEmpty.hidden = false;
+    el.destinationsEmpty.textContent = "No destinations available yet.";
+    return;
+  }
+
+  for (const d of list) {
+    el.destinationsList.appendChild(buildDestinationRow(d));
+  }
+}
+
+function buildDestinationRow(d) {
+  const row = document.createElement("div");
+  row.className = "destinations-row";
+
+  const icon = document.createElement("span");
+  icon.className = "destinations-row-icon";
+  if (d.icon && typeof d.icon === "string") {
+    // Trust cloud to supply a safe URL; never inject HTML.
+    const img = document.createElement("img");
+    img.src = d.icon;
+    img.alt = "";
+    icon.appendChild(img);
+  }
+
+  const text = document.createElement("div");
+  text.className = "destinations-row-text";
+  const name = document.createElement("span");
+  name.className = "destinations-row-name";
+  name.textContent = d.name || d.adapterId;
+  const status = document.createElement("span");
+  status.className = "destinations-row-status";
+  if (d.connected && d.needsReauth) {
+    status.classList.add("needs-reauth");
+    status.textContent = "Reconnect needed";
+  } else if (d.connected) {
+    status.classList.add("connected");
+    status.textContent = "Connected";
+  } else {
+    status.textContent = "Not connected";
+  }
+  text.appendChild(name);
+  text.appendChild(status);
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "destinations-row-action";
+  if (d.connected && !d.needsReauth) {
+    btn.textContent = "Disconnect";
+    btn.classList.add("danger");
+    btn.addEventListener("click", () => handleDisconnect(d.adapterId, btn));
+  } else {
+    btn.textContent = d.needsReauth ? "Reconnect" : "Connect";
+    btn.addEventListener("click", () => handleConnect(d.adapterId, btn));
+  }
+
+  row.appendChild(icon);
+  row.appendChild(text);
+  row.appendChild(btn);
+  return row;
+}
+
+async function handleConnect(adapterId, btn) {
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = "Opening…";
+  const res = await sendMsg({ type: "START_DESTINATION_OAUTH", adapterId });
+  btn.disabled = false;
+  btn.textContent = label;
+  if (!res?.success || !res.data?.ok) {
+    const err = res?.data?.error || res?.error || "Couldn't start connection";
+    btn.textContent = "Retry";
+    console.warn("Connect failed:", err);
+    return;
+  }
+  // Poll for connection flip — user completes OAuth in the opened tab.
+  pollForConnection(adapterId);
+}
+
+async function handleDisconnect(adapterId, btn) {
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = "Disconnecting…";
+  const res = await sendMsg({ type: "DISCONNECT_DESTINATION", adapterId });
+  btn.disabled = false;
+  btn.textContent = label;
+  if (!res?.success || !res.data?.ok) {
+    btn.textContent = "Retry";
+    return;
+  }
+  destinationsCache = null;
+  renderDestinationsSettings();
+}
+
+async function pollForConnection(adapterId) {
+  const start = Date.now();
+  const deadline = start + 2 * 60 * 1000; // 2 min
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 2500));
+    destinationsCache = null;
+    const res = await fetchDestinations();
+    const match = (res.destinations || []).find((d) => d.adapterId === adapterId);
+    if (match?.connected && !match.needsReauth) {
+      renderDestinationsSettings();
+      return;
+    }
+    // If the settings panel is no longer visible, stop polling — user left.
+    if (el.settingsPanel.hidden) return;
+  }
+  // Timed out silently; next settings-panel open will refetch.
+}
+
+// ---------------------------------------------------------------------------
+// Per-row ⋯ menu on recent transcripts (YTT-205 §3). Items:
+//   - Send to <connected destination>  (one per connected adapter)
+//   - ——
+//   - Open in web app
+//   - Copy link
+// Mirrors the portal-to-body / fixed-position pattern of .recent-summarize.
+// ---------------------------------------------------------------------------
+
+let rowActionsOpen = null;
+
+function closeRowActionsMenu() {
+  if (rowActionsOpen) {
+    if (typeof rowActionsOpen._cleanup === "function") rowActionsOpen._cleanup();
+    if (rowActionsOpen._wrapper) rowActionsOpen._wrapper.classList.remove("open");
+    rowActionsOpen.remove();
+    rowActionsOpen = null;
+    document.removeEventListener("mousedown", onOutsideRowActionsClick, true);
+  }
+}
+
+function onOutsideRowActionsClick(e) {
+  if (rowActionsOpen && !rowActionsOpen.contains(e.target)) {
+    if (!(e.target.closest && e.target.closest(".row-actions-btn"))) {
+      closeRowActionsMenu();
+    }
+  }
+}
+
+function buildRowActionsMenu(transcriptId, videoTitle) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "row-actions";
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "row-actions-btn";
+  btn.title = "More actions";
+  btn.setAttribute("aria-label", "More actions");
+  btn.innerHTML = `
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <circle cx="4" cy="10" r="1.6"/>
+      <circle cx="10" cy="10" r="1.6"/>
+      <circle cx="16" cy="10" r="1.6"/>
+    </svg>
+  `;
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleRowActionsMenu(wrapper, transcriptId, videoTitle);
+  });
+  wrapper.appendChild(btn);
+  return wrapper;
+}
+
+async function toggleRowActionsMenu(wrapper, transcriptId, videoTitle) {
+  if (rowActionsOpen && rowActionsOpen._wrapper === wrapper) {
+    closeRowActionsMenu();
+    return;
+  }
+  closeRowActionsMenu();
+
+  // Kick off a refresh so the menu reflects connection changes while the
+  // side panel has been open.
+  fetchDestinations();
+
+  const menu = document.createElement("div");
+  menu.className = "row-actions-menu";
+
+  const connected = connectedDestinations();
+
+  if (connected.length > 0) {
+    for (const d of connected) {
+      menu.appendChild(
+        buildRowActionItem(d.name || d.adapterId, iconFor(d), async (item) => {
+          item.setAttribute("data-sending", "true");
+          item.disabled = true;
+          const res = await sendMsg({
+            type: "SEND_TO_DESTINATION",
+            adapterId: d.adapterId,
+            transcriptId,
+            destinationName: d.name || d.adapterId,
+          });
+          closeRowActionsMenu();
+          if (!res?.success || !res.data?.ok) {
+            // Background already toasted unless unavailable/authError.
+            if (res?.data?.unavailable || res?.data?.authError) {
+              console.warn(
+                "Destination unavailable:",
+                res?.data?.error || res?.error
+              );
+            }
+          }
+        })
+      );
+    }
+    menu.appendChild(separator());
+  }
+
+  menu.appendChild(
+    buildRowActionItem("Open in web app", openIcon(), async () => {
+      closeRowActionsMenu();
+      await sendMsg({ type: "OPEN_TRANSCRIPT", id: transcriptId });
+    })
+  );
+
+  menu.appendChild(
+    buildRowActionItem("Copy link", copyIcon(), async (item) => {
+      const url = await buildTranscriptUrl(transcriptId);
+      try {
+        await navigator.clipboard.writeText(url);
+        item.querySelector(".row-actions-menu-name").textContent = "Copied!";
+        setTimeout(() => closeRowActionsMenu(), 600);
+      } catch {
+        closeRowActionsMenu();
+      }
+    })
+  );
+
+  if (connected.length === 0) {
+    const note = document.createElement("div");
+    note.className = "row-actions-menu-empty";
+    note.textContent = "Connect a destination in Settings to send";
+    menu.appendChild(separator());
+    menu.appendChild(note);
+  }
+
+  menu.addEventListener("click", (e) => e.stopPropagation());
+  document.body.appendChild(menu);
+  wrapper.classList.add("open");
+  rowActionsOpen = menu;
+  rowActionsOpen._wrapper = wrapper;
+  positionRowActionsMenu(wrapper, menu);
+
+  const reposition = () => {
+    if (rowActionsOpen === menu) positionRowActionsMenu(wrapper, menu);
+  };
+  window.addEventListener("scroll", reposition, true);
+  window.addEventListener("resize", reposition);
+  menu._cleanup = () => {
+    window.removeEventListener("scroll", reposition, true);
+    window.removeEventListener("resize", reposition);
+  };
+
+  setTimeout(() => {
+    document.addEventListener("mousedown", onOutsideRowActionsClick, true);
+  }, 0);
+}
+
+function buildRowActionItem(label, iconHtml, onClick) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "row-actions-menu-item";
+  btn.innerHTML = `
+    <span class="row-actions-menu-icon">${iconHtml || ""}</span>
+    <span class="row-actions-menu-name"></span>
+  `;
+  btn.querySelector(".row-actions-menu-name").textContent = label;
+  btn.addEventListener("click", () => onClick(btn));
+  return btn;
+}
+
+function separator() {
+  const s = document.createElement("div");
+  s.className = "row-actions-menu-separator";
+  return s;
+}
+
+function positionRowActionsMenu(wrapper, menu) {
+  const btn = wrapper.querySelector(".row-actions-btn");
+  if (!btn) return;
+  const rect = btn.getBoundingClientRect();
+  const menuWidth = menu.offsetWidth || 200;
+  const menuHeight = menu.offsetHeight || 100;
+  const margin = 8;
+
+  let left = rect.right - menuWidth;
+  if (left < margin) left = margin;
+  if (left + menuWidth > window.innerWidth - margin) {
+    left = window.innerWidth - menuWidth - margin;
+  }
+
+  let top = rect.bottom + 6;
+  if (top + menuHeight > window.innerHeight - margin) {
+    top = rect.top - menuHeight - 6;
+  }
+
+  menu.style.top = `${top}px`;
+  menu.style.left = `${left}px`;
+}
+
+async function buildTranscriptUrl(id) {
+  const cfgRes = await sendMsg({ type: "GET_SETTINGS" });
+  const mode = cfgRes?.data?.mode || "cloud";
+  const base = mode === "cloud"
+    ? "https://www.transcribed.dev"
+    : "http://localhost:19720";
+  return `${base}/?layout=list&id=${encodeURIComponent(id)}`;
+}
+
+function iconFor(d) {
+  if (d.icon && typeof d.icon === "string") {
+    return `<img src="${escapeAttr(d.icon)}" alt="" />`;
+  }
+  // Default destination icon — generic send/arrow glyph.
+  return `
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor"
+         stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 10l14-6-6 14-2-6-6-2z"/>
+    </svg>
+  `;
+}
+
+function openIcon() {
+  return `
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor"
+         stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M11 3h6v6M17 3l-8 8M8 4H5a2 2 0 00-2 2v9a2 2 0 002 2h9a2 2 0 002-2v-3"/>
+    </svg>
+  `;
+}
+
+function copyIcon() {
+  return `
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor"
+         stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="7" y="7" width="10" height="10" rx="2"/>
+      <path d="M13 7V5a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2"/>
+    </svg>
+  `;
+}
+
+function escapeAttr(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -597,6 +1014,8 @@ async function loadRecent() {
     `;
     // Summarize-with-LLM button — hover-reveal per row, mirrors web-app LlmLauncher
     item.appendChild(buildLlmLauncher(t.id, t.title));
+    // ⋯ menu — send to destinations, open in web app, copy link (YTT-205 §3)
+    item.appendChild(buildRowActionsMenu(t.id, t.title));
     el.recentList.appendChild(item);
 
     // Two-phase animation: visual fade, then smooth spatial collapse
@@ -818,6 +1237,13 @@ async function init() {
   stopOfflinePolling();
 
   startHeartbeat();
+
+  // Warm the destinations cache so the ⋯ menu renders instantly.
+  // Only in cloud mode — local mode has no destinations.
+  const settingsRes = await sendMsg({ type: "GET_SETTINGS" });
+  if (settingsRes?.data?.mode === "cloud") {
+    fetchDestinations();
+  }
 
   // 2. Show page state
   showCurrentPageState();
@@ -1058,6 +1484,8 @@ chrome.tabs.onUpdated?.addListener((tabId, changeInfo) => {
 let currentSettingsMode = "cloud";
 
 function showSettingsView() {
+  closeLlmDropdown();
+  closeRowActionsMenu();
   for (const s of ALL_STATES) {
     const elem = el[`state${s}`];
     if (elem) elem.hidden = true;
@@ -1105,14 +1533,21 @@ function setModeUI(mode) {
   el.btnModeLocal.classList.toggle("active", mode === "local");
   el.btnModeCloud.classList.toggle("active", mode === "cloud");
   el.cloudAccountSection.hidden = mode !== "cloud";
+  if (mode === "cloud") {
+    renderDestinationsSettings();
+  } else {
+    el.destinationsSection.hidden = true;
+  }
 }
 
 el.btnModeLocal.addEventListener("click", async () => {
+  destinationsCache = null;
   setModeUI("local");
   await sendMsg({ type: "SAVE_SETTINGS", mode: "local" });
   init();
 });
 el.btnModeCloud.addEventListener("click", async () => {
+  destinationsCache = null;
   setModeUI("cloud");
   await sendMsg({ type: "SAVE_SETTINGS", mode: "cloud" });
   init();

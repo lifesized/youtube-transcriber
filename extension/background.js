@@ -339,6 +339,125 @@ async function checkExisting(videoId) {
 }
 
 // ---------------------------------------------------------------------------
+// Destination adapters (YTT-205 §2) — cloud-hosted registry per YTT-211.
+// Extension is a thin client: cloud owns OAuth tokens, client_secret, and the
+// actual send() implementations. Obsidian scheme URLs are built server-side
+// and opened client-side via chrome.tabs.create.
+// ---------------------------------------------------------------------------
+
+const DESTINATIONS_UNAVAILABLE = {
+  ok: false,
+  unavailable: true,
+  error: "Destinations not yet available",
+};
+
+async function destinationsFetch(path, init = {}) {
+  const config = await getApiConfig();
+  if (config.mode !== "cloud") return DESTINATIONS_UNAVAILABLE;
+  try {
+    const res = await fetch(`${config.baseUrl}/api/destinations${path}`, {
+      credentials: config.credentials,
+      ...init,
+      headers: {
+        ...(init.body ? { "Content-Type": "application/json" } : {}),
+        ...config.headers,
+        ...(init.headers || {}),
+      },
+    });
+    // Cloud side (YTT-211) may not be deployed yet — treat 404/501 as a soft
+    // "feature not ready" so the UI can render a friendly state instead of
+    // looking broken. 401 bubbles up so the popup can nudge sign-in.
+    if (res.status === 404 || res.status === 501) {
+      return DESTINATIONS_UNAVAILABLE;
+    }
+    if (res.status === 401) {
+      return { ok: false, authError: true, error: "Sign in at transcribed.dev to continue." };
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { ok: false, error: data?.error || `HTTP ${res.status}` };
+    }
+    return { ok: true, data };
+  } catch {
+    return DESTINATIONS_UNAVAILABLE;
+  }
+}
+
+async function listDestinations() {
+  const res = await destinationsFetch("");
+  if (!res.ok) return res;
+  return { ok: true, destinations: Array.isArray(res.data) ? res.data : [] };
+}
+
+async function startDestinationOauth(adapterId) {
+  return await destinationsFetch(
+    `/${encodeURIComponent(adapterId)}/oauth/start`,
+    { method: "POST", body: "{}" }
+  );
+}
+
+async function disconnectDestination(adapterId) {
+  return await destinationsFetch(
+    `/${encodeURIComponent(adapterId)}/connection`,
+    { method: "DELETE" }
+  );
+}
+
+async function sendToDestination(adapterId, transcriptId, opts) {
+  const res = await destinationsFetch("/send", {
+    method: "POST",
+    body: JSON.stringify({ adapterId, transcriptId, opts: opts || {} }),
+  });
+  if (!res.ok) return res;
+
+  // Obsidian scheme case — cloud built the URL, client opens it.
+  const payload = res.data || {};
+  if (payload.schemeUrl && typeof payload.schemeUrl === "string") {
+    try {
+      await chrome.tabs.create({ url: payload.schemeUrl, active: true });
+    } catch (err) {
+      return { ok: false, error: `Couldn't open Obsidian: ${err.message}` };
+    }
+  }
+  return { ok: true, data: payload };
+}
+
+// ---------------------------------------------------------------------------
+// Toast — chrome.notifications wrapper. `notifications` is declared in
+// optional_permissions; request on first use and fall back to badge if denied.
+// ---------------------------------------------------------------------------
+
+async function showToast({ title, message, kind = "info" }) {
+  const perm = { permissions: ["notifications"] };
+  let granted = false;
+  try {
+    granted = await chrome.permissions.contains(perm);
+  } catch { /* ignore */ }
+  if (!granted) {
+    try {
+      granted = await chrome.permissions.request(perm);
+    } catch { /* ignore */ }
+  }
+  if (!granted) {
+    // Fallback: quick badge flash so the user still gets feedback.
+    const color = kind === "error" ? "#ef4444" : "#22c55e";
+    const text = kind === "error" ? "!" : "✓";
+    setBadge(text, color);
+    setTimeout(() => setBadge(""), 3000);
+    return;
+  }
+  try {
+    chrome.notifications.create({
+      type: "basic",
+      iconUrl: "icons/icon48.png",
+      title: title || "Transcriber",
+      message: message || "",
+      priority: kind === "error" ? 2 : 0,
+    });
+  } catch { /* ignore notification failures */ }
+}
+
+// ---------------------------------------------------------------------------
 // Core transcribe — runs in background, persists state
 // ---------------------------------------------------------------------------
 
@@ -438,6 +557,11 @@ function validId(id) {
 
 function validMode(m) {
   return m === "cloud" || m === "local";
+}
+
+const ADAPTER_ID_PATTERN = /^[a-z][a-z0-9-]{0,63}$/;
+function validAdapterId(id) {
+  return typeof id === "string" && ADAPTER_ID_PATTERN.test(id);
 }
 
 // ---------------------------------------------------------------------------
@@ -589,6 +713,53 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await chrome.storage.sync.set(settings);
         _apiConfigCache = null;
         return { ok: true };
+      }
+
+      case "LIST_DESTINATIONS":
+        return await listDestinations();
+
+      case "START_DESTINATION_OAUTH": {
+        if (!validAdapterId(message.adapterId)) throw new Error("Invalid adapterId");
+        const res = await startDestinationOauth(message.adapterId);
+        if (res.ok && res.data?.authUrl && typeof res.data.authUrl === "string") {
+          try {
+            await chrome.tabs.create({ url: res.data.authUrl, active: true });
+          } catch (err) {
+            return { ok: false, error: `Couldn't open auth tab: ${err.message}` };
+          }
+        }
+        return res;
+      }
+
+      case "DISCONNECT_DESTINATION": {
+        if (!validAdapterId(message.adapterId)) throw new Error("Invalid adapterId");
+        return await disconnectDestination(message.adapterId);
+      }
+
+      case "SEND_TO_DESTINATION": {
+        if (!validAdapterId(message.adapterId)) throw new Error("Invalid adapterId");
+        if (!validId(message.transcriptId)) throw new Error("Invalid transcriptId");
+        const res = await sendToDestination(
+          message.adapterId,
+          message.transcriptId,
+          message.opts
+        );
+        if (res.ok) {
+          showToast({
+            title: "Sent",
+            message: message.destinationName
+              ? `Sent to ${message.destinationName}`
+              : "Transcript sent",
+            kind: "info",
+          });
+        } else if (!res.unavailable && !res.authError) {
+          showToast({
+            title: "Send failed",
+            message: res.error || "Couldn't send transcript",
+            kind: "error",
+          });
+        }
+        return res;
       }
 
       case "GET_PAGE_INFO": {

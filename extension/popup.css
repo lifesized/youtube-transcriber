@@ -910,6 +910,206 @@ body::-webkit-scrollbar-thumb:hover {
   opacity: 0.8;
 }
 
+/* Destinations — connect/disconnect adapters (YTT-205 §2). Cloud-hosted
+   registry per YTT-211; extension is a thin client. Hidden in local mode. */
+.settings-destinations {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+.settings-destinations[hidden] {
+  display: none;
+}
+.section-label-subsection {
+  margin-bottom: 6px;
+}
+.destinations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.destinations-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  transition: background 0.12s;
+}
+.destinations-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+.destinations-row-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.7);
+}
+.destinations-row-icon img,
+.destinations-row-icon svg {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+.destinations-row-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.destinations-row-name {
+  font-size: 13px;
+  color: var(--text);
+}
+.destinations-row-status {
+  font-size: 11px;
+  color: var(--muted-3);
+}
+.destinations-row-status.connected {
+  color: #22c55e;
+}
+.destinations-row-status.needs-reauth {
+  color: #ef4444;
+}
+.destinations-row-action {
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+.destinations-row-action:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.destinations-row-action.danger {
+  color: rgba(255, 255, 255, 0.55);
+}
+.destinations-row-action.danger:hover {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+.destinations-row-action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.destinations-empty {
+  font-size: 12px;
+  color: var(--muted-3);
+  padding: 8px 10px;
+  margin: 0;
+}
+.destinations-empty[hidden] {
+  display: none;
+}
+
+/* Per-row ⋯ actions menu on recent transcripts. Uses the same hover-reveal
+   + fixed-positioned portal pattern as .recent-summarize-menu so it escapes
+   the recent-list scroll clip. */
+.row-actions {
+  position: relative;
+  margin-left: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.recent-item:hover .row-actions,
+.row-actions:focus-within,
+.row-actions.open {
+  opacity: 1;
+}
+.row-actions-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.row-actions-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+}
+.row-actions-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
+}
+.row-actions-menu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 200px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 20px 60px -15px rgba(0, 0, 0, 0.7);
+}
+.row-actions-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.row-actions-menu-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+}
+.row-actions-menu-item:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.row-actions-menu-item[data-sending="true"] {
+  opacity: 0.7;
+}
+.row-actions-menu-icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.55);
+}
+.row-actions-menu-icon img,
+.row-actions-menu-icon svg {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
+.row-actions-menu-separator {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 4px 2px;
+}
+.row-actions-menu-empty {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--muted-3);
+}
+
 /* Local detected banner — shown when local instance found during cloud onboarding */
 .local-detected-banner {
   display: flex;
