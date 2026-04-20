@@ -55,10 +55,13 @@ interface DebugFilters {
 }
 
 function isSupportedUrl(url: string): boolean {
-  return (
-    /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\/.+/.test(url) ||
-    /^https?:\/\/open\.spotify\.com\/episode\/.+/.test(url)
-  );
+  try {
+    const parsed = new URL(url);
+    // Accept any http(s) URL — yt-dlp handles ~1,800 sites via the generic route.
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function formatDate(iso: string): string {
@@ -851,7 +854,7 @@ function HomeInner() {
     }
 
     if (!isSupportedUrl(trimmed)) {
-      setError("Please enter a valid YouTube or Spotify podcast URL.");
+      setError("Please enter a valid video URL.");
       return;
     }
 
@@ -905,7 +908,7 @@ function HomeInner() {
                       if (error) setError(null);
                       if (duplicateHint) setDuplicateHint(null);
                     }}
-                    placeholder="Paste a YouTube or Spotify podcast URL..."
+                    placeholder="Paste a video URL (YouTube, Spotify, Twitch, Vimeo, TikTok…)..."
                     className="h-12 pr-10"
                   />
                   {url && (
@@ -1191,7 +1194,7 @@ function HomeInner() {
                         </svg>
                       </div>
                       <p className="text-sm text-white/35">Your transcripts will appear here</p>
-                      <p className="mt-1.5 text-xs text-white/18">Paste a YouTube or Spotify podcast URL above to get started</p>
+                      <p className="mt-1.5 text-xs text-white/18">Paste a video URL (YouTube, Spotify, Twitch, Vimeo, TikTok…) above to get started</p>
                     </>
                   )}
                 </div>

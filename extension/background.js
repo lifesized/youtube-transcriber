@@ -9,25 +9,29 @@ let _apiConfigCache = null;
 
 async function getApiConfig() {
   if (_apiConfigCache) return _apiConfigCache;
-  const { mode, apiKey } = await chrome.storage.sync.get(["mode", "apiKey"]);
-  _apiConfigCache = buildConfig(mode || "cloud", apiKey || "");
+  const { mode } = await chrome.storage.sync.get(["mode"]);
+  _apiConfigCache = buildConfig(mode || "cloud");
   return _apiConfigCache;
 }
 
-function buildConfig(mode, apiKey) {
+function buildConfig(mode) {
   if (mode === "cloud") {
+    // Cloud auth rides on the user's transcribed.dev session cookie.
+    // `credentials: "include"` on fetch sends the cookie cross-origin;
+    // host_permissions for transcribed.dev allows it.
     return {
       mode: "cloud",
       baseUrl: CLOUD_BASE,
-      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+      headers: {},
+      credentials: "include",
     };
   }
-  return { mode: "local", baseUrl: LOCAL_BASE, headers: {} };
+  return { mode: "local", baseUrl: LOCAL_BASE, headers: {}, credentials: "omit" };
 }
 
 // Invalidate cache when settings change
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "sync" && (changes.mode || changes.apiKey)) {
+  if (area === "sync" && changes.mode) {
     _apiConfigCache = null;
   }
 });
@@ -151,23 +155,38 @@ function setBadge(text, color) {
 
 async function checkService() {
   const config = await getApiConfig();
-  const health = await tryHealthCheck(config.baseUrl, config.headers, config.mode);
+  const health = await tryHealthCheck(config.baseUrl, config.headers, config.mode, config.credentials);
 
-  // In cloud mode, the health endpoint doesn't require auth — so a 200 from
-  // /api/health doesn't mean the API key is valid. Validate the key separately
-  // by hitting an authenticated endpoint.
-  if (health.online && config.mode === "cloud" && config.headers.Authorization) {
+  // In cloud mode, /api/health doesn't require auth — so a 200 from it
+  // doesn't mean the user is signed in. Validate the session separately
+  // by hitting an authenticated endpoint with the cookie.
+  if (health.online && config.mode === "cloud") {
     try {
       const res = await fetch(`${config.baseUrl}/api/account`, {
         method: "GET",
-        headers: config.headers,
+        credentials: config.credentials,
         signal: AbortSignal.timeout(3000),
       });
       if (res.status === 401) {
-        return { online: false, mode: "cloud", authError: true };
+        // Distinguish first-time users (never signed in on this install)
+        // from returning users whose session expired, so the UI can pick
+        // "Get started" vs "Signed out" copy.
+        const { hasEverSignedIn } = await chrome.storage.local.get(
+          "hasEverSignedIn"
+        );
+        return {
+          online: false,
+          mode: "cloud",
+          authError: true,
+          firstTime: !hasEverSignedIn,
+        };
+      }
+      if (res.ok) {
+        // Remember that this install has authed at least once.
+        await chrome.storage.local.set({ hasEverSignedIn: true });
       }
     } catch {
-      // Network error on key check — still treat as online since health passed
+      // Network error on session check — still treat as online since health passed
     }
   }
 
@@ -187,11 +206,12 @@ async function detectLocalInstance() {
   }
 }
 
-async function tryHealthCheck(baseUrl, headers, mode) {
+async function tryHealthCheck(baseUrl, headers, mode, credentials) {
   try {
     const res = await fetch(`${baseUrl}/api/health`, {
       method: "GET",
       headers,
+      credentials: credentials || "omit",
       signal: AbortSignal.timeout(3000),
     });
     if (res.ok) {
@@ -212,6 +232,7 @@ async function transcribeRequest(url) {
   const res = await fetch(`${config.baseUrl}/api/transcripts`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...config.headers },
+    credentials: config.credentials,
     body: JSON.stringify({ url }),
   });
   const data = await res.json();
@@ -234,6 +255,7 @@ async function pollUntilDone(id, config) {
     try {
       const res = await fetch(`${config.baseUrl}/api/transcripts/${id}`, {
         headers: config.headers,
+        credentials: config.credentials,
       });
       if (!res.ok) continue;
       const data = await res.json();
@@ -262,7 +284,7 @@ async function classifyError(status, data) {
     if (status >= 500) return "Local server error. Check the terminal for details.";
     return data?.error || `HTTP ${status}`;
   }
-  if (status === 401) return "Invalid API key. Check your key in Settings or at transcribed.dev/developers";
+  if (status === 401) return "Sign in at transcribed.dev to continue.";
   if (status === 429) return "Quota reached. Upgrade your plan at transcribed.dev/pricing";
   if (status >= 500) return "Cloud service error. Try again in a moment.";
   return data?.error || `HTTP ${status}`;
@@ -272,16 +294,44 @@ async function getRecent() {
   const config = await getApiConfig();
   const res = await fetch(`${config.baseUrl}/api/transcripts`, {
     headers: config.headers,
+    credentials: config.credentials,
   });
   if (!res.ok) throw new Error(await classifyError(res.status, {}));
   const all = await res.json();
   return all.slice(0, 5);
 }
 
+async function getTranscript(id) {
+  const config = await getApiConfig();
+  const res = await fetch(`${config.baseUrl}/api/transcripts/${id}`, {
+    headers: config.headers,
+    credentials: config.credentials,
+  });
+  if (!res.ok) throw new Error(await classifyError(res.status, {}));
+  return await res.json();
+}
+
+async function getPreferences() {
+  const config = await getApiConfig();
+  if (config.mode !== "cloud") return { summarizePrompt: null };
+  try {
+    const res = await fetch(`${config.baseUrl}/api/preferences`, {
+      headers: config.headers,
+      credentials: config.credentials,
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) return { summarizePrompt: null };
+    return await res.json();
+  } catch {
+    return { summarizePrompt: null };
+  }
+}
+
 async function checkExisting(videoId) {
   const config = await getApiConfig();
   const res = await fetch(`${config.baseUrl}/api/transcripts`, {
     headers: config.headers,
+    credentials: config.credentials,
   });
   if (!res.ok) return null;
   const all = await res.json();
@@ -351,10 +401,56 @@ async function processNextInQueue() {
 }
 
 // ---------------------------------------------------------------------------
+// Message payload validation
+// Content scripts run in pages we don't control (YouTube / Spotify DOM),
+// so every string that crosses the background boundary gets type- and
+// shape-checked. Popup messages are validated the same way for defense
+// in depth and consistent error surfaces.
+// ---------------------------------------------------------------------------
+
+const MAX_URL_LEN = 2048;
+const MAX_TITLE_LEN = 512;
+const ID_MAX_LEN = 128;
+const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+function isStr(v, maxLen) {
+  return typeof v === "string" && v.length > 0 && v.length <= maxLen;
+}
+
+function validHttpUrl(u) {
+  if (!isStr(u, MAX_URL_LEN)) return false;
+  try {
+    const parsed = new URL(u);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function clampTitle(t) {
+  if (typeof t !== "string") return "";
+  return t.length > MAX_TITLE_LEN ? t.slice(0, MAX_TITLE_LEN) : t;
+}
+
+function validId(id) {
+  return isStr(id, ID_MAX_LEN) && ID_PATTERN.test(id);
+}
+
+function validMode(m) {
+  return m === "cloud" || m === "local";
+}
+
+// ---------------------------------------------------------------------------
 // Message handler
 // ---------------------------------------------------------------------------
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Reject anything not shaped like { type: string }
+  if (!message || typeof message.type !== "string") {
+    sendResponse({ success: false, error: "Invalid message" });
+    return false;
+  }
+
   const handle = async () => {
     switch (message.type) {
       case "CLOSE_PANEL": {
@@ -377,8 +473,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "CHECK_SERVICE":
         return await checkService();
 
-      case "TRANSCRIBE":
-        return await doTranscribe(message.url, message.title);
+      case "TRANSCRIBE": {
+        if (!validHttpUrl(message.url)) {
+          throw new Error("Invalid url");
+        }
+        return await doTranscribe(message.url, clampTitle(message.title));
+      }
 
       case "GET_TRANSCRIPTION_STATUS":
         return await getState();
@@ -391,14 +491,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "GET_RECENT":
         return await getRecent();
 
-      case "CHECK_EXISTING":
+      case "GET_TRANSCRIPT": {
+        if (!validId(message.id)) throw new Error("Invalid id");
+        return await getTranscript(message.id);
+      }
+
+      case "GET_PREFERENCES":
+        return await getPreferences();
+
+      case "CHECK_EXISTING": {
+        if (!validId(message.videoId)) throw new Error("Invalid videoId");
         return await checkExisting(message.videoId);
+      }
 
       case "QUEUE_ADD": {
+        if (!validHttpUrl(message.url)) {
+          throw new Error("Invalid url");
+        }
         const queue = await getQueue();
         const already = queue.some((q) => q.url === message.url);
         if (!already) {
-          queue.push({ url: message.url, title: message.title || "" });
+          queue.push({ url: message.url, title: clampTitle(message.title) });
           await setQueue(queue);
         }
         return { ok: true, queue };
@@ -415,11 +528,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return await processNextInQueue();
 
       case "OPEN_TRANSCRIPT": {
+        if (!validId(message.id)) throw new Error("Invalid id");
         const transcriptId = message.id;
         const config = await getApiConfig();
         const appBase = config.mode === "cloud" ? CLOUD_BASE : LOCAL_BASE;
         // Append timestamp to bust Chrome's same-URL no-op optimization
-        const fullUrl = `${appBase}/?layout=list&id=${transcriptId}&t=${Date.now()}`;
+        const fullUrl = `${appBase}/?layout=list&id=${encodeURIComponent(transcriptId)}&t=${Date.now()}`;
 
         // Find existing app tab
         const matchHost = config.mode === "cloud" ? "www.transcribed.dev" : "localhost:19720";
@@ -437,22 +551,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       case "PAGE_INFO":
-      case "PAGE_CHANGED":
-        if (sender.tab?.id) {
-          await chrome.storage.session.set({
-            [`tab_${sender.tab.id}`]: {
-              url: message.url,
-              title: message.title,
-              videoId: message.videoId,
-              isLive: !!message.isLive,
-            },
-          });
-        }
+      case "PAGE_CHANGED": {
+        // Content scripts run in untrusted YouTube/Spotify DOM — validate
+        // every string before persisting. Silently drop malformed payloads
+        // instead of erroring so a hostile page can't spam the console.
+        if (!sender.tab?.id) return { ok: true };
+        if (!validHttpUrl(message.url)) return { ok: true };
+        const vid = typeof message.videoId === "string" ? message.videoId : null;
+        if (vid !== null && !validId(vid)) return { ok: true };
+        await chrome.storage.session.set({
+          [`tab_${sender.tab.id}`]: {
+            url: message.url,
+            title: clampTitle(message.title),
+            videoId: vid,
+            isLive: !!message.isLive,
+          },
+        });
         return { ok: true };
+      }
 
       case "GET_SETTINGS": {
-        const { mode, apiKey } = await chrome.storage.sync.get(["mode", "apiKey"]);
-        return { mode: mode || "cloud", hasApiKey: !!apiKey };
+        const { mode } = await chrome.storage.sync.get(["mode"]);
+        return { mode: mode || "cloud" };
       }
 
       case "DETECT_LOCAL": {
@@ -462,16 +582,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case "SAVE_SETTINGS": {
         const settings = {};
-        if (message.mode !== undefined) settings.mode = message.mode;
-        if (message.apiKey !== undefined) settings.apiKey = message.apiKey;
+        if (message.mode !== undefined) {
+          if (!validMode(message.mode)) throw new Error("Invalid mode");
+          settings.mode = message.mode;
+        }
         await chrome.storage.sync.set(settings);
         _apiConfigCache = null;
         return { ok: true };
-      }
-
-      case "TEST_CONNECTION": {
-        const testConfig = buildConfig(message.mode, message.apiKey);
-        return await tryHealthCheck(testConfig.baseUrl, testConfig.headers, message.mode);
       }
 
       case "GET_PAGE_INFO": {

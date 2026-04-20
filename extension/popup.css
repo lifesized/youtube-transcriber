@@ -486,6 +486,7 @@ body::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.15);
 }
 .recent-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -496,6 +497,122 @@ body::-webkit-scrollbar-thumb:hover {
 }
 .recent-item:hover {
   background: rgba(255, 255, 255, 0.05);
+}
+
+/* Summarize-with-LLM — hover-reveal, mirrors web-app LlmLauncher */
+.recent-summarize {
+  position: relative;
+  margin-left: 6px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.recent-item:hover .recent-summarize,
+.recent-summarize:focus-within {
+  opacity: 1;
+}
+.recent-summarize-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, transform 0.3s;
+}
+.recent-summarize-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+}
+.recent-summarize-btn:hover svg {
+  transform: rotate(15deg);
+}
+.recent-summarize-btn svg {
+  transition: transform 0.3s;
+}
+.recent-summarize-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
+}
+
+.recent-summarize-menu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 180px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 20px 60px -15px rgba(0, 0, 0, 0.7);
+}
+.recent-summarize-menu-label {
+  padding: 6px 8px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted-3);
+}
+.recent-summarize-menu-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.recent-summarize-menu-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+}
+.recent-summarize-menu-name {
+  flex: 1;
+}
+.recent-summarize-icon {
+  flex-shrink: 0;
+}
+.recent-summarize-menu-hint {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* Clipboard-hint tooltip — mirrors the web-app LlmLauncher delay/fade */
+.recent-summarize-menu-tip {
+  pointer-events: none;
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  margin-bottom: 6px;
+  transform: translateX(calc(-50% + 10px));
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: var(--panel);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.2s;
+  box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.7);
+}
+.recent-summarize-menu-item:hover .recent-summarize-menu-tip {
+  opacity: 1;
+  transition-delay: 0.4s;
+}
+.recent-summarize-menu-tip-key {
+  color: rgba(255, 255, 255, 0.7);
 }
 .recent-item-content {
   display: flex;
@@ -753,56 +870,43 @@ body::-webkit-scrollbar-thumb:hover {
   border-color: var(--border-hover);
 }
 
-/* Onboarding steps */
-.onboarding-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  width: 100%;
-  max-width: 260px;
-  margin-bottom: 12px;
-}
-.onboarding-step {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-.onboarding-step:last-child {
-  border-bottom: none;
-}
-.onboarding-step-num {
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--muted-3);
-  font-size: 11px;
-  font-weight: 600;
-  display: flex;
+/* Cloud sign-in CTA — shown in cloud onboarding + auth-error states */
+.btn-cloud-signin {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-}
-.onboarding-step-text {
-  flex: 1;
-  font-size: 12px;
-  color: var(--muted-2);
-}
-.onboarding-step-action {
-  flex-shrink: 0;
-  border: none;
-  background: none;
-  color: var(--accent);
-  font-size: 11px;
+  margin-top: 4px;
+  padding: 8px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  font-size: 13px;
   font-weight: 500;
-  cursor: pointer;
-  padding: 0;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn-cloud-signin:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: var(--border-hover);
+}
+
+/* Cloud account link in settings */
+.settings-account {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+.settings-account[hidden] {
+  display: none;
+}
+.settings-account-link {
+  font-size: 12px;
+  color: var(--accent);
   text-decoration: none;
   transition: opacity 0.15s;
 }
-.onboarding-step-action:hover {
+.settings-account-link:hover {
   opacity: 0.8;
 }
 

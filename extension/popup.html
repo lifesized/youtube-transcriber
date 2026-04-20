@@ -35,34 +35,21 @@
 
       <!-- Cloud mode offline / onboarding -->
       <div id="offlineCloudMsg" hidden>
-        <!-- Shown when user has no API key (first-time onboarding) -->
+        <!-- Shown when user has no session (first-time onboarding) -->
         <div id="cloudOnboarding">
           <p class="offline-heading">Get started</p>
           <p class="offline-sub">Transcribe 10 videos/month for free</p>
-
-          <div class="onboarding-steps">
-            <div class="onboarding-step">
-              <span class="onboarding-step-num">1</span>
-              <span class="onboarding-step-text">Create a free account</span>
-              <a class="onboarding-step-action" href="https://www.transcribed.dev/auth/signup" target="_blank">Sign up →</a>
-            </div>
-            <div class="onboarding-step">
-              <span class="onboarding-step-num">2</span>
-              <span class="onboarding-step-text">Copy your API key</span>
-              <a class="onboarding-step-action" href="https://www.transcribed.dev/developers#keys" target="_blank">Get key →</a>
-            </div>
-            <div class="onboarding-step">
-              <span class="onboarding-step-num">3</span>
-              <span class="onboarding-step-text">Paste it here</span>
-              <button class="onboarding-step-action" id="btnHaveAccount">Enter key →</button>
-            </div>
-          </div>
+          <a class="btn-cloud-signin" href="https://www.transcribed.dev/auth/signin" target="_blank">
+            Sign in at transcribed.dev →
+          </a>
         </div>
-        <!-- Shown when user has an API key but it's failing -->
+        <!-- Shown when the session has expired -->
         <div id="cloudAuthError" hidden>
-          <p class="offline-heading">Can't reach cloud</p>
-          <p class="offline-sub" id="offlineCloudSub">Check your API key or try again later</p>
-          <a class="settings-help-link" href="https://www.transcribed.dev/developers#keys" target="_blank" style="margin-top: 4px; display: inline-block;">Manage API key →</a>
+          <p class="offline-heading">Signed out</p>
+          <p class="offline-sub">Your session expired — sign in again to continue.</p>
+          <a class="btn-cloud-signin" href="https://www.transcribed.dev/auth/signin" target="_blank">
+            Sign in again →
+          </a>
         </div>
       </div>
 
@@ -89,7 +76,7 @@
     <!-- Not a supported page -->
     <div id="stateNotYoutube" class="state" hidden>
       <p class="message">Navigate to a video or podcast</p>
-      <p class="submessage">Open a YouTube video or Spotify episode to transcribe it</p>
+      <p class="submessage">Open a supported video or podcast to transcribe it</p>
     </div>
 
     <!-- Ready (not yet transcribed, or already transcribed) -->
@@ -161,17 +148,10 @@
           <button class="settings-mode-btn" id="btnModeLocal" data-mode="local">Self-hosted</button>
         </div>
       </div>
-      <div id="apiKeySection" class="settings-api-key" hidden>
-        <label class="settings-label" for="apiKeyInput">API Key</label>
-        <div class="settings-input-row">
-          <input type="password" id="apiKeyInput" class="settings-input" placeholder="ytt_sk_..." autocomplete="off" spellcheck="false" />
-          <button class="settings-test-btn" id="btnTestConnection">Test</button>
-        </div>
-        <div id="connectionStatus" class="settings-status" hidden></div>
-        <div class="settings-api-key-footer">
-          <a class="settings-help-link" href="https://www.transcribed.dev/developers#keys" target="_blank">Get an API key →</a>
-          <button class="btn-settings-save" id="btnSaveSettings">Save key</button>
-        </div>
+      <div id="cloudAccountSection" class="settings-account" hidden>
+        <a class="settings-account-link" href="https://www.transcribed.dev/account" target="_blank">
+          Manage account at transcribed.dev →
+        </a>
       </div>
     </div>
 
