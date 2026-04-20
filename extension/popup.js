@@ -50,6 +50,11 @@ const el = {
   destinationsSection: document.getElementById("destinationsSection"),
   destinationsList: document.getElementById("destinationsList"),
   destinationsEmpty: document.getElementById("destinationsEmpty"),
+  obsidianVaultRow: document.getElementById("obsidianVaultRow"),
+  obsidianVaultInput: document.getElementById("obsidianVaultInput"),
+  obsidianVaultSaved: document.getElementById("obsidianVaultSaved"),
+  obsidianAdvUriRow: document.getElementById("obsidianAdvUriRow"),
+  obsidianAdvUriInput: document.getElementById("obsidianAdvUriInput"),
 };
 
 let pageInfo = null;
@@ -465,6 +470,19 @@ async function renderDestinationsSettings() {
   for (const d of list) {
     el.destinationsList.appendChild(buildDestinationRow(d));
   }
+
+  // Show the Obsidian vault-name input whenever the Obsidian row is in the
+  // list. Obsidian is a client-side URL-scheme adapter — "connection" is
+  // just a stored vault name, no OAuth.
+  const hasObsidian = list.some((d) => d.adapterId === "obsidian-scheme");
+  el.obsidianVaultRow.hidden = !hasObsidian;
+  el.obsidianAdvUriRow.hidden = !hasObsidian;
+  if (hasObsidian) {
+    const { obsidianVaultName, obsidianUseAdvancedUri } =
+      await chrome.storage.sync.get(["obsidianVaultName", "obsidianUseAdvancedUri"]);
+    el.obsidianVaultInput.value = obsidianVaultName || "";
+    el.obsidianAdvUriInput.checked = !!obsidianUseAdvancedUri;
+  }
 }
 
 function buildDestinationRow(d) {
@@ -650,6 +668,30 @@ async function toggleRowActionsMenu(wrapper, transcriptId, videoTitle) {
             transcriptId,
             destinationName: d.name || d.adapterId,
           });
+          // Obsidian: popup writes clipboard (service worker can't) and
+          // opens the scheme URL. Background returned the payload without
+          // doing either. See buildObsidianSend.
+          if (
+            d.adapterId === "obsidian-scheme" &&
+            res?.success &&
+            res.data?.ok &&
+            res.data.data?.schemeUrl
+          ) {
+            const payload = res.data.data;
+            if (payload.clipboardText) {
+              try {
+                await navigator.clipboard.writeText(payload.clipboardText);
+              } catch {
+                // Clipboard blocked — user will see an empty note but the
+                // toast already told them to paste. No hard failure.
+              }
+            }
+            try {
+              chrome.tabs.create({ url: payload.schemeUrl, active: true });
+            } catch {
+              // tabs.create fails silently in some extension contexts.
+            }
+          }
           closeRowActionsMenu();
           if (!res?.success || !res.data?.ok) {
             // Background already toasted unless unavailable/authError.
@@ -1543,6 +1585,37 @@ function setModeUI(mode) {
     el.destinationsSection.hidden = true;
   }
 }
+
+// Obsidian vault name — saved on every keystroke (debounced) to
+// chrome.storage.sync. Used when sending to Obsidian.
+let obsidianVaultSaveTimer = null;
+function saveObsidianVaultName() {
+  const value = el.obsidianVaultInput.value.trim();
+  if (obsidianVaultSaveTimer) clearTimeout(obsidianVaultSaveTimer);
+  obsidianVaultSaveTimer = setTimeout(async () => {
+    await chrome.storage.sync.set({ obsidianVaultName: value });
+    el.obsidianVaultSaved.hidden = false;
+    el.obsidianVaultSaved.classList.add("show");
+    setTimeout(() => {
+      el.obsidianVaultSaved.classList.remove("show");
+      setTimeout(() => { el.obsidianVaultSaved.hidden = true; }, 300);
+    }, 1200);
+  }, 350);
+}
+el.obsidianVaultInput.addEventListener("input", saveObsidianVaultName);
+el.obsidianVaultInput.addEventListener("blur", () => {
+  if (obsidianVaultSaveTimer) {
+    clearTimeout(obsidianVaultSaveTimer);
+    obsidianVaultSaveTimer = null;
+  }
+  saveObsidianVaultName();
+});
+
+el.obsidianAdvUriInput.addEventListener("change", async () => {
+  await chrome.storage.sync.set({
+    obsidianUseAdvancedUri: !!el.obsidianAdvUriInput.checked,
+  });
+});
 
 el.btnModeLocal.addEventListener("click", async () => {
   destinationsCache = null;

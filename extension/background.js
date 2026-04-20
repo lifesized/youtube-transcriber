@@ -488,6 +488,177 @@ async function disconnectDestination(adapterId) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Obsidian — client-side adapter. No cloud, no OAuth. The extension builds an
+// obsidian:// URL from the user's vault name + the transcript and hands it
+// off to the OS, which launches Obsidian to create the note. Works across
+// Mac/Linux/Windows — the extension code is identical, Obsidian's installer
+// registers the URL scheme per platform.
+//
+// URL content length is capped around 30 KB for the `content=` param before
+// running into kernel argv / browser URL limits. Long transcripts fall back
+// to a clipboard-based flow: open an empty note, paste with ⌘V.
+// ---------------------------------------------------------------------------
+
+const OBSIDIAN_CONTENT_URL_CAP = 30 * 1024; // encoded chars, leave headroom
+
+// Break segments into paragraphs so the note is readable rather than a
+// single wall of text. Heuristics (first match wins):
+//   1. Speaker change — prepend **Speaker:** label, start a new paragraph
+//   2. Time gap > ~30s since the current paragraph began (if timestamps
+//      exist) — start a new paragraph
+//   3. Fallback cap of 8 segments per paragraph so untimed captions still
+//      get broken up
+function segmentsToMarkdown(segments) {
+  if (!Array.isArray(segments) || segments.length === 0) return "";
+
+  const PARAGRAPH_TIME_SECS = 30;
+  const PARAGRAPH_SEGMENT_CAP = 8;
+  const paragraphs = [];
+  let current = [];
+  let currentStart = null;
+  let lastSpeaker = null;
+
+  const flush = () => {
+    if (current.length > 0) {
+      paragraphs.push(current.join(" ").trim());
+      current = [];
+      currentStart = null;
+    }
+  };
+
+  for (const s of segments) {
+    const text = (s && typeof s.text === "string" ? s.text : "").trim();
+    if (!text) continue;
+
+    const start = typeof s.start === "number" ? s.start : null;
+    const speakerChanged = s.speaker && s.speaker !== lastSpeaker;
+    const timeGap =
+      currentStart !== null &&
+      start !== null &&
+      start - currentStart > PARAGRAPH_TIME_SECS;
+    const segmentCapHit = current.length >= PARAGRAPH_SEGMENT_CAP;
+
+    if (current.length > 0 && (speakerChanged || timeGap || segmentCapHit)) {
+      flush();
+    }
+
+    if (currentStart === null) currentStart = start;
+
+    const prefixed = speakerChanged && s.speaker
+      ? `**${s.speaker}:** ${text}`
+      : text;
+    current.push(prefixed);
+    if (s.speaker) lastSpeaker = s.speaker;
+  }
+  flush();
+
+  return paragraphs.join("\n\n");
+}
+
+function buildObsidianMarkdown(transcript) {
+  let segments = [];
+  try {
+    segments = JSON.parse(transcript.transcript || "[]");
+  } catch {
+    segments = [];
+  }
+  const body = segmentsToMarkdown(segments);
+  // Drop the H1 — Obsidian already shows the filename in the tab bar, so
+  // repeating it inside the note is noise.
+  const meta = [];
+  if (transcript.author) meta.push(`**By:** ${transcript.author}`);
+  if (transcript.videoUrl) meta.push(`**Source:** ${transcript.videoUrl}`);
+  if (transcript.createdAt) {
+    const d = new Date(transcript.createdAt);
+    if (!Number.isNaN(d.getTime())) {
+      meta.push(`**Captured:** ${d.toISOString().slice(0, 10)}`);
+    }
+  }
+  return meta.length ? `${meta.join("\n")}\n\n${body}` : body;
+}
+
+async function buildObsidianSend(transcriptId) {
+  const { obsidianVaultName, obsidianUseAdvancedUri } =
+    await chrome.storage.sync.get([
+      "obsidianVaultName",
+      "obsidianUseAdvancedUri",
+    ]);
+  const vault = (obsidianVaultName || "").trim();
+  if (!vault) {
+    return {
+      ok: false,
+      error: "Set your Obsidian vault name in Settings first",
+      needsVaultName: true,
+    };
+  }
+
+  let transcript;
+  try {
+    transcript = await getTranscript(transcriptId);
+  } catch (err) {
+    return { ok: false, error: err.message || "Couldn't load transcript" };
+  }
+
+  const markdown = buildObsidianMarkdown(transcript);
+  // Strip filesystem-illegal characters. `\ / :` are rejected on macOS/Linux;
+  // `| ? " < > *` are additionally rejected on Windows. Obsidian enforces the
+  // cross-platform union so a note typed in on Mac syncs to a Windows client.
+  const fileName = (transcript.title || "Transcript")
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120) || "Transcript";
+
+  const encodedContent = encodeURIComponent(markdown);
+  const shortFits = encodedContent.length <= OBSIDIAN_CONTENT_URL_CAP;
+
+  // Advanced URI plugin path — user opted in, meaning they've installed the
+  // community plugin `obsidian-advanced-uri`. Its `clipboard=true&mode=new`
+  // combo makes Obsidian auto-paste the clipboard into the new note, so the
+  // user never has to press ⌘V.
+  if (obsidianUseAdvancedUri) {
+    const advFilePath = encodeURIComponent(`${fileName}.md`);
+    const advParams = `vault=${encodeURIComponent(vault)}&filepath=${advFilePath}`;
+    if (shortFits) {
+      return {
+        ok: true,
+        data: {
+          schemeUrl: `obsidian://adv-uri?${advParams}&data=${encodedContent}&mode=new`,
+        },
+      };
+    }
+    return {
+      ok: true,
+      data: {
+        schemeUrl: `obsidian://adv-uri?${advParams}&clipboard=true&mode=new`,
+        clipboardText: markdown,
+        autoPaste: true,
+      },
+    };
+  }
+
+  // Default `obsidian://new` path. No plugin required, but long transcripts
+  // need the user to ⌘V inside Obsidian.
+  const baseParams = `vault=${encodeURIComponent(vault)}&name=${encodeURIComponent(fileName)}`;
+  if (shortFits) {
+    return {
+      ok: true,
+      data: {
+        schemeUrl: `obsidian://new?${baseParams}&content=${encodedContent}`,
+      },
+    };
+  }
+  return {
+    ok: true,
+    data: {
+      schemeUrl: `obsidian://new?${baseParams}`,
+      clipboardText: markdown,
+      pasteHint: true,
+    },
+  };
+}
+
 async function sendToDestination(adapterId, transcriptId, opts) {
   const res = await destinationsFetch("/send", {
     method: "POST",
@@ -824,6 +995,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "SEND_TO_DESTINATION": {
         if (!validAdapterId(message.adapterId)) throw new Error("Invalid adapterId");
         if (!validId(message.transcriptId)) throw new Error("Invalid transcriptId");
+
+        // Obsidian is a client-side URL-scheme adapter. Build the payload
+        // here but let the popup handle clipboard write + tab open because
+        // service workers can't write the clipboard.
+        if (message.adapterId === "obsidian-scheme") {
+          const res = await buildObsidianSend(message.transcriptId);
+          if (res.ok) {
+            showToast({
+              title: "Sent to Obsidian",
+              message: res.data.pasteHint
+                ? "Paste in Obsidian with ⌘V"
+                : "Note created in your vault",
+              kind: "info",
+            });
+          } else {
+            showToast({
+              title: "Send failed",
+              message: res.error || "Couldn't send to Obsidian",
+              kind: "error",
+            });
+          }
+          return res;
+        }
+
         const res = await sendToDestination(
           message.adapterId,
           message.transcriptId,

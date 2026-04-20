@@ -1012,6 +1012,86 @@ body::-webkit-scrollbar-thumb:hover {
   display: none;
 }
 
+/* Obsidian vault name input — client-side adapter config. Shown under the
+   destinations list when the Obsidian row is present. */
+.obsidian-vault-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  margin-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+.obsidian-vault-row[hidden] {
+  display: none;
+}
+.obsidian-vault-label {
+  font-size: 11px;
+  color: var(--muted-3);
+  flex-shrink: 0;
+}
+.obsidian-vault-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+}
+.obsidian-vault-input:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+}
+.obsidian-vault-input::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+}
+.obsidian-vault-saved {
+  font-size: 10px;
+  color: #22c55e;
+  opacity: 0;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+.obsidian-vault-saved.show {
+  opacity: 1;
+}
+.obsidian-vault-saved[hidden] {
+  display: none;
+}
+
+/* Advanced URI plugin opt-in — user installs the plugin in Obsidian, then
+   toggles this to get auto-paste instead of ⌘V. */
+.obsidian-advuri-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 10px;
+  cursor: pointer;
+  user-select: none;
+}
+.obsidian-advuri-row[hidden] {
+  display: none;
+}
+.obsidian-advuri-input {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  margin: 0;
+}
+.obsidian-advuri-text {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+}
+.obsidian-advuri-sub {
+  color: var(--muted-3);
+}
+
 /* Per-row ⋯ actions menu on recent transcripts. Uses the same hover-reveal
    + fixed-positioned portal pattern as .recent-summarize-menu so it escapes
    the recent-list scroll clip. */
