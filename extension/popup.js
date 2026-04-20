@@ -47,6 +47,14 @@ const el = {
   btnModeLocal: document.getElementById("btnModeLocal"),
   btnModeCloud: document.getElementById("btnModeCloud"),
   cloudAccountSection: document.getElementById("cloudAccountSection"),
+  destinationsSection: document.getElementById("destinationsSection"),
+  destinationsList: document.getElementById("destinationsList"),
+  destinationsEmpty: document.getElementById("destinationsEmpty"),
+  obsidianVaultRow: document.getElementById("obsidianVaultRow"),
+  obsidianVaultInput: document.getElementById("obsidianVaultInput"),
+  obsidianVaultSaved: document.getElementById("obsidianVaultSaved"),
+  obsidianAdvUriRow: document.getElementById("obsidianAdvUriRow"),
+  obsidianAdvUriInput: document.getElementById("obsidianAdvUriInput"),
 };
 
 let pageInfo = null;
@@ -387,6 +395,541 @@ async function launchWithProvider(provider, transcriptId, videoTitle) {
 }
 
 // ---------------------------------------------------------------------------
+// Destinations (YTT-205 §2) — cloud-hosted adapter registry per YTT-211.
+// Extension surfaces: settings list (connect/disconnect) and a per-row
+// ⋯ menu (send-to connected destinations). The extension does zero adapter
+// work — cloud handles OAuth + token storage + the send() call.
+// ---------------------------------------------------------------------------
+
+// Cached destination list so the ⋯ menu can render without hitting the
+// network on every open. Refreshed when the settings panel loads and after
+// OAuth completes.
+let destinationsCache = null;
+let destinationsLoading = false;
+
+// Client-side adapters — available in any mode, no cloud account required.
+// Obsidian's "connected" state is derived from whether the user has saved
+// a vault name, not from any server call.
+const CLIENT_SIDE_ADAPTERS = [
+  { adapterId: "obsidian-scheme", name: "Obsidian", icon: "", clientSide: true },
+];
+
+// Cloud-only teasers — shown when the user is in local mode or signed out,
+// so they can still see what they'd unlock with a cloud account. Renders
+// with a "Sign in" CTA instead of Connect.
+const CLOUD_TEASER_ADAPTERS = [
+  { adapterId: "notion", name: "Notion", icon: "", cloudOnly: true },
+];
+
+async function fetchDestinations() {
+  if (destinationsLoading) return destinationsCache;
+  destinationsLoading = true;
+  try {
+    const { obsidianVaultName } = await chrome.storage.sync.get(
+      "obsidianVaultName"
+    );
+    const clientSide = CLIENT_SIDE_ADAPTERS.map((d) => {
+      if (d.adapterId === "obsidian-scheme") {
+        return { ...d, connected: !!(obsidianVaultName || "").trim() };
+      }
+      return { ...d, connected: false };
+    });
+
+    const settingsRes = await sendMsg({ type: "GET_SETTINGS" });
+    const mode = settingsRes?.data?.mode || "cloud";
+
+    let cloudAdapters;
+    let cloudReady = false;
+    if (mode === "cloud") {
+      const res = await sendMsg({ type: "LIST_DESTINATIONS" });
+      if (res?.success && res.data?.ok) {
+        // Drop Obsidian if the cloud list includes it — the client-side
+        // entry is authoritative.
+        cloudAdapters = (res.data.destinations || []).filter(
+          (d) => d.adapterId !== "obsidian-scheme"
+        );
+        cloudReady = true;
+      } else {
+        // 401 / 404 / 501 — unavailable or not signed in. Show teasers so
+        // the user still sees the cloud upsell instead of an empty list.
+        cloudAdapters = CLOUD_TEASER_ADAPTERS;
+      }
+    } else {
+      // Local mode — cloud adapters aren't reachable, but show teasers.
+      cloudAdapters = CLOUD_TEASER_ADAPTERS;
+    }
+
+    destinationsCache = {
+      ok: true,
+      cloudReady,
+      destinations: [...clientSide, ...cloudAdapters],
+    };
+    return destinationsCache;
+  } finally {
+    destinationsLoading = false;
+  }
+}
+
+function connectedDestinations() {
+  // Exclude needsReauth — sending would hit expired tokens and 401 upstream.
+  // Users reconnect via Settings, where the row still renders with Reconnect.
+  return (destinationsCache?.destinations || []).filter(
+    (d) => d.connected && !d.needsReauth
+  );
+}
+
+async function renderDestinationsSettings() {
+  // Destinations always visible — Obsidian works in any mode (client-side
+  // URL scheme), and cloud-only adapters render as "Sign in" teasers when
+  // not reachable. The only state where the section is empty is if we
+  // somehow have zero adapters total, which shouldn't happen.
+  el.destinationsSection.hidden = false;
+  el.destinationsList.innerHTML = "";
+  el.destinationsEmpty.hidden = true;
+
+  const res = await fetchDestinations();
+  const list = res.destinations || [];
+
+  if (!list.length) {
+    el.destinationsEmpty.hidden = false;
+    el.destinationsEmpty.textContent = "No destinations available.";
+    return;
+  }
+
+  for (const d of list) {
+    el.destinationsList.appendChild(buildDestinationRow(d, res.cloudReady));
+  }
+
+  // Obsidian inputs always visible since Obsidian is always in the list.
+  el.obsidianVaultRow.hidden = false;
+  el.obsidianAdvUriRow.hidden = false;
+  const { obsidianVaultName, obsidianUseAdvancedUri } =
+    await chrome.storage.sync.get(["obsidianVaultName", "obsidianUseAdvancedUri"]);
+  el.obsidianVaultInput.value = obsidianVaultName || "";
+  el.obsidianAdvUriInput.checked = !!obsidianUseAdvancedUri;
+}
+
+function buildDestinationRow(d, cloudReady) {
+  const row = document.createElement("div");
+  row.className = "destinations-row";
+
+  const icon = document.createElement("span");
+  icon.className = "destinations-row-icon";
+  if (d.icon && typeof d.icon === "string") {
+    // Trust cloud to supply a safe URL; never inject HTML.
+    const img = document.createElement("img");
+    img.src = d.icon;
+    img.alt = "";
+    icon.appendChild(img);
+  }
+
+  const text = document.createElement("div");
+  text.className = "destinations-row-text";
+  const name = document.createElement("span");
+  name.className = "destinations-row-name";
+  name.textContent = d.name || d.adapterId;
+  const status = document.createElement("span");
+  status.className = "destinations-row-status";
+  text.appendChild(name);
+  text.appendChild(status);
+
+  let actionEl;
+
+  if (d.clientSide) {
+    // Client-side adapter (Obsidian). "Connected" = local config saved.
+    // Connect focuses the vault-name input below; Disconnect clears it.
+    if (d.connected) {
+      status.classList.add("connected");
+      status.textContent = "Connected";
+      actionEl = document.createElement("button");
+      actionEl.type = "button";
+      actionEl.className = "destinations-row-action danger";
+      actionEl.textContent = "Disconnect";
+      actionEl.addEventListener("click", async () => {
+        if (d.adapterId === "obsidian-scheme") {
+          await chrome.storage.sync.remove("obsidianVaultName");
+          el.obsidianVaultInput.value = "";
+          destinationsCache = null;
+          renderDestinationsSettings();
+        }
+      });
+    } else {
+      status.textContent = "Add vault name below";
+      actionEl = document.createElement("button");
+      actionEl.type = "button";
+      actionEl.className = "destinations-row-action";
+      actionEl.textContent = "Connect";
+      actionEl.addEventListener("click", () => {
+        el.obsidianVaultInput.focus();
+        el.obsidianVaultInput.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      });
+    }
+  } else if (d.cloudOnly && !cloudReady) {
+    // Cloud adapter, but the user isn't cloud-ready — either they're in
+    // local mode or signed out. Render as a teaser that routes to sign in.
+    status.textContent = "Requires transcribed.dev account";
+    actionEl = document.createElement("a");
+    actionEl.href = "https://www.transcribed.dev/auth/signin";
+    actionEl.target = "_blank";
+    actionEl.className = "destinations-row-action";
+    actionEl.textContent = "Sign in";
+  } else {
+    // Cloud adapter, cloud is reachable. Standard Connect/Disconnect flow.
+    if (d.connected && d.needsReauth) {
+      status.classList.add("needs-reauth");
+      status.textContent = "Reconnect needed";
+      actionEl = document.createElement("button");
+      actionEl.type = "button";
+      actionEl.className = "destinations-row-action";
+      actionEl.textContent = "Reconnect";
+      actionEl.addEventListener("click", () =>
+        handleConnect(d.adapterId, actionEl)
+      );
+    } else if (d.connected) {
+      status.classList.add("connected");
+      status.textContent = "Connected";
+      actionEl = document.createElement("button");
+      actionEl.type = "button";
+      actionEl.className = "destinations-row-action danger";
+      actionEl.textContent = "Disconnect";
+      actionEl.addEventListener("click", () =>
+        handleDisconnect(d.adapterId, actionEl)
+      );
+    } else {
+      status.textContent = "Not connected";
+      actionEl = document.createElement("button");
+      actionEl.type = "button";
+      actionEl.className = "destinations-row-action";
+      actionEl.textContent = "Connect";
+      actionEl.addEventListener("click", () =>
+        handleConnect(d.adapterId, actionEl)
+      );
+    }
+  }
+
+  row.appendChild(icon);
+  row.appendChild(text);
+  row.appendChild(actionEl);
+  return row;
+}
+
+async function handleConnect(adapterId, btn) {
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = "Opening…";
+  const res = await sendMsg({ type: "START_DESTINATION_OAUTH", adapterId });
+  btn.disabled = false;
+  btn.textContent = label;
+  if (!res?.success || !res.data?.ok) {
+    const err = res?.data?.error || res?.error || "Couldn't start connection";
+    btn.textContent = "Retry";
+    console.warn("Connect failed:", err);
+    return;
+  }
+  // Poll for connection flip — user completes OAuth in the opened tab.
+  pollForConnection(adapterId);
+}
+
+async function handleDisconnect(adapterId, btn) {
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = "Disconnecting…";
+  const res = await sendMsg({ type: "DISCONNECT_DESTINATION", adapterId });
+  btn.disabled = false;
+  btn.textContent = label;
+  if (!res?.success || !res.data?.ok) {
+    btn.textContent = "Retry";
+    return;
+  }
+  destinationsCache = null;
+  renderDestinationsSettings();
+}
+
+async function pollForConnection(adapterId) {
+  const start = Date.now();
+  const deadline = start + 2 * 60 * 1000; // 2 min
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 2500));
+    destinationsCache = null;
+    const res = await fetchDestinations();
+    const match = (res.destinations || []).find((d) => d.adapterId === adapterId);
+    if (match?.connected && !match.needsReauth) {
+      renderDestinationsSettings();
+      return;
+    }
+    // If the settings panel is no longer visible, stop polling — user left.
+    if (el.settingsPanel.hidden) return;
+  }
+  // Timed out silently; next settings-panel open will refetch.
+}
+
+// ---------------------------------------------------------------------------
+// Per-row ⋯ menu on recent transcripts (YTT-205 §3). Items:
+//   - Send to <connected destination>  (one per connected adapter)
+//   - ——
+//   - Open in web app
+//   - Copy link
+// Mirrors the portal-to-body / fixed-position pattern of .recent-summarize.
+// ---------------------------------------------------------------------------
+
+let rowActionsOpen = null;
+
+function closeRowActionsMenu() {
+  if (rowActionsOpen) {
+    if (typeof rowActionsOpen._cleanup === "function") rowActionsOpen._cleanup();
+    if (rowActionsOpen._wrapper) rowActionsOpen._wrapper.classList.remove("open");
+    rowActionsOpen.remove();
+    rowActionsOpen = null;
+    document.removeEventListener("mousedown", onOutsideRowActionsClick, true);
+  }
+}
+
+function onOutsideRowActionsClick(e) {
+  if (rowActionsOpen && !rowActionsOpen.contains(e.target)) {
+    if (!(e.target.closest && e.target.closest(".row-actions-btn"))) {
+      closeRowActionsMenu();
+    }
+  }
+}
+
+function buildRowActionsMenu(transcriptId, videoTitle) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "row-actions";
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "row-actions-btn";
+  btn.title = "More actions";
+  btn.setAttribute("aria-label", "More actions");
+  btn.innerHTML = `
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <circle cx="4" cy="10" r="1.6"/>
+      <circle cx="10" cy="10" r="1.6"/>
+      <circle cx="16" cy="10" r="1.6"/>
+    </svg>
+  `;
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleRowActionsMenu(wrapper, transcriptId, videoTitle);
+  });
+  wrapper.appendChild(btn);
+  return wrapper;
+}
+
+async function toggleRowActionsMenu(wrapper, transcriptId, videoTitle) {
+  if (rowActionsOpen && rowActionsOpen._wrapper === wrapper) {
+    closeRowActionsMenu();
+    return;
+  }
+  closeRowActionsMenu();
+
+  // Kick off a refresh so the menu reflects connection changes while the
+  // side panel has been open.
+  fetchDestinations();
+
+  const menu = document.createElement("div");
+  menu.className = "row-actions-menu";
+
+  const connected = connectedDestinations();
+
+  if (connected.length > 0) {
+    for (const d of connected) {
+      menu.appendChild(
+        buildRowActionItem(d.name || d.adapterId, iconFor(d), async (item) => {
+          item.setAttribute("data-sending", "true");
+          item.disabled = true;
+          const res = await sendMsg({
+            type: "SEND_TO_DESTINATION",
+            adapterId: d.adapterId,
+            transcriptId,
+            destinationName: d.name || d.adapterId,
+          });
+          // Obsidian: popup writes clipboard (service worker can't) and
+          // opens the scheme URL. Background returned the payload without
+          // doing either. See buildObsidianSend.
+          if (
+            d.adapterId === "obsidian-scheme" &&
+            res?.success &&
+            res.data?.ok &&
+            res.data.data?.schemeUrl
+          ) {
+            const payload = res.data.data;
+            if (payload.clipboardText) {
+              try {
+                await navigator.clipboard.writeText(payload.clipboardText);
+              } catch {
+                // Clipboard blocked — user will see an empty note but the
+                // toast already told them to paste. No hard failure.
+              }
+            }
+            try {
+              chrome.tabs.create({ url: payload.schemeUrl, active: true });
+            } catch {
+              // tabs.create fails silently in some extension contexts.
+            }
+          }
+          closeRowActionsMenu();
+          if (!res?.success || !res.data?.ok) {
+            // Background already toasted unless unavailable/authError.
+            if (res?.data?.unavailable || res?.data?.authError) {
+              console.warn(
+                "Destination unavailable:",
+                res?.data?.error || res?.error
+              );
+            }
+          }
+        })
+      );
+    }
+    menu.appendChild(separator());
+  }
+
+  menu.appendChild(
+    buildRowActionItem("Open in web app", openIcon(), async () => {
+      closeRowActionsMenu();
+      await sendMsg({ type: "OPEN_TRANSCRIPT", id: transcriptId });
+    })
+  );
+
+  menu.appendChild(
+    buildRowActionItem("Copy link", copyIcon(), async (item) => {
+      const url = await buildTranscriptUrl(transcriptId);
+      try {
+        await navigator.clipboard.writeText(url);
+        item.querySelector(".row-actions-menu-name").textContent = "Copied!";
+        setTimeout(() => closeRowActionsMenu(), 600);
+      } catch {
+        closeRowActionsMenu();
+      }
+    })
+  );
+
+  if (connected.length === 0) {
+    const note = document.createElement("div");
+    note.className = "row-actions-menu-empty";
+    note.textContent = "Connect a destination in Settings to send";
+    menu.appendChild(separator());
+    menu.appendChild(note);
+  }
+
+  menu.addEventListener("click", (e) => e.stopPropagation());
+  document.body.appendChild(menu);
+  wrapper.classList.add("open");
+  rowActionsOpen = menu;
+  rowActionsOpen._wrapper = wrapper;
+  positionRowActionsMenu(wrapper, menu);
+
+  const reposition = () => {
+    if (rowActionsOpen === menu) positionRowActionsMenu(wrapper, menu);
+  };
+  window.addEventListener("scroll", reposition, true);
+  window.addEventListener("resize", reposition);
+  menu._cleanup = () => {
+    window.removeEventListener("scroll", reposition, true);
+    window.removeEventListener("resize", reposition);
+  };
+
+  setTimeout(() => {
+    document.addEventListener("mousedown", onOutsideRowActionsClick, true);
+  }, 0);
+}
+
+function buildRowActionItem(label, iconHtml, onClick) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "row-actions-menu-item";
+  btn.innerHTML = `
+    <span class="row-actions-menu-icon">${iconHtml || ""}</span>
+    <span class="row-actions-menu-name"></span>
+  `;
+  btn.querySelector(".row-actions-menu-name").textContent = label;
+  btn.addEventListener("click", () => onClick(btn));
+  return btn;
+}
+
+function separator() {
+  const s = document.createElement("div");
+  s.className = "row-actions-menu-separator";
+  return s;
+}
+
+function positionRowActionsMenu(wrapper, menu) {
+  const btn = wrapper.querySelector(".row-actions-btn");
+  if (!btn) return;
+  const rect = btn.getBoundingClientRect();
+  const menuWidth = menu.offsetWidth || 200;
+  const menuHeight = menu.offsetHeight || 100;
+  const margin = 8;
+
+  let left = rect.right - menuWidth;
+  if (left < margin) left = margin;
+  if (left + menuWidth > window.innerWidth - margin) {
+    left = window.innerWidth - menuWidth - margin;
+  }
+
+  let top = rect.bottom + 6;
+  if (top + menuHeight > window.innerHeight - margin) {
+    top = rect.top - menuHeight - 6;
+  }
+
+  menu.style.top = `${top}px`;
+  menu.style.left = `${left}px`;
+}
+
+async function buildTranscriptUrl(id) {
+  const cfgRes = await sendMsg({ type: "GET_SETTINGS" });
+  const mode = cfgRes?.data?.mode || "cloud";
+  const base = mode === "cloud"
+    ? "https://www.transcribed.dev"
+    : "http://localhost:19720";
+  return `${base}/?layout=list&id=${encodeURIComponent(id)}`;
+}
+
+function iconFor(d) {
+  if (d.icon && typeof d.icon === "string") {
+    return `<img src="${escapeAttr(d.icon)}" alt="" />`;
+  }
+  // Default destination icon — generic send/arrow glyph.
+  return `
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor"
+         stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 10l14-6-6 14-2-6-6-2z"/>
+    </svg>
+  `;
+}
+
+function openIcon() {
+  return `
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor"
+         stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M11 3h6v6M17 3l-8 8M8 4H5a2 2 0 00-2 2v9a2 2 0 002 2h9a2 2 0 002-2v-3"/>
+    </svg>
+  `;
+}
+
+function copyIcon() {
+  return `
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor"
+         stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="7" y="7" width="10" height="10" rx="2"/>
+      <path d="M13 7V5a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2"/>
+    </svg>
+  `;
+}
+
+function escapeAttr(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -597,6 +1140,8 @@ async function loadRecent() {
     `;
     // Summarize-with-LLM button — hover-reveal per row, mirrors web-app LlmLauncher
     item.appendChild(buildLlmLauncher(t.id, t.title));
+    // ⋯ menu — send to destinations, open in web app, copy link (YTT-205 §3)
+    item.appendChild(buildRowActionsMenu(t.id, t.title));
     el.recentList.appendChild(item);
 
     // Two-phase animation: visual fade, then smooth spatial collapse
@@ -818,6 +1363,10 @@ async function init() {
   stopOfflinePolling();
 
   startHeartbeat();
+
+  // Warm the destinations cache so the ⋯ menu renders instantly.
+  // Always — Obsidian is available in local mode too.
+  fetchDestinations();
 
   // 2. Show page state
   showCurrentPageState();
@@ -1058,6 +1607,8 @@ chrome.tabs.onUpdated?.addListener((tabId, changeInfo) => {
 let currentSettingsMode = "cloud";
 
 function showSettingsView() {
+  closeLlmDropdown();
+  closeRowActionsMenu();
   for (const s of ALL_STATES) {
     const elem = el[`state${s}`];
     if (elem) elem.hidden = true;
@@ -1105,14 +1656,50 @@ function setModeUI(mode) {
   el.btnModeLocal.classList.toggle("active", mode === "local");
   el.btnModeCloud.classList.toggle("active", mode === "cloud");
   el.cloudAccountSection.hidden = mode !== "cloud";
+  // Destinations always render. Obsidian is client-side (works in any mode);
+  // cloud-only adapters show as teasers with a Sign in CTA in local mode.
+  renderDestinationsSettings();
 }
 
+// Obsidian vault name — saved on every keystroke (debounced) to
+// chrome.storage.sync. Used when sending to Obsidian.
+let obsidianVaultSaveTimer = null;
+function saveObsidianVaultName() {
+  const value = el.obsidianVaultInput.value.trim();
+  if (obsidianVaultSaveTimer) clearTimeout(obsidianVaultSaveTimer);
+  obsidianVaultSaveTimer = setTimeout(async () => {
+    await chrome.storage.sync.set({ obsidianVaultName: value });
+    el.obsidianVaultSaved.hidden = false;
+    el.obsidianVaultSaved.classList.add("show");
+    setTimeout(() => {
+      el.obsidianVaultSaved.classList.remove("show");
+      setTimeout(() => { el.obsidianVaultSaved.hidden = true; }, 300);
+    }, 1200);
+  }, 350);
+}
+el.obsidianVaultInput.addEventListener("input", saveObsidianVaultName);
+el.obsidianVaultInput.addEventListener("blur", () => {
+  if (obsidianVaultSaveTimer) {
+    clearTimeout(obsidianVaultSaveTimer);
+    obsidianVaultSaveTimer = null;
+  }
+  saveObsidianVaultName();
+});
+
+el.obsidianAdvUriInput.addEventListener("change", async () => {
+  await chrome.storage.sync.set({
+    obsidianUseAdvancedUri: !!el.obsidianAdvUriInput.checked,
+  });
+});
+
 el.btnModeLocal.addEventListener("click", async () => {
+  destinationsCache = null;
   setModeUI("local");
   await sendMsg({ type: "SAVE_SETTINGS", mode: "local" });
   init();
 });
 el.btnModeCloud.addEventListener("click", async () => {
+  destinationsCache = null;
   setModeUI("cloud");
   await sendMsg({ type: "SAVE_SETTINGS", mode: "cloud" });
   init();

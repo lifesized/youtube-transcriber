@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-04-20
+
+### Added
+- **Extension destination adapters — client scaffolding (YTT-205 §2)** — Settings panel gains a Destinations section for connecting / disconnecting cloud-hosted adapters (Notion, Obsidian, and future destinations). Each recent-transcript row gains a `⋯` menu with **Send to \<connected destination\>**, **Open in web app**, and **Copy link**. Success / failure surfaces as a `chrome.notifications` toast (falls back to a badge flash if the optional `notifications` permission is denied).
+- **New background message types** — `LIST_DESTINATIONS`, `START_DESTINATION_OAUTH`, `SEND_TO_DESTINATION`, `DISCONNECT_DESTINATION`. All route through the existing cloud session-cookie auth; the extension itself holds zero adapter code or OAuth secrets — it is a thin client.
+
+### Notes
+- The UI ships inert until the cloud-side registry + OAuth proxy (YTT-211) lands. When `/api/destinations/*` returns 404 or 501, the settings section shows "Destinations aren't available yet." and row menus gracefully hide destination items.
+- Obsidian adapter uses a URL scheme (`obsidian://new?…`); the scheme URL is built cloud-side for consistency and opened client-side via `chrome.tabs.create`.
+- Extension bumped to **1.6.0**.
+
 ## 2026-04-16
 
 ### Added
