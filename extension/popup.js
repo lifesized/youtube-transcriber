@@ -407,24 +407,63 @@ async function launchWithProvider(provider, transcriptId, videoTitle) {
 let destinationsCache = null;
 let destinationsLoading = false;
 
+// Client-side adapters — available in any mode, no cloud account required.
+// Obsidian's "connected" state is derived from whether the user has saved
+// a vault name, not from any server call.
+const CLIENT_SIDE_ADAPTERS = [
+  { adapterId: "obsidian-scheme", name: "Obsidian", icon: "", clientSide: true },
+];
+
+// Cloud-only teasers — shown when the user is in local mode or signed out,
+// so they can still see what they'd unlock with a cloud account. Renders
+// with a "Sign in" CTA instead of Connect.
+const CLOUD_TEASER_ADAPTERS = [
+  { adapterId: "notion", name: "Notion", icon: "", cloudOnly: true },
+];
+
 async function fetchDestinations() {
   if (destinationsLoading) return destinationsCache;
   destinationsLoading = true;
   try {
-    const res = await sendMsg({ type: "LIST_DESTINATIONS" });
-    if (res?.success && res.data?.ok) {
-      destinationsCache = {
-        ok: true,
-        destinations: res.data.destinations || [],
-      };
+    const { obsidianVaultName } = await chrome.storage.sync.get(
+      "obsidianVaultName"
+    );
+    const clientSide = CLIENT_SIDE_ADAPTERS.map((d) => {
+      if (d.adapterId === "obsidian-scheme") {
+        return { ...d, connected: !!(obsidianVaultName || "").trim() };
+      }
+      return { ...d, connected: false };
+    });
+
+    const settingsRes = await sendMsg({ type: "GET_SETTINGS" });
+    const mode = settingsRes?.data?.mode || "cloud";
+
+    let cloudAdapters;
+    let cloudReady = false;
+    if (mode === "cloud") {
+      const res = await sendMsg({ type: "LIST_DESTINATIONS" });
+      if (res?.success && res.data?.ok) {
+        // Drop Obsidian if the cloud list includes it — the client-side
+        // entry is authoritative.
+        cloudAdapters = (res.data.destinations || []).filter(
+          (d) => d.adapterId !== "obsidian-scheme"
+        );
+        cloudReady = true;
+      } else {
+        // 401 / 404 / 501 — unavailable or not signed in. Show teasers so
+        // the user still sees the cloud upsell instead of an empty list.
+        cloudAdapters = CLOUD_TEASER_ADAPTERS;
+      }
     } else {
-      destinationsCache = {
-        ok: false,
-        unavailable: !!res?.data?.unavailable,
-        authError: !!res?.data?.authError,
-        destinations: [],
-      };
+      // Local mode — cloud adapters aren't reachable, but show teasers.
+      cloudAdapters = CLOUD_TEASER_ADAPTERS;
     }
+
+    destinationsCache = {
+      ok: true,
+      cloudReady,
+      destinations: [...clientSide, ...cloudAdapters],
+    };
     return destinationsCache;
   } finally {
     destinationsLoading = false;
@@ -440,10 +479,10 @@ function connectedDestinations() {
 }
 
 async function renderDestinationsSettings() {
-  if (currentSettingsMode !== "cloud") {
-    el.destinationsSection.hidden = true;
-    return;
-  }
+  // Destinations always visible — Obsidian works in any mode (client-side
+  // URL scheme), and cloud-only adapters render as "Sign in" teasers when
+  // not reachable. The only state where the section is empty is if we
+  // somehow have zero adapters total, which shouldn't happen.
   el.destinationsSection.hidden = false;
   el.destinationsList.innerHTML = "";
   el.destinationsEmpty.hidden = true;
@@ -451,41 +490,26 @@ async function renderDestinationsSettings() {
   const res = await fetchDestinations();
   const list = res.destinations || [];
 
-  if (res.unavailable) {
-    el.destinationsEmpty.hidden = false;
-    el.destinationsEmpty.textContent = "Destinations aren't available yet.";
-    return;
-  }
-  if (res.authError) {
-    el.destinationsEmpty.hidden = false;
-    el.destinationsEmpty.textContent = "Sign in at transcribed.dev to manage destinations.";
-    return;
-  }
   if (!list.length) {
     el.destinationsEmpty.hidden = false;
-    el.destinationsEmpty.textContent = "No destinations available yet.";
+    el.destinationsEmpty.textContent = "No destinations available.";
     return;
   }
 
   for (const d of list) {
-    el.destinationsList.appendChild(buildDestinationRow(d));
+    el.destinationsList.appendChild(buildDestinationRow(d, res.cloudReady));
   }
 
-  // Show the Obsidian vault-name input whenever the Obsidian row is in the
-  // list. Obsidian is a client-side URL-scheme adapter — "connection" is
-  // just a stored vault name, no OAuth.
-  const hasObsidian = list.some((d) => d.adapterId === "obsidian-scheme");
-  el.obsidianVaultRow.hidden = !hasObsidian;
-  el.obsidianAdvUriRow.hidden = !hasObsidian;
-  if (hasObsidian) {
-    const { obsidianVaultName, obsidianUseAdvancedUri } =
-      await chrome.storage.sync.get(["obsidianVaultName", "obsidianUseAdvancedUri"]);
-    el.obsidianVaultInput.value = obsidianVaultName || "";
-    el.obsidianAdvUriInput.checked = !!obsidianUseAdvancedUri;
-  }
+  // Obsidian inputs always visible since Obsidian is always in the list.
+  el.obsidianVaultRow.hidden = false;
+  el.obsidianAdvUriRow.hidden = false;
+  const { obsidianVaultName, obsidianUseAdvancedUri } =
+    await chrome.storage.sync.get(["obsidianVaultName", "obsidianUseAdvancedUri"]);
+  el.obsidianVaultInput.value = obsidianVaultName || "";
+  el.obsidianAdvUriInput.checked = !!obsidianUseAdvancedUri;
 }
 
-function buildDestinationRow(d) {
+function buildDestinationRow(d, cloudReady) {
   const row = document.createElement("div");
   row.className = "destinations-row";
 
@@ -506,33 +530,89 @@ function buildDestinationRow(d) {
   name.textContent = d.name || d.adapterId;
   const status = document.createElement("span");
   status.className = "destinations-row-status";
-  if (d.connected && d.needsReauth) {
-    status.classList.add("needs-reauth");
-    status.textContent = "Reconnect needed";
-  } else if (d.connected) {
-    status.classList.add("connected");
-    status.textContent = "Connected";
-  } else {
-    status.textContent = "Not connected";
-  }
   text.appendChild(name);
   text.appendChild(status);
 
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "destinations-row-action";
-  if (d.connected && !d.needsReauth) {
-    btn.textContent = "Disconnect";
-    btn.classList.add("danger");
-    btn.addEventListener("click", () => handleDisconnect(d.adapterId, btn));
+  let actionEl;
+
+  if (d.clientSide) {
+    // Client-side adapter (Obsidian). "Connected" = local config saved.
+    // Connect focuses the vault-name input below; Disconnect clears it.
+    if (d.connected) {
+      status.classList.add("connected");
+      status.textContent = "Connected";
+      actionEl = document.createElement("button");
+      actionEl.type = "button";
+      actionEl.className = "destinations-row-action danger";
+      actionEl.textContent = "Disconnect";
+      actionEl.addEventListener("click", async () => {
+        if (d.adapterId === "obsidian-scheme") {
+          await chrome.storage.sync.remove("obsidianVaultName");
+          el.obsidianVaultInput.value = "";
+          destinationsCache = null;
+          renderDestinationsSettings();
+        }
+      });
+    } else {
+      status.textContent = "Add vault name below";
+      actionEl = document.createElement("button");
+      actionEl.type = "button";
+      actionEl.className = "destinations-row-action";
+      actionEl.textContent = "Connect";
+      actionEl.addEventListener("click", () => {
+        el.obsidianVaultInput.focus();
+        el.obsidianVaultInput.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      });
+    }
+  } else if (d.cloudOnly && !cloudReady) {
+    // Cloud adapter, but the user isn't cloud-ready — either they're in
+    // local mode or signed out. Render as a teaser that routes to sign in.
+    status.textContent = "Requires transcribed.dev account";
+    actionEl = document.createElement("a");
+    actionEl.href = "https://www.transcribed.dev/auth/signin";
+    actionEl.target = "_blank";
+    actionEl.className = "destinations-row-action";
+    actionEl.textContent = "Sign in";
   } else {
-    btn.textContent = d.needsReauth ? "Reconnect" : "Connect";
-    btn.addEventListener("click", () => handleConnect(d.adapterId, btn));
+    // Cloud adapter, cloud is reachable. Standard Connect/Disconnect flow.
+    if (d.connected && d.needsReauth) {
+      status.classList.add("needs-reauth");
+      status.textContent = "Reconnect needed";
+      actionEl = document.createElement("button");
+      actionEl.type = "button";
+      actionEl.className = "destinations-row-action";
+      actionEl.textContent = "Reconnect";
+      actionEl.addEventListener("click", () =>
+        handleConnect(d.adapterId, actionEl)
+      );
+    } else if (d.connected) {
+      status.classList.add("connected");
+      status.textContent = "Connected";
+      actionEl = document.createElement("button");
+      actionEl.type = "button";
+      actionEl.className = "destinations-row-action danger";
+      actionEl.textContent = "Disconnect";
+      actionEl.addEventListener("click", () =>
+        handleDisconnect(d.adapterId, actionEl)
+      );
+    } else {
+      status.textContent = "Not connected";
+      actionEl = document.createElement("button");
+      actionEl.type = "button";
+      actionEl.className = "destinations-row-action";
+      actionEl.textContent = "Connect";
+      actionEl.addEventListener("click", () =>
+        handleConnect(d.adapterId, actionEl)
+      );
+    }
   }
 
   row.appendChild(icon);
   row.appendChild(text);
-  row.appendChild(btn);
+  row.appendChild(actionEl);
   return row;
 }
 
@@ -1285,11 +1365,8 @@ async function init() {
   startHeartbeat();
 
   // Warm the destinations cache so the ⋯ menu renders instantly.
-  // Only in cloud mode — local mode has no destinations.
-  const settingsRes = await sendMsg({ type: "GET_SETTINGS" });
-  if (settingsRes?.data?.mode === "cloud") {
-    fetchDestinations();
-  }
+  // Always — Obsidian is available in local mode too.
+  fetchDestinations();
 
   // 2. Show page state
   showCurrentPageState();
@@ -1579,11 +1656,9 @@ function setModeUI(mode) {
   el.btnModeLocal.classList.toggle("active", mode === "local");
   el.btnModeCloud.classList.toggle("active", mode === "cloud");
   el.cloudAccountSection.hidden = mode !== "cloud";
-  if (mode === "cloud") {
-    renderDestinationsSettings();
-  } else {
-    el.destinationsSection.hidden = true;
-  }
+  // Destinations always render. Obsidian is client-side (works in any mode);
+  // cloud-only adapters show as teasers with a Sign in CTA in local mode.
+  renderDestinationsSettings();
 }
 
 // Obsidian vault name — saved on every keystroke (debounced) to
