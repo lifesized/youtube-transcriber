@@ -820,92 +820,70 @@ const INNERTUBE_ENABLED = process.env.YTT_INNERTUBE_ENABLED === "1";
 
 /**
  * Fetch time-coded transcript segments for a YouTube video.
- * Fallback chain:
- *   1. WEB page scrape (works for manually uploaded captions)
- *   2. yt-dlp subtitle download (handles auto-captions via PO tokens)
- *   3. [disabled] ANDROID / WEB InnerTube (broken without PO tokens since March 2026)
- *   4. Cloud Whisper / Local Whisper (universal audio transcription fallback)
+ * Caption methods race in parallel via Promise.any — fastest wins:
+ *   - WEB page scrape (works for manually uploaded captions)
+ *   - yt-dlp subtitle download (handles auto-captions via PO tokens)
+ *   - [disabled] ANDROID / WEB InnerTube (broken without PO tokens since March 2026)
+ * If all caption methods fail, fall back to Cloud Whisper / Local Whisper.
  */
 async function fetchTranscript(
   videoId: string,
   lang?: string
 ): Promise<{ segments: TranscriptSegment[]; source: string }> {
-  // 1. Web page scrape — works for videos with manually uploaded captions
+  type CaptionResult = { segments: TranscriptSegment[]; source: string };
+
   transcriptionProgress.emit("progress", {
     stage: "fetching_captions",
     progress: 5,
-    statusText: "Checking for YouTube captions...",
+    statusText: "Checking all YouTube caption sources...",
     videoId,
   });
-  try {
-    const segments = await fetchTranscriptWebFallback(videoId, lang);
-    return { segments, source: "youtube_captions" };
-  } catch (err) {
-    if (err instanceof NoCaptionsError) {
-      console.log(
-        `[transcript] No manual captions for ${videoId}, trying yt-dlp subtitles...`
-      );
-    } else {
-      console.log(
-        `[transcript] WEB scrape failed for ${videoId}: ${err instanceof Error ? err.message : err}. Trying yt-dlp subtitles...`
-      );
-    }
-  }
 
-  // 2. yt-dlp subtitle download — handles auto-generated captions via PO token ecosystem
-  transcriptionProgress.emit("progress", {
-    stage: "fetching_captions",
-    progress: 8,
-    statusText: "Trying yt-dlp subtitle download...",
-    videoId,
-  });
-  try {
-    const segments = await fetchSubtitlesViaYtdlp(videoId, lang);
-    return { segments, source: "youtube_captions_ytdlp" };
-  } catch (err) {
-    if (err instanceof NoCaptionsError) {
-      console.log(
-        `[transcript] No subtitles via yt-dlp for ${videoId}, falling back to audio transcription...`
-      );
-    } else {
-      console.log(
-        `[transcript] yt-dlp subtitles failed for ${videoId}: ${err instanceof Error ? err.message : err}`
-      );
-    }
-  }
+  const attempt = (
+    label: string,
+    source: string,
+    fn: () => Promise<TranscriptSegment[]>
+  ): Promise<CaptionResult> =>
+    fn().then(
+      (segments) => ({ segments, source }),
+      (err) => {
+        if (!(err instanceof NoCaptionsError)) {
+          console.log(
+            `[transcript] ${label} failed for ${videoId}: ${err instanceof Error ? err.message : err}`
+          );
+        }
+        throw err;
+      }
+    );
 
-  // 3. InnerTube methods — disabled by default (require PO tokens since March 2026)
+  const attempts: Promise<CaptionResult>[] = [
+    attempt("WEB scrape", "youtube_captions", () =>
+      fetchTranscriptWebFallback(videoId, lang)
+    ),
+    attempt("yt-dlp subtitles", "youtube_captions_ytdlp", () =>
+      fetchSubtitlesViaYtdlp(videoId, lang)
+    ),
+  ];
+
   if (INNERTUBE_ENABLED) {
-    try {
-      const segments = await fetchTranscriptAndroid(videoId, lang);
-      return { segments, source: "youtube_captions" };
-    } catch (err) {
-      if (err instanceof NoCaptionsError) {
-        return await transcribeAudioFallback(videoId);
-      }
-      console.log(
-        `[transcript] ANDROID client failed for ${videoId}: ${err instanceof Error ? err.message : err}`
-      );
-    }
-
-    try {
-      const segments = await fetchTranscriptWebClient(videoId, lang);
-      return { segments, source: "youtube_captions" };
-    } catch (err) {
-      if (err instanceof NoCaptionsError) {
-        return await transcribeAudioFallback(videoId);
-      }
-      console.log(
-        `[transcript] WEB InnerTube failed for ${videoId}: ${err instanceof Error ? err.message : err}`
-      );
-    }
+    attempts.push(
+      attempt("ANDROID client", "youtube_captions", () =>
+        fetchTranscriptAndroid(videoId, lang)
+      ),
+      attempt("WEB InnerTube", "youtube_captions", () =>
+        fetchTranscriptWebClient(videoId, lang)
+      )
+    );
   }
 
-  // 4. Audio transcription fallback (Whisper cloud/local)
-  console.log(
-    `[transcript] All caption methods failed for ${videoId}, falling back to audio transcription...`
-  );
-  return await transcribeAudioFallback(videoId);
+  try {
+    return await Promise.any(attempts);
+  } catch {
+    console.log(
+      `[transcript] All caption methods failed for ${videoId}, falling back to audio transcription...`
+    );
+    return await transcribeAudioFallback(videoId);
+  }
 }
 
 /**

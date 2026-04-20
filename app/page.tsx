@@ -96,12 +96,12 @@ interface MergedBlock {
 }
 
 /**
- * Merge short transcript segments into larger blocks (~30s each).
- * A new block starts when: the gap exceeds 30s, or the speaker changes.
+ * Merge short transcript segments into larger blocks (~40s each).
+ * A new block starts when: the gap exceeds 40s, or the speaker changes.
  */
 function mergeSegments(segments: TranscriptSegment[]): MergedBlock[] {
   if (segments.length === 0) return [];
-  const BLOCK_DURATION_MS = 10_000;
+  const BLOCK_DURATION_MS = 40_000;
   const blocks: MergedBlock[] = [];
   let current: MergedBlock = {
     startMs: segments[0].startMs,
