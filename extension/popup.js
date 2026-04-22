@@ -414,7 +414,7 @@ async function launchWithProvider(provider, transcriptId, videoTitle) {
     const maxLen = 6000;
     const safe = encoded.length > maxLen ? encoded.slice(0, maxLen) : encoded;
     const url = provider.urlTemplate.replace("{prompt}", safe);
-    chrome.tabs.create({ url, active: true });
+    await openNextToCurrentTab(url);
     return;
   }
 
@@ -427,7 +427,29 @@ async function launchWithProvider(provider, transcriptId, videoTitle) {
     // from the web app transcript page if needed.
   }
   if (provider.openUrl) {
-    chrome.tabs.create({ url: provider.openUrl, active: true });
+    await openNextToCurrentTab(provider.openUrl);
+  }
+}
+
+// Open a new tab immediately to the right of the currently active tab,
+// rather than appended at the end of the tab strip. The side panel isn't a
+// tab, so tabs.query({active:true}) returns the underlying page the user
+// clicked "summarize" from — that's the anchor we want the new tab next to.
+async function openNextToCurrentTab(url) {
+  try {
+    const [current] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    const opts = { url, active: true };
+    if (current) {
+      opts.index = current.index + 1;
+      opts.openerTabId = current.id;
+    }
+    await chrome.tabs.create(opts);
+  } catch {
+    // Fallback if tabs.query fails for any reason — just open at the end.
+    await chrome.tabs.create({ url, active: true });
   }
 }
 
@@ -460,7 +482,7 @@ async function tryLlmHandoff(provider, prompt) {
 
   const url = `${provider.handoffUrl}?${LLM_HANDOFF_PARAM}=${encodeURIComponent(token)}`;
   try {
-    await chrome.tabs.create({ url, active: true });
+    await openNextToCurrentTab(url);
   } catch {
     return false;
   }

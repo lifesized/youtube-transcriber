@@ -1112,17 +1112,23 @@ body::-webkit-scrollbar-thumb:hover {
 }
 
 /* Advanced URI plugin opt-in — user installs the plugin in Obsidian, then
-   toggles this to get auto-paste instead of ⌘V. */
+   toggles this to get auto-paste instead of ⌘V. Sub-text explains the
+   plugin requirement so users don't flip the toggle blind. */
 .obsidian-advuri-row {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 4px;
   padding: 6px 10px 10px;
-  cursor: pointer;
   user-select: none;
 }
 .obsidian-advuri-row[hidden] {
   display: none;
+}
+.obsidian-advuri-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
 }
 .obsidian-advuri-input {
   flex-shrink: 0;
@@ -1137,7 +1143,17 @@ body::-webkit-scrollbar-thumb:hover {
   color: rgba(255, 255, 255, 0.75);
 }
 .obsidian-advuri-sub {
+  margin: 0 0 0 22px;
+  font-size: 11px;
+  line-height: 1.4;
   color: var(--muted-3);
+}
+.obsidian-advuri-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+.obsidian-advuri-link:hover {
+  text-decoration: underline;
 }
 
 /* Per-row ⋯ actions menu on recent transcripts. Uses the same hover-reveal

@@ -162,12 +162,17 @@
           <input id="obsidianVaultInput" class="obsidian-vault-input" type="text" placeholder="e.g. MyVault" autocomplete="off" spellcheck="false" />
           <span id="obsidianVaultSaved" class="obsidian-vault-saved" hidden>Saved</span>
         </div>
-        <label id="obsidianAdvUriRow" class="obsidian-advuri-row" hidden>
-          <input id="obsidianAdvUriInput" class="obsidian-advuri-input" type="checkbox" />
-          <span class="obsidian-advuri-text">
-            Advanced URI plugin <span class="obsidian-advuri-sub">— skip the ⌘V step for long transcripts</span>
-          </span>
-        </label>
+        <div id="obsidianAdvUriRow" class="obsidian-advuri-row" hidden>
+          <label class="obsidian-advuri-label">
+            <input id="obsidianAdvUriInput" class="obsidian-advuri-input" type="checkbox" />
+            <span class="obsidian-advuri-text">Use Advanced URI plugin</span>
+          </label>
+          <p class="obsidian-advuri-sub">
+            Stock Obsidian can't auto-paste long transcripts. Enable only if you've installed the
+            <a class="obsidian-advuri-link" href="https://github.com/Vinzent03/obsidian-advanced-uri" target="_blank" rel="noopener">Advanced URI</a>
+            community plugin.
+          </p>
+        </div>
       </div>
     </div>
 
