@@ -151,6 +151,10 @@ const LLM_ICONS = {
   `,
 };
 
+const CLAUDE_HOST_PERM = { origins: ["https://claude.ai/*"] };
+const CLAUDE_HANDOFF_URL = "https://claude.ai/new";
+const CLAUDE_HANDOFF_PARAM = "yttx";
+
 const LLM_PROVIDERS = [
   {
     id: "chatgpt",
@@ -164,6 +168,8 @@ const LLM_PROVIDERS = [
     id: "claude",
     name: "Claude",
     urlTemplate: null,
+    // Primary path injects via content script once the host permission is
+    // granted. Clipboard fallback kicks in if the user declines the prompt.
     clipboardFallback: true,
     openUrl: "https://claude.ai/",
     icon: LLM_ICONS.claude,
@@ -382,7 +388,14 @@ async function launchWithProvider(provider, transcriptId, videoTitle) {
     return;
   }
 
-  // Clipboard path (Claude): copy prompt, open provider for paste.
+  if (provider.id === "claude") {
+    const launched = await tryClaudeHandoff(prompt);
+    if (launched) return;
+  }
+
+  // Fallback: copy prompt to clipboard, open provider. Used when the user
+  // declines the Claude host permission, or for any other clipboard-only
+  // provider that lands here in the future.
   try {
     await navigator.clipboard.writeText(prompt);
   } catch {
@@ -392,6 +405,39 @@ async function launchWithProvider(provider, transcriptId, videoTitle) {
   if (provider.openUrl) {
     chrome.tabs.create({ url: provider.openUrl, active: true });
   }
+}
+
+// Claude has no URL-prefill API, so we inject via content script on claude.ai
+// once the user grants the host permission. Returns true if the handoff
+// launch succeeded (tab opened with prompt queued), false if we should fall
+// back to the clipboard path.
+async function tryClaudeHandoff(prompt) {
+  let granted = false;
+  try {
+    granted = await chrome.permissions.contains(CLAUDE_HOST_PERM);
+  } catch {
+    granted = false;
+  }
+  if (!granted) {
+    try {
+      granted = await chrome.permissions.request(CLAUDE_HOST_PERM);
+    } catch {
+      granted = false;
+    }
+  }
+  if (!granted) return false;
+
+  const stash = await sendMsg({ type: "STASH_CLAUDE_PROMPT", prompt });
+  const token = stash?.success ? stash.data?.token : null;
+  if (!token) return false;
+
+  const url = `${CLAUDE_HANDOFF_URL}?${CLAUDE_HANDOFF_PARAM}=${encodeURIComponent(token)}`;
+  try {
+    await chrome.tabs.create({ url, active: true });
+  } catch {
+    return false;
+  }
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -406,6 +452,16 @@ async function launchWithProvider(provider, transcriptId, videoTitle) {
 // OAuth completes.
 let destinationsCache = null;
 let destinationsLoading = false;
+
+// Listen for OAuth return broadcasts from oauth-return.html so the settings
+// list reflects a fresh connection without waiting for the polling fallback.
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg?.type !== "OAUTH_RETURN") return;
+  destinationsCache = null;
+  if (el.settingsPanel && !el.settingsPanel.hidden) {
+    renderDestinationsSettings();
+  }
+});
 
 // Client-side adapters — available in any mode, no cloud account required.
 // Obsidian's "connected" state is derived from whether the user has saved
@@ -440,6 +496,7 @@ async function fetchDestinations() {
 
     let cloudAdapters;
     let cloudReady = false;
+    let cloudReason = null; // "local" | "authError" | "unavailable" | "unknown"
     if (mode === "cloud") {
       const res = await sendMsg({ type: "LIST_DESTINATIONS" });
       if (res?.success && res.data?.ok) {
@@ -450,18 +507,21 @@ async function fetchDestinations() {
         );
         cloudReady = true;
       } else {
-        // 401 / 404 / 501 — unavailable or not signed in. Show teasers so
-        // the user still sees the cloud upsell instead of an empty list.
+        // Classify so the teaser can show an accurate reason.
+        if (res?.data?.authError) cloudReason = "authError";
+        else if (res?.data?.unavailable) cloudReason = "unavailable";
+        else cloudReason = "unknown";
         cloudAdapters = CLOUD_TEASER_ADAPTERS;
       }
     } else {
-      // Local mode — cloud adapters aren't reachable, but show teasers.
+      cloudReason = "local";
       cloudAdapters = CLOUD_TEASER_ADAPTERS;
     }
 
     destinationsCache = {
       ok: true,
       cloudReady,
+      cloudReason,
       destinations: [...clientSide, ...cloudAdapters],
     };
     return destinationsCache;
@@ -496,8 +556,15 @@ async function renderDestinationsSettings() {
     return;
   }
 
+  const { notionDatabaseId } = await chrome.storage.sync.get("notionDatabaseId");
+  const ctx = {
+    cloudReady: res.cloudReady,
+    cloudReason: res.cloudReason,
+    notionDatabaseId: notionDatabaseId || "",
+  };
+
   for (const d of list) {
-    el.destinationsList.appendChild(buildDestinationRow(d, res.cloudReady));
+    el.destinationsList.appendChild(buildDestinationRow(d, ctx));
   }
 
   // Obsidian inputs always visible since Obsidian is always in the list.
@@ -509,7 +576,27 @@ async function renderDestinationsSettings() {
   el.obsidianAdvUriInput.checked = !!obsidianUseAdvancedUri;
 }
 
-function buildDestinationRow(d, cloudReady) {
+// Accepts a raw 32-hex Notion database ID (with or without dashes) or a
+// Notion URL containing one. Returns the canonical dashed form or null.
+function parseNotionDatabaseId(value) {
+  const v = (value || "").trim();
+  if (!v) return null;
+  const match = v.replace(/-/g, "").match(/[0-9a-f]{32}/i);
+  if (!match) return null;
+  const id = match[0].toLowerCase();
+  return id.replace(
+    /^(.{8})(.{4})(.{4})(.{4})(.{12})$/,
+    "$1-$2-$3-$4-$5"
+  );
+}
+
+function buildDestinationRow(d, ctx) {
+  // Back-compat: older callers passed a boolean cloudReady directly.
+  const cloudReady = typeof ctx === "object" ? !!ctx.cloudReady : !!ctx;
+  const cloudReason = (typeof ctx === "object" && ctx.cloudReason) || null;
+  const notionDatabaseId = (typeof ctx === "object" && ctx.notionDatabaseId) || "";
+
+  const frag = document.createDocumentFragment();
   const row = document.createElement("div");
   row.className = "destinations-row";
 
@@ -568,11 +655,20 @@ function buildDestinationRow(d, cloudReady) {
       });
     }
   } else if (d.cloudOnly && !cloudReady) {
-    // Cloud adapter, but the user isn't cloud-ready — either they're in
-    // local mode or signed out. Render as a teaser that routes to sign in.
-    status.textContent = "Requires transcribed.dev account";
+    // Cloud adapter, but the destinations fetch didn't succeed. Surface the
+    // actual reason so the user knows what to do next — the common case is
+    // "signed out", but it can also be offline / cloud 500.
+    if (cloudReason === "authError") {
+      status.textContent = "Session expired — sign in again";
+    } else if (cloudReason === "unavailable") {
+      status.textContent = "Cloud unreachable — retry shortly";
+    } else if (cloudReason === "local") {
+      status.textContent = "Switch to Cloud mode to use";
+    } else {
+      status.textContent = "Sign in to transcribed.dev to use";
+    }
     actionEl = document.createElement("a");
-    actionEl.href = "https://www.transcribed.dev/auth/signin";
+    actionEl.href = "https://www.transcribed.dev/auth/login";
     actionEl.target = "_blank";
     actionEl.className = "destinations-row-action";
     actionEl.textContent = "Sign in";
@@ -613,6 +709,73 @@ function buildDestinationRow(d, cloudReady) {
   row.appendChild(icon);
   row.appendChild(text);
   row.appendChild(actionEl);
+  frag.appendChild(row);
+
+  // Notion needs a target database. Show a picker under the row once the
+  // account is connected; the value is stored locally and passed through
+  // on send as opts.databaseId.
+  if (
+    d.adapterId === "notion" &&
+    d.connected &&
+    !d.needsReauth &&
+    !d.cloudOnly
+  ) {
+    frag.appendChild(buildNotionDbPicker(notionDatabaseId));
+  }
+
+  return frag;
+}
+
+function buildNotionDbPicker(initialValue) {
+  const row = document.createElement("div");
+  row.className = "destinations-db-picker";
+
+  const label = document.createElement("label");
+  label.className = "destinations-db-picker-label";
+  label.textContent = "Database";
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "destinations-db-picker-input";
+  input.placeholder = "Paste Notion database URL or ID";
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.value = initialValue || "";
+  label.htmlFor = "notionDatabaseInput";
+  input.id = "notionDatabaseInput";
+
+  const saved = document.createElement("span");
+  saved.className = "destinations-db-picker-saved";
+  saved.textContent = "Saved";
+
+  let debounce;
+  input.addEventListener("input", () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(async () => {
+      const raw = input.value.trim();
+      if (!raw) {
+        await chrome.storage.sync.remove("notionDatabaseId");
+        saved.classList.remove("show");
+        input.classList.remove("invalid");
+        return;
+      }
+      const parsed = parseNotionDatabaseId(raw);
+      if (!parsed) {
+        input.classList.add("invalid");
+        saved.classList.remove("show");
+        return;
+      }
+      input.classList.remove("invalid");
+      input.value = parsed;
+      await chrome.storage.sync.set({ notionDatabaseId: parsed });
+      saved.classList.add("show");
+      setTimeout(() => saved.classList.remove("show"), 1200);
+    }, 400);
+  });
+
+  row.appendChild(label);
+  row.appendChild(input);
+  row.appendChild(saved);
   return row;
 }
 

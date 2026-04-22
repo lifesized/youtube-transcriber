@@ -3,7 +3,10 @@
 // ---------------------------------------------------------------------------
 
 const LOCAL_BASE = "http://localhost:19720";
-const CLOUD_BASE = "https://www.transcribed.dev";
+// Apex (no `www.`) — the site 307-redirects `www.` to apex, and that
+// redirect hop can drop the session cookie when host-only. Hitting the
+// apex directly keeps credentials intact.
+const CLOUD_BASE = "https://transcribed.dev";
 
 let _apiConfigCache = null;
 
@@ -53,6 +56,12 @@ const CONTENT_SCRIPTS = [
     js: ["content-spotify.js"],
     runAt: "document_idle",
   },
+  {
+    id: "claude-handoff",
+    matches: ["https://claude.ai/*"],
+    js: ["content-claude-handoff.js"],
+    runAt: "document_idle",
+  },
 ];
 
 async function registerContentScripts() {
@@ -68,8 +77,21 @@ async function registerContentScripts() {
     // First install — nothing to unregister
   }
 
-  // Register all known content scripts
-  await chrome.scripting.registerContentScripts(CONTENT_SCRIPTS);
+  // Only register scripts whose match patterns are covered by currently-granted
+  // permissions. Optional hosts (e.g. claude.ai) are registered lazily after
+  // chrome.permissions.request() grants access.
+  const eligible = [];
+  for (const script of CONTENT_SCRIPTS) {
+    try {
+      const ok = await chrome.permissions.contains({ origins: script.matches });
+      if (ok) eligible.push(script);
+    } catch {
+      // permissions API hiccup — skip this script rather than breaking registration
+    }
+  }
+  if (eligible.length) {
+    await chrome.scripting.registerContentScripts(eligible);
+  }
 }
 
 // Register on install and startup
@@ -351,94 +373,9 @@ const DESTINATIONS_UNAVAILABLE = {
   error: "Destinations not yet available",
 };
 
-// Dev-only stub: returns canned responses so the full Settings list + ⋯ menu
-// + Send flow + toast path can be exercised without the YTT-211 cloud
-// endpoints existing. Enabled per-install via chrome.storage.local so the
-// code always ships with the mock OFF — no constant to forget to flip.
-//
-// To enable:
-//   1. chrome://extensions → inspect "service worker" under this extension
-//   2. In that DevTools console:
-//        chrome.storage.local.set({ __destinationsDevMock: true })
-//   3. Reload the extension
-//
-// To disable:
-//        chrome.storage.local.remove("__destinationsDevMock")
-//        (then reload the extension)
-async function isDestinationsDevMockEnabled() {
-  try {
-    const { __destinationsDevMock } = await chrome.storage.local.get(
-      "__destinationsDevMock"
-    );
-    return !!__destinationsDevMock;
-  } catch {
-    return false;
-  }
-}
-
-function destinationsDevMock(path, init) {
-  const method = (init && init.method) || "GET";
-  if (path === "" && method === "GET") {
-    return {
-      ok: true,
-      data: [
-        {
-          adapterId: "notion",
-          name: "Notion",
-          icon: "",
-          connected: false,
-        },
-        {
-          adapterId: "obsidian-scheme",
-          name: "Obsidian",
-          icon: "",
-          connected: true,
-          connectedAt: new Date().toISOString(),
-        },
-        {
-          adapterId: "readwise",
-          name: "Readwise",
-          icon: "",
-          connected: true,
-          needsReauth: true,
-        },
-      ],
-    };
-  }
-  if (path === "/send" && method === "POST") {
-    let body = {};
-    try { body = JSON.parse(init.body || "{}"); } catch { /* ignore */ }
-    if (body.adapterId === "obsidian-scheme") {
-      return {
-        ok: true,
-        data: {
-          schemeUrl: "obsidian://new?vault=Test&name=Transcript&content=Hello",
-        },
-      };
-    }
-    return {
-      ok: true,
-      data: { url: "https://example.com/fake-destination-page" },
-    };
-  }
-  if (/\/oauth\/start$/.test(path) && method === "POST") {
-    return {
-      ok: true,
-      data: { authUrl: "https://example.com/oauth?mock=1" },
-    };
-  }
-  if (/\/connection$/.test(path) && method === "DELETE") {
-    return { ok: true, data: {} };
-  }
-  return { ok: false, error: "Mock: unknown path" };
-}
-
 async function destinationsFetch(path, init = {}) {
   const config = await getApiConfig();
   if (config.mode !== "cloud") return DESTINATIONS_UNAVAILABLE;
-  if (await isDestinationsDevMockEnabled()) {
-    return destinationsDevMock(path, init);
-  }
   try {
     const res = await fetch(`${config.baseUrl}/api/destinations${path}`, {
       credentials: config.credentials,
@@ -449,15 +386,11 @@ async function destinationsFetch(path, init = {}) {
         ...(init.headers || {}),
       },
     });
-    // Cloud side (YTT-211) may not be deployed yet — treat 404/501 as a soft
-    // "feature not ready" so the UI can render a friendly state instead of
-    // looking broken. 401 bubbles up so the popup can nudge sign-in.
-    if (res.status === 404 || res.status === 501) {
-      return DESTINATIONS_UNAVAILABLE;
-    }
     if (res.status === 401) {
       return { ok: false, authError: true, error: "Sign in at transcribed.dev to continue." };
     }
+    // 204 No Content (e.g. DELETE /connection) — no body to parse.
+    if (res.status === 204) return { ok: true, data: {} };
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       return { ok: false, error: data?.error || `HTTP ${res.status}` };
@@ -475,9 +408,12 @@ async function listDestinations() {
 }
 
 async function startDestinationOauth(adapterId) {
+  // Cloud redirects here after the provider callback. Must match the
+  // server-side allowlist (chrome-extension://* is whitelisted).
+  const returnUrl = chrome.runtime.getURL("oauth-return.html");
   return await destinationsFetch(
     `/${encodeURIComponent(adapterId)}/oauth/start`,
-    { method: "POST", body: "{}" }
+    { method: "POST", body: JSON.stringify({ returnUrl }) }
   );
 }
 
@@ -660,9 +596,28 @@ async function buildObsidianSend(transcriptId) {
 }
 
 async function sendToDestination(adapterId, transcriptId, opts) {
+  const merged = { ...(opts || {}) };
+
+  // Notion needs a target database. User picks one in Settings and it's
+  // stored per-install. No databaseId = no send — surface a config hint
+  // instead of letting cloud 400 us.
+  if (adapterId === "notion" && !merged.databaseId) {
+    const { notionDatabaseId } = await chrome.storage.sync.get(
+      "notionDatabaseId"
+    );
+    if (!notionDatabaseId) {
+      return {
+        ok: false,
+        needsConfig: true,
+        error: "Set a Notion database in Settings first.",
+      };
+    }
+    merged.databaseId = notionDatabaseId;
+  }
+
   const res = await destinationsFetch("/send", {
     method: "POST",
-    body: JSON.stringify({ adapterId, transcriptId, opts: opts || {} }),
+    body: JSON.stringify({ adapterId, transcriptId, opts: merged }),
   });
   if (!res.ok) return res;
 
@@ -711,6 +666,51 @@ async function showToast({ title, message, kind = "info" }) {
       priority: kind === "error" ? 2 : 0,
     });
   } catch { /* ignore notification failures */ }
+}
+
+// ---------------------------------------------------------------------------
+// Claude prompt handoff — popup stashes the built prompt here, content script
+// on claude.ai pulls it after the page loads and injects into the editor.
+// Uses chrome.storage.session so the prompt survives a service-worker restart
+// but never persists to disk. A short TTL guards against orphaned prompts if
+// the user closes the Claude tab before the content script claims.
+// ---------------------------------------------------------------------------
+
+const HANDOFF_KEY_PREFIX = "claudeHandoff_";
+const HANDOFF_TTL_MS = 60 * 1000;
+
+function randomHandoffToken() {
+  // 22-char URL-safe token — collision resistant enough for a 60s TTL.
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+async function stashHandoffPrompt(prompt) {
+  const token = randomHandoffToken();
+  const key = HANDOFF_KEY_PREFIX + token;
+  await chrome.storage.session.set({
+    [key]: { prompt, expiresAt: Date.now() + HANDOFF_TTL_MS },
+  });
+  setTimeout(() => {
+    chrome.storage.session.remove(key).catch(() => {});
+  }, HANDOFF_TTL_MS);
+  return token;
+}
+
+async function claimHandoffPrompt(token) {
+  if (typeof token !== "string" || !/^[A-Za-z0-9_-]{10,64}$/.test(token)) {
+    return null;
+  }
+  const key = HANDOFF_KEY_PREFIX + token;
+  const stored = await chrome.storage.session.get(key);
+  const entry = stored[key];
+  if (!entry) return null;
+  await chrome.storage.session.remove(key);
+  if (entry.expiresAt && entry.expiresAt < Date.now()) return null;
+  return entry.prompt || null;
 }
 
 // ---------------------------------------------------------------------------
@@ -979,12 +979,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const res = await startDestinationOauth(message.adapterId);
         if (res.ok && res.data?.authUrl && typeof res.data.authUrl === "string") {
           try {
-            await chrome.tabs.create({ url: res.data.authUrl, active: true });
+            await chrome.windows.create({
+              url: res.data.authUrl,
+              type: "popup",
+              width: 500,
+              height: 700,
+            });
           } catch (err) {
-            return { ok: false, error: `Couldn't open auth tab: ${err.message}` };
+            return { ok: false, error: `Couldn't open auth window: ${err.message}` };
           }
         }
         return res;
+      }
+
+      case "OAUTH_RETURN": {
+        // Sent by oauth-return.html after cloud redirects back. Popup also
+        // listens directly so settings UI can re-render; background just
+        // acks so the landing page can close itself.
+        return { ok: true };
       }
 
       case "DISCONNECT_DESTINATION": {
@@ -1032,6 +1044,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               : "Transcript sent",
             kind: "info",
           });
+        } else if (res.needsConfig) {
+          showToast({
+            title: "Needs setup",
+            message: res.error || "Configure this destination in Settings.",
+            kind: "error",
+          });
         } else if (!res.unavailable && !res.authError) {
           showToast({
             title: "Send failed",
@@ -1040,6 +1058,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           });
         }
         return res;
+      }
+
+      case "STASH_CLAUDE_PROMPT": {
+        if (typeof message.prompt !== "string" || !message.prompt.trim()) {
+          throw new Error("Invalid prompt");
+        }
+        const token = await stashHandoffPrompt(message.prompt);
+        return { token };
+      }
+
+      case "CLAIM_CLAUDE_PROMPT": {
+        const prompt = await claimHandoffPrompt(message.token);
+        return { prompt };
       }
 
       case "GET_PAGE_INFO": {
