@@ -1012,6 +1012,54 @@ body::-webkit-scrollbar-thumb:hover {
   display: none;
 }
 
+/* Notion database picker — rendered as a sub-row below the Notion
+   destination row when connected. Same shape as the Obsidian vault input
+   but scoped per adapter. */
+.destinations-db-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px 8px 44px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+.destinations-db-picker-label {
+  font-size: 11px;
+  color: var(--muted-3);
+  flex-shrink: 0;
+}
+.destinations-db-picker-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+}
+.destinations-db-picker-input:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+}
+.destinations-db-picker-input.invalid {
+  border-color: rgba(239, 68, 68, 0.5);
+}
+.destinations-db-picker-input::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+}
+.destinations-db-picker-saved {
+  font-size: 10px;
+  color: #22c55e;
+  opacity: 0;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+.destinations-db-picker-saved.show {
+  opacity: 1;
+}
+
 /* Obsidian vault name input — client-side adapter config. Shown under the
    destinations list when the Obsidian row is present. */
 .obsidian-vault-row {
