@@ -59,7 +59,13 @@ const CONTENT_SCRIPTS = [
   {
     id: "claude-handoff",
     matches: ["https://claude.ai/*"],
-    js: ["content-claude-handoff.js"],
+    js: ["content-llm-handoff.js"],
+    runAt: "document_idle",
+  },
+  {
+    id: "chatgpt-handoff",
+    matches: ["https://chatgpt.com/*"],
+    js: ["content-llm-handoff.js"],
     runAt: "document_idle",
   },
 ];
@@ -669,14 +675,15 @@ async function showToast({ title, message, kind = "info" }) {
 }
 
 // ---------------------------------------------------------------------------
-// Claude prompt handoff — popup stashes the built prompt here, content script
-// on claude.ai pulls it after the page loads and injects into the editor.
-// Uses chrome.storage.session so the prompt survives a service-worker restart
-// but never persists to disk. A short TTL guards against orphaned prompts if
-// the user closes the Claude tab before the content script claims.
+// LLM prompt handoff — popup stashes the built prompt here, content script
+// on the provider (claude.ai, chatgpt.com) pulls it after the page loads and
+// injects into the composer. Uses chrome.storage.session so the prompt
+// survives a service-worker restart but never persists to disk. A short TTL
+// guards against orphaned prompts if the user closes the provider tab before
+// the content script claims.
 // ---------------------------------------------------------------------------
 
-const HANDOFF_KEY_PREFIX = "claudeHandoff_";
+const HANDOFF_KEY_PREFIX = "llmHandoff_";
 const HANDOFF_TTL_MS = 60 * 1000;
 
 function randomHandoffToken() {
@@ -1060,7 +1067,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return res;
       }
 
-      case "STASH_CLAUDE_PROMPT": {
+      case "STASH_LLM_PROMPT": {
         if (typeof message.prompt !== "string" || !message.prompt.trim()) {
           throw new Error("Invalid prompt");
         }
@@ -1068,7 +1075,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return { token };
       }
 
-      case "CLAIM_CLAUDE_PROMPT": {
+      case "CLAIM_LLM_PROMPT": {
         const prompt = await claimHandoffPrompt(message.token);
         return { prompt };
       }

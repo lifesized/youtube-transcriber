@@ -151,14 +151,19 @@ const LLM_ICONS = {
   `,
 };
 
-const CLAUDE_HOST_PERM = { origins: ["https://claude.ai/*"] };
-const CLAUDE_HANDOFF_URL = "https://claude.ai/new";
-const CLAUDE_HANDOFF_PARAM = "yttx";
+const LLM_HANDOFF_PARAM = "yttx";
 
 const LLM_PROVIDERS = [
   {
     id: "chatgpt",
     name: "ChatGPT",
+    // Primary path: content-script handoff once the optional host perm is
+    // granted — injects prompt into the composer and auto-submits.
+    handoffOrigins: ["https://chatgpt.com/*"],
+    handoffUrl: "https://chatgpt.com/",
+    // Fallback when the user declines the host permission: ChatGPT supports
+    // URL prefill via ?q=, which populates the composer but requires the
+    // user to click Send manually.
     urlTemplate: "https://chatgpt.com/?q={prompt}",
     clipboardFallback: false,
     openUrl: null,
@@ -167,9 +172,11 @@ const LLM_PROVIDERS = [
   {
     id: "claude",
     name: "Claude",
+    handoffOrigins: ["https://claude.ai/*"],
+    handoffUrl: "https://claude.ai/new",
+    // Claude has no public URL-prefill param, so the fallback when the
+    // user declines the host permission is clipboard + manual paste.
     urlTemplate: null,
-    // Primary path injects via content script once the host permission is
-    // granted. Clipboard fallback kicks in if the user declines the prompt.
     clipboardFallback: true,
     openUrl: "https://claude.ai/",
     icon: LLM_ICONS.claude,
@@ -265,17 +272,31 @@ async function toggleLlmDropdown(wrapper, transcriptId, videoTitle) {
     : LLM_PROVIDERS;
 
   const pasteKey = /mac/i.test(navigator.userAgent) ? "\u2318+V" : "Ctrl+V";
+  // Resolve paste-hint visibility per provider: only show the paste tip when
+  // the user will actually need to paste — i.e. the provider falls back to
+  // the clipboard and the handoff host perm has not been granted. Once they
+  // allow the host, the content script auto-pastes + submits.
+  const handoffGranted = await Promise.all(
+    sorted.map(async (p) => {
+      if (!p.handoffOrigins) return false;
+      try {
+        return await chrome.permissions.contains({ origins: p.handoffOrigins });
+      } catch {
+        return false;
+      }
+    })
+  );
   menu.innerHTML = `
     <div class="recent-summarize-menu-label">Summarize with</div>
     ${sorted
       .map(
-        (p) => `
+        (p, idx) => `
       <button type="button" class="recent-summarize-menu-item" data-provider="${p.id}">
         ${p.icon}
         <span class="recent-summarize-menu-name">${escapeHtml(p.name)}</span>
         ${p.id === lastProvider ? '<span class="recent-summarize-menu-hint">last used</span>' : ""}
         ${
-          p.clipboardFallback
+          p.clipboardFallback && !handoffGranted[idx]
             ? `<span class="recent-summarize-menu-tip"><span class="recent-summarize-menu-tip-key">${pasteKey}</span> to paste transcript</span>`
             : ""
         }
@@ -379,7 +400,16 @@ async function launchWithProvider(provider, transcriptId, videoTitle) {
   const instruction = llmPromptTemplate.replace(/\{title\}/g, videoTitle);
   const prompt = `${instruction}\n\nTranscript:\n\n${transcriptText}`;
 
-  if (provider.urlTemplate && !provider.clipboardFallback) {
+  // Primary path for every provider: content-script handoff so the prompt
+  // lands in the composer AND the send button fires automatically.
+  if (provider.handoffOrigins && provider.handoffUrl) {
+    const launched = await tryLlmHandoff(provider, prompt);
+    if (launched) return;
+  }
+
+  // Fallback 1: URL prefill template (ChatGPT's ?q=) — puts text in the
+  // composer but user still has to click Send.
+  if (provider.urlTemplate) {
     const encoded = encodeURIComponent(prompt);
     const maxLen = 6000;
     const safe = encoded.length > maxLen ? encoded.slice(0, maxLen) : encoded;
@@ -388,14 +418,8 @@ async function launchWithProvider(provider, transcriptId, videoTitle) {
     return;
   }
 
-  if (provider.id === "claude") {
-    const launched = await tryClaudeHandoff(prompt);
-    if (launched) return;
-  }
-
-  // Fallback: copy prompt to clipboard, open provider. Used when the user
-  // declines the Claude host permission, or for any other clipboard-only
-  // provider that lands here in the future.
+  // Fallback 2: clipboard + open provider homepage (Claude without host
+  // perm). User pastes with ⌘V.
   try {
     await navigator.clipboard.writeText(prompt);
   } catch {
@@ -407,31 +431,34 @@ async function launchWithProvider(provider, transcriptId, videoTitle) {
   }
 }
 
-// Claude has no URL-prefill API, so we inject via content script on claude.ai
-// once the user grants the host permission. Returns true if the handoff
-// launch succeeded (tab opened with prompt queued), false if we should fall
-// back to the clipboard path.
-async function tryClaudeHandoff(prompt) {
+// Neither Claude nor ChatGPT expose a public URL path that both fills the
+// composer AND auto-submits. Content-script injection is the only way to
+// match that expectation, so we ask for the optional host permission on
+// first use and register a content script that injects + sends. Returns
+// true if the handoff launched successfully (prompt stashed + tab opened),
+// false if we should fall back to url-template / clipboard paths.
+async function tryLlmHandoff(provider, prompt) {
+  const perm = { origins: provider.handoffOrigins };
   let granted = false;
   try {
-    granted = await chrome.permissions.contains(CLAUDE_HOST_PERM);
+    granted = await chrome.permissions.contains(perm);
   } catch {
     granted = false;
   }
   if (!granted) {
     try {
-      granted = await chrome.permissions.request(CLAUDE_HOST_PERM);
+      granted = await chrome.permissions.request(perm);
     } catch {
       granted = false;
     }
   }
   if (!granted) return false;
 
-  const stash = await sendMsg({ type: "STASH_CLAUDE_PROMPT", prompt });
+  const stash = await sendMsg({ type: "STASH_LLM_PROMPT", prompt });
   const token = stash?.success ? stash.data?.token : null;
   if (!token) return false;
 
-  const url = `${CLAUDE_HANDOFF_URL}?${CLAUDE_HANDOFF_PARAM}=${encodeURIComponent(token)}`;
+  const url = `${provider.handoffUrl}?${LLM_HANDOFF_PARAM}=${encodeURIComponent(token)}`;
   try {
     await chrome.tabs.create({ url, active: true });
   } catch {

@@ -31,7 +31,8 @@
     "*://*.vimeo.com/*",
     "*://podcasts.apple.com/*",
     "*://*.twitch.tv/*",
-    "https://claude.ai/*"
+    "https://claude.ai/*",
+    "https://chatgpt.com/*"
   ],
   "background": {
     "service_worker": "background.js"

@@ -1,16 +1,52 @@
-// Claude prompt handoff — content script loaded on claude.ai.
+// LLM prompt handoff — content script loaded on claude.ai and chatgpt.com.
 //
 // Flow: popup stashes the built prompt in background, opens
-// claude.ai/new?yttx=<token>. This script spots the token in the URL, pulls
-// the prompt from background, and drops it into the ProseMirror editor so the
-// user doesn't have to paste manually. Without the token this script is a
-// no-op, so normal claude.ai browsing is unaffected.
+// https://<provider>/?yttx=<token>. This script spots the token in the URL,
+// pulls the prompt from background, drops it into the provider's composer,
+// and auto-submits so the user's click-to-summarize feels end-to-end.
+// Without the token this script is a no-op, so normal browsing is unaffected.
 
 (() => {
   const HANDOFF_QUERY_PARAM = "yttx";
   const EDITOR_WAIT_MS = 12000;
   const POLL_INTERVAL_MS = 250;
-  const POST_INJECT_DELAY_MS = 450;
+  const POST_INJECT_DELAY_MS = 500;
+
+  // Per-provider DOM config. Selectors are Claude/ChatGPT's own published
+  // markup — the only thing that crosses over between providers is the
+  // ProseMirror editor primitive both happen to use.
+  const PROVIDERS = {
+    "claude.ai": {
+      editorSelectors: [
+        "div.ProseMirror[contenteditable='true']",
+        "fieldset div[contenteditable='true']",
+        "form div[contenteditable='true']",
+      ],
+      sendSelectors: [
+        "button[aria-label='Send message']",
+        "button[aria-label='Send Message']",
+        "fieldset button[type='submit']",
+      ],
+    },
+    "chatgpt.com": {
+      editorSelectors: [
+        "main form div.ProseMirror",
+        "#prompt-textarea",
+        "main form textarea",
+      ],
+      sendSelectors: [
+        "main form button[aria-label='Send prompt']",
+        "button[aria-label='Send prompt']",
+        "button[data-testid='send-button']",
+        "main form button[type='submit']",
+      ],
+    },
+  };
+
+  function currentProviderConfig() {
+    const host = window.location.hostname.replace(/^www\./, "");
+    return PROVIDERS[host] || null;
+  }
 
   function readToken() {
     try {
@@ -42,35 +78,24 @@
       .replace(/'/g, "&#39;");
   }
 
-  function findEditor() {
-    // Claude's composer is a ProseMirror contenteditable. The exact wrapper
-    // class has churned across redesigns, so fall back to any contenteditable
-    // inside the chat form.
-    return (
-      document.querySelector("div.ProseMirror[contenteditable='true']") ||
-      document.querySelector("fieldset div[contenteditable='true']") ||
-      document.querySelector("form div[contenteditable='true']")
-    );
+  function findBy(selectors) {
+    for (const sel of selectors) {
+      const el = document.querySelector(sel);
+      if (el) return el;
+    }
+    return null;
   }
 
-  function findSendButton() {
-    return (
-      document.querySelector("button[aria-label='Send message']") ||
-      document.querySelector("button[aria-label='Send Message']") ||
-      document.querySelector("fieldset button[type='submit']")
-    );
-  }
-
-  function waitForEditor(timeoutMs) {
+  function waitForEditor(config, timeoutMs) {
     return new Promise((resolve) => {
-      const existing = findEditor();
+      const existing = findBy(config.editorSelectors);
       if (existing) {
         resolve(existing);
         return;
       }
       const deadline = Date.now() + timeoutMs;
       const observer = new MutationObserver(() => {
-        const el = findEditor();
+        const el = findBy(config.editorSelectors);
         if (el) {
           observer.disconnect();
           resolve(el);
@@ -87,7 +112,7 @@
           resolve(null);
           return;
         }
-        const el = findEditor();
+        const el = findBy(config.editorSelectors);
         if (el) {
           clearInterval(tick);
           observer.disconnect();
@@ -100,13 +125,20 @@
   function injectPrompt(editor, prompt) {
     // ProseMirror rebuilds its internal doc from the DOM on focus/input, so
     // setting innerHTML + dispatching an input event is enough to seed the
-    // editor with text. Wrap in <p> to match Claude's own paragraph schema.
-    editor.innerHTML = `<p>${escapeForHtml(prompt)}</p>`;
+    // editor with text. Plain textarea fallback uses .value.
+    if (editor.tagName.toLowerCase() === "textarea") {
+      editor.value = prompt;
+    } else {
+      editor.innerHTML = `<p>${escapeForHtml(prompt)}</p>`;
+    }
     editor.focus();
     editor.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
   async function run() {
+    const config = currentProviderConfig();
+    if (!config) return;
+
     const token = readToken();
     if (!token) return;
     stripTokenFromUrl();
@@ -114,7 +146,7 @@
     let response;
     try {
       response = await chrome.runtime.sendMessage({
-        type: "CLAIM_CLAUDE_PROMPT",
+        type: "CLAIM_LLM_PROMPT",
         token,
       });
     } catch {
@@ -123,15 +155,15 @@
     const prompt = response?.success ? response.data?.prompt : null;
     if (!prompt) return;
 
-    const editor = await waitForEditor(EDITOR_WAIT_MS);
+    const editor = await waitForEditor(config, EDITOR_WAIT_MS);
     if (!editor) return;
 
     injectPrompt(editor, prompt);
 
-    // Give Claude's send button a moment to re-enable after input fires,
+    // Give the send button a moment to re-enable after input fires,
     // then submit so the user's click-to-summarize feels end-to-end.
     await new Promise((r) => setTimeout(r, POST_INJECT_DELAY_MS));
-    const send = findSendButton();
+    const send = findBy(config.sendSelectors);
     if (send) {
       try {
         send.disabled = false;
