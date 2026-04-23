@@ -49,7 +49,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["oauth-return.html", "oauth-return.js"],
+      "resources": ["destination-connected.html", "destination-connected.js"],
       "matches": [
         "https://www.transcribed.dev/*",
         "https://transcribed.dev/*"

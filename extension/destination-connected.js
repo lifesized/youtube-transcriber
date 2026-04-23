@@ -1,10 +1,14 @@
-// OAuth redirect landing page. Cloud callback 307s here with query params:
-//   ?destination=<adapterId>&status=connected|error&reason=<optional>
+// OAuth redirect landing page. Cloud callback 307s here with hash params:
+//   #destination=<adapterId>&status=connected|error&reason=<optional>
+// Hash (not query) because ad/privacy blockers frequently match
+// chrome-extension:// URLs with tracking-shaped query strings and block them
+// with ERR_BLOCKED_BY_CLIENT. Hash fragments bypass that heuristic.
 // Relays to the extension via runtime messaging so any open settings UI
 // can refresh the destinations list, then closes itself.
 
 (function () {
-  const params = new URLSearchParams(window.location.search);
+  const raw = (window.location.hash || "").replace(/^#/, "");
+  const params = new URLSearchParams(raw);
   const adapterId = params.get("destination") || "";
   const status = params.get("status") || "error";
   const reason = params.get("reason") || "";

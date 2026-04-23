@@ -502,7 +502,7 @@ async function tryLlmHandoff(provider, prompt) {
 let destinationsCache = null;
 let destinationsLoading = false;
 
-// Listen for OAuth return broadcasts from oauth-return.html so the settings
+// Listen for OAuth return broadcasts from destination-connected.html so the settings
 // list reflects a fresh connection without waiting for the polling fallback.
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type !== "OAUTH_RETURN") return;
@@ -511,6 +511,13 @@ chrome.runtime.onMessage.addListener((msg) => {
     renderDestinationsSettings();
   }
 });
+
+// Bundled icons — cloud returns relative paths like "/icons/notion.svg" that
+// 404 from chrome-extension:// origin, so we override by adapterId.
+const LOCAL_DESTINATION_ICONS = {
+  "notion": "icons/notion.svg",
+  "obsidian-scheme": "icons/obsidian.svg",
+};
 
 // Client-side adapters — available in any mode, no cloud account required.
 // Obsidian's "connected" state is derived from whether the user has saved
@@ -605,11 +612,9 @@ async function renderDestinationsSettings() {
     return;
   }
 
-  const { notionDatabaseId } = await chrome.storage.sync.get("notionDatabaseId");
   const ctx = {
     cloudReady: res.cloudReady,
     cloudReason: res.cloudReason,
-    notionDatabaseId: notionDatabaseId || "",
   };
 
   for (const d of list) {
@@ -625,25 +630,10 @@ async function renderDestinationsSettings() {
   el.obsidianAdvUriInput.checked = !!obsidianUseAdvancedUri;
 }
 
-// Accepts a raw 32-hex Notion database ID (with or without dashes) or a
-// Notion URL containing one. Returns the canonical dashed form or null.
-function parseNotionDatabaseId(value) {
-  const v = (value || "").trim();
-  if (!v) return null;
-  const match = v.replace(/-/g, "").match(/[0-9a-f]{32}/i);
-  if (!match) return null;
-  const id = match[0].toLowerCase();
-  return id.replace(
-    /^(.{8})(.{4})(.{4})(.{4})(.{12})$/,
-    "$1-$2-$3-$4-$5"
-  );
-}
-
 function buildDestinationRow(d, ctx) {
   // Back-compat: older callers passed a boolean cloudReady directly.
   const cloudReady = typeof ctx === "object" ? !!ctx.cloudReady : !!ctx;
   const cloudReason = (typeof ctx === "object" && ctx.cloudReason) || null;
-  const notionDatabaseId = (typeof ctx === "object" && ctx.notionDatabaseId) || "";
 
   const frag = document.createDocumentFragment();
   const row = document.createElement("div");
@@ -651,10 +641,11 @@ function buildDestinationRow(d, ctx) {
 
   const icon = document.createElement("span");
   icon.className = "destinations-row-icon";
-  if (d.icon && typeof d.icon === "string") {
-    // Trust cloud to supply a safe URL; never inject HTML.
+  const localIcon = LOCAL_DESTINATION_ICONS[d.adapterId];
+  const iconSrc = localIcon || (typeof d.icon === "string" ? d.icon : "");
+  if (iconSrc) {
     const img = document.createElement("img");
-    img.src = d.icon;
+    img.src = iconSrc;
     img.alt = "";
     icon.appendChild(img);
   }
@@ -760,72 +751,7 @@ function buildDestinationRow(d, ctx) {
   row.appendChild(actionEl);
   frag.appendChild(row);
 
-  // Notion needs a target database. Show a picker under the row once the
-  // account is connected; the value is stored locally and passed through
-  // on send as opts.databaseId.
-  if (
-    d.adapterId === "notion" &&
-    d.connected &&
-    !d.needsReauth &&
-    !d.cloudOnly
-  ) {
-    frag.appendChild(buildNotionDbPicker(notionDatabaseId));
-  }
-
   return frag;
-}
-
-function buildNotionDbPicker(initialValue) {
-  const row = document.createElement("div");
-  row.className = "destinations-db-picker";
-
-  const label = document.createElement("label");
-  label.className = "destinations-db-picker-label";
-  label.textContent = "Database";
-
-  const input = document.createElement("input");
-  input.type = "text";
-  input.className = "destinations-db-picker-input";
-  input.placeholder = "Paste Notion database URL or ID";
-  input.autocomplete = "off";
-  input.spellcheck = false;
-  input.value = initialValue || "";
-  label.htmlFor = "notionDatabaseInput";
-  input.id = "notionDatabaseInput";
-
-  const saved = document.createElement("span");
-  saved.className = "destinations-db-picker-saved";
-  saved.textContent = "Saved";
-
-  let debounce;
-  input.addEventListener("input", () => {
-    clearTimeout(debounce);
-    debounce = setTimeout(async () => {
-      const raw = input.value.trim();
-      if (!raw) {
-        await chrome.storage.sync.remove("notionDatabaseId");
-        saved.classList.remove("show");
-        input.classList.remove("invalid");
-        return;
-      }
-      const parsed = parseNotionDatabaseId(raw);
-      if (!parsed) {
-        input.classList.add("invalid");
-        saved.classList.remove("show");
-        return;
-      }
-      input.classList.remove("invalid");
-      input.value = parsed;
-      await chrome.storage.sync.set({ notionDatabaseId: parsed });
-      saved.classList.add("show");
-      setTimeout(() => saved.classList.remove("show"), 1200);
-    }, 400);
-  });
-
-  row.appendChild(label);
-  row.appendChild(input);
-  row.appendChild(saved);
-  return row;
 }
 
 async function handleConnect(adapterId, btn) {
@@ -1001,22 +927,28 @@ async function toggleRowActionsMenu(wrapper, transcriptId, videoTitle) {
   }
 
   menu.appendChild(
-    buildRowActionItem("Open in web app", openIcon(), async () => {
+    buildRowActionItem("Download as markdown", downloadIcon(), async () => {
       closeRowActionsMenu();
-      await sendMsg({ type: "OPEN_TRANSCRIPT", id: transcriptId });
+      await downloadTranscriptMarkdown(transcriptId);
     })
   );
 
   menu.appendChild(
-    buildRowActionItem("Copy link", copyIcon(), async (item) => {
-      const url = await buildTranscriptUrl(transcriptId);
-      try {
-        await navigator.clipboard.writeText(url);
+    buildRowActionItem("Copy transcript", copyIcon(), async (item) => {
+      const ok = await copyTranscriptText(transcriptId);
+      if (ok) {
         item.querySelector(".row-actions-menu-name").textContent = "Copied!";
         setTimeout(() => closeRowActionsMenu(), 600);
-      } catch {
+      } else {
         closeRowActionsMenu();
       }
+    })
+  );
+
+  menu.appendChild(
+    buildRowActionItem("Open in web app", openIcon(), async () => {
+      closeRowActionsMenu();
+      await sendMsg({ type: "OPEN_TRANSCRIPT", id: transcriptId });
     })
   );
 
@@ -1092,18 +1024,63 @@ function positionRowActionsMenu(wrapper, menu) {
   menu.style.left = `${left}px`;
 }
 
-async function buildTranscriptUrl(id) {
+function timestampFromMs(ms) {
+  const totalSeconds = Math.floor((ms || 0) / 1000);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  const mm = String(m).padStart(2, "0");
+  const ss = String(s).padStart(2, "0");
+  return h > 0 ? `${String(h).padStart(2, "0")}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+async function copyTranscriptText(transcriptId) {
+  const res = await sendMsg({ type: "GET_TRANSCRIPT", id: transcriptId });
+  if (!res?.success || !res.data?.transcript) return false;
+  let segments;
+  try {
+    segments = JSON.parse(res.data.transcript);
+  } catch {
+    return false;
+  }
+  const text = segments
+    .map((seg, idx) => {
+      const prev = segments[idx - 1];
+      const speakerChanged = seg.speaker && (!prev || prev.speaker !== seg.speaker);
+      const prefix = speakerChanged ? `[${seg.speaker}] ` : "";
+      return `[${timestampFromMs(seg.startMs)}] ${prefix}${seg.text}`;
+    })
+    .join("\n");
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function downloadTranscriptMarkdown(transcriptId) {
   const cfgRes = await sendMsg({ type: "GET_SETTINGS" });
   const mode = cfgRes?.data?.mode || "cloud";
   const base = mode === "cloud"
     ? "https://www.transcribed.dev"
     : "http://localhost:19720";
-  return `${base}/?layout=list&id=${encodeURIComponent(id)}`;
+  // The download route sets Content-Disposition: attachment, so a plain
+  // anchor click triggers a file save rather than navigating the popup.
+  const a = document.createElement("a");
+  a.href = `${base}/api/transcripts/${encodeURIComponent(transcriptId)}/download`;
+  a.rel = "noopener";
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 function iconFor(d) {
-  if (d.icon && typeof d.icon === "string") {
-    return `<img src="${escapeAttr(d.icon)}" alt="" />`;
+  const localIcon = LOCAL_DESTINATION_ICONS[d.adapterId];
+  const iconSrc = localIcon || (typeof d.icon === "string" ? d.icon : "");
+  if (iconSrc) {
+    return `<img src="${escapeAttr(iconSrc)}" alt="" />`;
   }
   // Default destination icon — generic send/arrow glyph.
   return `
@@ -1119,6 +1096,16 @@ function openIcon() {
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor"
          stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
       <path d="M11 3h6v6M17 3l-8 8M8 4H5a2 2 0 00-2 2v9a2 2 0 002 2h9a2 2 0 002-2v-3"/>
+    </svg>
+  `;
+}
+
+function downloadIcon() {
+  return `
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor"
+         stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10 3v10m0 0l-3.5-3.5M10 13l3.5-3.5"/>
+      <path d="M3 15v1a1 1 0 001 1h12a1 1 0 001-1v-1"/>
     </svg>
   `;
 }
@@ -1244,6 +1231,85 @@ async function openTranscript(id) {
   await sendMsg({ type: "OPEN_TRANSCRIPT", id });
 }
 
+// ---------------------------------------------------------------------------
+// Inline transcript drawer — matches the web app's list-item accordion. Click
+// a row to expand the transcript below it; click again to collapse. ⋯ menu
+// still has "Open in web app" for the full-page view.
+// ---------------------------------------------------------------------------
+
+async function toggleInlineTranscript(wrap, transcriptId) {
+  const expanded = wrap.classList.toggle("expanded");
+  if (!expanded) return;
+  const panel = wrap.querySelector(".recent-transcript-inner");
+  if (panel.dataset.loaded === "1") return;
+  panel.innerHTML = '<div class="recent-transcript-loading">Loading…</div>';
+  const res = await sendMsg({ type: "GET_TRANSCRIPT", id: transcriptId });
+  if (!res?.success || !res.data?.transcript) {
+    panel.innerHTML =
+      '<div class="recent-transcript-error">Couldn\'t load transcript.</div>';
+    return;
+  }
+  let segments;
+  try {
+    segments = JSON.parse(res.data.transcript);
+  } catch {
+    panel.innerHTML =
+      '<div class="recent-transcript-error">Invalid transcript format.</div>';
+    return;
+  }
+  panel.innerHTML = renderTranscriptBlocks(segments);
+  panel.dataset.loaded = "1";
+}
+
+function mergeSegmentsForDisplay(segments) {
+  // Group consecutive segments into paragraph blocks. Breaks on: speaker
+  // change, >20s time gap, or 8-segment cap so untimed captions still split.
+  const PARAGRAPH_MAX = 8;
+  const GAP_MS = 20000;
+  const out = [];
+  let buf = null;
+  for (const s of segments) {
+    const startMs = typeof s.startMs === "number" ? s.startMs : 0;
+    const speaker = s.speaker || null;
+    const text = (s.text || "").trim();
+    if (!text) continue;
+    const speakerChanged = buf && speaker !== buf.speaker;
+    const gapBroke = buf && startMs - buf.endMs > GAP_MS;
+    if (!buf || speakerChanged || gapBroke || buf.count >= PARAGRAPH_MAX) {
+      if (buf) out.push(buf);
+      buf = { startMs, endMs: startMs, speaker, text, count: 1 };
+    } else {
+      buf.text += " " + text;
+      buf.endMs = startMs;
+      buf.count += 1;
+    }
+  }
+  if (buf) out.push(buf);
+  return out;
+}
+
+function renderTranscriptBlocks(segments) {
+  const blocks = mergeSegmentsForDisplay(segments);
+  if (blocks.length === 0) {
+    return '<div class="recent-transcript-error">No transcript text.</div>';
+  }
+  return blocks
+    .map((b, i) => {
+      const prev = blocks[i - 1];
+      const showSpeaker = b.speaker && (!prev || prev.speaker !== b.speaker);
+      return `
+        <div class="transcript-block">
+          ${showSpeaker ? `<div class="transcript-speaker">${escapeHtml(b.speaker)}</div>` : ""}
+          <div class="transcript-line">
+            <span class="transcript-time">${timestampFromMs(b.startMs)}</span>
+            <span class="transcript-text">${escapeHtml(b.text)}</span>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
 function showCompletedAndReturn(completedId) {
   // Highlight the new transcript in the recent list, then show normal page state
   justCompletedId = completedId;
@@ -1331,12 +1397,20 @@ async function loadRecent() {
   el.recentList.innerHTML = "";
   for (const t of res.data) {
     const isNew = justCompletedId && t.id === justCompletedId;
+
+    const wrap = document.createElement("div");
+    wrap.className = "recent-item-wrap";
+
     const item = document.createElement("a");
     item.className = `recent-item${isNew ? " recent-item-new" : ""}`;
     item.href = "#";
     item.addEventListener("click", (e) => {
+      // Ignore clicks that land on inline action buttons (LLM, ⋯ menu).
+      if (e.target.closest(".recent-summarize") || e.target.closest(".row-actions")) {
+        return;
+      }
       e.preventDefault();
-      openTranscript(t.id);
+      toggleInlineTranscript(wrap, t.id);
     });
     item.innerHTML = `
       <div class="recent-item-content">
@@ -1352,9 +1426,18 @@ async function loadRecent() {
     `;
     // Summarize-with-LLM button — hover-reveal per row, mirrors web-app LlmLauncher
     item.appendChild(buildLlmLauncher(t.id, t.title));
-    // ⋯ menu — send to destinations, open in web app, copy link (YTT-205 §3)
+    // ⋯ menu — send to destinations, download, copy, open in web app (YTT-205 §3)
     item.appendChild(buildRowActionsMenu(t.id, t.title));
-    el.recentList.appendChild(item);
+
+    const panel = document.createElement("div");
+    panel.className = "recent-transcript";
+    const panelInner = document.createElement("div");
+    panelInner.className = "recent-transcript-inner";
+    panel.appendChild(panelInner);
+
+    wrap.appendChild(item);
+    wrap.appendChild(panel);
+    el.recentList.appendChild(wrap);
 
     // Two-phase animation: visual fade, then smooth spatial collapse
     if (isNew) {

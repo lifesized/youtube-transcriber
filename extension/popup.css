@@ -51,6 +51,8 @@ body::-webkit-scrollbar-thumb:hover {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-height: 100vh;
+  box-sizing: border-box;
 }
 
 /* State containers */
@@ -454,6 +456,10 @@ body::-webkit-scrollbar-thumb:hover {
 .recent-section {
   border-top: 1px solid var(--border);
   padding-top: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 .section-label {
   font-size: 11px;
@@ -467,7 +473,8 @@ body::-webkit-scrollbar-thumb:hover {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: 280px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
@@ -485,6 +492,10 @@ body::-webkit-scrollbar-thumb:hover {
 .recent-list::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.15);
 }
+.recent-item-wrap {
+  display: flex;
+  flex-direction: column;
+}
 .recent-item {
   position: relative;
   display: flex;
@@ -494,9 +505,73 @@ body::-webkit-scrollbar-thumb:hover {
   border-radius: 8px;
   text-decoration: none;
   transition: background 0.1s;
+  cursor: pointer;
 }
 .recent-item:hover {
   background: rgba(255, 255, 255, 0.05);
+}
+
+/* Inline transcript drawer — mirrors web-app spring motion (stiffness=550,
+   damping=5 approximated via springy cubic-bezier + grid row trick for
+   height:auto transition). */
+.recent-transcript {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.22s ease-out;
+}
+.recent-item-wrap.expanded .recent-transcript {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows 0.42s cubic-bezier(0.34, 1.56, 0.3, 1),
+    opacity 0.65s ease-out;
+}
+.recent-transcript-inner {
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 6px;
+}
+.recent-item-wrap.expanded .recent-transcript-inner {
+  padding: 10px 6px 14px;
+}
+.transcript-block {
+  margin-bottom: 12px;
+}
+.transcript-speaker {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 4px;
+}
+.transcript-line {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.transcript-time {
+  flex-shrink: 0;
+  width: 42px;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  line-height: 1.55;
+}
+.transcript-text {
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.72);
+}
+.recent-transcript-loading,
+.recent-transcript-error {
+  padding: 16px;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 /* Summarize-with-LLM — hover-reveal, mirrors web-app LlmLauncher */

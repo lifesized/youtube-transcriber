@@ -25,8 +25,8 @@ const COPY_FILES = [
   "popup.css",
   "popup-shell.html",
   "popup-shell.js",
-  "oauth-return.html",
-  "oauth-return.js",
+  "destination-connected.html",
+  "destination-connected.js",
   "setup-link.css",
   "content.js",
   "content-spotify.js",
@@ -34,6 +34,8 @@ const COPY_FILES = [
   "icons/icon16.png",
   "icons/icon48.png",
   "icons/icon128.png",
+  "icons/notion.svg",
+  "icons/obsidian.svg",
 ];
 
 // --- Helpers ---

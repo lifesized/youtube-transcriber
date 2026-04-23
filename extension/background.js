@@ -379,6 +379,20 @@ const DESTINATIONS_UNAVAILABLE = {
   error: "Destinations not yet available",
 };
 
+// Track the last OAuth popup window so we can close stale ones on retry and
+// force-close on OAUTH_RETURN in case destination-connected.html couldn't.
+let oauthWindowId = null;
+
+async function closeOauthWindow() {
+  if (oauthWindowId == null) return;
+  try {
+    await chrome.windows.remove(oauthWindowId);
+  } catch {
+    // Already closed by the user or by destination-connected.js — ignore.
+  }
+  oauthWindowId = null;
+}
+
 async function destinationsFetch(path, init = {}) {
   const config = await getApiConfig();
   if (config.mode !== "cloud") return DESTINATIONS_UNAVAILABLE;
@@ -416,7 +430,7 @@ async function listDestinations() {
 async function startDestinationOauth(adapterId) {
   // Cloud redirects here after the provider callback. Must match the
   // server-side allowlist (chrome-extension://* is whitelisted).
-  const returnUrl = chrome.runtime.getURL("oauth-return.html");
+  const returnUrl = chrome.runtime.getURL("destination-connected.html");
   return await destinationsFetch(
     `/${encodeURIComponent(adapterId)}/oauth/start`,
     { method: "POST", body: JSON.stringify({ returnUrl }) }
@@ -602,28 +616,13 @@ async function buildObsidianSend(transcriptId) {
 }
 
 async function sendToDestination(adapterId, transcriptId, opts) {
-  const merged = { ...(opts || {}) };
-
-  // Notion needs a target database. User picks one in Settings and it's
-  // stored per-install. No databaseId = no send — surface a config hint
-  // instead of letting cloud 400 us.
-  if (adapterId === "notion" && !merged.databaseId) {
-    const { notionDatabaseId } = await chrome.storage.sync.get(
-      "notionDatabaseId"
-    );
-    if (!notionDatabaseId) {
-      return {
-        ok: false,
-        needsConfig: true,
-        error: "Set a Notion database in Settings first.",
-      };
-    }
-    merged.databaseId = notionDatabaseId;
-  }
-
+  // Notion's target database is provisioned server-side during OAuth (via the
+  // integration's Template page duplication) and stored in DestinationToken
+  // config. No client-side picker — cloud adapter resolves databaseId from
+  // config when opts.databaseId is missing.
   const res = await destinationsFetch("/send", {
     method: "POST",
-    body: JSON.stringify({ adapterId, transcriptId, opts: merged }),
+    body: JSON.stringify({ adapterId, transcriptId, opts: opts || {} }),
   });
   if (!res.ok) return res;
 
@@ -985,13 +984,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (!validAdapterId(message.adapterId)) throw new Error("Invalid adapterId");
         const res = await startDestinationOauth(message.adapterId);
         if (res.ok && res.data?.authUrl && typeof res.data.authUrl === "string") {
+          // Close any lingering popup from a prior attempt so the user doesn't
+          // end up with a stale provider error tab after a successful retry.
+          await closeOauthWindow();
           try {
-            await chrome.windows.create({
+            const win = await chrome.windows.create({
               url: res.data.authUrl,
               type: "popup",
               width: 500,
               height: 700,
             });
+            oauthWindowId = win?.id ?? null;
           } catch (err) {
             return { ok: false, error: `Couldn't open auth window: ${err.message}` };
           }
@@ -1000,9 +1003,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       case "OAUTH_RETURN": {
-        // Sent by oauth-return.html after cloud redirects back. Popup also
+        // Sent by destination-connected.html after cloud redirects back. Popup also
         // listens directly so settings UI can re-render; background just
-        // acks so the landing page can close itself.
+        // acks + force-closes the window in case the landing page couldn't
+        // close itself (stale popup from earlier attempt, etc).
+        await closeOauthWindow();
         return { ok: true };
       }
 
