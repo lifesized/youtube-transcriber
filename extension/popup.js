@@ -1169,7 +1169,14 @@ const ALL_STATES = [
   "Error",
 ];
 
+function isSettingsOpen() {
+  return !el.settingsPanel.hidden;
+}
+
 function showState(name) {
+  // Settings view is exclusive — don't let a stale init() / async flow
+  // resurface library panels on top of it.
+  if (isSettingsOpen()) return;
   for (const s of ALL_STATES) {
     const elem = el[`state${s}`];
     if (elem) elem.hidden = s !== name;
@@ -1412,6 +1419,9 @@ async function renderQueueList() {
 
 async function loadRecent() {
   const res = await sendMsg({ type: "GET_RECENT" });
+  // User navigated to Settings while we were fetching — don't resurface
+  // the Recent list on top of the settings panel.
+  if (isSettingsOpen()) return;
   if (!res?.success || !res.data?.length) {
     el.recentSection.hidden = true;
     return;
@@ -1515,6 +1525,9 @@ async function showCurrentPageState() {
   existingTranscriptId = null;
   const version = ++pageStateVersion;
 
+  // Bail if the user switched to Settings before or during this flow.
+  if (isSettingsOpen()) return;
+
   if (!pageInfo?.videoId) {
     showState("NotYoutube");
     return;
@@ -1540,6 +1553,7 @@ async function showCurrentPageState() {
 
   // Stale check — a newer call has taken over
   if (version !== pageStateVersion) return;
+  if (isSettingsOpen()) return;
 
   if (existingRes?.success && existingRes.data) {
     existingTranscriptId = existingRes.data.id;
