@@ -412,6 +412,7 @@ body::-webkit-scrollbar-thumb:hover {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  margin-top: 14px;
   padding: 0;
   border: none;
   background: none;
@@ -460,6 +461,9 @@ body::-webkit-scrollbar-thumb:hover {
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+.recent-section[hidden] {
+  display: none;
 }
 .section-label {
   font-size: 11px;
@@ -1390,8 +1394,41 @@ body::-webkit-scrollbar-thumb:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-top: auto;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   padding-top: 10px;
+}
+
+/* Inline toast — fixed overlay inside the side panel so send feedback is
+   visible regardless of chrome.notifications permission. */
+.popup-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%) translateY(8px);
+  max-width: calc(100% - 32px);
+  padding: 9px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(22, 22, 22, 0.96);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12.5px;
+  line-height: 1.35;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  z-index: 50;
+  text-align: center;
+}
+.popup-toast[hidden] { display: none; }
+.popup-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.popup-toast.error {
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
 }
 .github-link {
   display: flex;

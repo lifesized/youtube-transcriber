@@ -55,7 +55,22 @@ const el = {
   obsidianVaultSaved: document.getElementById("obsidianVaultSaved"),
   obsidianAdvUriRow: document.getElementById("obsidianAdvUriRow"),
   obsidianAdvUriInput: document.getElementById("obsidianAdvUriInput"),
+  popupToast: document.getElementById("popupToast"),
 };
+
+let popupToastTimer = null;
+function showPopupToast(message, kind = "info") {
+  if (!el.popupToast || !message) return;
+  if (popupToastTimer) clearTimeout(popupToastTimer);
+  el.popupToast.textContent = message;
+  el.popupToast.classList.toggle("error", kind === "error");
+  el.popupToast.hidden = false;
+  requestAnimationFrame(() => el.popupToast.classList.add("show"));
+  popupToastTimer = setTimeout(() => {
+    el.popupToast.classList.remove("show");
+    setTimeout(() => { el.popupToast.hidden = true; }, 220);
+  }, kind === "error" ? 4500 : 2600);
+}
 
 let pageInfo = null;
 let progressTimer = null;
@@ -880,22 +895,19 @@ async function toggleRowActionsMenu(wrapper, transcriptId, videoTitle) {
         buildRowActionItem(d.name || d.adapterId, iconFor(d), async (item) => {
           item.setAttribute("data-sending", "true");
           item.disabled = true;
+          const destName = d.name || d.adapterId;
           const res = await sendMsg({
             type: "SEND_TO_DESTINATION",
             adapterId: d.adapterId,
             transcriptId,
-            destinationName: d.name || d.adapterId,
+            destinationName: destName,
           });
+          const payload = res?.data?.data || {};
+          const ok = res?.success && res.data?.ok;
           // Obsidian: popup writes clipboard (service worker can't) and
           // opens the scheme URL. Background returned the payload without
           // doing either. See buildObsidianSend.
-          if (
-            d.adapterId === "obsidian-scheme" &&
-            res?.success &&
-            res.data?.ok &&
-            res.data.data?.schemeUrl
-          ) {
-            const payload = res.data.data;
+          if (d.adapterId === "obsidian-scheme" && ok && payload.schemeUrl) {
             if (payload.clipboardText) {
               try {
                 await navigator.clipboard.writeText(payload.clipboardText);
@@ -910,15 +922,26 @@ async function toggleRowActionsMenu(wrapper, transcriptId, videoTitle) {
               // tabs.create fails silently in some extension contexts.
             }
           }
-          closeRowActionsMenu();
-          if (!res?.success || !res.data?.ok) {
-            // Background already toasted unless unavailable/authError.
-            if (res?.data?.unavailable || res?.data?.authError) {
-              console.warn(
-                "Destination unavailable:",
-                res?.data?.error || res?.error
-              );
+          // Notion (and other OAuth adapters) return the created page URL.
+          // Open it so the user sees the result and Notion desktop gets
+          // focus via its URL handler if installed.
+          if (d.adapterId === "notion" && ok && payload.url) {
+            try {
+              chrome.tabs.create({ url: payload.url, active: true });
+            } catch {
+              // Open failure is non-fatal — the page still exists in Notion.
             }
+          }
+          closeRowActionsMenu();
+          if (ok) {
+            showPopupToast(`Sent to ${destName}`, "info");
+          } else {
+            const errData = res?.data || {};
+            const errMsg =
+              errData.error ||
+              res?.error ||
+              `Couldn't send to ${destName}`;
+            showPopupToast(errMsg, "error");
           }
         })
       );
