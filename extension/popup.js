@@ -37,6 +37,13 @@ const el = {
   offlineCloudMsg: document.getElementById("offlineCloudMsg"),
   cloudOnboarding: document.getElementById("cloudOnboarding"),
   cloudAuthError: document.getElementById("cloudAuthError"),
+  cloudAuthForm: document.getElementById("cloudAuthForm"),
+  cloudAuthEmail: document.getElementById("cloudAuthEmail"),
+  cloudAuthSubmit: document.getElementById("cloudAuthSubmit"),
+  cloudAuthErrorMsg: document.getElementById("cloudAuthErrorMsg"),
+  cloudAuthSent: document.getElementById("cloudAuthSent"),
+  cloudAuthSentEmail: document.getElementById("cloudAuthSentEmail"),
+  cloudAuthResend: document.getElementById("cloudAuthResend"),
   localDetectedBanner: document.getElementById("localDetectedBanner"),
   btnUseLocal: document.getElementById("btnUseLocal"),
   cloudNudge: document.getElementById("cloudNudge"),
@@ -1673,6 +1680,14 @@ async function init() {
         el.cloudOnboarding.hidden = false;
         el.cloudAuthError.hidden = true;
       }
+      // Reset the in-panel magic-link form so it's ready for the next attempt
+      // (or keep the "check your email" confirmation visible if we just sent).
+      if (!el.cloudAuthSent.hidden) {
+        el.cloudAuthForm.hidden = true;
+      } else {
+        el.cloudAuthForm.hidden = false;
+        el.cloudAuthErrorMsg.hidden = true;
+      }
 
       // Auto-detect local instance and show banner
       const localRes = await sendMsg({ type: "DETECT_LOCAL" });
@@ -1842,6 +1857,48 @@ async function processQueue() {
 el.btnTranscribe.addEventListener("click", doTranscribe);
 el.btnRetry.addEventListener("click", doTranscribe);
 el.btnCheckAgain.addEventListener("click", init);
+
+// In-panel magic-link sign-in. Keeps the user on the current YouTube tab
+// — they get an email, click the link (which auto-closes its tab), and
+// the existing `startOfflinePolling()` loop picks up the restored session
+// and reruns init().
+let lastAuthEmail = "";
+async function sendMagicLink(email) {
+  el.cloudAuthSubmit.disabled = true;
+  el.cloudAuthResend.disabled = true;
+  el.cloudAuthErrorMsg.hidden = true;
+  el.cloudAuthErrorMsg.textContent = "";
+
+  const res = await sendMsg({ type: "SEND_MAGIC_LINK", email });
+
+  el.cloudAuthSubmit.disabled = false;
+  el.cloudAuthResend.disabled = false;
+
+  if (res?.success) {
+    lastAuthEmail = email;
+    el.cloudAuthSentEmail.textContent = email;
+    el.cloudOnboarding.hidden = true;
+    el.cloudAuthError.hidden = true;
+    el.cloudAuthForm.hidden = true;
+    el.cloudAuthSent.hidden = false;
+    return;
+  }
+  el.cloudAuthErrorMsg.textContent =
+    res?.error || "Couldn't send the magic link. Try again.";
+  el.cloudAuthErrorMsg.hidden = false;
+}
+
+el.cloudAuthForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const email = el.cloudAuthEmail.value.trim();
+  if (!email) return;
+  sendMagicLink(email);
+});
+
+el.cloudAuthResend.addEventListener("click", () => {
+  if (!lastAuthEmail) return;
+  sendMagicLink(lastAuthEmail);
+});
 
 // "Switch to self-hosted" — auto-switch to local mode
 el.btnUseLocal.addEventListener("click", async () => {

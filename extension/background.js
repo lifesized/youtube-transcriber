@@ -221,6 +221,37 @@ async function checkService() {
   return health;
 }
 
+/**
+ * Send a Supabase magic-link email to `email`, keeping the user on their
+ * current tab. Cloud endpoint sets the post-auth redirect so the email
+ * link completes the session on transcribed.dev (cross-origin cookie
+ * already allowed by host_permissions), and the side panel's offline
+ * poller picks up the new session automatically.
+ */
+async function sendMagicLink(email) {
+  const trimmed = (email || "").trim();
+  if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    return { ok: false, error: "Enter a valid email address." };
+  }
+  try {
+    const res = await fetch(`${CLOUD_BASE}/api/auth/magic-link`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: trimmed, source: "extension" }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (res.ok) return { ok: true };
+    let message = "Couldn't send the magic link. Try again.";
+    try {
+      const data = await res.json();
+      if (data?.error) message = data.error;
+    } catch { /* ignore */ }
+    return { ok: false, error: message };
+  } catch {
+    return { ok: false, error: "Network error. Check your connection." };
+  }
+}
+
 /** Probe localhost to see if a local instance is running. */
 async function detectLocalInstance() {
   try {
@@ -858,6 +889,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case "CHECK_SERVICE":
         return await checkService();
+
+      case "SEND_MAGIC_LINK":
+        return await sendMagicLink(message.email);
 
       case "TRANSCRIBE": {
         if (!validHttpUrl(message.url)) {

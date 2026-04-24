@@ -39,17 +39,36 @@
         <div id="cloudOnboarding">
           <p class="offline-heading">Get started</p>
           <p class="offline-sub">Transcribe 10 videos/month for free</p>
-          <a class="btn-cloud-signin" href="https://www.transcribed.dev/auth/login" target="_blank">
-            Sign in at transcribed.dev →
-          </a>
         </div>
         <!-- Shown when the session has expired -->
         <div id="cloudAuthError" hidden>
           <p class="offline-heading">Signed out</p>
           <p class="offline-sub">Your session expired — sign in again to continue.</p>
-          <a class="btn-cloud-signin" href="https://www.transcribed.dev/auth/login" target="_blank">
-            Sign in again →
-          </a>
+        </div>
+        <!-- In-panel magic-link form: keeps the user on YouTube instead of
+             bouncing them to transcribed.dev/auth/login in a new tab. -->
+        <form id="cloudAuthForm" class="cloud-auth-form">
+          <input
+            type="email"
+            id="cloudAuthEmail"
+            class="cloud-auth-email"
+            placeholder="you@email.com"
+            autocomplete="email"
+            spellcheck="false"
+            required
+          >
+          <button type="submit" id="cloudAuthSubmit" class="btn-cloud-signin">Sign in</button>
+          <p id="cloudAuthErrorMsg" class="cloud-auth-error" hidden></p>
+        </form>
+        <!-- "Check your email" success state — stays in-panel while the user
+             clicks the magic link in a new tab. The existing offline-polling
+             detects session return and re-runs init(). -->
+        <div id="cloudAuthSent" class="cloud-auth-sent" hidden>
+          <p class="offline-heading">Check your email</p>
+          <p class="offline-sub">
+            Sent a sign-in link to <span id="cloudAuthSentEmail"></span>. Click it to finish — you can stay here.
+          </p>
+          <button type="button" id="cloudAuthResend" class="cloud-auth-resend">Resend</button>
         </div>
       </div>
 
