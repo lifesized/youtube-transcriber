@@ -221,6 +221,103 @@ async function checkService() {
   return health;
 }
 
+/**
+ * Send a Supabase magic-link email to `email`, keeping the user on their
+ * current tab. Cloud endpoint sets the post-auth redirect so the email
+ * link completes the session on transcribed.dev (cross-origin cookie
+ * already allowed by host_permissions), and the side panel's offline
+ * poller picks up the new session automatically.
+ */
+async function sendMagicLink(email) {
+  const trimmed = (email || "").trim();
+  if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    throw new Error("Enter a valid email address.");
+  }
+  let res;
+  try {
+    res = await fetch(`${CLOUD_BASE}/api/auth/magic-link`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: trimmed, source: "extension" }),
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch {
+    throw new Error("Network error. Check your connection.");
+  }
+  if (res.ok) return { sent: true };
+  let message = "Couldn't send the magic link. Try again.";
+  try {
+    const data = await res.json();
+    if (data?.error) message = data.error;
+  } catch { /* ignore */ }
+  throw new Error(message);
+}
+
+/**
+ * Open transcribed.dev/auth/login in a small popup window with
+ * ?provider=google so the login page auto-triggers the Supabase Google
+ * OAuth redirect. The callback lands on /auth/extension-bridge which
+ * closes the popup; the side panel's offline poll restores the session.
+ */
+async function openGoogleSignin() {
+  const next = encodeURIComponent("/auth/extension-bridge");
+  const url = `${CLOUD_BASE}/auth/login?provider=google&next=${next}`;
+  const width = 420;
+  const height = 560;
+
+  // Center the popup over whichever window the user is currently in.
+  let left;
+  let top;
+  try {
+    const current = await chrome.windows.getCurrent();
+    if (current?.width && current?.height) {
+      left = Math.round((current.left ?? 0) + (current.width - width) / 2);
+      top = Math.round((current.top ?? 0) + (current.height - height) / 2);
+    }
+  } catch { /* fall back to Chrome default placement */ }
+
+  let win;
+  try {
+    win = await chrome.windows.create({
+      url,
+      type: "popup",
+      width,
+      height,
+      ...(left != null && top != null ? { left, top } : {}),
+    });
+  } catch (err) {
+    throw new Error(err?.message || "Could not open the sign-in window.");
+  }
+
+  // Auto-close the popup when it reaches the extension-bridge URL. Falling
+  // back to the bridge page's own window.close() isn't 100% reliable across
+  // browsers, so we close the window from the extension side too.
+  const windowId = win.id;
+  if (windowId != null) {
+    const onUpdated = (_tabId, changeInfo, tab) => {
+      if (tab?.windowId !== windowId) return;
+      const u = changeInfo.url || tab.url || "";
+      if (u.includes("/auth/extension-bridge")) {
+        chrome.tabs.onUpdated.removeListener(onUpdated);
+        // Brief delay so Supabase sets the session cookie before we close.
+        setTimeout(() => {
+          chrome.windows.remove(windowId).catch(() => { /* already closed */ });
+        }, 400);
+      }
+    };
+    const onRemoved = (closedId) => {
+      if (closedId === windowId) {
+        chrome.tabs.onUpdated.removeListener(onUpdated);
+        chrome.windows.onRemoved.removeListener(onRemoved);
+      }
+    };
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    chrome.windows.onRemoved.addListener(onRemoved);
+  }
+
+  return { opened: true };
+}
+
 /** Probe localhost to see if a local instance is running. */
 async function detectLocalInstance() {
   try {
@@ -858,6 +955,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case "CHECK_SERVICE":
         return await checkService();
+
+      case "SEND_MAGIC_LINK":
+        return await sendMagicLink(message.email);
+
+      case "OPEN_GOOGLE_SIGNIN":
+        return await openGoogleSignin();
 
       case "TRANSCRIBE": {
         if (!validHttpUrl(message.url)) {

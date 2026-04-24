@@ -9,11 +9,6 @@
   <div class="popup">
     <!-- No Service -->
     <div id="stateNoService" class="state state-offline" hidden>
-      <div class="offline-orb">
-        <div class="offline-orb-ring"></div>
-        <div class="offline-orb-dot"></div>
-      </div>
-
       <!-- Local mode offline -->
       <div id="offlineLocalMsg">
         <p class="offline-heading">Waiting for server</p>
@@ -33,23 +28,46 @@
         </div>
       </div>
 
-      <!-- Cloud mode offline / onboarding -->
+      <!-- Cloud mode: mini sign-in card mirroring /auth/login -->
       <div id="offlineCloudMsg" hidden>
-        <!-- Shown when user has no session (first-time onboarding) -->
+        <!-- Heading + subtitle swap between onboarding and signed-out states.
+             Kept as distinct elements (rather than a single text swap) so the
+             init() code keeps its existing hide/show contract. -->
         <div id="cloudOnboarding">
-          <p class="offline-heading">Get started</p>
-          <p class="offline-sub">Transcribe 10 videos/month for free</p>
-          <a class="btn-cloud-signin" href="https://www.transcribed.dev/auth/login" target="_blank">
-            Sign in at transcribed.dev →
-          </a>
+          <h2 class="cloud-auth-title">Sign in</h2>
+          <p class="cloud-auth-subtitle">Transcribe 10 videos/month for free.</p>
         </div>
-        <!-- Shown when the session has expired -->
         <div id="cloudAuthError" hidden>
-          <p class="offline-heading">Signed out</p>
-          <p class="offline-sub">Your session expired — sign in again to continue.</p>
-          <a class="btn-cloud-signin" href="https://www.transcribed.dev/auth/login" target="_blank">
-            Sign in again →
-          </a>
+          <h2 class="cloud-auth-title">Session expired</h2>
+          <p class="cloud-auth-subtitle">Sign back in to continue.</p>
+        </div>
+
+        <div id="cloudAuthCard" class="cloud-auth-card">
+          <button type="button" id="cloudAuthGoogle" class="btn-google">
+            Continue with Google
+          </button>
+          <div class="cloud-auth-divider"><span>or</span></div>
+          <form id="cloudAuthForm" class="cloud-auth-form">
+            <input
+              type="email"
+              id="cloudAuthEmail"
+              class="cloud-auth-email"
+              placeholder="Email address"
+              autocomplete="email"
+              spellcheck="false"
+              required
+            >
+            <button type="submit" id="cloudAuthSubmit" class="btn-auth-primary">Send magic link</button>
+            <p id="cloudAuthErrorMsg" class="cloud-auth-error" hidden></p>
+          </form>
+        </div>
+
+        <div id="cloudAuthSent" class="cloud-auth-sent" hidden>
+          <h2 class="cloud-auth-title">Check your email</h2>
+          <p class="cloud-auth-subtitle">
+            Sent a sign-in link to <span id="cloudAuthSentEmail"></span>.
+          </p>
+          <button type="button" id="cloudAuthResend" class="cloud-auth-resend">Resend</button>
         </div>
       </div>
 
@@ -162,7 +180,8 @@
           <input id="obsidianVaultInput" class="obsidian-vault-input" type="text" placeholder="e.g. MyVault" autocomplete="off" spellcheck="false" />
           <span id="obsidianVaultSaved" class="obsidian-vault-saved" hidden>Saved</span>
         </div>
-        <div id="obsidianAdvUriRow" class="obsidian-advuri-row" hidden>
+        <details id="obsidianAdvUriRow" class="obsidian-advuri-row" hidden>
+          <summary class="obsidian-advuri-summary">Advanced</summary>
           <label class="obsidian-advuri-label">
             <input id="obsidianAdvUriInput" class="obsidian-advuri-input" type="checkbox" />
             <span class="obsidian-advuri-text">Use Advanced URI plugin</span>
@@ -172,7 +191,7 @@
             <a class="obsidian-advuri-link" href="https://github.com/Vinzent03/obsidian-advanced-uri" target="_blank" rel="noopener">Advanced URI</a>
             community plugin.
           </p>
-        </div>
+        </details>
       </div>
     </div>
 
