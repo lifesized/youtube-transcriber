@@ -1281,7 +1281,7 @@ async function toggleInlineTranscript(wrap, transcriptId) {
   if (!expanded) return;
   const panel = wrap.querySelector(".recent-transcript-inner");
   if (panel.dataset.loaded === "1") return;
-  panel.innerHTML = '<div class="recent-transcript-loading">Loading…</div>';
+  panel.innerHTML = '<div class="recent-transcript-loading"><div class="transcript-spinner" aria-label="Loading"></div></div>';
   const res = await sendMsg({ type: "GET_TRANSCRIPT", id: transcriptId });
   if (!res?.success || !res.data?.transcript) {
     panel.innerHTML =
@@ -1483,6 +1483,9 @@ async function loadRecent() {
 
     // Two-phase animation: visual fade, then smooth spatial collapse
     if (isNew) {
+      // Auto-expand the newly transcribed item so the user sees the result
+      // immediately rather than having to click to reveal it.
+      toggleInlineTranscript(wrap, t.id);
       // Phase 1 complete (1.4s) — tick is visually gone, now collapse space
       setTimeout(() => {
         const tick = item.querySelector(".recent-tick");

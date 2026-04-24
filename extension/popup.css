@@ -545,37 +545,52 @@ body::-webkit-scrollbar-thumb:hover {
   margin-bottom: 12px;
 }
 .transcript-speaker {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.55);
   margin-bottom: 4px;
 }
 .transcript-line {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: baseline;
 }
 .transcript-time {
   flex-shrink: 0;
-  width: 42px;
+  width: 44px;
   text-align: right;
   font-family: ui-monospace, SFMono-Regular, monospace;
-  font-size: 11px;
+  font-size: 12px;
   color: rgba(255, 255, 255, 0.35);
-  line-height: 1.55;
+  line-height: 1.6;
 }
 .transcript-text {
   flex: 1;
-  font-size: 13px;
-  line-height: 1.55;
-  color: rgba(255, 255, 255, 0.72);
+  font-size: 15px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.82);
 }
 .recent-transcript-loading,
 .recent-transcript-error {
-  padding: 16px;
+  padding: 20px;
   text-align: center;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Matches the web-app spinner pattern (h-6 w-6 border-t + spin). */
+.transcript-spinner {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-top-color: rgba(255, 255, 255, 0.55);
+  animation: transcript-spinner-rotate 0.8s linear infinite;
+}
+@keyframes transcript-spinner-rotate {
+  to { transform: rotate(360deg); }
 }
 
 /* Summarize-with-LLM — hover-reveal, mirrors web-app LlmLauncher */
