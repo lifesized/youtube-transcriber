@@ -975,20 +975,87 @@ body::-webkit-scrollbar-thumb:hover {
   cursor: not-allowed;
 }
 
+/* Cloud sign-in card — mirrors the /auth/login layout in the web app. */
+.cloud-auth-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  text-align: center;
+}
+.cloud-auth-subtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+  text-align: center;
+}
+
+.cloud-auth-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 280px;
+  margin: 16px auto 0;
+}
+.cloud-auth-card[hidden] {
+  display: none;
+}
+
+.btn-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn-google:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.btn-google:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cloud-auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.3);
+}
+.cloud-auth-divider::before,
+.cloud-auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .cloud-auth-form {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 12px;
   width: 100%;
-  max-width: 260px;
+}
+.cloud-auth-form[hidden] {
+  display: none;
 }
 .cloud-auth-email {
   width: 100%;
-  padding: 8px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(0, 0, 0, 0.3);
   color: var(--text);
   font-size: 13px;
   outline: none;
@@ -998,29 +1065,51 @@ body::-webkit-scrollbar-thumb:hover {
   color: rgba(255, 255, 255, 0.25);
 }
 .cloud-auth-email:focus {
-  border-color: rgba(255, 255, 255, 0.3);
-  background: rgba(0, 0, 0, 0.35);
+  border-color: rgba(217, 185, 112, 0.5);
+  background: rgba(0, 0, 0, 0.4);
 }
-.cloud-auth-form .btn-cloud-signin {
-  margin-top: 0;
+
+.btn-auth-primary {
   width: 100%;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent, #d9b970);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s;
 }
+.btn-auth-primary:hover {
+  opacity: 0.9;
+}
+.btn-auth-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .cloud-auth-error {
-  margin: 0;
+  margin: 4px 0 0;
   font-size: 11px;
   color: rgba(248, 113, 113, 0.85);
   text-align: left;
 }
 
 .cloud-auth-sent {
-  margin-top: 4px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
+  width: 100%;
+  max-width: 280px;
+  margin: 16px auto 0;
+}
+.cloud-auth-sent[hidden] {
+  display: none;
 }
 .cloud-auth-resend {
-  margin-top: 6px;
+  margin-top: 10px;
   padding: 0;
   border: none;
   background: none;

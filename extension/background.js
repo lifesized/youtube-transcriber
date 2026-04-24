@@ -231,24 +231,47 @@ async function checkService() {
 async function sendMagicLink(email) {
   const trimmed = (email || "").trim();
   if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-    return { ok: false, error: "Enter a valid email address." };
+    throw new Error("Enter a valid email address.");
   }
+  let res;
   try {
-    const res = await fetch(`${CLOUD_BASE}/api/auth/magic-link`, {
+    res = await fetch(`${CLOUD_BASE}/api/auth/magic-link`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: trimmed, source: "extension" }),
       signal: AbortSignal.timeout(10000),
     });
-    if (res.ok) return { ok: true };
-    let message = "Couldn't send the magic link. Try again.";
-    try {
-      const data = await res.json();
-      if (data?.error) message = data.error;
-    } catch { /* ignore */ }
-    return { ok: false, error: message };
   } catch {
-    return { ok: false, error: "Network error. Check your connection." };
+    throw new Error("Network error. Check your connection.");
+  }
+  if (res.ok) return { sent: true };
+  let message = "Couldn't send the magic link. Try again.";
+  try {
+    const data = await res.json();
+    if (data?.error) message = data.error;
+  } catch { /* ignore */ }
+  throw new Error(message);
+}
+
+/**
+ * Open transcribed.dev/auth/login in a small popup window with
+ * ?provider=google so the login page auto-triggers the Supabase Google
+ * OAuth redirect. The callback lands on /auth/extension-bridge which
+ * closes the popup; the side panel's offline poll restores the session.
+ */
+async function openGoogleSignin() {
+  const next = encodeURIComponent("/auth/extension-bridge");
+  const url = `${CLOUD_BASE}/auth/login?provider=google&next=${next}`;
+  try {
+    await chrome.windows.create({
+      url,
+      type: "popup",
+      width: 500,
+      height: 680,
+    });
+    return { opened: true };
+  } catch (err) {
+    throw new Error(err?.message || "Could not open the sign-in window.");
   }
 }
 
@@ -892,6 +915,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case "SEND_MAGIC_LINK":
         return await sendMagicLink(message.email);
+
+      case "OPEN_GOOGLE_SIGNIN":
+        return await openGoogleSignin();
 
       case "TRANSCRIBE": {
         if (!validHttpUrl(message.url)) {

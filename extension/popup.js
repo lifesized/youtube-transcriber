@@ -37,6 +37,8 @@ const el = {
   offlineCloudMsg: document.getElementById("offlineCloudMsg"),
   cloudOnboarding: document.getElementById("cloudOnboarding"),
   cloudAuthError: document.getElementById("cloudAuthError"),
+  cloudAuthCard: document.getElementById("cloudAuthCard"),
+  cloudAuthGoogle: document.getElementById("cloudAuthGoogle"),
   cloudAuthForm: document.getElementById("cloudAuthForm"),
   cloudAuthEmail: document.getElementById("cloudAuthEmail"),
   cloudAuthSubmit: document.getElementById("cloudAuthSubmit"),
@@ -1680,12 +1682,12 @@ async function init() {
         el.cloudOnboarding.hidden = false;
         el.cloudAuthError.hidden = true;
       }
-      // Reset the in-panel magic-link form so it's ready for the next attempt
+      // Reset the in-panel sign-in card so it's ready for the next attempt
       // (or keep the "check your email" confirmation visible if we just sent).
       if (!el.cloudAuthSent.hidden) {
-        el.cloudAuthForm.hidden = true;
+        el.cloudAuthCard.hidden = true;
       } else {
-        el.cloudAuthForm.hidden = false;
+        el.cloudAuthCard.hidden = false;
         el.cloudAuthErrorMsg.hidden = true;
       }
 
@@ -1858,11 +1860,14 @@ el.btnTranscribe.addEventListener("click", doTranscribe);
 el.btnRetry.addEventListener("click", doTranscribe);
 el.btnCheckAgain.addEventListener("click", init);
 
-// In-panel magic-link sign-in. Keeps the user on the current YouTube tab
-// — they get an email, click the link (which auto-closes its tab), and
-// the existing `startOfflinePolling()` loop picks up the restored session
-// and reruns init().
+// In-panel sign-in. The user never leaves the YouTube tab:
+// — Google: a small popup window runs the OAuth flow and closes itself.
+// — Magic link: we POST to /api/auth/magic-link; the email link lands on
+//   /auth/extension-bridge which auto-closes.
+// In both cases the existing `startOfflinePolling()` loop picks up the
+// restored session within ~5s and reruns init().
 let lastAuthEmail = "";
+
 async function sendMagicLink(email) {
   el.cloudAuthSubmit.disabled = true;
   el.cloudAuthResend.disabled = true;
@@ -1879,7 +1884,7 @@ async function sendMagicLink(email) {
     el.cloudAuthSentEmail.textContent = email;
     el.cloudOnboarding.hidden = true;
     el.cloudAuthError.hidden = true;
-    el.cloudAuthForm.hidden = true;
+    el.cloudAuthCard.hidden = true;
     el.cloudAuthSent.hidden = false;
     return;
   }
@@ -1898,6 +1903,21 @@ el.cloudAuthForm.addEventListener("submit", (e) => {
 el.cloudAuthResend.addEventListener("click", () => {
   if (!lastAuthEmail) return;
   sendMagicLink(lastAuthEmail);
+});
+
+// Google OAuth: open /auth/login?provider=google in a small popup window
+// so the YouTube tab stays focused. The login page auto-triggers the
+// Supabase Google flow; the callback redirects to /auth/extension-bridge
+// which closes the popup.
+el.cloudAuthGoogle.addEventListener("click", async () => {
+  el.cloudAuthGoogle.disabled = true;
+  const res = await sendMsg({ type: "OPEN_GOOGLE_SIGNIN" });
+  el.cloudAuthGoogle.disabled = false;
+  if (!res?.success) {
+    el.cloudAuthErrorMsg.textContent =
+      res?.error || "Couldn't open the Google sign-in window.";
+    el.cloudAuthErrorMsg.hidden = false;
+  }
 });
 
 // "Switch to self-hosted" — auto-switch to local mode

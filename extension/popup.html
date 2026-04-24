@@ -9,11 +9,6 @@
   <div class="popup">
     <!-- No Service -->
     <div id="stateNoService" class="state state-offline" hidden>
-      <div class="offline-orb">
-        <div class="offline-orb-ring"></div>
-        <div class="offline-orb-dot"></div>
-      </div>
-
       <!-- Local mode offline -->
       <div id="offlineLocalMsg">
         <p class="offline-heading">Waiting for server</p>
@@ -33,40 +28,44 @@
         </div>
       </div>
 
-      <!-- Cloud mode offline / onboarding -->
+      <!-- Cloud mode: mini sign-in card mirroring /auth/login -->
       <div id="offlineCloudMsg" hidden>
-        <!-- Shown when user has no session (first-time onboarding) -->
+        <!-- Heading + subtitle swap between onboarding and signed-out states.
+             Kept as distinct elements (rather than a single text swap) so the
+             init() code keeps its existing hide/show contract. -->
         <div id="cloudOnboarding">
-          <p class="offline-heading">Get started</p>
-          <p class="offline-sub">Transcribe 10 videos/month for free</p>
+          <h2 class="cloud-auth-title">Sign in</h2>
+          <p class="cloud-auth-subtitle">Transcribe 10 videos/month for free.</p>
         </div>
-        <!-- Shown when the session has expired -->
         <div id="cloudAuthError" hidden>
-          <p class="offline-heading">Signed out</p>
-          <p class="offline-sub">Your session expired — sign in again to continue.</p>
+          <h2 class="cloud-auth-title">Session expired</h2>
+          <p class="cloud-auth-subtitle">Sign back in to continue.</p>
         </div>
-        <!-- In-panel magic-link form: keeps the user on YouTube instead of
-             bouncing them to transcribed.dev/auth/login in a new tab. -->
-        <form id="cloudAuthForm" class="cloud-auth-form">
-          <input
-            type="email"
-            id="cloudAuthEmail"
-            class="cloud-auth-email"
-            placeholder="you@email.com"
-            autocomplete="email"
-            spellcheck="false"
-            required
-          >
-          <button type="submit" id="cloudAuthSubmit" class="btn-cloud-signin">Sign in</button>
-          <p id="cloudAuthErrorMsg" class="cloud-auth-error" hidden></p>
-        </form>
-        <!-- "Check your email" success state — stays in-panel while the user
-             clicks the magic link in a new tab. The existing offline-polling
-             detects session return and re-runs init(). -->
+
+        <div id="cloudAuthCard" class="cloud-auth-card">
+          <button type="button" id="cloudAuthGoogle" class="btn-google">
+            Continue with Google
+          </button>
+          <div class="cloud-auth-divider"><span>or</span></div>
+          <form id="cloudAuthForm" class="cloud-auth-form">
+            <input
+              type="email"
+              id="cloudAuthEmail"
+              class="cloud-auth-email"
+              placeholder="Email address"
+              autocomplete="email"
+              spellcheck="false"
+              required
+            >
+            <button type="submit" id="cloudAuthSubmit" class="btn-auth-primary">Send magic link</button>
+            <p id="cloudAuthErrorMsg" class="cloud-auth-error" hidden></p>
+          </form>
+        </div>
+
         <div id="cloudAuthSent" class="cloud-auth-sent" hidden>
-          <p class="offline-heading">Check your email</p>
-          <p class="offline-sub">
-            Sent a sign-in link to <span id="cloudAuthSentEmail"></span>. Click it to finish — you can stay here.
+          <h2 class="cloud-auth-title">Check your email</h2>
+          <p class="cloud-auth-subtitle">
+            Sent a sign-in link to <span id="cloudAuthSentEmail"></span>.
           </p>
           <button type="button" id="cloudAuthResend" class="cloud-auth-resend">Resend</button>
         </div>
