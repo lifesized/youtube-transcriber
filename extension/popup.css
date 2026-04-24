@@ -1350,35 +1350,85 @@ body::-webkit-scrollbar-thumb:hover {
    toggles this to get auto-paste instead of ⌘V. Sub-text explains the
    plugin requirement so users don't flip the toggle blind. */
 .obsidian-advuri-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
   padding: 6px 10px 10px;
   user-select: none;
 }
 .obsidian-advuri-row[hidden] {
   display: none;
 }
+.obsidian-advuri-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.35);
+  list-style: none;
+  transition: color 0.15s;
+  padding: 4px 0;
+}
+.obsidian-advuri-summary::-webkit-details-marker {
+  display: none;
+}
+.obsidian-advuri-summary::before {
+  content: "▸";
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.3);
+  transition: transform 0.15s, color 0.15s;
+}
+.obsidian-advuri-row[open] .obsidian-advuri-summary::before {
+  transform: rotate(90deg);
+}
+.obsidian-advuri-summary:hover {
+  color: rgba(255, 255, 255, 0.6);
+}
 .obsidian-advuri-label {
   display: flex;
   align-items: center;
   gap: 8px;
   cursor: pointer;
+  margin-top: 10px;
 }
 .obsidian-advuri-input {
   flex-shrink: 0;
   width: 14px;
   height: 14px;
-  accent-color: var(--accent);
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.3);
   cursor: pointer;
   margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+.obsidian-advuri-input:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+}
+.obsidian-advuri-input:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.obsidian-advuri-input:checked::after {
+  content: "";
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) translate(-1px, -1px);
 }
 .obsidian-advuri-text {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.75);
 }
 .obsidian-advuri-sub {
-  margin: 0 0 0 22px;
+  margin: 4px 0 0 22px;
   font-size: 11px;
   line-height: 1.4;
   color: var(--muted-3);
