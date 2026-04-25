@@ -547,9 +547,10 @@ const CLIENT_SIDE_ADAPTERS = [
   { adapterId: "obsidian-scheme", name: "Obsidian", icon: "", clientSide: true },
 ];
 
-// Cloud-only teasers — shown when the user is in local mode or signed out,
-// so they can still see what they'd unlock with a cloud account. Renders
-// with a "Sign in" CTA instead of Connect.
+// Cloud-only teasers — shown when the user is in cloud mode but the
+// destinations fetch failed (signed out, offline, 5xx). Renders with a
+// "Sign in" CTA instead of Connect. Hidden entirely in self-hosted mode
+// since these adapters can't work without the cloud backend.
 const CLOUD_TEASER_ADAPTERS = [
   { adapterId: "notion", name: "Notion", icon: "", cloudOnly: true },
 ];
@@ -591,8 +592,10 @@ async function fetchDestinations() {
         cloudAdapters = CLOUD_TEASER_ADAPTERS;
       }
     } else {
+      // Self-hosted mode — hide cloud-only adapters entirely. They can't
+      // work without the cloud backend, so a teaser would just be noise.
       cloudReason = "local";
-      cloudAdapters = CLOUD_TEASER_ADAPTERS;
+      cloudAdapters = [];
     }
 
     destinationsCache = {
@@ -2154,12 +2157,17 @@ el.obsidianAdvUriInput.addEventListener("change", async () => {
 
 el.btnModeLocal.addEventListener("click", async () => {
   destinationsCache = null;
+  coldStartHandled = false;
   setModeUI("local");
   await sendMsg({ type: "SAVE_SETTINGS", mode: "local" });
   init();
 });
 el.btnModeCloud.addEventListener("click", async () => {
   destinationsCache = null;
+  // Mode switch invalidates the apiConfigCache in the background worker.
+  // The first /api/account hit after rebuild can 401 on a cookie race the
+  // same way a true cold start does, so reopen the retry window.
+  coldStartHandled = false;
   setModeUI("cloud");
   await sendMsg({ type: "SAVE_SETTINGS", mode: "cloud" });
   init();
