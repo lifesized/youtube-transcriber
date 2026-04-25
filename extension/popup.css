@@ -1659,6 +1659,9 @@ body::-webkit-scrollbar-thumb:hover {
   opacity: 0.3;
   transition: opacity 0.15s;
 }
+.github-link[hidden] {
+  display: none;
+}
 .github-link:hover {
   opacity: 0.7;
 }
@@ -1680,6 +1683,9 @@ body::-webkit-scrollbar-thumb:hover {
   color: rgba(255, 255, 255, 0.9);
   opacity: 0.45;
   transition: opacity 0.15s;
+}
+.cloud-link[hidden] {
+  display: none;
 }
 .cloud-link:hover {
   opacity: 0.85;
