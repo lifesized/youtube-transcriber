@@ -1571,6 +1571,11 @@ async function showCurrentPageState() {
 }
 
 let initVersion = 0;
+// True after the first init() has completed its CHECK_SERVICE round-trip.
+// The cold-start retry below is only useful on the genuinely cold first
+// hit; subsequent init() calls (nav clicks, post-OAuth re-runs) talk to a
+// warm service worker and don't need the 400ms retry tax.
+let coldStartHandled = false;
 
 async function init() {
   const thisInit = ++initVersion;
@@ -1665,7 +1670,9 @@ async function init() {
   // Cold-start race: the service worker can return offline/authError on the
   // first hit if /api/health or /api/account times out warming up. For
   // returning users we retry once before committing to the sign-in card.
-  if (!online) {
+  // Gated to the first init() call — nav-click re-inits don't need it and
+  // the 400ms wait was making Settings→Library feel laggy.
+  if (!online && !coldStartHandled) {
     const { hasEverSignedIn } = await chrome.storage.local.get("hasEverSignedIn");
     if (hasEverSignedIn) {
       await new Promise((r) => setTimeout(r, 400));
@@ -1675,6 +1682,7 @@ async function init() {
       online = serviceRes?.success && serviceRes.data?.online;
     }
   }
+  coldStartHandled = true;
 
   if (!online) {
     const cfgRes = await sendMsg({ type: "GET_SETTINGS" });
