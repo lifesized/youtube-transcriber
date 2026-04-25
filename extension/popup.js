@@ -1659,9 +1659,23 @@ async function init() {
   }
 
   // 1. Check service
-  const serviceRes = await sendMsg({ type: "CHECK_SERVICE" });
+  let serviceRes = await sendMsg({ type: "CHECK_SERVICE" });
   if (thisInit !== initVersion) return;
-  const online = serviceRes?.success && serviceRes.data?.online;
+  let online = serviceRes?.success && serviceRes.data?.online;
+
+  // Cold-start race: the service worker can return offline/authError on the
+  // first hit if /api/health or /api/account times out warming up. For
+  // returning users we retry once before committing to the sign-in card.
+  if (!online) {
+    const { hasEverSignedIn } = await chrome.storage.local.get("hasEverSignedIn");
+    if (hasEverSignedIn) {
+      await new Promise((r) => setTimeout(r, 400));
+      if (thisInit !== initVersion) return;
+      serviceRes = await sendMsg({ type: "CHECK_SERVICE" });
+      if (thisInit !== initVersion) return;
+      online = serviceRes?.success && serviceRes.data?.online;
+    }
+  }
 
   if (!online) {
     const cfgRes = await sendMsg({ type: "GET_SETTINGS" });
