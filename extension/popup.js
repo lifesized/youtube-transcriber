@@ -2160,7 +2160,10 @@ el.btnModeLocal.addEventListener("click", async () => {
   coldStartHandled = false;
   setModeUI("local");
   await sendMsg({ type: "SAVE_SETTINGS", mode: "local" });
-  init();
+  // Mode toggles live inside the settings panel — keep the user there.
+  // init() (which collapses settings into the library view) runs when the
+  // user navigates back via the Library nav button.
+  if (!isSettingsOpen()) init();
 });
 el.btnModeCloud.addEventListener("click", async () => {
   destinationsCache = null;
@@ -2170,7 +2173,7 @@ el.btnModeCloud.addEventListener("click", async () => {
   coldStartHandled = false;
   setModeUI("cloud");
   await sendMsg({ type: "SAVE_SETTINGS", mode: "cloud" });
-  init();
+  if (!isSettingsOpen()) init();
 });
 
 // Start
