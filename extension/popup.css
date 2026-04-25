@@ -1670,3 +1670,23 @@ body::-webkit-scrollbar-thumb:hover {
 .github-star-label {
   display: none;
 }
+
+.cloud-link {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.9);
+  opacity: 0.45;
+  transition: opacity 0.15s;
+}
+.cloud-link:hover {
+  opacity: 0.85;
+}
+.cloud-link-label {
+  letter-spacing: 0.01em;
+}
+.cloud-link-icon {
+  flex-shrink: 0;
+}

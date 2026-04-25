@@ -52,6 +52,8 @@ const el = {
   liveNotice: document.getElementById("liveNotice"),
   btnNavLibrary: document.getElementById("btnNavLibrary"),
   btnNavSettings: document.getElementById("btnNavSettings"),
+  githubLink: document.getElementById("githubLink"),
+  cloudLink: document.getElementById("cloudLink"),
   settingsPanel: document.getElementById("settingsPanel"),
   btnModeLocal: document.getElementById("btnModeLocal"),
   btnModeCloud: document.getElementById("btnModeCloud"),
@@ -1586,6 +1588,7 @@ async function init() {
   el.settingsPanel.hidden = true;
   el.btnNavLibrary.classList.add("active");
   el.btnNavSettings.classList.remove("active");
+  applyFooterLink();
 
   // Reset stale UI from previous state
   for (const s of ALL_STATES) {
@@ -2082,9 +2085,23 @@ function setModeUI(mode) {
   el.btnModeLocal.classList.toggle("active", mode === "local");
   el.btnModeCloud.classList.toggle("active", mode === "cloud");
   el.cloudAccountSection.hidden = mode !== "cloud";
+  applyFooterLink(mode);
   // Destinations always render. Obsidian is client-side (works in any mode);
   // cloud-only adapters show as teasers with a Sign in CTA in local mode.
   renderDestinationsSettings();
+}
+
+// Footer right-side link swaps with mode: GitHub repo for local devs,
+// transcribed.dev wordmark for cloud users (CTA toward the web app).
+async function applyFooterLink(modeOverride) {
+  let mode = modeOverride;
+  if (!mode) {
+    const stored = await chrome.storage.sync.get(["mode"]);
+    mode = stored.mode || "cloud";
+  }
+  const isCloud = mode === "cloud";
+  el.cloudLink.hidden = !isCloud;
+  el.githubLink.hidden = isCloud;
 }
 
 // Obsidian vault name — saved on every keystroke (debounced) to
