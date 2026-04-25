@@ -107,14 +107,19 @@ const PROGRESS_STAGES = [
   { at: 90, label: "Finishing up..." },
 ];
 
-function startProgress() {
+// In cloud mode, real progress text arrives via polling, so the fake stage
+// labels are suppressed (writeLabels=false) to avoid flicker between the
+// two. The width curve still runs so the bar feels the same as local.
+function startProgress({ writeLabels = true } = {}) {
   const bar = document.getElementById("progressBar");
   bar.classList.remove("indeterminate");
   bar.style.width = "0%";
   let stageIdx = 0;
   let elapsed = 0;
 
-  el.progressText.textContent = PROGRESS_STAGES[0].label;
+  el.progressText.textContent = writeLabels
+    ? PROGRESS_STAGES[0].label
+    : "Transcription in progress...";
 
   progressTimer = setInterval(() => {
     elapsed += 1;
@@ -126,7 +131,9 @@ function startProgress() {
       pct >= PROGRESS_STAGES[stageIdx + 1].at
     ) {
       stageIdx++;
-      el.progressText.textContent = PROGRESS_STAGES[stageIdx].label;
+      if (writeLabels) {
+        el.progressText.textContent = PROGRESS_STAGES[stageIdx].label;
+      }
     }
   }, 1000);
 }
@@ -138,18 +145,6 @@ function stopProgress() {
   }
   const bar = document.getElementById("progressBar");
   bar.style.width = "100%";
-}
-
-function startIndeterminate() {
-  // Clear any running local-mode progress timer to avoid conflicts
-  if (progressTimer) {
-    clearInterval(progressTimer);
-    progressTimer = null;
-  }
-  const bar = document.getElementById("progressBar");
-  bar.style.width = "";
-  bar.classList.add("indeterminate");
-  el.progressText.textContent = "Transcription in progress...";
 }
 
 // ---------------------------------------------------------------------------
@@ -604,7 +599,7 @@ async function fetchDestinations() {
       ok: true,
       cloudReady,
       cloudReason,
-      destinations: [...clientSide, ...cloudAdapters],
+      destinations: [...cloudAdapters, ...clientSide],
     };
     return destinationsCache;
   } finally {
@@ -692,13 +687,7 @@ function buildDestinationRow(d, ctx) {
     // Client-side adapter (Obsidian). "Connected" = local config saved.
     // Connect focuses the vault-name input below; Disconnect clears it.
     if (d.connected) {
-      status.classList.add("connected");
-      status.textContent = "Connected";
-      actionEl = document.createElement("button");
-      actionEl.type = "button";
-      actionEl.className = "destinations-row-action danger";
-      actionEl.textContent = "Disconnect";
-      actionEl.addEventListener("click", async () => {
+      actionEl = makeDestinationToggle(true, async () => {
         if (d.adapterId === "obsidian-scheme") {
           await chrome.storage.sync.remove("obsidianVaultName");
           el.obsidianVaultInput.value = "";
@@ -708,11 +697,15 @@ function buildDestinationRow(d, ctx) {
       });
     } else {
       status.textContent = "Add vault name below";
-      actionEl = document.createElement("button");
-      actionEl.type = "button";
-      actionEl.className = "destinations-row-action";
-      actionEl.textContent = "Connect";
-      actionEl.addEventListener("click", () => {
+      actionEl = makeDestinationToggle(false, async () => {
+        const { obsidianVaultName } = await chrome.storage.sync.get(
+          "obsidianVaultName"
+        );
+        if ((obsidianVaultName || "").trim()) {
+          destinationsCache = null;
+          renderDestinationsSettings();
+          return;
+        }
         el.obsidianVaultInput.focus();
         el.obsidianVaultInput.scrollIntoView({
           behavior: "smooth",
@@ -743,30 +736,15 @@ function buildDestinationRow(d, ctx) {
     if (d.connected && d.needsReauth) {
       status.classList.add("needs-reauth");
       status.textContent = "Reconnect needed";
-      actionEl = document.createElement("button");
-      actionEl.type = "button";
-      actionEl.className = "destinations-row-action";
-      actionEl.textContent = "Reconnect";
-      actionEl.addEventListener("click", () =>
+      actionEl = makeDestinationToggle(false, () =>
         handleConnect(d.adapterId, actionEl)
       );
     } else if (d.connected) {
-      status.classList.add("connected");
-      status.textContent = "Connected";
-      actionEl = document.createElement("button");
-      actionEl.type = "button";
-      actionEl.className = "destinations-row-action danger";
-      actionEl.textContent = "Disconnect";
-      actionEl.addEventListener("click", () =>
+      actionEl = makeDestinationToggle(true, () =>
         handleDisconnect(d.adapterId, actionEl)
       );
     } else {
-      status.textContent = "Not connected";
-      actionEl = document.createElement("button");
-      actionEl.type = "button";
-      actionEl.className = "destinations-row-action";
-      actionEl.textContent = "Connect";
-      actionEl.addEventListener("click", () =>
+      actionEl = makeDestinationToggle(false, () =>
         handleConnect(d.adapterId, actionEl)
       );
     }
@@ -780,17 +758,34 @@ function buildDestinationRow(d, ctx) {
   return frag;
 }
 
+// Mirrors the Toggle component in components/settings-panel.tsx — same shape,
+// transitions, and aria-checked semantics so the connector switch matches the
+// toggles used elsewhere in the local-hosted settings (OpenRouter, etc.).
+function makeDestinationToggle(checked, onChange) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.setAttribute("role", "switch");
+  btn.setAttribute("aria-checked", checked ? "true" : "false");
+  btn.className = "destinations-toggle" + (checked ? " is-on" : "");
+  const thumb = document.createElement("span");
+  thumb.className = "destinations-toggle-thumb";
+  btn.appendChild(thumb);
+  btn.addEventListener("click", () => {
+    if (btn.disabled) return;
+    onChange(!checked);
+  });
+  return btn;
+}
+
 async function handleConnect(adapterId, btn) {
   btn.disabled = true;
-  const label = btn.textContent;
-  btn.textContent = "Opening…";
   const res = await sendMsg({ type: "START_DESTINATION_OAUTH", adapterId });
   btn.disabled = false;
-  btn.textContent = label;
   if (!res?.success || !res.data?.ok) {
     const err = res?.data?.error || res?.error || "Couldn't start connection";
-    btn.textContent = "Retry";
     console.warn("Connect failed:", err);
+    destinationsCache = null;
+    renderDestinationsSettings();
     return;
   }
   // Poll for connection flip — user completes OAuth in the opened tab.
@@ -799,14 +794,10 @@ async function handleConnect(adapterId, btn) {
 
 async function handleDisconnect(adapterId, btn) {
   btn.disabled = true;
-  const label = btn.textContent;
-  btn.textContent = "Disconnecting…";
   const res = await sendMsg({ type: "DISCONNECT_DESTINATION", adapterId });
   btn.disabled = false;
-  btn.textContent = label;
   if (!res?.success || !res.data?.ok) {
-    btn.textContent = "Retry";
-    return;
+    console.warn("Disconnect failed");
   }
   destinationsCache = null;
   renderDestinationsSettings();
@@ -1631,7 +1622,12 @@ async function init() {
       // Only restart animation/polling if not already running — prevents
       // glitchy restart when switching tabs during an active transcription
       if (!pollInterval) {
-        startIndeterminate();
+        const cfg = await sendMsg({ type: "GET_SETTINGS" });
+        const isCloud = cfg?.data?.mode === "cloud";
+        startProgress({ writeLabels: !isCloud });
+        if (isCloud && pending.progressText) {
+          el.progressText.textContent = pending.progressText;
+        }
         pollTranscriptionStatus();
       }
       showQueuePrompt(pending.url);
@@ -1809,17 +1805,17 @@ async function doTranscribe() {
   showState("Transcribing");
   el.queuePrompt.hidden = true;
 
-  // Cloud mode: indeterminate bar + poll for real progress
-  // Local mode: fake staged progress bar
+  // Same staged width animation in both modes. Local fills in fake stage
+  // labels; cloud suppresses them and lets the poll overwrite progressText
+  // with the real backend stage.
   const cfgRes = await sendMsg({ type: "GET_SETTINGS" });
   const isCloud = cfgRes?.data?.mode === "cloud";
+  startProgress({ writeLabels: !isCloud });
   if (isCloud) {
     suppressPollFinalization = true;
-    startIndeterminate();
     pollTranscriptionStatus();
   } else {
     suppressPollFinalization = false;
-    startProgress();
   }
 
   const res = await sendMsg({
@@ -1865,7 +1861,9 @@ async function processQueue() {
   if (res?.success && res.data?.processing) {
     el.transcribingTitle.textContent = res.data.title || "Transcribing...";
     showState("Transcribing");
-    startIndeterminate();
+    const cfg = await sendMsg({ type: "GET_SETTINGS" });
+    const isCloud = cfg?.data?.mode === "cloud";
+    startProgress({ writeLabels: !isCloud });
     showQueuePrompt();
     renderQueueList();
     pollTranscriptionStatus();
@@ -2118,6 +2116,17 @@ function saveObsidianVaultName() {
       el.obsidianVaultSaved.classList.remove("show");
       setTimeout(() => { el.obsidianVaultSaved.hidden = true; }, 300);
     }, 1200);
+    // Connection state for Obsidian is derived from whether a vault name is
+    // saved. When the value flips empty↔non-empty, re-render so the toggle
+    // reflects the new state instead of getting stuck off after a disconnect.
+    const cached = (destinationsCache?.destinations || []).find(
+      (d) => d.adapterId === "obsidian-scheme"
+    );
+    const isConnected = !!value;
+    if (cached && cached.connected !== isConnected) {
+      destinationsCache = null;
+      renderDestinationsSettings();
+    }
   }, 350);
 }
 el.obsidianVaultInput.addEventListener("input", saveObsidianVaultName);

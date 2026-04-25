@@ -1219,8 +1219,54 @@ body::-webkit-scrollbar-thumb:hover {
   font-size: 11px;
   color: var(--muted-3);
 }
-.destinations-row-status.connected {
-  color: #22c55e;
+.destinations-row-status:empty {
+  display: none;
+}
+/* Connector toggle — mirrors the Toggle in components/settings-panel.tsx.
+   44×24 track, 20×20 thumb, accent fill when on, white/20 when off. */
+.destinations-toggle {
+  position: relative;
+  flex-shrink: 0;
+  width: 44px;
+  height: 24px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  padding: 0;
+  transition: background-color 0.2s, opacity 0.2s;
+}
+.destinations-toggle:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+.destinations-toggle.is-on {
+  background: var(--accent);
+}
+.destinations-toggle.is-on:hover {
+  filter: brightness(1.1);
+}
+.destinations-toggle:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.2);
+  outline-offset: 2px;
+}
+.destinations-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+.destinations-toggle-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transform: translateX(0);
+  transition: transform 0.2s;
+}
+.destinations-toggle.is-on .destinations-toggle-thumb {
+  transform: translateX(20px);
 }
 .destinations-row-status.needs-reauth {
   color: #ef4444;
@@ -1388,14 +1434,23 @@ body::-webkit-scrollbar-thumb:hover {
 .obsidian-advuri-summary::-webkit-details-marker {
   display: none;
 }
-.obsidian-advuri-summary::before {
-  content: "▸";
-  font-size: 9px;
-  color: rgba(255, 255, 255, 0.3);
-  transition: transform 0.15s, color 0.15s;
+.obsidian-advuri-summary::after {
+  content: "";
+  width: 5px;
+  height: 5px;
+  flex-shrink: 0;
+  border-right: 1.25px solid rgba(255, 255, 255, 0.5);
+  border-bottom: 1.25px solid rgba(255, 255, 255, 0.5);
+  transform: rotate(-45deg);
+  transform-origin: 60% 60%;
+  transition: transform 0.15s, border-color 0.15s;
+  margin-left: 2px;
 }
-.obsidian-advuri-row[open] .obsidian-advuri-summary::before {
-  transform: rotate(90deg);
+.obsidian-advuri-row[open] .obsidian-advuri-summary::after {
+  transform: rotate(45deg);
+}
+.obsidian-advuri-summary:hover::after {
+  border-color: rgba(255, 255, 255, 0.85);
 }
 .obsidian-advuri-summary:hover {
   color: rgba(255, 255, 255, 0.6);
