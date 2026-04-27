@@ -212,6 +212,14 @@ async function fetchCaptionsForTrack(track) {
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  // Liveness probe — bg uses this to detect whether the new content script
+  // is already attached on an existing tab before deciding to inject. Must
+  // respond synchronously so chrome.runtime.lastError doesn't fire when the
+  // listener is the only one for this message type.
+  if (msg?.type === "PING_TRANSCRIBER") {
+    sendResponse({ ok: true });
+    return false;
+  }
   if (msg?.type !== "EXTRACT_CAPTIONS") return undefined;
   (async () => {
     try {

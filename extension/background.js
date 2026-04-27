@@ -108,6 +108,61 @@ async function registerContentScripts() {
   if (eligible.length) {
     await chrome.scripting.registerContentScripts(eligible);
   }
+  // Chrome doesn't auto-inject newly-registered content scripts into tabs
+  // that were already open — only into future page loads. Without manual
+  // intervention, an extension update leaves users with stale (or absent)
+  // content scripts on every YouTube tab they have open until they reload
+  // each one. Inject programmatically into existing matching tabs so the
+  // post-update state matches the post-reload state.
+  await injectIntoExistingTabs(eligible);
+}
+
+async function injectIntoExistingTabs(scripts) {
+  for (const script of scripts) {
+    let tabs;
+    try {
+      tabs = await chrome.tabs.query({ url: script.matches });
+    } catch {
+      continue;
+    }
+    for (const tab of tabs) {
+      if (!tab.id || (tab.url || "").startsWith("chrome://")) continue;
+
+      // ISOLATED scripts add chrome.runtime.onMessage listeners — re-injecting
+      // when one is already alive would duplicate every response. Ping first;
+      // skip if the new content script already answers.
+      if (script.world !== "MAIN") {
+        const alive = await new Promise((resolve) => {
+          try {
+            chrome.tabs.sendMessage(
+              tab.id,
+              { type: "PING_TRANSCRIBER" },
+              (reply) => {
+                if (chrome.runtime.lastError) return resolve(false);
+                resolve(!!reply?.ok);
+              }
+            );
+          } catch {
+            resolve(false);
+          }
+        });
+        if (alive) continue;
+      }
+
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: script.js,
+          world: script.world,
+          injectImmediately: true,
+        });
+      } catch {
+        // chrome://, restricted hosts, page about to navigate, etc. —
+        // best-effort; the next page load will pick up the registered
+        // script anyway.
+      }
+    }
+  }
 }
 
 // Register on install and startup
