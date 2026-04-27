@@ -8,6 +8,7 @@
 (function () {
   function snapshotTracks() {
     const r = window.ytInitialPlayerResponse;
+    if (!r) return null; // ytInitialPlayerResponse not hydrated yet
     const tracks =
       r?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
     // Strip to a JSON-safe shape — anything we don't need adds bloat to the
@@ -23,30 +24,42 @@
   function dispatch() {
     try {
       const tracks = snapshotTracks();
+      if (tracks == null) return false; // not ready, caller should retry
       document.dispatchEvent(
         new CustomEvent("ytt-captions-tracks", {
           detail: { tracks, ts: Date.now() },
         })
       );
+      return true;
     } catch {
-      /* page state in flux — wait for next nav event */
+      return false;
     }
   }
 
-  // Initial dispatch (page may already be hydrated).
-  dispatch();
+  // Poll until ytInitialPlayerResponse hydrates. document_start runs
+  // before YouTube's inline assignment on direct-load pages, so the
+  // initial dispatch always misses; a fixed setTimeout is a guess.
+  // Cap at ~6s so we don't leak timers on edge-case pages.
+  function dispatchWhenReady() {
+    if (dispatch()) return;
+    let attempts = 0;
+    const timer = setInterval(() => {
+      attempts++;
+      if (dispatch() || attempts >= 30) clearInterval(timer);
+    }, 200);
+  }
 
-  // YouTube SPA navigation — re-snapshot the new video's tracks.
-  window.addEventListener("yt-navigate-finish", () => {
-    // Defer slightly so YouTube updates ytInitialPlayerResponse first.
-    setTimeout(dispatch, 250);
-  });
+  // Initial attempt — direct load.
+  dispatchWhenReady();
 
-  // Also expose a synchronous request channel for the side panel —
-  // content.js can dispatch "ytt-captions-request" and we'll re-emit the
-  // current tracks immediately. Useful if the side panel opens after
-  // initial load and content.js missed the first dispatch.
-  document.addEventListener("ytt-captions-request", () => {
-    dispatch();
-  });
+  // YouTube SPA navigation — re-snapshot the new video's tracks. The
+  // ytInitialPlayerResponse swap can lag the navigate-finish event so
+  // poll here too rather than guessing with a fixed setTimeout.
+  window.addEventListener("yt-navigate-finish", dispatchWhenReady);
+
+  // Synchronous request channel for the side panel — content.js
+  // (ISOLATED) dispatches "ytt-captions-request" and we re-emit. Useful
+  // when the bg's EXTRACT_CAPTIONS arrives before any prior dispatch
+  // landed in the cache.
+  document.addEventListener("ytt-captions-request", dispatchWhenReady);
 })();
