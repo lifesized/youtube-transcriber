@@ -2,6 +2,15 @@
 
 ## 2026-04-27
 
+### Added
+- **Client-side caption scrape (extension 1.6.1)** — Side panel now reads `window.ytInitialPlayerResponse` from the YouTube tab via a new MAIN-world content script (`content-captions-main.js`) and fetches the JSON3 timed-text URL directly in-browser. When captions exist, segments are sent along with the `POST /api/transcripts` request as a `segments[]` field; the cloud server stores them directly and skips the Inngest worker round-trip. Matches the "instant transcript" UX of competitor extensions for caption-able videos. Falls back transparently to the existing server-side path for videos without captions (Whisper / audio).
+- **Transcribe benchmarking** — `doTranscribe` now logs and persists per-call timings (`captionScrapeMs`, `serverRequestMs`, `totalMs`, pathway) to the service worker console + `chrome.storage.local.transcribeBench` (last 20 records). Lets us measure the speedup objectively across videos.
+
+### Fixed
+- **Progress bar lurching** — `startProgress` was leaking `setInterval` timers when called twice (e.g., on a tab-switch race). Two timers writing to `bar.style.width` with their own elapsed counters made the bar jump backward. Now idempotent — clears any previous timer before starting a new one.
+- **`optimisticAuthed` ReferenceError on cold-start retry** — Leftover references after the recent rename to `cachedAuthOk` would have crashed the cold-start retry path on cloud-mode 401s.
+- **Stale caption cache across SPA navigation** — Cached caption tracks are now tagged with their videoId; `EXTRACT_CAPTIONS` rejects stale snapshots and waits for a fresh dispatch from the MAIN-world script before fetching, so video B never gets video A's captions.
+
 ### Changed
 - **Extension cloud-mode panel boot — instant first paint** — Side panel no longer shows a dark blank screen while `CHECK_SERVICE` (`/api/health` + `/api/account`) round-trips on open. `init()` now does parallel cheap reads (active tab, mode, cached auth) up front and paints the page state + Recent list optimistically before any network fetch. The CHECK_SERVICE call still runs and reconciles the UI on confirmed offline / 401, but happy-path users see content in their first frame.
 - **Recent transcripts SWR cache** — Last fetched list is cached per mode in `chrome.storage.local`. `loadRecent()` renders the cached list immediately on open, then revalidates from `/api/transcripts` and only touches the DOM if the result actually differs.

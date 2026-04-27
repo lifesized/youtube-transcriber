@@ -111,6 +111,13 @@ const PROGRESS_STAGES = [
 // labels are suppressed (writeLabels=false) to avoid flicker between the
 // two. The width curve still runs so the bar feels the same as local.
 function startProgress({ writeLabels = true } = {}) {
+  // Idempotent — clear any previous timer before starting a new one. Two
+  // timers writing to bar.style.width with their own elapsed counters
+  // makes the bar lurch backward; this guarantees only one is ever active.
+  if (progressTimer) {
+    clearInterval(progressTimer);
+    progressTimer = null;
+  }
   const bar = document.getElementById("progressBar");
   bar.classList.remove("indeterminate");
   bar.style.width = "0%";
@@ -1846,8 +1853,8 @@ async function init() {
   // once if either (a) this is the first init() of the session and the user
   // has signed in before, or (b) we just optimistically rendered as authed
   // (a known-good signal that the 401 is a race, not a real signout).
-  if (!online && (optimisticAuthed || !coldStartHandled)) {
-    let shouldRetry = optimisticAuthed;
+  if (!online && (cachedAuthOk || !coldStartHandled)) {
+    let shouldRetry = cachedAuthOk;
     if (!shouldRetry) {
       const { hasEverSignedIn } = await chrome.storage.local.get("hasEverSignedIn");
       shouldRetry = !!hasEverSignedIn;

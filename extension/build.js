@@ -27,6 +27,7 @@ const COPY_FILES = [
   "destination-connected.js",
   "setup-link.css",
   "content.js",
+  "content-captions-main.js",
   "content-spotify.js",
   "content-llm-handoff.js",
   "icons/icon16.png",
