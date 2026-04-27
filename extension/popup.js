@@ -1419,21 +1419,111 @@ async function renderQueueList() {
 }
 
 // ---------------------------------------------------------------------------
-// Recent transcripts
+// Cloud auth cache
+//
+// Cache the last known cloud auth result so we don't gate first paint on a
+// network round-trip. A returning user opens the panel → we render the list
+// optimistically while CHECK_SERVICE runs in the background, only swapping
+// to the sign-in card on a confirmed 401.
+//
+// TTL is short (5 min) so a real signout (cookies cleared in the web app)
+// stops being optimistic quickly. Confirmed 401 also clears the cache.
 // ---------------------------------------------------------------------------
 
+const AUTH_CACHE_KEY = "authCache_cloud";
+const AUTH_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function getCachedAuth() {
+  try {
+    const obj = await chrome.storage.local.get(AUTH_CACHE_KEY);
+    return obj?.[AUTH_CACHE_KEY] || null;
+  } catch {
+    return null;
+  }
+}
+
+async function setCachedAuth(ok) {
+  try {
+    await chrome.storage.local.set({
+      [AUTH_CACHE_KEY]: { ok: !!ok, ts: Date.now() },
+    });
+  } catch { /* ignore */ }
+}
+
+function isAuthCacheFresh(cache) {
+  if (!cache || !cache.ok) return false;
+  return Date.now() - cache.ts < AUTH_CACHE_TTL_MS;
+}
+
+// ---------------------------------------------------------------------------
+// Recent transcripts (SWR)
+//
+// Cache last fetched list per mode in chrome.storage.local so the panel
+// paints instantly on reopen instead of waiting on a network round-trip.
+// On open: render cached list immediately, then fetch fresh; only re-render
+// if the fresh result actually differs.
+// ---------------------------------------------------------------------------
+
+const RECENT_CACHE_KEY = (mode) => `recentCache_${mode}`;
+
+async function getCachedRecent(mode) {
+  try {
+    const key = RECENT_CACHE_KEY(mode);
+    const obj = await chrome.storage.local.get(key);
+    const cached = obj?.[key];
+    if (!cached || !Array.isArray(cached.items)) return null;
+    return cached.items;
+  } catch {
+    return null;
+  }
+}
+
+async function setCachedRecent(mode, items) {
+  try {
+    await chrome.storage.local.set({
+      [RECENT_CACHE_KEY(mode)]: { items, ts: Date.now() },
+    });
+  } catch { /* ignore */ }
+}
+
+function recentListHash(items) {
+  if (!Array.isArray(items)) return "";
+  return items.map((t) => `${t.id}:${t.title}:${t.createdAt}`).join("|");
+}
+
 async function loadRecent() {
+  const modeRes = await sendMsg({ type: "GET_SETTINGS" });
+  const mode = modeRes?.data?.mode || "cloud";
+
+  // 1. Optimistic render from cache (no network).
+  const cached = await getCachedRecent(mode);
+  if (cached && cached.length && !isSettingsOpen()) {
+    renderRecentList(cached);
+  }
+
+  // 2. Fetch fresh; reconcile.
   const res = await sendMsg({ type: "GET_RECENT" });
-  // User navigated to Settings while we were fetching — don't resurface
-  // the Recent list on top of the settings panel.
   if (isSettingsOpen()) return;
   if (!res?.success || !res.data?.length) {
+    // Empty list — clear cache and hide section unless we're still rendering
+    // a stale optimistic list that we now know is gone.
+    await setCachedRecent(mode, []);
     el.recentSection.hidden = true;
+    el.recentList.innerHTML = "";
     return;
   }
+  // Skip DOM churn when nothing changed — cached render is already correct.
+  if (cached && recentListHash(cached) === recentListHash(res.data) && !justCompletedId) {
+    return;
+  }
+  renderRecentList(res.data);
+  await setCachedRecent(mode, res.data);
+}
+
+function renderRecentList(items) {
   el.recentSection.hidden = false;
   el.recentList.innerHTML = "";
-  for (const t of res.data) {
+  for (const t of items) {
     const isNew = justCompletedId && t.id === justCompletedId;
 
     const wrap = document.createElement("div");
@@ -1600,25 +1690,64 @@ async function init() {
   el.btnTranscribe.hidden = false;
   existingTranscriptId = null;
 
-  // Get active tab directly
+  // PHASE 1 — cheap parallel reads. None of these hit the network. Combined
+  // they take a few ms; doing them in parallel (and skipping the bg
+  // GET_SETTINGS round-trip in favor of a direct chrome.storage.sync read)
+  // means we have everything needed for an optimistic first paint before the
+  // first network fetch even starts.
+  let tabResult = [];
+  let syncStash = {};
+  let authCache = null;
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (thisInit !== initVersion) return;
-    if (tab) {
-      const videoId = extractVideoId(tab.url || "");
-      // Read isLive flag from content script's stored page info
-      let isLive = false;
-      try {
-        const stored = await chrome.storage.session.get(`tab_${tab.id}`);
-        isLive = !!stored[`tab_${tab.id}`]?.isLive;
-      } catch { /* ignore */ }
-      pageInfo = { url: tab.url, title: tab.title, videoId, isLive };
-      currentTabUrl = tab.url;
-      currentTabId = tab.id;
-    }
+    [tabResult, syncStash, authCache] = await Promise.all([
+      chrome.tabs.query({ active: true, currentWindow: true }),
+      chrome.storage.sync.get(["mode"]),
+      getCachedAuth(),
+    ]);
   } catch { /* ignore */ }
+  if (thisInit !== initVersion) return;
 
-  // Check if there's an in-flight transcription from a previous popup open
+  const mode = syncStash?.mode || "cloud";
+  const optimisticAuthed = mode !== "cloud" || isAuthCacheFresh(authCache);
+  const tab = tabResult?.[0];
+  if (tab) {
+    const videoId = extractVideoId(tab.url || "");
+    let isLive = false;
+    try {
+      const stored = await chrome.storage.session.get(`tab_${tab.id}`);
+      isLive = !!stored[`tab_${tab.id}`]?.isLive;
+    } catch { /* ignore */ }
+    pageInfo = { url: tab.url, title: tab.title, videoId, isLive };
+    currentTabUrl = tab.url;
+    currentTabId = tab.id;
+  }
+
+  // PHASE 2 — optimistic paint. For returning users we already know if they
+  // were authed and what their recent list looked like, so paint that now.
+  // Network checks below either confirm it (no-op) or correct it (swap to
+  // offline / sign-in UI). This is what kills the dark-screen flash and the
+  // "sign-in card on a slow /api/account" flicker.
+  let optimisticRendered = false;
+  if (optimisticAuthed) {
+    if (pageInfo?.videoId) {
+      el.videoTitle.textContent = pageInfo.title || pageInfo.url;
+      // Hide action buttons until showCurrentPageState resolves
+      el.btnTranscribe.hidden = true;
+      el.btnAlreadyTranscribed.hidden = true;
+      el.liveNotice.hidden = true;
+      showState("Ready");
+    } else {
+      showState("NotYoutube");
+    }
+    // Cached list paints instantly; the SWR fetch revalidates in parallel.
+    loadRecent();
+    optimisticRendered = true;
+  }
+
+  // PHASE 3 — in-flight transcription check. Done after optimistic paint so
+  // a returning user doesn't see a dark screen during this round-trip
+  // either. If a transcription is in flight we'll override the optimistic
+  // state with the Transcribing UI.
   const statusRes = await sendMsg({ type: "GET_TRANSCRIPTION_STATUS" });
   if (thisInit !== initVersion) return;
   if (statusRes?.success && statusRes.data) {
@@ -1630,8 +1759,7 @@ async function init() {
       // Only restart animation/polling if not already running — prevents
       // glitchy restart when switching tabs during an active transcription
       if (!pollInterval) {
-        const cfg = await sendMsg({ type: "GET_SETTINGS" });
-        const isCloud = cfg?.data?.mode === "cloud";
+        const isCloud = mode === "cloud";
         startProgress({ writeLabels: !isCloud });
         if (isCloud && pending.progressText) {
           el.progressText.textContent = pending.progressText;
@@ -1640,7 +1768,7 @@ async function init() {
       }
       showQueuePrompt(pending.url);
       renderQueueList();
-      loadRecent();
+      if (!optimisticRendered) loadRecent();
       return;
     }
     if (pending.status === "done" && pending.result) {
@@ -1660,24 +1788,29 @@ async function init() {
       }
       el.errorMessage.textContent = pending.error || "Transcription failed";
       showState("Error");
-      loadRecent();
+      if (!optimisticRendered) loadRecent();
       return;
     }
   }
 
-  // 1. Check service
+  // PHASE 4 — confirm via CHECK_SERVICE. If we already painted optimistically
+  // and the service is up + authed, this is a no-op visually. If we got it
+  // wrong, swap to the offline / sign-in UI.
   let serviceRes = await sendMsg({ type: "CHECK_SERVICE" });
   if (thisInit !== initVersion) return;
   let online = serviceRes?.success && serviceRes.data?.online;
 
-  // Cold-start race: the service worker can return offline/authError on the
-  // first hit if /api/health or /api/account times out warming up. For
-  // returning users we retry once before committing to the sign-in card.
-  // Gated to the first init() call — nav-click re-inits don't need it and
-  // the 400ms wait was making Settings→Library feel laggy.
-  if (!online && !coldStartHandled) {
-    const { hasEverSignedIn } = await chrome.storage.local.get("hasEverSignedIn");
-    if (hasEverSignedIn) {
+  // Cold-start race: /api/account can 401 on a Supabase cookie warmup. Retry
+  // once if either (a) this is the first init() of the session and the user
+  // has signed in before, or (b) we just optimistically rendered as authed
+  // (a known-good signal that the 401 is a race, not a real signout).
+  if (!online && (optimisticAuthed || !coldStartHandled)) {
+    let shouldRetry = optimisticAuthed;
+    if (!shouldRetry) {
+      const { hasEverSignedIn } = await chrome.storage.local.get("hasEverSignedIn");
+      shouldRetry = !!hasEverSignedIn;
+    }
+    if (shouldRetry) {
       await new Promise((r) => setTimeout(r, 400));
       if (thisInit !== initVersion) return;
       serviceRes = await sendMsg({ type: "CHECK_SERVICE" });
@@ -1688,12 +1821,13 @@ async function init() {
   coldStartHandled = true;
 
   if (!online) {
-    const cfgRes = await sendMsg({ type: "GET_SETTINGS" });
-    if (thisInit !== initVersion) return;
-    const cfgMode = cfgRes?.data?.mode || "cloud";
+    const cfgMode = serviceRes?.data?.mode || mode;
     const authError = serviceRes?.data?.authError;
 
     if (cfgMode === "cloud") {
+      // Confirmed signed-out — kill cached optimism so next open doesn't
+      // flash the list before the sign-in card.
+      if (authError) await setCachedAuth(false);
       el.offlineLocalMsg.hidden = true;
       el.offlineCloudMsg.hidden = false;
       el.cloudNudge.hidden = true;
@@ -1738,17 +1872,23 @@ async function init() {
   }
   stopOfflinePolling();
 
+  // Confirmed online. Refresh auth cache for cloud so next reopen paints
+  // optimistically without the round-trip gating.
+  if (mode === "cloud") setCachedAuth(true);
+
   startHeartbeat();
 
   // Warm the destinations cache so the ⋯ menu renders instantly.
   // Always — Obsidian is available in local mode too.
   fetchDestinations();
 
-  // 2. Show page state
+  // Show page state (re-runs in case optimistic was stale, e.g. videoId
+  // resolved to "Already transcribed" from CHECK_EXISTING).
   showCurrentPageState();
 
-  // 3. Load recent
-  loadRecent();
+  // Load recent — skip if optimistic already kicked it off (SWR handles
+  // revalidation on its own).
+  if (!optimisticRendered) loadRecent();
 }
 
 // ---------------------------------------------------------------------------

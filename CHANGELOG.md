@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-04-27
+
+### Changed
+- **Extension cloud-mode panel boot — instant first paint** — Side panel no longer shows a dark blank screen while `CHECK_SERVICE` (`/api/health` + `/api/account`) round-trips on open. `init()` now does parallel cheap reads (active tab, mode, cached auth) up front and paints the page state + Recent list optimistically before any network fetch. The CHECK_SERVICE call still runs and reconciles the UI on confirmed offline / 401, but happy-path users see content in their first frame.
+- **Recent transcripts SWR cache** — Last fetched list is cached per mode in `chrome.storage.local`. `loadRecent()` renders the cached list immediately on open, then revalidates from `/api/transcripts` and only touches the DOM if the result actually differs.
+- **Cloud auth cache (5 min TTL)** — Successful `/api/account` writes `authCache_cloud` so returning users skip the sign-in flash on a transient cold-start 401. Cold-start retry is now also triggered when the cached auth says we should still be signed in (a 401 there is almost always a Supabase cookie warmup race, not a real signout). Confirmed 401 clears the cache so the next open shows the sign-in card without flashing the list.
+
+### Removed
+- **Dead `popup-shell.html` / `popup-shell.js`** — Unused since the side panel switched to native `popup.html`. Dropped from `extension/build.js` too.
+
 ## 2026-04-20
 
 ### Added
