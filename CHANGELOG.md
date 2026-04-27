@@ -7,6 +7,7 @@
 - **Transcribe benchmarking** — `doTranscribe` now logs and persists per-call timings (`captionScrapeMs`, `serverRequestMs`, `totalMs`, pathway) to the service worker console + `chrome.storage.local.transcribeBench` (last 20 records). Lets us measure the speedup objectively across videos.
 
 ### Fixed
+- **"Already transcribed" lying about pending records (1.6.2)** — Both the cached lookup in the side panel (`maybeFindCachedTranscript`) and the bg `checkExisting` round-trip matched recent transcripts by `videoId` only, ignoring `status`. A stuck `processing` record would surface as "Already transcribed", and clicking it took users to a still-pending row in the web app. Both paths now require `status === "done"` before claiming the video is done.
 - **Progress bar lurching** — `startProgress` was leaking `setInterval` timers when called twice (e.g., on a tab-switch race). Two timers writing to `bar.style.width` with their own elapsed counters made the bar jump backward. Now idempotent — clears any previous timer before starting a new one.
 - **`optimisticAuthed` ReferenceError on cold-start retry** — Leftover references after the recent rename to `cachedAuthOk` would have crashed the cold-start retry path on cloud-mode 401s.
 - **Stale caption cache across SPA navigation** — Cached caption tracks are now tagged with their videoId; `EXTRACT_CAPTIONS` rejects stale snapshots and waits for a fresh dispatch from the MAIN-world script before fetching, so video B never gets video A's captions.

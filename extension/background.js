@@ -568,7 +568,10 @@ async function checkExisting(videoId) {
   });
   if (!res.ok) return null;
   const all = await res.json();
-  return all.find((t) => t.videoId === videoId) || null;
+  // Only finished transcripts count as "already transcribed". A stuck
+  // processing record would otherwise mislead the panel into showing the
+  // "Already transcribed" link, which on click reveals a still-pending row.
+  return all.find((t) => t.videoId === videoId && t.status === "done") || null;
 }
 
 // ---------------------------------------------------------------------------

@@ -1497,7 +1497,14 @@ async function maybeFindCachedTranscript(videoId, mode) {
   if (!videoId) return null;
   const cached = await getCachedRecent(mode);
   if (!cached) return null;
-  return cached.find((t) => t.videoId === videoId) || null;
+  // Only finished transcripts count — a "processing" record in the cache
+  // would otherwise make the panel claim the video is "already transcribed"
+  // when it's actually still in flight (or stuck).
+  return (
+    cached.find(
+      (t) => t.videoId === videoId && (t.status === "done" || !t.status)
+    ) || null
+  );
 }
 
 function recentListHash(items) {
