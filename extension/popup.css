@@ -515,6 +515,41 @@ body::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.05);
 }
 
+/* Skeleton placeholder rows shown on first paint while the cached or fresh
+   list resolves. Same shape as a real .recent-item so the swap doesn't
+   reflow. */
+.recent-item-skeleton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  pointer-events: none;
+}
+.recent-skeleton-line {
+  height: 10px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.09) 50%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  background-size: 200% 100%;
+  animation: recent-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+.recent-skeleton-title { width: 70%; }
+.recent-skeleton-meta { width: 45%; height: 8px; margin-top: 6px; }
+.recent-item-skeleton .recent-skeleton-stack {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+@keyframes recent-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 /* Inline transcript drawer — mirrors web-app spring motion (stiffness=550,
    damping=5 approximated via springy cubic-bezier + grid row trick for
    height:auto transition). */
@@ -1732,6 +1767,7 @@ body::-webkit-scrollbar-thumb:hover {
 .cloud-link {
   display: flex;
   align-items: center;
+  min-height: 28px;
   gap: 4px;
   text-decoration: none;
   font-size: 11px;

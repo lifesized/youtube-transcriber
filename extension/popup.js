@@ -1486,6 +1486,13 @@ async function setCachedRecent(mode, items) {
   } catch { /* ignore */ }
 }
 
+async function maybeFindCachedTranscript(videoId, mode) {
+  if (!videoId) return null;
+  const cached = await getCachedRecent(mode);
+  if (!cached) return null;
+  return cached.find((t) => t.videoId === videoId) || null;
+}
+
 function recentListHash(items) {
   if (!Array.isArray(items)) return "";
   return items.map((t) => `${t.id}:${t.title}:${t.createdAt}`).join("|");
@@ -1495,10 +1502,16 @@ async function loadRecent() {
   const modeRes = await sendMsg({ type: "GET_SETTINGS" });
   const mode = modeRes?.data?.mode || "cloud";
 
-  // 1. Optimistic render from cache (no network).
+  // 1. Optimistic render. Cached list if we have one (instant + correct
+  // shape); otherwise a skeleton so the panel never shows a dark void
+  // while the first /api/transcripts fetch is in flight.
   const cached = await getCachedRecent(mode);
-  if (cached && cached.length && !isSettingsOpen()) {
-    renderRecentList(cached);
+  if (!isSettingsOpen()) {
+    if (cached && cached.length) {
+      renderRecentList(cached);
+    } else {
+      renderRecentSkeleton();
+    }
   }
 
   // 2. Fetch fresh; reconcile.
@@ -1518,6 +1531,22 @@ async function loadRecent() {
   }
   renderRecentList(res.data);
   await setCachedRecent(mode, res.data);
+}
+
+function renderRecentSkeleton(rows = 3) {
+  el.recentSection.hidden = false;
+  el.recentList.innerHTML = "";
+  for (let i = 0; i < rows; i++) {
+    const wrap = document.createElement("div");
+    wrap.className = "recent-item-skeleton";
+    wrap.innerHTML = `
+      <div class="recent-skeleton-stack">
+        <div class="recent-skeleton-line recent-skeleton-title"></div>
+        <div class="recent-skeleton-line recent-skeleton-meta"></div>
+      </div>
+    `;
+    el.recentList.appendChild(wrap);
+  }
 }
 
 function renderRecentList(items) {
@@ -1708,7 +1737,11 @@ async function init() {
   if (thisInit !== initVersion) return;
 
   const mode = syncStash?.mode || "cloud";
-  const optimisticAuthed = mode !== "cloud" || isAuthCacheFresh(authCache);
+  // Only treat the cache as a hard "they are signed in" signal — used to
+  // broaden the cold-start retry below. We always paint optimistically
+  // regardless, so the panel never shows a dark void while CHECK_SERVICE
+  // is in flight.
+  const cachedAuthOk = mode === "cloud" && isAuthCacheFresh(authCache);
   const tab = tabResult?.[0];
   if (tab) {
     const videoId = extractVideoId(tab.url || "");
@@ -1722,27 +1755,36 @@ async function init() {
     currentTabId = tab.id;
   }
 
-  // PHASE 2 — optimistic paint. For returning users we already know if they
-  // were authed and what their recent list looked like, so paint that now.
-  // Network checks below either confirm it (no-op) or correct it (swap to
-  // offline / sign-in UI). This is what kills the dark-screen flash and the
-  // "sign-in card on a slow /api/account" flicker.
+  // PHASE 2 — optimistic paint. Always render a state on the first frame
+  // — page-state shell + Recent list (cached or skeleton) — regardless of
+  // whether we have a fresh authCache. Network checks below either confirm
+  // (no-op) or correct it (swap to offline / sign-in UI on confirmed 401).
+  // The brief flash for an actually-signed-out user is a much better trade
+  // than a dark void on every cold open.
   let optimisticRendered = false;
-  if (optimisticAuthed) {
-    if (pageInfo?.videoId) {
-      el.videoTitle.textContent = pageInfo.title || pageInfo.url;
-      // Hide action buttons until showCurrentPageState resolves
+  if (pageInfo?.videoId) {
+    el.videoTitle.textContent = pageInfo.title || pageInfo.url;
+    el.liveNotice.hidden = true;
+    // Optimistically show the Transcribe button so the panel always has an
+    // action visible. If the cached recent list already contains this
+    // videoId we know it's been transcribed before — render the
+    // "Already transcribed" link instead. showCurrentPageState() will
+    // reconcile via CHECK_EXISTING if our cache is wrong.
+    const cachedHit = await maybeFindCachedTranscript(pageInfo.videoId, mode);
+    if (cachedHit) {
+      existingTranscriptId = cachedHit.id;
       el.btnTranscribe.hidden = true;
-      el.btnAlreadyTranscribed.hidden = true;
-      el.liveNotice.hidden = true;
-      showState("Ready");
+      el.btnAlreadyTranscribed.hidden = false;
     } else {
-      showState("NotYoutube");
+      el.btnTranscribe.hidden = false;
+      el.btnAlreadyTranscribed.hidden = true;
     }
-    // Cached list paints instantly; the SWR fetch revalidates in parallel.
-    loadRecent();
-    optimisticRendered = true;
+    showState("Ready");
+  } else {
+    showState("NotYoutube");
   }
+  loadRecent();
+  optimisticRendered = true;
 
   // PHASE 3 — in-flight transcription check. Done after optimistic paint so
   // a returning user doesn't see a dark screen during this round-trip
