@@ -6,11 +6,37 @@
 // content script can fetch them directly with credentials.
 
 (function () {
+  function getPlayerResponse() {
+    // YouTube has rolled out at least three different surfaces for this data
+    // over the years and the global `ytInitialPlayerResponse` is missing on
+    // many current page renders (confirmed via diagnostic). Try them in
+    // order of preference; whichever returns non-null wins.
+    //
+    //   1. window.ytInitialPlayerResponse — historic inline-script global
+    //   2. movie_player.getPlayerResponse() — player API method (most
+    //      reliable on current pages, but only after the player initializes)
+    //   3. window.ytplayer.config.args.player_response — legacy, sometimes
+    //      a JSON string instead of an object
+    if (window.ytInitialPlayerResponse) return window.ytInitialPlayerResponse;
+    try {
+      const player = document.getElementById("movie_player");
+      if (player && typeof player.getPlayerResponse === "function") {
+        const resp = player.getPlayerResponse();
+        if (resp) return resp;
+      }
+    } catch { /* player not ready */ }
+    try {
+      const raw = window.ytplayer?.config?.args?.player_response;
+      if (raw) return typeof raw === "string" ? JSON.parse(raw) : raw;
+    } catch { /* malformed */ }
+    return null;
+  }
+
   function snapshotTracks() {
-    const r = window.ytInitialPlayerResponse;
-    if (!r) return null; // ytInitialPlayerResponse not hydrated yet
+    const resp = getPlayerResponse();
+    if (!resp) return null; // none of the three sources are ready
     const tracks =
-      r?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
+      resp?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
     // Strip to a JSON-safe shape — anything we don't need adds bloat to the
     // CustomEvent.detail payload.
     return tracks.map((t) => ({
