@@ -2005,12 +2005,25 @@ function pollTranscriptionStatus() {
 // ---------------------------------------------------------------------------
 
 async function doTranscribe() {
+  // Guard against double-click. The first click awaits GET_SETTINGS
+  // before starting progress (~100-300ms on cold SW), during which the
+  // panel looks frozen. A user-perceived "nothing happened" second click
+  // would otherwise spin up a parallel doTranscribe, two startProgress
+  // calls fight, and the bar visibly resets to 0% — that was the
+  // "lurching" people saw.
+  if (isTranscribing) return;
   if (!pageInfo?.url) return;
 
   isTranscribing = true;
   el.transcribingTitle.textContent = pageInfo.title || "Transcribing...";
   showState("Transcribing");
   el.queuePrompt.hidden = true;
+  // Synchronous indeterminate-bar so the click lands visibly within a
+  // frame. The real progress curve takes over when GET_SETTINGS resolves.
+  const bar = document.getElementById("progressBar");
+  bar.classList.add("indeterminate");
+  bar.style.width = "100%";
+  el.progressText.textContent = "Starting...";
 
   // Same staged width animation in both modes. Local fills in fake stage
   // labels; cloud suppresses them and lets the poll overwrite progressText
