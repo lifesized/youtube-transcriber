@@ -35,8 +35,15 @@
   function snapshotTracks() {
     const resp = getPlayerResponse();
     if (!resp) return null; // none of the three sources are ready
-    const tracks =
-      resp?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
+    // The player response object can be available before the captions
+    // metadata is populated. Returning [] here would freeze the cache at
+    // empty, then a later EXTRACT_CAPTIONS finds an empty cache and reports
+    // "no captions" even on videos that DO have them. Treat the absent
+    // renderer as "not ready yet" so the poll loop keeps trying until either
+    // it shows up or the ~6s cap.
+    const renderer = resp?.captions?.playerCaptionsTracklistRenderer;
+    if (renderer === undefined) return null;
+    const tracks = renderer?.captionTracks || [];
     // Strip to a JSON-safe shape — anything we don't need adds bloat to the
     // CustomEvent.detail payload.
     return tracks.map((t) => ({
