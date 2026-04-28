@@ -90,6 +90,14 @@ let pollInterval = null;
 let isTranscribing = false;
 let offlinePollTimer = null;
 let heartbeatTimer = null;
+// Mirrors `chrome.storage.sync.mode` — set in init() and on mode-toggle.
+// Lets doTranscribe paint progress synchronously without awaiting GET_SETTINGS
+// (the await caused a leftward bar sweep when the indeterminate prepaint
+// transitioned back to 0%).
+let currentMode = "cloud";
+// Mutable label flag read by the progressTimer tick. Cloud mode flips this
+// off so pollTranscriptionStatus owns label text without timer overwrites.
+let progressWriteLabels = true;
 // When true, direct TRANSCRIBE response owns completion/error handling.
 let suppressPollFinalization = false;
 
@@ -118,13 +126,22 @@ function startProgress({ writeLabels = true } = {}) {
     clearInterval(progressTimer);
     progressTimer = null;
   }
+  progressWriteLabels = writeLabels;
   const bar = document.getElementById("progressBar");
   bar.classList.remove("indeterminate");
+  // Snap to 0% with no transition so a stale width (e.g. 100% from a prior
+  // run) can't animate leftward when the new run starts.
+  const prevTransition = bar.style.transition;
+  bar.style.transition = "none";
   bar.style.width = "0%";
+  // Force a reflow so the transition: none commit lands before we restore.
+  void bar.offsetWidth;
+  bar.style.transition = prevTransition;
+
   let stageIdx = 0;
   let elapsed = 0;
 
-  el.progressText.textContent = writeLabels
+  el.progressText.textContent = progressWriteLabels
     ? PROGRESS_STAGES[0].label
     : "Transcription in progress...";
 
@@ -138,7 +155,7 @@ function startProgress({ writeLabels = true } = {}) {
       pct >= PROGRESS_STAGES[stageIdx + 1].at
     ) {
       stageIdx++;
-      if (writeLabels) {
+      if (progressWriteLabels) {
         el.progressText.textContent = PROGRESS_STAGES[stageIdx].label;
       }
     }
@@ -1169,7 +1186,28 @@ function escapeAttr(s) {
 
 function sendMsg(msg) {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage(msg, resolve);
+    const startedAt = Date.now();
+    chrome.runtime.sendMessage(msg, (response) => {
+      if (chrome.runtime.lastError) {
+        const error = chrome.runtime.lastError.message || "runtime_send_failed";
+        console.warn("[ytt-popup] sendMessage failed", {
+          type: msg?.type,
+          error,
+          elapsedMs: Date.now() - startedAt,
+        });
+        resolve({ success: false, error });
+        return;
+      }
+      if (response === undefined) {
+        console.warn("[ytt-popup] sendMessage returned undefined", {
+          type: msg?.type,
+          elapsedMs: Date.now() - startedAt,
+        });
+        resolve({ success: false, error: "No response from background script" });
+        return;
+      }
+      resolve(response);
+    });
   });
 }
 
@@ -1757,6 +1795,7 @@ async function init() {
   if (thisInit !== initVersion) return;
 
   const mode = syncStash?.mode || "cloud";
+  currentMode = mode;
   // Only treat the cache as a hard "they are signed in" signal — used to
   // broaden the cold-start retry below. We always paint optimistically
   // regardless, so the panel never shows a dark void while CHECK_SERVICE
@@ -2017,25 +2056,38 @@ async function doTranscribe() {
   // would otherwise spin up a parallel doTranscribe, two startProgress
   // calls fight, and the bar visibly resets to 0% — that was the
   // "lurching" people saw.
-  if (isTranscribing) return;
-  if (!pageInfo?.url) return;
+  if (isTranscribing) {
+    console.warn("[ytt-popup] doTranscribe ignored: already transcribing");
+    return;
+  }
+  if (!pageInfo?.url) {
+    console.warn("[ytt-popup] doTranscribe blocked: missing pageInfo.url", {
+      pageInfo,
+      currentTabUrl,
+      currentTabId,
+    });
+    el.errorMessage.textContent = "No video detected. Refresh YouTube and try again.";
+    showState("Error");
+    return;
+  }
+
+  console.log("[ytt-popup] doTranscribe start", {
+    url: pageInfo.url,
+    title: pageInfo.title || "",
+    videoId: pageInfo.videoId || null,
+  });
 
   isTranscribing = true;
   el.transcribingTitle.textContent = pageInfo.title || "Transcribing...";
   showState("Transcribing");
   el.queuePrompt.hidden = true;
-  // Synchronous indeterminate-bar so the click lands visibly within a
-  // frame. The real progress curve takes over when GET_SETTINGS resolves.
-  const bar = document.getElementById("progressBar");
-  bar.classList.add("indeterminate");
-  bar.style.width = "100%";
-  el.progressText.textContent = "Starting...";
 
-  // Same staged width animation in both modes. Local fills in fake stage
-  // labels; cloud suppresses them and lets the poll overwrite progressText
-  // with the real backend stage.
-  const cfgRes = await sendMsg({ type: "GET_SETTINGS" });
-  const isCloud = cfgRes?.data?.mode === "cloud";
+  // Synchronous forward-only progress. Read mode from the in-memory mirror
+  // (kept in sync via init() + mode-toggle handlers) instead of awaiting
+  // GET_SETTINGS — the prior await + indeterminate `width:100%` prepaint
+  // caused the bar to animate leftward (~65% → 0%) when startProgress later
+  // reset width to 0% under the CSS `transition: width 0.7s ease-out`.
+  const isCloud = currentMode === "cloud";
   startProgress({ writeLabels: !isCloud });
   if (isCloud) {
     suppressPollFinalization = true;
@@ -2049,6 +2101,7 @@ async function doTranscribe() {
     url: pageInfo.url,
     title: pageInfo.title,
   });
+  console.log("[ytt-popup] TRANSCRIBE response", res);
 
   isTranscribing = false;
   suppressPollFinalization = false;
@@ -2061,6 +2114,7 @@ async function doTranscribe() {
     processQueue();
   } else {
     await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
+    console.warn("[ytt-popup] TRANSCRIBE failed", res);
     if (isServerDownError(res?.error)) {
       init();
       return;
@@ -2237,18 +2291,64 @@ chrome.tabs.onActivated?.addListener(async () => {
   } catch { /* ignore */ }
 });
 
-chrome.tabs.onUpdated?.addListener((tabId, changeInfo) => {
+chrome.tabs.onUpdated?.addListener(async (tabId, changeInfo) => {
   // Only react to changes in the active tab
   if (tabId !== currentTabId) return;
-  // Skip all tab-change events during active transcription
-  if (isTranscribing) return;
 
-  if (changeInfo.url && changeInfo.url !== currentTabUrl) {
-    currentTabUrl = changeInfo.url;
-    init();
+  const urlChanged = changeInfo.url && changeInfo.url !== currentTabUrl;
+  const titleChanged = !!changeInfo.title;
+  if (!urlChanged && !titleChanged) return;
+
+  if (urlChanged) currentTabUrl = changeInfo.url;
+
+  // During active transcription, refresh pageInfo + queue prompt without
+  // re-init (init clobbers the progress animation). Mirrors onActivated.
+  // Without this, navigating to a new YouTube video in the same tab while
+  // transcribing leaves the queue prompt showing the old video's title or
+  // hidden entirely — user can't see what they'd be queuing.
+  if (isTranscribing) {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.url) {
+        const videoId = extractVideoId(tab.url);
+        let isLive = false;
+        try {
+          const stored = await chrome.storage.session.get(`tab_${tab.id}`);
+          isLive = !!stored[`tab_${tab.id}`]?.isLive;
+        } catch { /* ignore */ }
+        pageInfo = { url: tab.url, title: tab.title, videoId, isLive };
+        showQueuePrompt();
+      }
+    } catch { /* ignore */ }
+    return;
   }
-  // YouTube SPA navigations update the title after the URL — re-init to pick up the new title
-  if (changeInfo.title) {
+
+  init();
+});
+
+// content.js writes the active tab's video info to chrome.storage.session on
+// every YouTube SPA navigation (yt-navigate-finish + MutationObserver fallback).
+// Listening here catches in-page route changes that chrome.tabs.onUpdated
+// sometimes misses, and gets the populated title — onUpdated fires before YT
+// has updated document.title, so changeInfo.title can still be the old value.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "session") return;
+  if (currentTabId == null) return;
+  const key = `tab_${currentTabId}`;
+  if (!changes[key]) return;
+  const next = changes[key].newValue;
+  if (!next?.url) return;
+  if (isTranscribing) {
+    pageInfo = {
+      url: next.url,
+      title: next.title || "",
+      videoId: next.videoId || extractVideoId(next.url),
+      isLive: !!next.isLive,
+    };
+    currentTabUrl = next.url;
+    showQueuePrompt();
+  } else if (next.url !== currentTabUrl) {
+    currentTabUrl = next.url;
     init();
   }
 });
@@ -2370,26 +2470,30 @@ el.obsidianAdvUriInput.addEventListener("change", async () => {
   });
 });
 
-el.btnModeLocal.addEventListener("click", async () => {
-  destinationsCache = null;
-  coldStartHandled = false;
-  setModeUI("local");
-  await sendMsg({ type: "SAVE_SETTINGS", mode: "local" });
-  // Mode toggles live inside the settings panel — keep the user there.
-  // init() (which collapses settings into the library view) runs when the
-  // user navigates back via the Library nav button.
-  if (!isSettingsOpen()) init();
-});
-el.btnModeCloud.addEventListener("click", async () => {
+async function switchMode(newMode) {
   destinationsCache = null;
   // Mode switch invalidates the apiConfigCache in the background worker.
   // The first /api/account hit after rebuild can 401 on a cookie race the
   // same way a true cold start does, so reopen the retry window.
   coldStartHandled = false;
-  setModeUI("cloud");
-  await sendMsg({ type: "SAVE_SETTINGS", mode: "cloud" });
+  currentMode = newMode;
+  setModeUI(newMode);
+  // Drop any in-flight state from the previous mode. Without this, an
+  // interrupted cloud transcribe can leave bg state="transcribing" — PHASE 3
+  // of init() then re-arms isTranscribing=true and the next Transcribe
+  // click is silently blocked by the doTranscribe guard. User saw this as
+  // "first click after mode switch does nothing".
+  isTranscribing = false;
+  await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
+  await sendMsg({ type: "SAVE_SETTINGS", mode: newMode });
+  // Mode toggles live inside the settings panel — keep the user there.
+  // init() (which collapses settings into the library view) runs when the
+  // user navigates back via the Library nav button.
   if (!isSettingsOpen()) init();
-});
+}
+
+el.btnModeLocal.addEventListener("click", () => switchMode("local"));
+el.btnModeCloud.addEventListener("click", () => switchMode("cloud"));
 
 // Start
 init();

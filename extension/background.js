@@ -51,16 +51,6 @@ const CONTENT_SCRIPTS = [
     runAt: "document_idle",
   },
   {
-    // MAIN world — required to read window.ytInitialPlayerResponse for the
-    // client-side caption scrape fast path. Posts caption tracks via a
-    // CustomEvent that content.js (ISOLATED) picks up.
-    id: "youtube-captions-main",
-    matches: ["*://*.youtube.com/*"],
-    js: ["content-captions-main.js"],
-    runAt: "document_start",
-    world: "MAIN",
-  },
-  {
     id: "spotify-content",
     matches: ["*://open.spotify.com/*"],
     js: ["content-spotify.js"],
@@ -520,12 +510,21 @@ function sendMessageWithTimeout(tabId, message, timeoutMs) {
 
 async function tryExtractCaptions(url) {
   const tab = await findYouTubeTabForUrl(url);
-  if (!tab?.id) return null;
+  if (!tab?.id) {
+    console.log("[ytt-bg] caption fast-path: no matching youtube tab", { url });
+    return null;
+  }
   const response = await sendMessageWithTimeout(
     tab.id,
     { type: "EXTRACT_CAPTIONS" },
     CAPTION_EXTRACT_TIMEOUT_MS
   );
+  console.log("[ytt-bg] caption fast-path response", {
+    tabId: tab.id,
+    ok: !!response?.ok,
+    segments: Array.isArray(response?.segments) ? response.segments.length : 0,
+    error: response?.error || null,
+  });
   if (!response?.ok || !Array.isArray(response.segments) || !response.segments.length) {
     return null;
   }
@@ -623,10 +622,18 @@ async function checkExisting(videoId) {
   });
   if (!res.ok) return null;
   const all = await res.json();
-  // Only finished transcripts count as "already transcribed". A stuck
-  // processing record would otherwise mislead the panel into showing the
-  // "Already transcribed" link, which on click reveals a still-pending row.
-  return all.find((t) => t.videoId === videoId && t.status === "done") || null;
+  // "Done" if the record explicitly says so OR if the backend returns no
+  // status field at all. The local server schema (transcriber-local
+  // prisma/schema.prisma Video) has no status column — every local record
+  // is implicitly complete the moment it's saved (no async worker hop). A
+  // strict `=== "done"` check would silently hide the "Already transcribed"
+  // link for every video in local mode. Only excludes records that say
+  // "processing" or "error" explicitly.
+  return (
+    all.find(
+      (t) => t.videoId === videoId && (t.status === "done" || !t.status)
+    ) || null
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -987,6 +994,11 @@ async function claimHandoffPrompt(token) {
 // ---------------------------------------------------------------------------
 
 async function doTranscribe(url, title) {
+  console.log("[ytt-bg] doTranscribe start", {
+    url,
+    videoId: youtubeVideoId(url),
+    title: title || "",
+  });
   const state = {
     url,
     title: title || "",
@@ -1048,6 +1060,10 @@ async function doTranscribe(url, title) {
     await processNextInQueue();
     return data;
   } catch (err) {
+    console.warn("[ytt-bg] doTranscribe failed", {
+      url,
+      message: err?.message || String(err),
+    });
     state.status = "error";
     state.error = err.message;
     await setState(state);
