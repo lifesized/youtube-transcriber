@@ -35,15 +35,18 @@
   function snapshotTracks() {
     const resp = getPlayerResponse();
     if (!resp) return null; // none of the three sources are ready
-    // The player response object can be available before the captions
-    // metadata is populated. Returning [] here would freeze the cache at
-    // empty, then a later EXTRACT_CAPTIONS finds an empty cache and reports
-    // "no captions" even on videos that DO have them. Treat the absent
-    // renderer as "not ready yet" so the poll loop keeps trying until either
-    // it shows up or the ~6s cap.
+    // YouTube populates the player response in stages. Both intermediate
+    // states leak through here as "renderer present but no tracks" or
+    // "renderer missing entirely". A video with 12 caption tracks was seen
+    // dispatching empty during the early window because the renderer object
+    // existed before captionTracks was assigned. Treat anything short of
+    // a non-empty tracks array as "not ready" so the 6s poll keeps trying.
+    // Cost: videos that genuinely have no captions poll for the full
+    // window before giving up. Acceptable — those fall to the server path,
+    // and most YouTube videos do have captions.
     const renderer = resp?.captions?.playerCaptionsTracklistRenderer;
-    if (renderer === undefined) return null;
-    const tracks = renderer?.captionTracks || [];
+    const tracks = renderer?.captionTracks;
+    if (!Array.isArray(tracks) || tracks.length === 0) return null;
     // Strip to a JSON-safe shape — anything we don't need adds bloat to the
     // CustomEvent.detail payload.
     return tracks.map((t) => ({
