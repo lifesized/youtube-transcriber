@@ -1732,6 +1732,12 @@ async function init() {
   el.btnAlreadyTranscribed.hidden = true;
   el.btnTranscribe.hidden = false;
   existingTranscriptId = null;
+  // isTranscribing can leak true if the panel was closed mid-transcribe —
+  // popup's await never resolved, so the assignment after sendMsg never
+  // ran. PHASE 3 below sets it back to true if the bg actually has a
+  // pending transcription. Otherwise the doTranscribe guard would block
+  // every future click in this panel session.
+  isTranscribing = false;
 
   // PHASE 1 — cheap parallel reads. None of these hit the network. Combined
   // they take a few ms; doing them in parallel (and skipping the bg
