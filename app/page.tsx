@@ -328,7 +328,7 @@ function HomeInner() {
 
       if (!("Notification" in window)) return;
       if (Notification.permission === "granted") {
-        new Notification("YouTube Transcriber", {
+        new Notification("Transcriber", {
           body: label,
           silent: true,
         });
@@ -338,7 +338,7 @@ function HomeInner() {
         try {
           const permission = await Notification.requestPermission();
           if (permission === "granted") {
-            new Notification("YouTube Transcriber", {
+            new Notification("Transcriber", {
               body: label,
               silent: true,
             });
@@ -877,7 +877,7 @@ function HomeInner() {
           <section>
             <div className="mb-8">
               <p className="anim-fade-up text-[11px] font-medium uppercase tracking-[0.12em] text-white/25">
-                YouTube Transcriber
+                Transcriber
               </p>
               <h1 className="anim-fade-up-d1 mt-3 text-[22px] font-semibold tracking-tight text-white/90">
                 Paste a link. Get the transcript.
@@ -908,7 +908,7 @@ function HomeInner() {
                       if (error) setError(null);
                       if (duplicateHint) setDuplicateHint(null);
                     }}
-                    placeholder="Paste a video URL (YouTube, Spotify, Twitch, Vimeo, TikTok…)..."
+                    placeholder="Paste a video URL"
                     className="h-12 pr-10"
                   />
                   {url && (
@@ -1194,7 +1194,7 @@ function HomeInner() {
                         </svg>
                       </div>
                       <p className="text-sm text-white/35">Your transcripts will appear here</p>
-                      <p className="mt-1.5 text-xs text-white/18">Paste a video URL (YouTube, Spotify, Twitch, Vimeo, TikTok…) above to get started</p>
+                      <p className="mt-1.5 text-xs text-white/18">Paste a video URL above to get started</p>
                     </>
                   )}
                 </div>

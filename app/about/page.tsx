@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "About YouTube Transcriber",
+  title: "About Transcriber",
   description: "Learn about why this project exists and how it works",
 };
 
