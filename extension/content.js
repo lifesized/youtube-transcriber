@@ -260,7 +260,14 @@ function findClickableByText(textPattern) {
     "button, tp-yt-paper-item, ytd-menu-service-item-renderer, ytd-menu-navigation-item-renderer, ytd-button-renderer, yt-button-shape"
   );
   for (const el of all) {
-    if (el.offsetParent === null && getComputedStyle(el).display === "none") continue;
+    // Skip hidden elements. The previous AND-condition let elements through
+    // when their parent was hidden (offsetParent null) but their own display
+    // was inline-block (e.g. "Show transcript" inside a collapsed description).
+    // Returning that hidden button caused openTranscriptPanel to click a no-op
+    // and skip the description-expand path entirely — symptom: captioned
+    // videos with collapsed descriptions silently fell back to server scrape.
+    if (el.offsetParent === null) continue;
+    if (getComputedStyle(el).display === "none") continue;
     const aria = (el.getAttribute("aria-label") || "").toLowerCase();
     const text = String(el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
     if (textPattern.test(aria) || textPattern.test(text)) {
