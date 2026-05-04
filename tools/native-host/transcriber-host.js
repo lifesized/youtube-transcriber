@@ -126,13 +126,31 @@ async function startServer() {
   }
 
   // Launch detached so the server keeps running after the host exits.
-  // Use shell to resolve `npm` from PATH the same way a Terminal would.
-  const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+  // Chrome's inherited PATH is minimal (no Homebrew, no nvm), so we can't
+  // rely on `npm` being resolvable. Use the absolute path next to the node
+  // binary that's running this script, and extend PATH so nested children
+  // (next, prisma, ffmpeg) can also resolve.
+  const nodeBinDir = path.dirname(process.execPath);
+  const npmCmd =
+    process.platform === "win32"
+      ? path.join(nodeBinDir, "npm.cmd")
+      : path.join(nodeBinDir, "npm");
+  const extendedPath = [
+    nodeBinDir,
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/usr/bin",
+    "/bin",
+    process.env.PATH || "",
+  ]
+    .filter(Boolean)
+    .join(path.delimiter);
+
   const child = spawn(npmCmd, ["run", "dev"], {
     cwd: PROJECT_ROOT,
     detached: true,
     stdio: "ignore",
-    env: { ...process.env },
+    env: { ...process.env, PATH: extendedPath },
   });
   child.unref();
 

@@ -17,10 +17,7 @@
 
         <!-- Primary path: one-click start via native messaging host -->
         <div id="offlineStartWrap" hidden>
-          <button class="btn-start-transcriber" id="btnStartTranscriber">
-            <svg class="start-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="6 4 20 12 6 20 6 4"/>
-            </svg>
+          <button class="btn-transcribe" id="btnStartTranscriber">
             <span class="start-label">Start Transcriber</span>
             <span class="start-spinner" hidden></span>
           </button>
@@ -41,26 +38,26 @@
               </svg>
             </button>
           </div>
-          <button class="btn-setup-autostart" id="btnSetupAutostart" type="button">
-            One-time setup for one-click start →
-          </button>
-          <div id="setupInstructions" class="setup-instructions" hidden>
-            <p class="setup-step">1. Open Terminal in the project folder</p>
-            <p class="setup-step">2. Run:</p>
-            <div class="offline-copybox">
-              <code class="offline-copybox-code" id="setupCommand">npm run install-native-host -- --ext-id=YOUR_ID</code>
-              <button class="offline-copybox-btn" id="btnCopySetup" title="Copy to clipboard">
-                <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
-                </svg>
-                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-              </button>
+          <details class="setup-disclosure">
+            <summary class="setup-disclosure-summary">One-time setup for one-click start</summary>
+            <div class="setup-instructions">
+              <p class="setup-step">1. Open Terminal in the project folder</p>
+              <p class="setup-step">2. Run:</p>
+              <div class="offline-copybox">
+                <code class="offline-copybox-code" id="setupCommand">npm run install-native-host -- --ext-id=YOUR_ID</code>
+                <button class="offline-copybox-btn" id="btnCopySetup" title="Copy to clipboard">
+                  <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                  </svg>
+                  <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                </button>
+              </div>
+              <p class="setup-hint">3. Reload this popup</p>
             </div>
-            <p class="setup-hint">3. Reload this popup</p>
-          </div>
+          </details>
         </div>
       </div>
 
@@ -116,7 +113,7 @@
       </button>
       <div id="cloudNudge" class="cloud-nudge">
         <a class="cloud-nudge-cta" href="https://www.transcribed.dev" target="_blank">
-          Try the web app →
+          Try the web app
         </a>
         <p class="cloud-nudge-copy">No install needed · 30 free/month</p>
       </div>
@@ -206,6 +203,14 @@
         <a class="settings-account-link" href="https://www.transcribed.dev/account" target="_blank">
           Manage account
         </a>
+      </div>
+      <div id="serverSection" class="settings-server" hidden>
+        <div class="section-label section-label-subsection">Server</div>
+        <button class="btn-transcribe btn-transcribe-secondary" id="btnStopServer">
+          <span class="stop-label">Stop</span>
+          <span class="start-spinner" hidden></span>
+        </button>
+        <p class="settings-server-hint" id="stopServerHint" hidden></p>
       </div>
       <div id="destinationsSection" class="settings-destinations" hidden>
         <div class="section-label section-label-subsection">Connectors</div>

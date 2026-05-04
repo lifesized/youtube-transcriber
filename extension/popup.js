@@ -36,13 +36,14 @@ const el = {
   offlineCopyWrap: document.getElementById("offlineCopyWrap"),
   offlineStartError: document.getElementById("offlineStartError"),
   offlineSub: document.getElementById("offlineSub"),
-  btnSetupAutostart: document.getElementById("btnSetupAutostart"),
-  setupInstructions: document.getElementById("setupInstructions"),
   setupCommand: document.getElementById("setupCommand"),
   btnCopySetup: document.getElementById("btnCopySetup"),
   offlinePath: document.getElementById("offlinePath"),
   offlineCommand: document.getElementById("offlineCommand"),
   offlineLocalMsg: document.getElementById("offlineLocalMsg"),
+  serverSection: document.getElementById("serverSection"),
+  btnStopServer: document.getElementById("btnStopServer"),
+  stopServerHint: document.getElementById("stopServerHint"),
   offlineCloudMsg: document.getElementById("offlineCloudMsg"),
   cloudOnboarding: document.getElementById("cloudOnboarding"),
   cloudAuthError: document.getElementById("cloudAuthError"),
@@ -754,7 +755,7 @@ function buildDestinationRow(d, ctx) {
     help.href = d.setupHelpUrl;
     help.target = "_blank";
     help.rel = "noopener noreferrer";
-    help.textContent = "Setup help →";
+    help.textContent = "Setup help";
     text.appendChild(help);
   }
 
@@ -1411,7 +1412,6 @@ async function startTranscriberClicked() {
   nativeStartInFlight = true;
   el.btnStartTranscriber.disabled = true;
   el.offlineStartError.hidden = true;
-  el.btnStartTranscriber.querySelector(".start-icon").style.display = "none";
   el.btnStartTranscriber.querySelector(".start-spinner").hidden = false;
   el.btnStartTranscriber.querySelector(".start-label").textContent = "Starting…";
 
@@ -1446,7 +1446,6 @@ async function startTranscriberClicked() {
   } finally {
     nativeStartInFlight = false;
     el.btnStartTranscriber.disabled = false;
-    el.btnStartTranscriber.querySelector(".start-icon").style.display = "";
     el.btnStartTranscriber.querySelector(".start-spinner").hidden = true;
     el.btnStartTranscriber.querySelector(".start-label").textContent = "Start Transcriber";
   }
@@ -2407,10 +2406,6 @@ el.btnCopyCommand.addEventListener("click", () => {
 
 el.btnStartTranscriber.addEventListener("click", startTranscriberClicked);
 
-el.btnSetupAutostart.addEventListener("click", () => {
-  el.setupInstructions.hidden = !el.setupInstructions.hidden;
-});
-
 el.btnCopySetup.addEventListener("click", () => {
   const cmd = el.setupCommand.dataset.fullCmd || el.setupCommand.textContent;
   navigator.clipboard.writeText(cmd);
@@ -2597,10 +2592,58 @@ function setModeUI(mode) {
   el.btnModeCloud.classList.toggle("active", mode === "cloud");
   el.cloudAccountSection.hidden = mode !== "cloud";
   applyFooterLink(mode);
+  // Server stop control: only useful in self-hosted mode AND when the native
+  // host is installed (otherwise we have no way to stop). detectNativeHost
+  // sets nativeHostAvailable; if it hasn't run yet, fire-and-forget.
+  refreshServerSection(mode);
   // Destinations always render. Obsidian is client-side (works in any mode);
   // cloud-only adapters show as teasers with a Sign in CTA in local mode.
   renderDestinationsSettings();
 }
+
+async function refreshServerSection(mode) {
+  if (mode !== "local") {
+    el.serverSection.hidden = true;
+    return;
+  }
+  // Need native host to actually stop. If we don't know yet, probe quickly.
+  if (nativeHostAvailable === undefined || nativeHostAvailable === null) {
+    await detectNativeHost();
+  }
+  el.serverSection.hidden = !nativeHostAvailable;
+  el.stopServerHint.hidden = true;
+}
+
+async function stopServerClicked() {
+  if (nativeStartInFlight) return;
+  el.btnStopServer.disabled = true;
+  el.stopServerHint.hidden = true;
+  el.btnStopServer.querySelector(".start-spinner").hidden = false;
+  el.btnStopServer.querySelector(".stop-label").textContent = "Stopping…";
+  try {
+    const res = await callNativeHost("stop", {}, 10000);
+    if (res?.stopped) {
+      el.stopServerHint.textContent = "Server stopped.";
+      el.stopServerHint.hidden = false;
+    } else if (res?.reason === "not_running") {
+      el.stopServerHint.textContent =
+        "No tracked server. If you started it from a Terminal, stop it there (Ctrl-C).";
+      el.stopServerHint.hidden = false;
+    } else {
+      el.stopServerHint.textContent = res?.error || "Couldn't stop the server.";
+      el.stopServerHint.hidden = false;
+    }
+  } catch (e) {
+    el.stopServerHint.textContent = `Stop failed: ${e.message}`;
+    el.stopServerHint.hidden = false;
+  } finally {
+    el.btnStopServer.disabled = false;
+    el.btnStopServer.querySelector(".start-spinner").hidden = true;
+    el.btnStopServer.querySelector(".stop-label").textContent = "Stop";
+  }
+}
+
+el.btnStopServer.addEventListener("click", stopServerClicked);
 
 // Footer right-side link swaps with mode: GitHub repo for local devs,
 // transcribed.dev wordmark for cloud users (CTA toward the web app).

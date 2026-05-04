@@ -304,9 +304,9 @@ body::-webkit-scrollbar-thumb:hover {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   text-align: center;
-  padding: 40px 16px 24px;
+  padding: 24px 16px;
   gap: 0;
 }
 .offline-orb {
@@ -374,11 +374,13 @@ body::-webkit-scrollbar-thumb:hover {
 }
 .offline-copybox-code {
   flex: 1;
+  min-width: 0; /* let flex shrink — without this, long unbreakable IDs push the copy button off-screen */
   font-size: 12px;
   font-family: "SF Mono", "Menlo", monospace;
   color: rgba(255, 255, 255, 0.50);
   letter-spacing: 0.01em;
   user-select: all;
+  overflow-wrap: anywhere; /* allow mid-string wrap for long ext-ids (32 chars) */
 }
 .offline-copybox-btn {
   flex-shrink: 0;
@@ -408,46 +410,46 @@ body::-webkit-scrollbar-thumb:hover {
   display: block;
   color: rgba(255, 255, 255, 0.5);
 }
-.btn-start-transcriber {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
+/* Settings → Server section (self-hosted + native host installed only). */
+.settings-server {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.settings-server .btn-transcribe {
   width: 100%;
-  max-width: 260px;
-  padding: 10px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.04));
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, transform 0.05s;
-  margin-bottom: 12px;
 }
-.btn-start-transcriber:hover {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
-  border-color: rgba(255, 255, 255, 0.22);
+.settings-server-hint {
+  font-size: 11px;
+  color: var(--muted-3);
+  margin-top: 8px;
+  line-height: 1.4;
 }
-.btn-start-transcriber:active {
-  transform: translateY(1px);
+.settings-server-hint[hidden] {
+  display: none;
 }
-.btn-start-transcriber:disabled {
-  opacity: 0.6;
-  cursor: progress;
-}
-.btn-start-transcriber .start-icon {
-  flex-shrink: 0;
-}
-.btn-start-transcriber .start-spinner {
+
+/* Inline spinner for any .btn-transcribe used as a "starting…" affordance.
+   Hidden by default via [hidden]; toggled in JS when an async action runs.
+   The [hidden] override is required because `display: inline-block` here is
+   more specific than the browser's user-agent `[hidden] { display: none }`. */
+.btn-transcribe .start-spinner {
+  display: inline-block;
+  vertical-align: -1px;
   width: 12px;
   height: 12px;
   border: 2px solid rgba(255, 255, 255, 0.25);
   border-top-color: rgba(255, 255, 255, 0.85);
   border-radius: 50%;
   animation: start-spin 0.7s linear infinite;
-  margin-left: 4px;
+  margin-left: 6px;
+}
+.btn-transcribe .start-spinner[hidden] {
+  display: none !important;
+}
+.btn-transcribe[disabled] {
+  opacity: 0.7;
+  cursor: progress;
 }
 @keyframes start-spin {
   to { transform: rotate(360deg); }
@@ -459,18 +461,45 @@ body::-webkit-scrollbar-thumb:hover {
   margin: 6px auto 12px;
   line-height: 1.4;
 }
-.btn-setup-autostart {
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.40);
-  font-size: 11px;
-  cursor: pointer;
-  padding: 4px 0;
+/* Native disclosure — same chevron pattern as Obsidian Advanced toggle.
+   Click anywhere on the summary expands/collapses; arrow rotates. */
+.setup-disclosure {
   margin-top: 4px;
+}
+.setup-disclosure-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.40);
+  list-style: none;
+  padding: 4px 0;
   transition: color 0.15s;
 }
-.btn-setup-autostart:hover {
+.setup-disclosure-summary::-webkit-details-marker {
+  display: none;
+}
+.setup-disclosure-summary::after {
+  content: "";
+  width: 5px;
+  height: 5px;
+  flex-shrink: 0;
+  border-right: 1.25px solid rgba(255, 255, 255, 0.5);
+  border-bottom: 1.25px solid rgba(255, 255, 255, 0.5);
+  transform: rotate(-45deg);
+  transform-origin: 60% 60%;
+  transition: transform 0.15s, border-color 0.15s;
+  margin-left: 2px;
+}
+.setup-disclosure[open] .setup-disclosure-summary::after {
+  transform: rotate(45deg);
+}
+.setup-disclosure-summary:hover {
   color: rgba(255, 255, 255, 0.65);
+}
+.setup-disclosure-summary:hover::after {
+  border-color: rgba(255, 255, 255, 0.85);
 }
 .setup-instructions {
   margin-top: 10px;

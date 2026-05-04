@@ -74,6 +74,12 @@ function makeWrapperIfNeeded() {
   return wrapperPath;
 }
 
+// Replace the long absolute home path with ~ for readable output.
+function tildify(p) {
+  const home = os.homedir();
+  return p.startsWith(home) ? "~" + p.slice(home.length) : p;
+}
+
 function writeManifest({ ids, remove }) {
   const dir = manifestDir();
   const manifestPath = path.join(dir, `${HOST_NAME}.json`);
@@ -81,17 +87,35 @@ function writeManifest({ ids, remove }) {
   if (remove) {
     if (fs.existsSync(manifestPath)) {
       fs.unlinkSync(manifestPath);
-      console.log(`Removed: ${manifestPath}`);
+      console.log("");
+      console.log("Native host removed.");
+      console.log("");
+      console.log("The 'Start Transcriber' button in the extension popup will no");
+      console.log("longer work. You can still start the server manually with:");
+      console.log("  npm run dev");
+      console.log("");
     } else {
-      console.log("Nothing to remove.");
+      console.log("");
+      console.log("Nothing to remove — the native host wasn't installed.");
+      console.log("");
     }
     if (process.platform === "win32") removeWindowsRegistry();
     return;
   }
 
   if (ids.length === 0) {
-    console.error("Error: pass --ext-id <chrome-extension-id> or set EXTENSION_ID.");
-    console.error("Find it at chrome://extensions (enable Developer mode to see IDs).");
+    console.error("");
+    console.error("Missing extension ID.");
+    console.error("");
+    console.error("To find it:");
+    console.error("  1. Open chrome://extensions in Chrome");
+    console.error("  2. Enable 'Developer mode' (toggle, top right)");
+    console.error("  3. Find 'Transcriber for YouTube' — copy the ID under the name");
+    console.error("     (a 32-character string of lowercase letters)");
+    console.error("");
+    console.error("Then run:");
+    console.error("  npm run install-native-host -- --ext-id=PASTE_ID_HERE");
+    console.error("");
     process.exit(1);
   }
 
@@ -107,9 +131,26 @@ function writeManifest({ ids, remove }) {
   };
 
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
-  console.log(`Installed: ${manifestPath}`);
-  console.log(`Host script: ${hostPath}`);
-  console.log(`Allowed extension IDs: ${ids.join(", ")}`);
+
+  console.log("");
+  console.log("Native host installed.");
+  console.log("");
+  console.log("The Transcriber extension can now start your local server in one");
+  console.log("click — no more 'npm run dev' from the terminal.");
+  console.log("");
+  console.log("Next steps:");
+  console.log("  1. Reload the extension at chrome://extensions");
+  console.log("  2. Open the side panel on a YouTube tab");
+  console.log("  3. When the server is offline, click 'Start Transcriber'");
+  console.log("");
+  console.log("To remove later: npm run uninstall-native-host");
+  console.log("");
+  console.log("─────────────────────────────────────────────────────────");
+  console.log("Details (for debugging):");
+  console.log(`  Allowed extension IDs:  ${ids.join(", ")}`);
+  console.log(`  Manifest:               ${tildify(manifestPath)}`);
+  console.log(`  Host script:            ${tildify(hostPath)}`);
+  console.log("");
 
   if (process.platform === "win32") writeWindowsRegistry(manifestPath);
 }
