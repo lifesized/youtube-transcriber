@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "setup": "bash scripts/setup.sh",
-    "dev": "next dev -p 19720 --webpack",
+    "dev": "next dev -p 19720 --hostname 127.0.0.1 --webpack",
     "build": "next build",
-    "start": "next start -p 19720",
+    "start": "next start -p 19720 --hostname 127.0.0.1",
     "lint": "eslint .",
     "postinstall": "prisma generate",
     "mcp:build": "cd mcp-server && npm run build",
@@ -15,7 +15,13 @@
     "backup": "tsx scripts/backup.ts",
     "restore": "tsx scripts/restore.ts",
     "fresh": "tsx scripts/fresh.ts",
-    "test:setup": "bash scripts/test-setup.sh"
+    "test:setup": "bash scripts/test-setup.sh",
+    "email:dev": "email dev --dir emails --port 3030",
+    "email:export": "email export --dir emails --outDir emails/.out",
+    "email:render": "tsx scripts/render-emails.ts",
+    "email:send": "tsx scripts/send-email-test.ts",
+    "install-native-host": "node scripts/install-native-host.js",
+    "uninstall-native-host": "node scripts/install-native-host.js --remove"
   },
   "keywords": [],
   "author": "",
@@ -32,6 +38,8 @@
     "resend": "^6.9.4"
   },
   "devDependencies": {
+    "@react-email/components": "^1.0.12",
+    "@react-email/ui": "^6.0.1",
     "@tailwindcss/postcss": "^4.1.18",
     "@types/node": "^25.2.3",
     "@types/react": "^19.2.14",
@@ -40,6 +48,7 @@
     "eslint-config-next": "^16.1.6",
     "postcss": "^8.5.6",
     "prisma": "^7.4.0",
+    "react-email": "^6.0.1",
     "tailwindcss": "^4.1.18",
     "tsx": "^4.19.2",
     "typescript": "5.9.3"

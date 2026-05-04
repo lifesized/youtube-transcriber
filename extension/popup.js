@@ -31,6 +31,15 @@ const el = {
   btnCancel: document.getElementById("btnCancel"),
   btnCheckAgain: document.getElementById("btnCheckAgain"),
   btnCopyCommand: document.getElementById("btnCopyCommand"),
+  btnStartTranscriber: document.getElementById("btnStartTranscriber"),
+  offlineStartWrap: document.getElementById("offlineStartWrap"),
+  offlineCopyWrap: document.getElementById("offlineCopyWrap"),
+  offlineStartError: document.getElementById("offlineStartError"),
+  offlineSub: document.getElementById("offlineSub"),
+  btnSetupAutostart: document.getElementById("btnSetupAutostart"),
+  setupInstructions: document.getElementById("setupInstructions"),
+  setupCommand: document.getElementById("setupCommand"),
+  btnCopySetup: document.getElementById("btnCopySetup"),
   offlinePath: document.getElementById("offlinePath"),
   offlineCommand: document.getElementById("offlineCommand"),
   offlineLocalMsg: document.getElementById("offlineLocalMsg"),
@@ -1231,8 +1240,11 @@ function showState(name) {
     const elem = el[`state${s}`];
     if (elem) elem.hidden = s !== name;
   }
-  // Hide recent list when offline or errored — only show alongside Ready/Transcribing
-  if (name === "NoService" || name === "NotYoutube") {
+  // Hide recent list only when offline / signed out — there's nothing to
+  // show without auth. The NotYoutube state (user on YouTube but not on a
+  // watch page, e.g. homepage / search / channel grid) keeps the Recent
+  // list visible so users can still jump back to their library.
+  if (name === "NoService") {
     el.recentSection.hidden = true;
   }
 }
@@ -1279,6 +1291,124 @@ function loadCachedPath() {
   el.offlinePath.hidden = true;
   el.offlineCommand.textContent = "npm run dev";
   delete el.offlineCommand.dataset.fullCmd;
+  refreshOfflineStartUI();
+}
+
+// ---------------------------------------------------------------------------
+// Native messaging host — one-click "Start Transcriber" button.
+// The host (com.transcribed.host) is a small node script installed via
+// `npm run install-native-host`. If it isn't installed, the popup falls
+// back to the npm-run-dev copy/paste box.
+// ---------------------------------------------------------------------------
+
+const NATIVE_HOST = "com.transcribed.host";
+let nativeHostAvailable = null; // null = unknown, true/false after first probe
+let nativeStartInFlight = false;
+
+function callNativeHost(cmd, payload = {}, timeoutMs = 30000) {
+  return new Promise((resolve, reject) => {
+    let port;
+    try {
+      port = chrome.runtime.connectNative(NATIVE_HOST);
+    } catch (e) {
+      reject(new Error("native_host_unavailable"));
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      try { port.disconnect(); } catch {}
+      reject(new Error("native_host_timeout"));
+    }, timeoutMs);
+
+    port.onMessage.addListener((msg) => {
+      clearTimeout(timer);
+      try { port.disconnect(); } catch {}
+      resolve(msg);
+    });
+    port.onDisconnect.addListener(() => {
+      clearTimeout(timer);
+      const err = chrome.runtime.lastError?.message || "disconnected";
+      reject(new Error(err));
+    });
+
+    const id = Math.random().toString(36).slice(2);
+    port.postMessage({ id, cmd, ...payload });
+  });
+}
+
+async function detectNativeHost() {
+  try {
+    await callNativeHost("ping", {}, 2500);
+    nativeHostAvailable = true;
+  } catch {
+    nativeHostAvailable = false;
+  }
+  return nativeHostAvailable;
+}
+
+function refreshOfflineStartUI() {
+  const haveHost = nativeHostAvailable === true;
+  el.offlineStartWrap.hidden = !haveHost;
+  el.offlineCopyWrap.hidden = haveHost;
+  if (!haveHost) {
+    // Bake the extension ID into the setup command so the user can copy + run.
+    const extId = chrome.runtime.id;
+    el.setupCommand.textContent = `npm run install-native-host -- --ext-id=${extId}`;
+    el.setupCommand.dataset.fullCmd = `npm run install-native-host -- --ext-id=${extId}`;
+  }
+}
+
+async function ensureNativeHostDetected() {
+  if (nativeHostAvailable !== null) return nativeHostAvailable;
+  await detectNativeHost();
+  refreshOfflineStartUI();
+  return nativeHostAvailable;
+}
+
+async function startTranscriberClicked() {
+  if (nativeStartInFlight) return;
+  nativeStartInFlight = true;
+  el.btnStartTranscriber.disabled = true;
+  el.offlineStartError.hidden = true;
+  el.btnStartTranscriber.querySelector(".start-icon").style.display = "none";
+  el.btnStartTranscriber.querySelector(".start-spinner").hidden = false;
+  el.btnStartTranscriber.querySelector(".start-label").textContent = "Starting…";
+
+  try {
+    const res = await callNativeHost("start", {}, 30000);
+    if (res?.ok) {
+      // Server is up — let init() pick up the change.
+      stopOfflinePolling();
+      init();
+    } else if (res?.reason === "port_conflict") {
+      el.offlineStartError.textContent =
+        `Port ${res.port || 19720} is already in use by another app. ` +
+        `Close it (or change the port) and try again.`;
+      el.offlineStartError.hidden = false;
+    } else if (res?.reason === "already_running") {
+      stopOfflinePolling();
+      init();
+    } else {
+      el.offlineStartError.textContent =
+        res?.error || "Couldn't start the server. Check ~/Library/Logs/Transcriber/native-host.log";
+      el.offlineStartError.hidden = false;
+    }
+  } catch (e) {
+    if (e.message === "native_host_unavailable" ||
+        /Specified native messaging host not found/i.test(e.message)) {
+      nativeHostAvailable = false;
+      refreshOfflineStartUI();
+    } else {
+      el.offlineStartError.textContent = `Start failed: ${e.message}`;
+      el.offlineStartError.hidden = false;
+    }
+  } finally {
+    nativeStartInFlight = false;
+    el.btnStartTranscriber.disabled = false;
+    el.btnStartTranscriber.querySelector(".start-icon").style.display = "";
+    el.btnStartTranscriber.querySelector(".start-spinner").hidden = true;
+    el.btnStartTranscriber.querySelector(".start-label").textContent = "Start Transcriber";
+  }
 }
 
 function isServerDownError(msg) {
@@ -1965,6 +2095,9 @@ async function init() {
       el.cloudNudge.hidden = false;
       el.localDetectedBanner.hidden = true;
       loadCachedPath();
+      // Detect (or re-detect on each offline render) whether the native host
+      // is installed so the right primary action shows.
+      ensureNativeHostDetected();
     }
 
     showState("NoService");
@@ -2229,6 +2362,19 @@ el.btnCopyCommand.addEventListener("click", () => {
   navigator.clipboard.writeText(cmd);
   el.btnCopyCommand.classList.add("copied");
   setTimeout(() => el.btnCopyCommand.classList.remove("copied"), 1500);
+});
+
+el.btnStartTranscriber.addEventListener("click", startTranscriberClicked);
+
+el.btnSetupAutostart.addEventListener("click", () => {
+  el.setupInstructions.hidden = !el.setupInstructions.hidden;
+});
+
+el.btnCopySetup.addEventListener("click", () => {
+  const cmd = el.setupCommand.dataset.fullCmd || el.setupCommand.textContent;
+  navigator.clipboard.writeText(cmd);
+  el.btnCopySetup.classList.add("copied");
+  setTimeout(() => el.btnCopySetup.classList.remove("copied"), 1500);
 });
 
 el.btnAlreadyTranscribed.addEventListener("click", (e) => {

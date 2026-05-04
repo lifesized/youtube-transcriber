@@ -731,15 +731,18 @@ const OBSIDIAN_CONTENT_URL_CAP = 30 * 1024; // encoded chars, leave headroom
 // Break segments into paragraphs so the note is readable rather than a
 // single wall of text. Heuristics (first match wins):
 //   1. Speaker change — prepend **Speaker:** label, start a new paragraph
-//   2. Time gap > ~30s since the current paragraph began (if timestamps
+//   2. Time gap > ~75s since the current paragraph began (if timestamps
 //      exist) — start a new paragraph
-//   3. Fallback cap of 8 segments per paragraph so untimed captions still
+//   3. Fallback cap of 18 segments per paragraph so untimed captions still
 //      get broken up
+// Thresholds chosen for human readability — 2-3 sentence paragraphs feel
+// choppy when the underlying speech runs on a single thought; ~75s lets a
+// full beat land before breaking.
 function segmentsToMarkdown(segments) {
   if (!Array.isArray(segments) || segments.length === 0) return "";
 
-  const PARAGRAPH_TIME_SECS = 30;
-  const PARAGRAPH_SEGMENT_CAP = 8;
+  const PARAGRAPH_TIME_SECS = 75;
+  const PARAGRAPH_SEGMENT_CAP = 18;
   const paragraphs = [];
   let current = [];
   let currentStart = null;
@@ -798,7 +801,7 @@ function buildObsidianMarkdown(transcript) {
   if (transcript.createdAt) {
     const d = new Date(transcript.createdAt);
     if (!Number.isNaN(d.getTime())) {
-      meta.push(`**Captured:** ${d.toISOString().slice(0, 10)}`);
+      meta.push(`**Recorded:** ${d.toISOString().slice(0, 10)}`);
     }
   }
   return meta.length ? `${meta.join("\n")}\n\n${body}` : body;

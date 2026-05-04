@@ -12,19 +12,55 @@
       <!-- Local mode offline -->
       <div id="offlineLocalMsg">
         <p class="offline-heading">Waiting for server</p>
-        <p class="offline-sub">The transcriber service isn't running yet</p>
+        <p class="offline-sub" id="offlineSub">The transcriber service isn't running yet</p>
         <p class="offline-path" id="offlinePath" hidden></p>
-        <div class="offline-copybox">
-          <code class="offline-copybox-code" id="offlineCommand">npm run dev</code>
-          <button class="offline-copybox-btn" id="btnCopyCommand" title="Copy to clipboard">
-            <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+
+        <!-- Primary path: one-click start via native messaging host -->
+        <div id="offlineStartWrap" hidden>
+          <button class="btn-start-transcriber" id="btnStartTranscriber">
+            <svg class="start-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="6 4 20 12 6 20 6 4"/>
             </svg>
-            <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="20 6 9 17 4 12"/>
-            </svg>
+            <span class="start-label">Start Transcriber</span>
+            <span class="start-spinner" hidden></span>
           </button>
+          <p class="offline-error" id="offlineStartError" hidden></p>
+        </div>
+
+        <!-- Fallback: copy/paste command when the native host isn't installed -->
+        <div id="offlineCopyWrap" hidden>
+          <div class="offline-copybox">
+            <code class="offline-copybox-code" id="offlineCommand">npm run dev</code>
+            <button class="offline-copybox-btn" id="btnCopyCommand" title="Copy to clipboard">
+              <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+              </svg>
+              <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </button>
+          </div>
+          <button class="btn-setup-autostart" id="btnSetupAutostart" type="button">
+            One-time setup for one-click start →
+          </button>
+          <div id="setupInstructions" class="setup-instructions" hidden>
+            <p class="setup-step">1. Open Terminal in the project folder</p>
+            <p class="setup-step">2. Run:</p>
+            <div class="offline-copybox">
+              <code class="offline-copybox-code" id="setupCommand">npm run install-native-host -- --ext-id=YOUR_ID</code>
+              <button class="offline-copybox-btn" id="btnCopySetup" title="Copy to clipboard">
+                <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                </svg>
+                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </button>
+            </div>
+            <p class="setup-hint">3. Reload this popup</p>
+          </div>
         </div>
       </div>
 
@@ -82,7 +118,7 @@
         <a class="cloud-nudge-cta" href="https://www.transcribed.dev" target="_blank">
           Try the web app →
         </a>
-        <p class="cloud-nudge-copy">No install needed · 10 free/month</p>
+        <p class="cloud-nudge-copy">No install needed · 30 free/month</p>
       </div>
       <!-- Local instance detected banner -->
       <div id="localDetectedBanner" class="local-detected-banner" hidden>
@@ -168,7 +204,7 @@
       </div>
       <div id="cloudAccountSection" class="settings-account" hidden>
         <a class="settings-account-link" href="https://www.transcribed.dev/account" target="_blank">
-          Manage account →
+          Manage account
         </a>
       </div>
       <div id="destinationsSection" class="settings-destinations" hidden>
@@ -218,10 +254,6 @@
       </a>
       <a class="cloud-link" id="cloudLink" href="https://www.transcribed.dev" target="_blank" title="Open transcribed.dev" hidden>
         <span class="cloud-link-label">transcribed.dev</span>
-        <svg class="cloud-link-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M7 17L17 7"/>
-          <path d="M8 7h9v9"/>
-        </svg>
       </a>
     </div>
     <div id="popupToast" class="popup-toast" hidden></div>

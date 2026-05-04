@@ -408,6 +408,89 @@ body::-webkit-scrollbar-thumb:hover {
   display: block;
   color: rgba(255, 255, 255, 0.5);
 }
+.btn-start-transcriber {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 260px;
+  padding: 10px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.04));
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.05s;
+  margin-bottom: 12px;
+}
+.btn-start-transcriber:hover {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.btn-start-transcriber:active {
+  transform: translateY(1px);
+}
+.btn-start-transcriber:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.btn-start-transcriber .start-icon {
+  flex-shrink: 0;
+}
+.btn-start-transcriber .start-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: rgba(255, 255, 255, 0.85);
+  border-radius: 50%;
+  animation: start-spin 0.7s linear infinite;
+  margin-left: 4px;
+}
+@keyframes start-spin {
+  to { transform: rotate(360deg); }
+}
+.offline-error {
+  font-size: 11px;
+  color: #ff8b8b;
+  max-width: 260px;
+  margin: 6px auto 12px;
+  line-height: 1.4;
+}
+.btn-setup-autostart {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.40);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 4px 0;
+  margin-top: 4px;
+  transition: color 0.15s;
+}
+.btn-setup-autostart:hover {
+  color: rgba(255, 255, 255, 0.65);
+}
+.setup-instructions {
+  margin-top: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.setup-step {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.50);
+  margin: 2px 0 6px;
+  text-align: left;
+}
+.setup-hint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  margin-top: 6px;
+  text-align: left;
+}
 .btn-check-again {
   display: inline-flex;
   align-items: center;
