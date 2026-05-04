@@ -514,11 +514,36 @@ async function tryExtractCaptions(url) {
     console.log("[ytt-bg] caption fast-path: no matching youtube tab", { url });
     return null;
   }
-  const response = await sendMessageWithTimeout(
+  let response = await sendMessageWithTimeout(
     tab.id,
     { type: "EXTRACT_CAPTIONS" },
     CAPTION_EXTRACT_TIMEOUT_MS
   );
+  // Null response = no listener on the tab. Common when the user opened the
+  // YouTube tab BEFORE the extension loaded, or after a `chrome://extensions`
+  // reload didn't fire registerContentScripts in the right window. Inject
+  // content.js on-demand and retry once. This is the belt-and-suspenders
+  // recovery the on-install registration alone can't cover.
+  if (response === null) {
+    console.log("[ytt-bg] caption fast-path: no listener — injecting + retrying", { tabId: tab.id });
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ["content.js"],
+        injectImmediately: true,
+      });
+      // Fresh content script needs a beat to attach the message listener.
+      await new Promise((r) => setTimeout(r, 100));
+      response = await sendMessageWithTimeout(
+        tab.id,
+        { type: "EXTRACT_CAPTIONS" },
+        CAPTION_EXTRACT_TIMEOUT_MS
+      );
+    } catch (err) {
+      console.log("[ytt-bg] caption fast-path: inject failed", err?.message || err);
+      return null;
+    }
+  }
   console.log("[ytt-bg] caption fast-path response", {
     tabId: tab.id,
     ok: !!response?.ok,
