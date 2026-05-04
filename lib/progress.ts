@@ -1,7 +1,15 @@
 import { EventEmitter } from "events";
 
+export type ProgressStage =
+  | "fetching_captions"
+  | "downloading"
+  | "transcribing"
+  | "diarizing"
+  | "done"
+  | "error";
+
 export interface ProgressEvent {
-  stage: "fetching_captions" | "downloading" | "transcribing" | "diarizing" | "done" | "error";
+  stage: ProgressStage;
   progress: number; // 0-100
   statusText: string;
   videoId?: string;
