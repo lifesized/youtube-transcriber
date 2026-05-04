@@ -1340,6 +1340,56 @@ body::-webkit-scrollbar-thumb:hover {
 .destinations-row-status:empty {
   display: none;
 }
+.destinations-row-help {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+  text-decoration: none;
+  transition: color 0.12s;
+  align-self: flex-start;
+}
+.destinations-row-help:hover {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* Skeleton rows — same outer layout as .destinations-row, shimmer
+   placeholders for icon / name / status / toggle. Reuses the
+   recent-skeleton-shimmer keyframe to avoid a duplicate animation. */
+.destinations-row-skeleton {
+  pointer-events: none;
+}
+.destinations-skeleton-icon,
+.destinations-skeleton-line,
+.destinations-skeleton-toggle {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.09) 50%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  background-size: 200% 100%;
+  animation: recent-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+.destinations-skeleton-icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+}
+.destinations-skeleton-line {
+  height: 10px;
+  border-radius: 4px;
+}
+.destinations-skeleton-name { width: 35%; }
+.destinations-skeleton-status { width: 55%; height: 8px; margin-top: 4px; }
+.destinations-skeleton-toggle {
+  flex-shrink: 0;
+  width: 44px;
+  height: 24px;
+  border-radius: 100px;
+}
+
 /* Connector toggle — mirrors the Toggle in components/settings-panel.tsx.
    44×24 track, 20×20 thumb, accent fill when on, white/20 when off. */
 .destinations-toggle {
@@ -1790,7 +1840,7 @@ body::-webkit-scrollbar-thumb:hover {
   justify-content: space-between;
   margin-top: auto;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
-  padding-top: 10px;
+  padding-top: 16px;
 }
 
 /* Inline toast — fixed overlay inside the side panel so send feedback is
@@ -1827,6 +1877,8 @@ body::-webkit-scrollbar-thumb:hover {
 .github-link {
   display: flex;
   align-items: center;
+  height: 28px;
+  line-height: 1;
   gap: 6px;
   text-decoration: none;
   opacity: 0.3;
@@ -1850,7 +1902,8 @@ body::-webkit-scrollbar-thumb:hover {
 .cloud-link {
   display: flex;
   align-items: center;
-  min-height: 28px;
+  height: 28px;
+  line-height: 1;
   gap: 4px;
   text-decoration: none;
   font-size: 11px;

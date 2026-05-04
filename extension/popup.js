@@ -573,11 +573,17 @@ const LOCAL_DESTINATION_ICONS = {
   "obsidian-scheme": "icons/obsidian.svg",
 };
 
+// Setup-help docs URL — points at the README "Connectors" section for now
+// (safe, exists today). Swap to dedicated transcribed.dev/docs pages once
+// YTT-257 / YTT-258 ship per-connector guides.
+const CONNECTOR_SETUP_HELP_URL =
+  "https://github.com/lifesized/youtube-transcriber#connectors--send-transcripts-to-obsidian-or-notion";
+
 // Client-side adapters — available in any mode, no cloud account required.
 // Obsidian's "connected" state is derived from whether the user has saved
 // a vault name, not from any server call.
 const CLIENT_SIDE_ADAPTERS = [
-  { adapterId: "obsidian-scheme", name: "Obsidian", icon: "", clientSide: true },
+  { adapterId: "obsidian-scheme", name: "Obsidian", icon: "", clientSide: true, setupHelpUrl: CONNECTOR_SETUP_HELP_URL },
 ];
 
 // Cloud-only teasers — shown when the user is in cloud mode but the
@@ -585,7 +591,7 @@ const CLIENT_SIDE_ADAPTERS = [
 // "Sign in" CTA instead of Connect. Hidden entirely in self-hosted mode
 // since these adapters can't work without the cloud backend.
 const CLOUD_TEASER_ADAPTERS = [
-  { adapterId: "notion", name: "Notion", icon: "", cloudOnly: true },
+  { adapterId: "notion", name: "Notion", icon: "", cloudOnly: true, setupHelpUrl: CONNECTOR_SETUP_HELP_URL },
 ];
 
 async function fetchDestinations() {
@@ -651,17 +657,40 @@ function connectedDestinations() {
   );
 }
 
+function renderDestinationsSkeleton(rows = 2) {
+  el.destinationsList.innerHTML = "";
+  for (let i = 0; i < rows; i++) {
+    const row = document.createElement("div");
+    row.className = "destinations-row destinations-row-skeleton";
+    row.innerHTML = `
+      <div class="destinations-skeleton-icon"></div>
+      <div class="destinations-row-text">
+        <div class="destinations-skeleton-line destinations-skeleton-name"></div>
+        <div class="destinations-skeleton-line destinations-skeleton-status"></div>
+      </div>
+      <div class="destinations-skeleton-toggle"></div>
+    `;
+    el.destinationsList.appendChild(row);
+  }
+}
+
 async function renderDestinationsSettings() {
   // Destinations always visible — Obsidian works in any mode (client-side
   // URL scheme), and cloud-only adapters render as "Sign in" teasers when
   // not reachable. The only state where the section is empty is if we
   // somehow have zero adapters total, which shouldn't happen.
   el.destinationsSection.hidden = false;
-  el.destinationsList.innerHTML = "";
   el.destinationsEmpty.hidden = true;
+  // Skeleton rows during the await — cloud mode hits LIST_DESTINATIONS in
+  // the background which is a visible round-trip; even local mode has a
+  // brief storage read. Replaced when fetchDestinations resolves.
+  renderDestinationsSkeleton();
 
   const res = await fetchDestinations();
   const list = res.destinations || [];
+
+  // Clear skeletons before rendering real rows / empty state.
+  el.destinationsList.innerHTML = "";
 
   if (!list.length) {
     el.destinationsEmpty.hidden = false;
@@ -716,6 +745,18 @@ function buildDestinationRow(d, ctx) {
   status.className = "destinations-row-status";
   text.appendChild(name);
   text.appendChild(status);
+
+  // Setup-help link — surfaced only when the connector isn't usable yet.
+  // Hidden once connected so the row stays clean for happy-path users.
+  if (d.setupHelpUrl && !d.connected) {
+    const help = document.createElement("a");
+    help.className = "destinations-row-help";
+    help.href = d.setupHelpUrl;
+    help.target = "_blank";
+    help.rel = "noopener noreferrer";
+    help.textContent = "Setup help →";
+    text.appendChild(help);
+  }
 
   let actionEl;
 
@@ -2623,7 +2664,6 @@ async function switchMode(newMode) {
   // same way a true cold start does, so reopen the retry window.
   coldStartHandled = false;
   currentMode = newMode;
-  setModeUI(newMode);
   // Drop any in-flight state from the previous mode. Without this, an
   // interrupted cloud transcribe can leave bg state="transcribing" — PHASE 3
   // of init() then re-arms isTranscribing=true and the next Transcribe
@@ -2632,6 +2672,14 @@ async function switchMode(newMode) {
   isTranscribing = false;
   await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
   await sendMsg({ type: "SAVE_SETTINGS", mode: newMode });
+  // Persist FIRST, render SECOND. setModeUI triggers
+  // renderDestinationsSettings → fetchDestinations → GET_SETTINGS — if we
+  // re-render before SAVE_SETTINGS resolves, that GET returns the *previous*
+  // mode and the destinations list is built from stale state. Symptom seen:
+  // self-hosted → cloud only showed Obsidian (cloud branch never ran);
+  // cloud → self-hosted showed Notion as a "Cloud unreachable" teaser
+  // (the cloud branch ran with a defunct cloud server, fell back to teasers).
+  setModeUI(newMode);
   // Mode toggles live inside the settings panel — keep the user there.
   // init() (which collapses settings into the library view) runs when the
   // user navigates back via the Library nav button.
