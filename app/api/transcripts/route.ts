@@ -1,11 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { parseContentUrl } from "@/lib/url-parser";
-import { getVideoTranscript, RateLimitError, BotDetectionError, NoCaptionsError } from "@/lib/transcript";
+import {
+  getVideoTranscript,
+  fetchMetadata,
+  RateLimitError,
+  BotDetectionError,
+  NoCaptionsError,
+} from "@/lib/transcript";
 import { isTranscriptionInProgress } from "@/lib/whisper";
 
+type ClientSegment = { start: number; duration?: number; text: string };
+
+function isValidClientSegments(value: unknown): value is ClientSegment[] {
+  if (!Array.isArray(value) || value.length === 0) return false;
+  return value.every(
+    (s) =>
+      s &&
+      typeof s === "object" &&
+      typeof (s as ClientSegment).start === "number" &&
+      typeof (s as ClientSegment).text === "string"
+  );
+}
+
 export async function POST(request: NextRequest) {
-  let body: { url?: string; lang?: string };
+  let body: {
+    url?: string;
+    lang?: string;
+    segments?: unknown;
+    title?: string;
+  };
   try {
     body = await request.json();
   } catch {
@@ -43,6 +67,44 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ...existing, duplicate: true });
     }
     // Existing record has empty transcript — re-fetch and update below
+  }
+
+  // Client-supplied segments (extension panel-scrape fast path). Skip
+  // yt-dlp / Whisper entirely — pull metadata via oEmbed (~200ms) and
+  // persist the supplied transcript. This is what makes cloud match local
+  // speed: no Railway worker hop, no audio download, no transcription job.
+  if (platform === "youtube" && isValidClientSegments(body.segments)) {
+    try {
+      const meta = await fetchMetadata(videoId);
+      // Normalize extension's seconds-based shape to the canonical
+      // {text, startMs, durationMs} stored everywhere else (lib/types.ts,
+      // download/summarize routes, app/page.tsx all read startMs/durationMs).
+      const normalized = body.segments.map((s) => ({
+        text: s.text,
+        startMs: Math.round(s.start * 1000),
+        durationMs: Math.round((s.duration ?? 0) * 1000),
+      }));
+      const data = {
+        videoId,
+        title: body.title || meta.title,
+        author: meta.author,
+        channelUrl: meta.channelUrl,
+        thumbnailUrl: meta.thumbnailUrl,
+        videoUrl: url,
+        transcript: JSON.stringify(normalized),
+        source: "client_panel_scrape",
+        platform,
+      };
+      const video = existing
+        ? await prisma.video.update({ where: { videoId }, data })
+        : await prisma.video.create({ data });
+      return NextResponse.json(video, { status: existing ? 200 : 201 });
+    } catch (err: unknown) {
+      // Fall through to the server fetch path on metadata failure rather
+      // than failing the whole request — the supplied segments are still
+      // valid, but we need title/thumbnail before persisting.
+      console.warn("[transcripts] client-segment fast path metadata failed", err);
+    }
   }
 
   if (isTranscriptionInProgress()) {

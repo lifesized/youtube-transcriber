@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "About YouTube Transcriber",
+  title: "About Transcriber",
   description: "Learn about why this project exists and how it works",
 };
 
@@ -73,7 +73,7 @@ export default function AboutPage() {
             <h2 className="text-base font-medium text-white/75">Technical Highlights</h2>
             <ul className="space-y-2 text-sm text-white/40">
               <li>• <strong className="text-white/70">Local-first architecture</strong> — All processing happens on your machine. No data leaves your computer.</li>
-              <li>• <strong className="text-white/70">MLX Whisper optimization</strong> — 3-5x faster transcription on Apple Silicon using Apple's MLX framework.</li>
+              <li>• <strong className="text-white/70">MLX Whisper optimization</strong> — 3-5x faster transcription on Apple Silicon using Apple&apos;s MLX framework.</li>
               <li>• <strong className="text-white/70">Automatic fallback chain</strong> — YouTube captions → Cloud Whisper (BYOK) → MLX Whisper → OpenAI Whisper, ensuring you always get a transcript.</li>
               <li>• <strong className="text-white/70">Multi-language captions</strong> — Request captions in any language YouTube supports via the <code className="rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-white/70">lang</code> parameter or <code className="rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-white/70">YTT_CAPTION_LANGS</code> env var.</li>
               <li>• <strong className="text-white/70">Modern stack</strong> — Next.js 15, React 19, TypeScript, Prisma with SQLite.</li>
@@ -109,10 +109,10 @@ export default function AboutPage() {
                 • <a href="https://cursor.sh" target="_blank" rel="noopener noreferrer" className="text-white/75 underline decoration-blue-400 hover:text-white hover:decoration-blue-300">Cursor</a> — AI-first code editor
               </li>
               <li>
-                • <a href="https://openai.com/index/openai-codex/" target="_blank" rel="noopener noreferrer" className="text-white/75 underline decoration-blue-400 hover:text-white hover:decoration-blue-300">Codex</a> — OpenAI's code generation model
+                • <a href="https://openai.com/index/openai-codex/" target="_blank" rel="noopener noreferrer" className="text-white/75 underline decoration-blue-400 hover:text-white hover:decoration-blue-300">Codex</a> — OpenAI&apos;s code generation model
               </li>
               <li>
-                • <a href="https://github.com/anthropics/claude-code" target="_blank" rel="noopener noreferrer" className="text-white/75 underline decoration-blue-400 hover:text-white hover:decoration-blue-300">Claude Code</a> — Anthropic's AI coding assistant
+                • <a href="https://github.com/anthropics/claude-code" target="_blank" rel="noopener noreferrer" className="text-white/75 underline decoration-blue-400 hover:text-white hover:decoration-blue-300">Claude Code</a> — Anthropic&apos;s AI coding assistant
               </li>
             </ul>
           </div>

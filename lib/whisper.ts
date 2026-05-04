@@ -3,8 +3,9 @@ import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
 import type { TranscriptSegment } from "./types";
+import type { ProgressStage } from "./progress";
 
-export type ProgressCallback = (event: { stage: string; progress: number; statusText: string }) => void;
+export type ProgressCallback = (event: { stage: ProgressStage; progress: number; statusText: string }) => void;
 
 // Concurrency lock: only one transcription at a time to prevent memory exhaustion
 let transcriptionInProgress = false;

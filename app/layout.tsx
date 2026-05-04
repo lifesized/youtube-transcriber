@@ -6,8 +6,8 @@ import { GeistPixelSquare } from "geist/font/pixel";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "YouTube Transcriber",
-  description: "Capture and store YouTube video transcripts",
+  title: "Transcriber",
+  description: "Capture and store video transcripts",
 };
 
 export default function RootLayout({

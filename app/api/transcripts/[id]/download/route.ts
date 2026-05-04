@@ -41,7 +41,7 @@ export async function GET(
     "",
     `**Author:** ${video.author}`,
     `**URL:** ${video.videoUrl}`,
-    `**Captured:** ${capturedDate}`,
+    `**Recorded:** ${capturedDate}`,
     "",
     "---",
     "",

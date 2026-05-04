@@ -23,8 +23,6 @@ const COPY_FILES = [
   "popup.html",
   "popup.js",
   "popup.css",
-  "popup-shell.html",
-  "popup-shell.js",
   "destination-connected.html",
   "destination-connected.js",
   "setup-link.css",

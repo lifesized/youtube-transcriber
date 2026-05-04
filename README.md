@@ -53,6 +53,20 @@ The extension works in two modes:
 
 Navigate to any YouTube video or Spotify episode, open the side panel, and click **Transcribe**. In cloud mode, transcripts are available at [transcribed.dev](https://www.transcribed.dev). In self-hosted mode, they open in the local web app at `http://localhost:19720`.
 
+### Connectors — send transcripts to Obsidian or Notion
+
+Each transcript row's `⋯` menu can push the result to an external app. Connect once in **Settings → Connectors**, then use the menu on any recent transcript.
+
+**Obsidian** — works in both cloud and self-hosted mode. Stateless: the extension builds an `obsidian://new?...` URL on your machine and hands it to the desktop app. Nothing transcript-related leaves the device.
+
+1. Install [Obsidian](https://obsidian.md) and open your vault.
+2. In the extension panel: gear icon → **Connectors** → toggle **Obsidian** on.
+3. Type your vault name **exactly** as it appears in Obsidian's sidebar (case-sensitive).
+4. (Recommended for long transcripts) Install the [Advanced URI](https://github.com/Vinzent03/obsidian-advanced-uri) community plugin in Obsidian, then expand **More** under the vault field and check **Use Advanced URI plugin**. Stock `obsidian://new` has a URL length cap that truncates long videos; Advanced URI handles them reliably.
+5. From any recent transcript, click `⋯` → **Send to Obsidian**. Allow the protocol handler the first time Chrome prompts you.
+
+**Notion** — cloud mode only. Uses OAuth; tokens are stored encrypted on transcribed.dev. Toggle **Notion** on in Connectors, authorize in the popup, and share at least one page or database (a dedicated database works best) with the integration. Full setup: [docs/destinations](https://www.transcribed.dev/docs/destinations).
+
 ---
 
 ## Use with Claude Code, Claude Desktop & Cursor

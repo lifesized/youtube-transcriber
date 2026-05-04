@@ -36,6 +36,8 @@ const PROVIDERS: LlmProvider[] = [
   {
     id: "claude",
     name: "Claude",
+    // Claude.ai's ?q= path triggers an external-prompt warning banner —
+    // worse UX than the clipboard hop. Use the extension for one-press parity.
     urlTemplate: null,
     clipboardFallback: true,
     icon: PROVIDER_ICONS.claude,
@@ -60,18 +62,13 @@ interface LlmLauncherProps {
 
 export function LlmLauncher({ videoId, videoTitle, onToast }: LlmLauncherProps) {
   const [open, setOpen] = useState(false);
-  const [lastProvider, setLastProvider] = useState<string | null>(null);
+  // Lazy init avoids the React 19 set-state-in-effect warning. Same-component
+  // writes (line ~93) keep this in sync; cross-tab updates are an accepted
+  // edge case.
+  const [lastProvider, setLastProvider] = useState<string | null>(() =>
+    typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null
+  );
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setLastProvider(localStorage.getItem(STORAGE_KEY));
-  }, []);
-
-  useEffect(() => {
-    if (open) {
-      setLastProvider(localStorage.getItem(STORAGE_KEY));
-    }
-  }, [open]);
 
   useEffect(() => {
     if (!open) return;

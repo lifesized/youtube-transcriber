@@ -12,19 +12,55 @@
       <!-- Local mode offline -->
       <div id="offlineLocalMsg">
         <p class="offline-heading">Waiting for server</p>
-        <p class="offline-sub">The transcriber service isn't running yet</p>
+        <p class="offline-sub" id="offlineSub">The transcriber service isn't running yet</p>
         <p class="offline-path" id="offlinePath" hidden></p>
-        <div class="offline-copybox">
-          <code class="offline-copybox-code" id="offlineCommand">npm run dev</code>
-          <button class="offline-copybox-btn" id="btnCopyCommand" title="Copy to clipboard">
-            <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+
+        <!-- Primary path: one-click start via native messaging host -->
+        <div id="offlineStartWrap" hidden>
+          <button class="btn-start-transcriber" id="btnStartTranscriber">
+            <svg class="start-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="6 4 20 12 6 20 6 4"/>
             </svg>
-            <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="20 6 9 17 4 12"/>
-            </svg>
+            <span class="start-label">Start Transcriber</span>
+            <span class="start-spinner" hidden></span>
           </button>
+          <p class="offline-error" id="offlineStartError" hidden></p>
+        </div>
+
+        <!-- Fallback: copy/paste command when the native host isn't installed -->
+        <div id="offlineCopyWrap" hidden>
+          <div class="offline-copybox">
+            <code class="offline-copybox-code" id="offlineCommand">npm run dev</code>
+            <button class="offline-copybox-btn" id="btnCopyCommand" title="Copy to clipboard">
+              <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+              </svg>
+              <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </button>
+          </div>
+          <button class="btn-setup-autostart" id="btnSetupAutostart" type="button">
+            One-time setup for one-click start →
+          </button>
+          <div id="setupInstructions" class="setup-instructions" hidden>
+            <p class="setup-step">1. Open Terminal in the project folder</p>
+            <p class="setup-step">2. Run:</p>
+            <div class="offline-copybox">
+              <code class="offline-copybox-code" id="setupCommand">npm run install-native-host -- --ext-id=YOUR_ID</code>
+              <button class="offline-copybox-btn" id="btnCopySetup" title="Copy to clipboard">
+                <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                </svg>
+                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </button>
+            </div>
+            <p class="setup-hint">3. Reload this popup</p>
+          </div>
         </div>
       </div>
 
@@ -35,7 +71,7 @@
              init() code keeps its existing hide/show contract. -->
         <div id="cloudOnboarding">
           <h2 class="cloud-auth-title">Sign in</h2>
-          <p class="cloud-auth-subtitle">Transcribe 10 videos/month for free.</p>
+          <p class="cloud-auth-subtitle">30 free transcripts/month. Audio on Pro.</p>
         </div>
         <div id="cloudAuthError" hidden>
           <h2 class="cloud-auth-title">Session expired</h2>
@@ -82,7 +118,7 @@
         <a class="cloud-nudge-cta" href="https://www.transcribed.dev" target="_blank">
           Try the web app →
         </a>
-        <p class="cloud-nudge-copy">No install needed · 10 free/month</p>
+        <p class="cloud-nudge-copy">No install needed · 30 free/month</p>
       </div>
       <!-- Local instance detected banner -->
       <div id="localDetectedBanner" class="local-detected-banner" hidden>
@@ -168,20 +204,20 @@
       </div>
       <div id="cloudAccountSection" class="settings-account" hidden>
         <a class="settings-account-link" href="https://www.transcribed.dev/account" target="_blank">
-          Manage account at transcribed.dev →
+          Manage account
         </a>
       </div>
       <div id="destinationsSection" class="settings-destinations" hidden>
-        <div class="section-label section-label-subsection">Destinations</div>
+        <div class="section-label section-label-subsection">Connectors</div>
         <div id="destinationsList" class="destinations-list"></div>
-        <p id="destinationsEmpty" class="destinations-empty" hidden>Destinations aren't available yet.</p>
+        <p id="destinationsEmpty" class="destinations-empty" hidden>Connectors aren't available yet.</p>
         <div id="obsidianVaultRow" class="obsidian-vault-row" hidden>
           <label class="obsidian-vault-label" for="obsidianVaultInput">Obsidian vault name</label>
           <input id="obsidianVaultInput" class="obsidian-vault-input" type="text" placeholder="e.g. MyVault" autocomplete="off" spellcheck="false" />
           <span id="obsidianVaultSaved" class="obsidian-vault-saved" hidden>Saved</span>
         </div>
         <details id="obsidianAdvUriRow" class="obsidian-advuri-row" hidden>
-          <summary class="obsidian-advuri-summary">Advanced</summary>
+          <summary class="obsidian-advuri-summary">More</summary>
           <label class="obsidian-advuri-label">
             <input id="obsidianAdvUriInput" class="obsidian-advuri-input" type="checkbox" />
             <span class="obsidian-advuri-text">Use Advanced URI plugin</span>
@@ -211,10 +247,13 @@
           </svg>
         </button>
       </div>
-      <a class="github-link" href="https://github.com/lifesized/youtube-transcriber" target="_blank" title="View on GitHub">
+      <a class="github-link" id="githubLink" href="https://github.com/lifesized/youtube-transcriber" target="_blank" title="View on GitHub" hidden>
         <svg class="github-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
           <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
         </svg>
+      </a>
+      <a class="cloud-link" id="cloudLink" href="https://www.transcribed.dev" target="_blank" title="Open transcribed.dev" hidden>
+        <span class="cloud-link-label">transcribed.dev</span>
       </a>
     </div>
     <div id="popupToast" class="popup-toast" hidden></div>

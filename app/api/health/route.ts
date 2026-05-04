@@ -120,6 +120,9 @@ export async function GET() {
 
   return NextResponse.json(
     { status, checks, projectPath: process.cwd() },
-    { status: hasFail ? 503 : 200 }
+    {
+      status: hasFail ? 503 : 200,
+      headers: { "X-Transcriber-Service": "1" },
+    }
   );
 }

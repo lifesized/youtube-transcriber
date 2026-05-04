@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "YouTube Transcriber",
-  "version": "1.6.0",
+  "name": "Transcriber for YouTube",
+  "version": "1.6.14",
   "description": "One-click transcription for videos and podcasts. Works with transcribed.dev or your own self-hosted instance.",
   "content_security_policy": {
     "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' http://localhost:19720 http://127.0.0.1:19720 https://transcribed.dev https://www.transcribed.dev; frame-src https://transcribed.dev https://www.transcribed.dev; object-src 'none'; base-uri 'none'; form-action 'none'"
@@ -11,7 +11,8 @@
     "tabs",
     "storage",
     "sidePanel",
-    "scripting"
+    "scripting",
+    "nativeMessaging"
   ],
   "optional_permissions": [
     "notifications",

@@ -53,3 +53,18 @@ app/dither/
 
 # Private local docs (cloud prompts, notes — not for public repo)
 .private/
+
+# Private strategy / marketing / branding docs — never commit, even if copied in
+# (these normally live in the parent transcriber/ folder which is not a git repo)
+/0*-*.md
+/1*-*.md
+/competitive-analysis*.md
+/competitor-*.md
+/*-pitch-deck.*
+/*-investor-*.md
+/*-investment-*.md
+/marketing/
+/brand/
+/design/
+/_marketing-validation/
+tmp/email-renders/

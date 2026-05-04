@@ -31,6 +31,15 @@ const el = {
   btnCancel: document.getElementById("btnCancel"),
   btnCheckAgain: document.getElementById("btnCheckAgain"),
   btnCopyCommand: document.getElementById("btnCopyCommand"),
+  btnStartTranscriber: document.getElementById("btnStartTranscriber"),
+  offlineStartWrap: document.getElementById("offlineStartWrap"),
+  offlineCopyWrap: document.getElementById("offlineCopyWrap"),
+  offlineStartError: document.getElementById("offlineStartError"),
+  offlineSub: document.getElementById("offlineSub"),
+  btnSetupAutostart: document.getElementById("btnSetupAutostart"),
+  setupInstructions: document.getElementById("setupInstructions"),
+  setupCommand: document.getElementById("setupCommand"),
+  btnCopySetup: document.getElementById("btnCopySetup"),
   offlinePath: document.getElementById("offlinePath"),
   offlineCommand: document.getElementById("offlineCommand"),
   offlineLocalMsg: document.getElementById("offlineLocalMsg"),
@@ -52,6 +61,8 @@ const el = {
   liveNotice: document.getElementById("liveNotice"),
   btnNavLibrary: document.getElementById("btnNavLibrary"),
   btnNavSettings: document.getElementById("btnNavSettings"),
+  githubLink: document.getElementById("githubLink"),
+  cloudLink: document.getElementById("cloudLink"),
   settingsPanel: document.getElementById("settingsPanel"),
   btnModeLocal: document.getElementById("btnModeLocal"),
   btnModeCloud: document.getElementById("btnModeCloud"),
@@ -88,6 +99,14 @@ let pollInterval = null;
 let isTranscribing = false;
 let offlinePollTimer = null;
 let heartbeatTimer = null;
+// Mirrors `chrome.storage.sync.mode` — set in init() and on mode-toggle.
+// Lets doTranscribe paint progress synchronously without awaiting GET_SETTINGS
+// (the await caused a leftward bar sweep when the indeterminate prepaint
+// transitioned back to 0%).
+let currentMode = "cloud";
+// Mutable label flag read by the progressTimer tick. Cloud mode flips this
+// off so pollTranscriptionStatus owns label text without timer overwrites.
+let progressWriteLabels = true;
 // When true, direct TRANSCRIBE response owns completion/error handling.
 let suppressPollFinalization = false;
 
@@ -105,14 +124,35 @@ const PROGRESS_STAGES = [
   { at: 90, label: "Finishing up..." },
 ];
 
-function startProgress() {
+// In cloud mode, real progress text arrives via polling, so the fake stage
+// labels are suppressed (writeLabels=false) to avoid flicker between the
+// two. The width curve still runs so the bar feels the same as local.
+function startProgress({ writeLabels = true } = {}) {
+  // Idempotent — clear any previous timer before starting a new one. Two
+  // timers writing to bar.style.width with their own elapsed counters
+  // makes the bar lurch backward; this guarantees only one is ever active.
+  if (progressTimer) {
+    clearInterval(progressTimer);
+    progressTimer = null;
+  }
+  progressWriteLabels = writeLabels;
   const bar = document.getElementById("progressBar");
   bar.classList.remove("indeterminate");
+  // Snap to 0% with no transition so a stale width (e.g. 100% from a prior
+  // run) can't animate leftward when the new run starts.
+  const prevTransition = bar.style.transition;
+  bar.style.transition = "none";
   bar.style.width = "0%";
+  // Force a reflow so the transition: none commit lands before we restore.
+  void bar.offsetWidth;
+  bar.style.transition = prevTransition;
+
   let stageIdx = 0;
   let elapsed = 0;
 
-  el.progressText.textContent = PROGRESS_STAGES[0].label;
+  el.progressText.textContent = progressWriteLabels
+    ? PROGRESS_STAGES[0].label
+    : "Transcription in progress...";
 
   progressTimer = setInterval(() => {
     elapsed += 1;
@@ -124,7 +164,9 @@ function startProgress() {
       pct >= PROGRESS_STAGES[stageIdx + 1].at
     ) {
       stageIdx++;
-      el.progressText.textContent = PROGRESS_STAGES[stageIdx].label;
+      if (progressWriteLabels) {
+        el.progressText.textContent = PROGRESS_STAGES[stageIdx].label;
+      }
     }
   }, 1000);
 }
@@ -136,18 +178,6 @@ function stopProgress() {
   }
   const bar = document.getElementById("progressBar");
   bar.style.width = "100%";
-}
-
-function startIndeterminate() {
-  // Clear any running local-mode progress timer to avoid conflicts
-  if (progressTimer) {
-    clearInterval(progressTimer);
-    progressTimer = null;
-  }
-  const bar = document.getElementById("progressBar");
-  bar.style.width = "";
-  bar.classList.add("indeterminate");
-  el.progressText.textContent = "Transcription in progress...";
 }
 
 // ---------------------------------------------------------------------------
@@ -550,9 +580,10 @@ const CLIENT_SIDE_ADAPTERS = [
   { adapterId: "obsidian-scheme", name: "Obsidian", icon: "", clientSide: true },
 ];
 
-// Cloud-only teasers — shown when the user is in local mode or signed out,
-// so they can still see what they'd unlock with a cloud account. Renders
-// with a "Sign in" CTA instead of Connect.
+// Cloud-only teasers — shown when the user is in cloud mode but the
+// destinations fetch failed (signed out, offline, 5xx). Renders with a
+// "Sign in" CTA instead of Connect. Hidden entirely in self-hosted mode
+// since these adapters can't work without the cloud backend.
 const CLOUD_TEASER_ADAPTERS = [
   { adapterId: "notion", name: "Notion", icon: "", cloudOnly: true },
 ];
@@ -594,15 +625,17 @@ async function fetchDestinations() {
         cloudAdapters = CLOUD_TEASER_ADAPTERS;
       }
     } else {
+      // Self-hosted mode — hide cloud-only adapters entirely. They can't
+      // work without the cloud backend, so a teaser would just be noise.
       cloudReason = "local";
-      cloudAdapters = CLOUD_TEASER_ADAPTERS;
+      cloudAdapters = [];
     }
 
     destinationsCache = {
       ok: true,
       cloudReady,
       cloudReason,
-      destinations: [...clientSide, ...cloudAdapters],
+      destinations: [...cloudAdapters, ...clientSide],
     };
     return destinationsCache;
   } finally {
@@ -690,13 +723,7 @@ function buildDestinationRow(d, ctx) {
     // Client-side adapter (Obsidian). "Connected" = local config saved.
     // Connect focuses the vault-name input below; Disconnect clears it.
     if (d.connected) {
-      status.classList.add("connected");
-      status.textContent = "Connected";
-      actionEl = document.createElement("button");
-      actionEl.type = "button";
-      actionEl.className = "destinations-row-action danger";
-      actionEl.textContent = "Disconnect";
-      actionEl.addEventListener("click", async () => {
+      actionEl = makeDestinationToggle(true, async () => {
         if (d.adapterId === "obsidian-scheme") {
           await chrome.storage.sync.remove("obsidianVaultName");
           el.obsidianVaultInput.value = "";
@@ -706,11 +733,15 @@ function buildDestinationRow(d, ctx) {
       });
     } else {
       status.textContent = "Add vault name below";
-      actionEl = document.createElement("button");
-      actionEl.type = "button";
-      actionEl.className = "destinations-row-action";
-      actionEl.textContent = "Connect";
-      actionEl.addEventListener("click", () => {
+      actionEl = makeDestinationToggle(false, async () => {
+        const { obsidianVaultName } = await chrome.storage.sync.get(
+          "obsidianVaultName"
+        );
+        if ((obsidianVaultName || "").trim()) {
+          destinationsCache = null;
+          renderDestinationsSettings();
+          return;
+        }
         el.obsidianVaultInput.focus();
         el.obsidianVaultInput.scrollIntoView({
           behavior: "smooth",
@@ -741,30 +772,15 @@ function buildDestinationRow(d, ctx) {
     if (d.connected && d.needsReauth) {
       status.classList.add("needs-reauth");
       status.textContent = "Reconnect needed";
-      actionEl = document.createElement("button");
-      actionEl.type = "button";
-      actionEl.className = "destinations-row-action";
-      actionEl.textContent = "Reconnect";
-      actionEl.addEventListener("click", () =>
+      actionEl = makeDestinationToggle(false, () =>
         handleConnect(d.adapterId, actionEl)
       );
     } else if (d.connected) {
-      status.classList.add("connected");
-      status.textContent = "Connected";
-      actionEl = document.createElement("button");
-      actionEl.type = "button";
-      actionEl.className = "destinations-row-action danger";
-      actionEl.textContent = "Disconnect";
-      actionEl.addEventListener("click", () =>
+      actionEl = makeDestinationToggle(true, () =>
         handleDisconnect(d.adapterId, actionEl)
       );
     } else {
-      status.textContent = "Not connected";
-      actionEl = document.createElement("button");
-      actionEl.type = "button";
-      actionEl.className = "destinations-row-action";
-      actionEl.textContent = "Connect";
-      actionEl.addEventListener("click", () =>
+      actionEl = makeDestinationToggle(false, () =>
         handleConnect(d.adapterId, actionEl)
       );
     }
@@ -778,17 +794,34 @@ function buildDestinationRow(d, ctx) {
   return frag;
 }
 
+// Mirrors the Toggle component in components/settings-panel.tsx — same shape,
+// transitions, and aria-checked semantics so the connector switch matches the
+// toggles used elsewhere in the local-hosted settings (OpenRouter, etc.).
+function makeDestinationToggle(checked, onChange) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.setAttribute("role", "switch");
+  btn.setAttribute("aria-checked", checked ? "true" : "false");
+  btn.className = "destinations-toggle" + (checked ? " is-on" : "");
+  const thumb = document.createElement("span");
+  thumb.className = "destinations-toggle-thumb";
+  btn.appendChild(thumb);
+  btn.addEventListener("click", () => {
+    if (btn.disabled) return;
+    onChange(!checked);
+  });
+  return btn;
+}
+
 async function handleConnect(adapterId, btn) {
   btn.disabled = true;
-  const label = btn.textContent;
-  btn.textContent = "Opening…";
   const res = await sendMsg({ type: "START_DESTINATION_OAUTH", adapterId });
   btn.disabled = false;
-  btn.textContent = label;
   if (!res?.success || !res.data?.ok) {
     const err = res?.data?.error || res?.error || "Couldn't start connection";
-    btn.textContent = "Retry";
     console.warn("Connect failed:", err);
+    destinationsCache = null;
+    renderDestinationsSettings();
     return;
   }
   // Poll for connection flip — user completes OAuth in the opened tab.
@@ -797,14 +830,10 @@ async function handleConnect(adapterId, btn) {
 
 async function handleDisconnect(adapterId, btn) {
   btn.disabled = true;
-  const label = btn.textContent;
-  btn.textContent = "Disconnecting…";
   const res = await sendMsg({ type: "DISCONNECT_DESTINATION", adapterId });
   btn.disabled = false;
-  btn.textContent = label;
   if (!res?.success || !res.data?.ok) {
-    btn.textContent = "Retry";
-    return;
+    console.warn("Disconnect failed");
   }
   destinationsCache = null;
   renderDestinationsSettings();
@@ -1166,7 +1195,28 @@ function escapeAttr(s) {
 
 function sendMsg(msg) {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage(msg, resolve);
+    const startedAt = Date.now();
+    chrome.runtime.sendMessage(msg, (response) => {
+      if (chrome.runtime.lastError) {
+        const error = chrome.runtime.lastError.message || "runtime_send_failed";
+        console.warn("[ytt-popup] sendMessage failed", {
+          type: msg?.type,
+          error,
+          elapsedMs: Date.now() - startedAt,
+        });
+        resolve({ success: false, error });
+        return;
+      }
+      if (response === undefined) {
+        console.warn("[ytt-popup] sendMessage returned undefined", {
+          type: msg?.type,
+          elapsedMs: Date.now() - startedAt,
+        });
+        resolve({ success: false, error: "No response from background script" });
+        return;
+      }
+      resolve(response);
+    });
   });
 }
 
@@ -1190,8 +1240,11 @@ function showState(name) {
     const elem = el[`state${s}`];
     if (elem) elem.hidden = s !== name;
   }
-  // Hide recent list when offline or errored — only show alongside Ready/Transcribing
-  if (name === "NoService" || name === "NotYoutube") {
+  // Hide recent list only when offline / signed out — there's nothing to
+  // show without auth. The NotYoutube state (user on YouTube but not on a
+  // watch page, e.g. homepage / search / channel grid) keeps the Recent
+  // list visible so users can still jump back to their library.
+  if (name === "NoService") {
     el.recentSection.hidden = true;
   }
 }
@@ -1238,6 +1291,124 @@ function loadCachedPath() {
   el.offlinePath.hidden = true;
   el.offlineCommand.textContent = "npm run dev";
   delete el.offlineCommand.dataset.fullCmd;
+  refreshOfflineStartUI();
+}
+
+// ---------------------------------------------------------------------------
+// Native messaging host — one-click "Start Transcriber" button.
+// The host (com.transcribed.host) is a small node script installed via
+// `npm run install-native-host`. If it isn't installed, the popup falls
+// back to the npm-run-dev copy/paste box.
+// ---------------------------------------------------------------------------
+
+const NATIVE_HOST = "com.transcribed.host";
+let nativeHostAvailable = null; // null = unknown, true/false after first probe
+let nativeStartInFlight = false;
+
+function callNativeHost(cmd, payload = {}, timeoutMs = 30000) {
+  return new Promise((resolve, reject) => {
+    let port;
+    try {
+      port = chrome.runtime.connectNative(NATIVE_HOST);
+    } catch (e) {
+      reject(new Error("native_host_unavailable"));
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      try { port.disconnect(); } catch {}
+      reject(new Error("native_host_timeout"));
+    }, timeoutMs);
+
+    port.onMessage.addListener((msg) => {
+      clearTimeout(timer);
+      try { port.disconnect(); } catch {}
+      resolve(msg);
+    });
+    port.onDisconnect.addListener(() => {
+      clearTimeout(timer);
+      const err = chrome.runtime.lastError?.message || "disconnected";
+      reject(new Error(err));
+    });
+
+    const id = Math.random().toString(36).slice(2);
+    port.postMessage({ id, cmd, ...payload });
+  });
+}
+
+async function detectNativeHost() {
+  try {
+    await callNativeHost("ping", {}, 2500);
+    nativeHostAvailable = true;
+  } catch {
+    nativeHostAvailable = false;
+  }
+  return nativeHostAvailable;
+}
+
+function refreshOfflineStartUI() {
+  const haveHost = nativeHostAvailable === true;
+  el.offlineStartWrap.hidden = !haveHost;
+  el.offlineCopyWrap.hidden = haveHost;
+  if (!haveHost) {
+    // Bake the extension ID into the setup command so the user can copy + run.
+    const extId = chrome.runtime.id;
+    el.setupCommand.textContent = `npm run install-native-host -- --ext-id=${extId}`;
+    el.setupCommand.dataset.fullCmd = `npm run install-native-host -- --ext-id=${extId}`;
+  }
+}
+
+async function ensureNativeHostDetected() {
+  if (nativeHostAvailable !== null) return nativeHostAvailable;
+  await detectNativeHost();
+  refreshOfflineStartUI();
+  return nativeHostAvailable;
+}
+
+async function startTranscriberClicked() {
+  if (nativeStartInFlight) return;
+  nativeStartInFlight = true;
+  el.btnStartTranscriber.disabled = true;
+  el.offlineStartError.hidden = true;
+  el.btnStartTranscriber.querySelector(".start-icon").style.display = "none";
+  el.btnStartTranscriber.querySelector(".start-spinner").hidden = false;
+  el.btnStartTranscriber.querySelector(".start-label").textContent = "Starting…";
+
+  try {
+    const res = await callNativeHost("start", {}, 30000);
+    if (res?.ok) {
+      // Server is up — let init() pick up the change.
+      stopOfflinePolling();
+      init();
+    } else if (res?.reason === "port_conflict") {
+      el.offlineStartError.textContent =
+        `Port ${res.port || 19720} is already in use by another app. ` +
+        `Close it (or change the port) and try again.`;
+      el.offlineStartError.hidden = false;
+    } else if (res?.reason === "already_running") {
+      stopOfflinePolling();
+      init();
+    } else {
+      el.offlineStartError.textContent =
+        res?.error || "Couldn't start the server. Check ~/Library/Logs/Transcriber/native-host.log";
+      el.offlineStartError.hidden = false;
+    }
+  } catch (e) {
+    if (e.message === "native_host_unavailable" ||
+        /Specified native messaging host not found/i.test(e.message)) {
+      nativeHostAvailable = false;
+      refreshOfflineStartUI();
+    } else {
+      el.offlineStartError.textContent = `Start failed: ${e.message}`;
+      el.offlineStartError.hidden = false;
+    }
+  } finally {
+    nativeStartInFlight = false;
+    el.btnStartTranscriber.disabled = false;
+    el.btnStartTranscriber.querySelector(".start-icon").style.display = "";
+    el.btnStartTranscriber.querySelector(".start-spinner").hidden = true;
+    el.btnStartTranscriber.querySelector(".start-label").textContent = "Start Transcriber";
+  }
 }
 
 function isServerDownError(msg) {
@@ -1281,7 +1452,7 @@ async function toggleInlineTranscript(wrap, transcriptId) {
   if (!expanded) return;
   const panel = wrap.querySelector(".recent-transcript-inner");
   if (panel.dataset.loaded === "1") return;
-  panel.innerHTML = '<div class="recent-transcript-loading">Loading…</div>';
+  panel.innerHTML = '<div class="recent-transcript-loading"><div class="transcript-spinner" aria-label="Loading"></div></div>';
   const res = await sendMsg({ type: "GET_TRANSCRIPT", id: transcriptId });
   if (!res?.success || !res.data?.transcript) {
     panel.innerHTML =
@@ -1423,21 +1594,147 @@ async function renderQueueList() {
 }
 
 // ---------------------------------------------------------------------------
-// Recent transcripts
+// Cloud auth cache
+//
+// Cache the last known cloud auth result so we don't gate first paint on a
+// network round-trip. A returning user opens the panel → we render the list
+// optimistically while CHECK_SERVICE runs in the background, only swapping
+// to the sign-in card on a confirmed 401.
+//
+// TTL is short (5 min) so a real signout (cookies cleared in the web app)
+// stops being optimistic quickly. Confirmed 401 also clears the cache.
 // ---------------------------------------------------------------------------
 
+const AUTH_CACHE_KEY = "authCache_cloud";
+const AUTH_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function getCachedAuth() {
+  try {
+    const obj = await chrome.storage.local.get(AUTH_CACHE_KEY);
+    return obj?.[AUTH_CACHE_KEY] || null;
+  } catch {
+    return null;
+  }
+}
+
+async function setCachedAuth(ok) {
+  try {
+    await chrome.storage.local.set({
+      [AUTH_CACHE_KEY]: { ok: !!ok, ts: Date.now() },
+    });
+  } catch { /* ignore */ }
+}
+
+function isAuthCacheFresh(cache) {
+  if (!cache || !cache.ok) return false;
+  return Date.now() - cache.ts < AUTH_CACHE_TTL_MS;
+}
+
+// ---------------------------------------------------------------------------
+// Recent transcripts (SWR)
+//
+// Cache last fetched list per mode in chrome.storage.local so the panel
+// paints instantly on reopen instead of waiting on a network round-trip.
+// On open: render cached list immediately, then fetch fresh; only re-render
+// if the fresh result actually differs.
+// ---------------------------------------------------------------------------
+
+const RECENT_CACHE_KEY = (mode) => `recentCache_${mode}`;
+
+async function getCachedRecent(mode) {
+  try {
+    const key = RECENT_CACHE_KEY(mode);
+    const obj = await chrome.storage.local.get(key);
+    const cached = obj?.[key];
+    if (!cached || !Array.isArray(cached.items)) return null;
+    return cached.items;
+  } catch {
+    return null;
+  }
+}
+
+async function setCachedRecent(mode, items) {
+  try {
+    await chrome.storage.local.set({
+      [RECENT_CACHE_KEY(mode)]: { items, ts: Date.now() },
+    });
+  } catch { /* ignore */ }
+}
+
+async function maybeFindCachedTranscript(videoId, mode) {
+  if (!videoId) return null;
+  const cached = await getCachedRecent(mode);
+  if (!cached) return null;
+  // Only finished transcripts count — a "processing" record in the cache
+  // would otherwise make the panel claim the video is "already transcribed"
+  // when it's actually still in flight (or stuck).
+  return (
+    cached.find(
+      (t) => t.videoId === videoId && (t.status === "done" || !t.status)
+    ) || null
+  );
+}
+
+function recentListHash(items) {
+  if (!Array.isArray(items)) return "";
+  return items.map((t) => `${t.id}:${t.title}:${t.createdAt}`).join("|");
+}
+
 async function loadRecent() {
+  const modeRes = await sendMsg({ type: "GET_SETTINGS" });
+  const mode = modeRes?.data?.mode || "cloud";
+
+  // 1. Optimistic render. Cached list if we have one (instant + correct
+  // shape); otherwise a skeleton so the panel never shows a dark void
+  // while the first /api/transcripts fetch is in flight.
+  const cached = await getCachedRecent(mode);
+  if (!isSettingsOpen()) {
+    if (cached && cached.length) {
+      renderRecentList(cached);
+    } else {
+      renderRecentSkeleton();
+    }
+  }
+
+  // 2. Fetch fresh; reconcile.
   const res = await sendMsg({ type: "GET_RECENT" });
-  // User navigated to Settings while we were fetching — don't resurface
-  // the Recent list on top of the settings panel.
   if (isSettingsOpen()) return;
   if (!res?.success || !res.data?.length) {
+    // Empty list — clear cache and hide section unless we're still rendering
+    // a stale optimistic list that we now know is gone.
+    await setCachedRecent(mode, []);
     el.recentSection.hidden = true;
+    el.recentList.innerHTML = "";
     return;
   }
+  // Skip DOM churn when nothing changed — cached render is already correct.
+  if (cached && recentListHash(cached) === recentListHash(res.data) && !justCompletedId) {
+    return;
+  }
+  renderRecentList(res.data);
+  await setCachedRecent(mode, res.data);
+}
+
+function renderRecentSkeleton(rows = 3) {
   el.recentSection.hidden = false;
   el.recentList.innerHTML = "";
-  for (const t of res.data) {
+  for (let i = 0; i < rows; i++) {
+    const wrap = document.createElement("div");
+    wrap.className = "recent-item-skeleton";
+    wrap.innerHTML = `
+      <div class="recent-skeleton-stack">
+        <div class="recent-skeleton-line recent-skeleton-title"></div>
+        <div class="recent-skeleton-line recent-skeleton-meta"></div>
+      </div>
+    `;
+    el.recentList.appendChild(wrap);
+  }
+}
+
+function renderRecentList(items) {
+  el.recentSection.hidden = false;
+  el.recentList.innerHTML = "";
+  for (const t of items) {
     const isNew = justCompletedId && t.id === justCompletedId;
 
     const wrap = document.createElement("div");
@@ -1483,6 +1780,9 @@ async function loadRecent() {
 
     // Two-phase animation: visual fade, then smooth spatial collapse
     if (isNew) {
+      // Auto-expand the newly transcribed item so the user sees the result
+      // immediately rather than having to click to reveal it.
+      toggleInlineTranscript(wrap, t.id);
       // Phase 1 complete (1.4s) — tick is visually gone, now collapse space
       setTimeout(() => {
         const tick = item.querySelector(".recent-tick");
@@ -1575,6 +1875,11 @@ async function showCurrentPageState() {
 }
 
 let initVersion = 0;
+// True after the first init() has completed its CHECK_SERVICE round-trip.
+// The cold-start retry below is only useful on the genuinely cold first
+// hit; subsequent init() calls (nav clicks, post-OAuth re-runs) talk to a
+// warm service worker and don't need the 400ms retry tax.
+let coldStartHandled = false;
 
 async function init() {
   const thisInit = ++initVersion;
@@ -1583,6 +1888,7 @@ async function init() {
   el.settingsPanel.hidden = true;
   el.btnNavLibrary.classList.add("active");
   el.btnNavSettings.classList.remove("active");
+  applyFooterLink();
 
   // Reset stale UI from previous state
   for (const s of ALL_STATES) {
@@ -1594,26 +1900,85 @@ async function init() {
   el.btnAlreadyTranscribed.hidden = true;
   el.btnTranscribe.hidden = false;
   existingTranscriptId = null;
+  // isTranscribing can leak true if the panel was closed mid-transcribe —
+  // popup's await never resolved, so the assignment after sendMsg never
+  // ran. PHASE 3 below sets it back to true if the bg actually has a
+  // pending transcription. Otherwise the doTranscribe guard would block
+  // every future click in this panel session.
+  isTranscribing = false;
 
-  // Get active tab directly
+  // PHASE 1 — cheap parallel reads. None of these hit the network. Combined
+  // they take a few ms; doing them in parallel (and skipping the bg
+  // GET_SETTINGS round-trip in favor of a direct chrome.storage.sync read)
+  // means we have everything needed for an optimistic first paint before the
+  // first network fetch even starts.
+  let tabResult = [];
+  let syncStash = {};
+  let authCache = null;
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (thisInit !== initVersion) return;
-    if (tab) {
-      const videoId = extractVideoId(tab.url || "");
-      // Read isLive flag from content script's stored page info
-      let isLive = false;
-      try {
-        const stored = await chrome.storage.session.get(`tab_${tab.id}`);
-        isLive = !!stored[`tab_${tab.id}`]?.isLive;
-      } catch { /* ignore */ }
-      pageInfo = { url: tab.url, title: tab.title, videoId, isLive };
-      currentTabUrl = tab.url;
-      currentTabId = tab.id;
-    }
+    [tabResult, syncStash, authCache] = await Promise.all([
+      chrome.tabs.query({ active: true, currentWindow: true }),
+      chrome.storage.sync.get(["mode"]),
+      getCachedAuth(),
+    ]);
   } catch { /* ignore */ }
+  if (thisInit !== initVersion) return;
 
-  // Check if there's an in-flight transcription from a previous popup open
+  const mode = syncStash?.mode || "cloud";
+  currentMode = mode;
+  // Only treat the cache as a hard "they are signed in" signal — used to
+  // broaden the cold-start retry below. We always paint optimistically
+  // regardless, so the panel never shows a dark void while CHECK_SERVICE
+  // is in flight.
+  const cachedAuthOk = mode === "cloud" && isAuthCacheFresh(authCache);
+  const tab = tabResult?.[0];
+  if (tab) {
+    const videoId = extractVideoId(tab.url || "");
+    let isLive = false;
+    try {
+      const stored = await chrome.storage.session.get(`tab_${tab.id}`);
+      isLive = !!stored[`tab_${tab.id}`]?.isLive;
+    } catch { /* ignore */ }
+    pageInfo = { url: tab.url, title: tab.title, videoId, isLive };
+    currentTabUrl = tab.url;
+    currentTabId = tab.id;
+  }
+
+  // PHASE 2 — optimistic paint. Always render a state on the first frame
+  // — page-state shell + Recent list (cached or skeleton) — regardless of
+  // whether we have a fresh authCache. Network checks below either confirm
+  // (no-op) or correct it (swap to offline / sign-in UI on confirmed 401).
+  // The brief flash for an actually-signed-out user is a much better trade
+  // than a dark void on every cold open.
+  let optimisticRendered = false;
+  if (pageInfo?.videoId) {
+    el.videoTitle.textContent = pageInfo.title || pageInfo.url;
+    el.liveNotice.hidden = true;
+    // Optimistically show the Transcribe button so the panel always has an
+    // action visible. If the cached recent list already contains this
+    // videoId we know it's been transcribed before — render the
+    // "Already transcribed" link instead. showCurrentPageState() will
+    // reconcile via CHECK_EXISTING if our cache is wrong.
+    const cachedHit = await maybeFindCachedTranscript(pageInfo.videoId, mode);
+    if (cachedHit) {
+      existingTranscriptId = cachedHit.id;
+      el.btnTranscribe.hidden = true;
+      el.btnAlreadyTranscribed.hidden = false;
+    } else {
+      el.btnTranscribe.hidden = false;
+      el.btnAlreadyTranscribed.hidden = true;
+    }
+    showState("Ready");
+  } else {
+    showState("NotYoutube");
+  }
+  loadRecent();
+  optimisticRendered = true;
+
+  // PHASE 3 — in-flight transcription check. Done after optimistic paint so
+  // a returning user doesn't see a dark screen during this round-trip
+  // either. If a transcription is in flight we'll override the optimistic
+  // state with the Transcribing UI.
   const statusRes = await sendMsg({ type: "GET_TRANSCRIPTION_STATUS" });
   if (thisInit !== initVersion) return;
   if (statusRes?.success && statusRes.data) {
@@ -1625,12 +1990,16 @@ async function init() {
       // Only restart animation/polling if not already running — prevents
       // glitchy restart when switching tabs during an active transcription
       if (!pollInterval) {
-        startIndeterminate();
+        const isCloud = mode === "cloud";
+        startProgress({ writeLabels: !isCloud });
+        if (isCloud && pending.progressText) {
+          el.progressText.textContent = pending.progressText;
+        }
         pollTranscriptionStatus();
       }
       showQueuePrompt(pending.url);
       renderQueueList();
-      loadRecent();
+      if (!optimisticRendered) loadRecent();
       return;
     }
     if (pending.status === "done" && pending.result) {
@@ -1650,23 +2019,46 @@ async function init() {
       }
       el.errorMessage.textContent = pending.error || "Transcription failed";
       showState("Error");
-      loadRecent();
+      if (!optimisticRendered) loadRecent();
       return;
     }
   }
 
-  // 1. Check service
-  const serviceRes = await sendMsg({ type: "CHECK_SERVICE" });
+  // PHASE 4 — confirm via CHECK_SERVICE. If we already painted optimistically
+  // and the service is up + authed, this is a no-op visually. If we got it
+  // wrong, swap to the offline / sign-in UI.
+  let serviceRes = await sendMsg({ type: "CHECK_SERVICE" });
   if (thisInit !== initVersion) return;
-  const online = serviceRes?.success && serviceRes.data?.online;
+  let online = serviceRes?.success && serviceRes.data?.online;
+
+  // Cold-start race: /api/account can 401 on a Supabase cookie warmup. Retry
+  // once if either (a) this is the first init() of the session and the user
+  // has signed in before, or (b) we just optimistically rendered as authed
+  // (a known-good signal that the 401 is a race, not a real signout).
+  if (!online && (cachedAuthOk || !coldStartHandled)) {
+    let shouldRetry = cachedAuthOk;
+    if (!shouldRetry) {
+      const { hasEverSignedIn } = await chrome.storage.local.get("hasEverSignedIn");
+      shouldRetry = !!hasEverSignedIn;
+    }
+    if (shouldRetry) {
+      await new Promise((r) => setTimeout(r, 400));
+      if (thisInit !== initVersion) return;
+      serviceRes = await sendMsg({ type: "CHECK_SERVICE" });
+      if (thisInit !== initVersion) return;
+      online = serviceRes?.success && serviceRes.data?.online;
+    }
+  }
+  coldStartHandled = true;
 
   if (!online) {
-    const cfgRes = await sendMsg({ type: "GET_SETTINGS" });
-    if (thisInit !== initVersion) return;
-    const cfgMode = cfgRes?.data?.mode || "cloud";
+    const cfgMode = serviceRes?.data?.mode || mode;
     const authError = serviceRes?.data?.authError;
 
     if (cfgMode === "cloud") {
+      // Confirmed signed-out — kill cached optimism so next open doesn't
+      // flash the list before the sign-in card.
+      if (authError) await setCachedAuth(false);
       el.offlineLocalMsg.hidden = true;
       el.offlineCloudMsg.hidden = false;
       el.cloudNudge.hidden = true;
@@ -1703,6 +2095,9 @@ async function init() {
       el.cloudNudge.hidden = false;
       el.localDetectedBanner.hidden = true;
       loadCachedPath();
+      // Detect (or re-detect on each offline render) whether the native host
+      // is installed so the right primary action shows.
+      ensureNativeHostDetected();
     }
 
     showState("NoService");
@@ -1711,17 +2106,23 @@ async function init() {
   }
   stopOfflinePolling();
 
+  // Confirmed online. Refresh auth cache for cloud so next reopen paints
+  // optimistically without the round-trip gating.
+  if (mode === "cloud") setCachedAuth(true);
+
   startHeartbeat();
 
   // Warm the destinations cache so the ⋯ menu renders instantly.
   // Always — Obsidian is available in local mode too.
   fetchDestinations();
 
-  // 2. Show page state
+  // Show page state (re-runs in case optimistic was stale, e.g. videoId
+  // resolved to "Already transcribed" from CHECK_EXISTING).
   showCurrentPageState();
 
-  // 3. Load recent
-  loadRecent();
+  // Load recent — skip if optimistic already kicked it off (SWR handles
+  // revalidation on its own).
+  if (!optimisticRendered) loadRecent();
 }
 
 // ---------------------------------------------------------------------------
@@ -1782,24 +2183,50 @@ function pollTranscriptionStatus() {
 // ---------------------------------------------------------------------------
 
 async function doTranscribe() {
-  if (!pageInfo?.url) return;
+  // Guard against double-click. The first click awaits GET_SETTINGS
+  // before starting progress (~100-300ms on cold SW), during which the
+  // panel looks frozen. A user-perceived "nothing happened" second click
+  // would otherwise spin up a parallel doTranscribe, two startProgress
+  // calls fight, and the bar visibly resets to 0% — that was the
+  // "lurching" people saw.
+  if (isTranscribing) {
+    console.warn("[ytt-popup] doTranscribe ignored: already transcribing");
+    return;
+  }
+  if (!pageInfo?.url) {
+    console.warn("[ytt-popup] doTranscribe blocked: missing pageInfo.url", {
+      pageInfo,
+      currentTabUrl,
+      currentTabId,
+    });
+    el.errorMessage.textContent = "No video detected. Refresh YouTube and try again.";
+    showState("Error");
+    return;
+  }
+
+  console.log("[ytt-popup] doTranscribe start", {
+    url: pageInfo.url,
+    title: pageInfo.title || "",
+    videoId: pageInfo.videoId || null,
+  });
 
   isTranscribing = true;
   el.transcribingTitle.textContent = pageInfo.title || "Transcribing...";
   showState("Transcribing");
   el.queuePrompt.hidden = true;
 
-  // Cloud mode: indeterminate bar + poll for real progress
-  // Local mode: fake staged progress bar
-  const cfgRes = await sendMsg({ type: "GET_SETTINGS" });
-  const isCloud = cfgRes?.data?.mode === "cloud";
+  // Synchronous forward-only progress. Read mode from the in-memory mirror
+  // (kept in sync via init() + mode-toggle handlers) instead of awaiting
+  // GET_SETTINGS — the prior await + indeterminate `width:100%` prepaint
+  // caused the bar to animate leftward (~65% → 0%) when startProgress later
+  // reset width to 0% under the CSS `transition: width 0.7s ease-out`.
+  const isCloud = currentMode === "cloud";
+  startProgress({ writeLabels: !isCloud });
   if (isCloud) {
     suppressPollFinalization = true;
-    startIndeterminate();
     pollTranscriptionStatus();
   } else {
     suppressPollFinalization = false;
-    startProgress();
   }
 
   const res = await sendMsg({
@@ -1807,6 +2234,7 @@ async function doTranscribe() {
     url: pageInfo.url,
     title: pageInfo.title,
   });
+  console.log("[ytt-popup] TRANSCRIBE response", res);
 
   isTranscribing = false;
   suppressPollFinalization = false;
@@ -1819,6 +2247,7 @@ async function doTranscribe() {
     processQueue();
   } else {
     await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
+    console.warn("[ytt-popup] TRANSCRIBE failed", res);
     if (isServerDownError(res?.error)) {
       init();
       return;
@@ -1845,7 +2274,9 @@ async function processQueue() {
   if (res?.success && res.data?.processing) {
     el.transcribingTitle.textContent = res.data.title || "Transcribing...";
     showState("Transcribing");
-    startIndeterminate();
+    const cfg = await sendMsg({ type: "GET_SETTINGS" });
+    const isCloud = cfg?.data?.mode === "cloud";
+    startProgress({ writeLabels: !isCloud });
     showQueuePrompt();
     renderQueueList();
     pollTranscriptionStatus();
@@ -1933,6 +2364,19 @@ el.btnCopyCommand.addEventListener("click", () => {
   setTimeout(() => el.btnCopyCommand.classList.remove("copied"), 1500);
 });
 
+el.btnStartTranscriber.addEventListener("click", startTranscriberClicked);
+
+el.btnSetupAutostart.addEventListener("click", () => {
+  el.setupInstructions.hidden = !el.setupInstructions.hidden;
+});
+
+el.btnCopySetup.addEventListener("click", () => {
+  const cmd = el.setupCommand.dataset.fullCmd || el.setupCommand.textContent;
+  navigator.clipboard.writeText(cmd);
+  el.btnCopySetup.classList.add("copied");
+  setTimeout(() => el.btnCopySetup.classList.remove("copied"), 1500);
+});
+
 el.btnAlreadyTranscribed.addEventListener("click", (e) => {
   e.preventDefault();
   if (existingTranscriptId) {
@@ -1993,18 +2437,64 @@ chrome.tabs.onActivated?.addListener(async () => {
   } catch { /* ignore */ }
 });
 
-chrome.tabs.onUpdated?.addListener((tabId, changeInfo) => {
+chrome.tabs.onUpdated?.addListener(async (tabId, changeInfo) => {
   // Only react to changes in the active tab
   if (tabId !== currentTabId) return;
-  // Skip all tab-change events during active transcription
-  if (isTranscribing) return;
 
-  if (changeInfo.url && changeInfo.url !== currentTabUrl) {
-    currentTabUrl = changeInfo.url;
-    init();
+  const urlChanged = changeInfo.url && changeInfo.url !== currentTabUrl;
+  const titleChanged = !!changeInfo.title;
+  if (!urlChanged && !titleChanged) return;
+
+  if (urlChanged) currentTabUrl = changeInfo.url;
+
+  // During active transcription, refresh pageInfo + queue prompt without
+  // re-init (init clobbers the progress animation). Mirrors onActivated.
+  // Without this, navigating to a new YouTube video in the same tab while
+  // transcribing leaves the queue prompt showing the old video's title or
+  // hidden entirely — user can't see what they'd be queuing.
+  if (isTranscribing) {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.url) {
+        const videoId = extractVideoId(tab.url);
+        let isLive = false;
+        try {
+          const stored = await chrome.storage.session.get(`tab_${tab.id}`);
+          isLive = !!stored[`tab_${tab.id}`]?.isLive;
+        } catch { /* ignore */ }
+        pageInfo = { url: tab.url, title: tab.title, videoId, isLive };
+        showQueuePrompt();
+      }
+    } catch { /* ignore */ }
+    return;
   }
-  // YouTube SPA navigations update the title after the URL — re-init to pick up the new title
-  if (changeInfo.title) {
+
+  init();
+});
+
+// content.js writes the active tab's video info to chrome.storage.session on
+// every YouTube SPA navigation (yt-navigate-finish + MutationObserver fallback).
+// Listening here catches in-page route changes that chrome.tabs.onUpdated
+// sometimes misses, and gets the populated title — onUpdated fires before YT
+// has updated document.title, so changeInfo.title can still be the old value.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "session") return;
+  if (currentTabId == null) return;
+  const key = `tab_${currentTabId}`;
+  if (!changes[key]) return;
+  const next = changes[key].newValue;
+  if (!next?.url) return;
+  if (isTranscribing) {
+    pageInfo = {
+      url: next.url,
+      title: next.title || "",
+      videoId: next.videoId || extractVideoId(next.url),
+      isLive: !!next.isLive,
+    };
+    currentTabUrl = next.url;
+    showQueuePrompt();
+  } else if (next.url !== currentTabUrl) {
+    currentTabUrl = next.url;
     init();
   }
 });
@@ -2065,9 +2555,23 @@ function setModeUI(mode) {
   el.btnModeLocal.classList.toggle("active", mode === "local");
   el.btnModeCloud.classList.toggle("active", mode === "cloud");
   el.cloudAccountSection.hidden = mode !== "cloud";
+  applyFooterLink(mode);
   // Destinations always render. Obsidian is client-side (works in any mode);
   // cloud-only adapters show as teasers with a Sign in CTA in local mode.
   renderDestinationsSettings();
+}
+
+// Footer right-side link swaps with mode: GitHub repo for local devs,
+// transcribed.dev wordmark for cloud users (CTA toward the web app).
+async function applyFooterLink(modeOverride) {
+  let mode = modeOverride;
+  if (!mode) {
+    const stored = await chrome.storage.sync.get(["mode"]);
+    mode = stored.mode || "cloud";
+  }
+  const isCloud = mode === "cloud";
+  el.cloudLink.hidden = !isCloud;
+  el.githubLink.hidden = isCloud;
 }
 
 // Obsidian vault name — saved on every keystroke (debounced) to
@@ -2084,6 +2588,17 @@ function saveObsidianVaultName() {
       el.obsidianVaultSaved.classList.remove("show");
       setTimeout(() => { el.obsidianVaultSaved.hidden = true; }, 300);
     }, 1200);
+    // Connection state for Obsidian is derived from whether a vault name is
+    // saved. When the value flips empty↔non-empty, re-render so the toggle
+    // reflects the new state instead of getting stuck off after a disconnect.
+    const cached = (destinationsCache?.destinations || []).find(
+      (d) => d.adapterId === "obsidian-scheme"
+    );
+    const isConnected = !!value;
+    if (cached && cached.connected !== isConnected) {
+      destinationsCache = null;
+      renderDestinationsSettings();
+    }
   }, 350);
 }
 el.obsidianVaultInput.addEventListener("input", saveObsidianVaultName);
@@ -2101,18 +2616,30 @@ el.obsidianAdvUriInput.addEventListener("change", async () => {
   });
 });
 
-el.btnModeLocal.addEventListener("click", async () => {
+async function switchMode(newMode) {
   destinationsCache = null;
-  setModeUI("local");
-  await sendMsg({ type: "SAVE_SETTINGS", mode: "local" });
-  init();
-});
-el.btnModeCloud.addEventListener("click", async () => {
-  destinationsCache = null;
-  setModeUI("cloud");
-  await sendMsg({ type: "SAVE_SETTINGS", mode: "cloud" });
-  init();
-});
+  // Mode switch invalidates the apiConfigCache in the background worker.
+  // The first /api/account hit after rebuild can 401 on a cookie race the
+  // same way a true cold start does, so reopen the retry window.
+  coldStartHandled = false;
+  currentMode = newMode;
+  setModeUI(newMode);
+  // Drop any in-flight state from the previous mode. Without this, an
+  // interrupted cloud transcribe can leave bg state="transcribing" — PHASE 3
+  // of init() then re-arms isTranscribing=true and the next Transcribe
+  // click is silently blocked by the doTranscribe guard. User saw this as
+  // "first click after mode switch does nothing".
+  isTranscribing = false;
+  await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
+  await sendMsg({ type: "SAVE_SETTINGS", mode: newMode });
+  // Mode toggles live inside the settings panel — keep the user there.
+  // init() (which collapses settings into the library view) runs when the
+  // user navigates back via the Library nav button.
+  if (!isSettingsOpen()) init();
+}
+
+el.btnModeLocal.addEventListener("click", () => switchMode("local"));
+el.btnModeCloud.addEventListener("click", () => switchMode("cloud"));
 
 // Start
 init();

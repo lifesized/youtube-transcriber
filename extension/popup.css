@@ -408,6 +408,89 @@ body::-webkit-scrollbar-thumb:hover {
   display: block;
   color: rgba(255, 255, 255, 0.5);
 }
+.btn-start-transcriber {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 260px;
+  padding: 10px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.04));
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.05s;
+  margin-bottom: 12px;
+}
+.btn-start-transcriber:hover {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.btn-start-transcriber:active {
+  transform: translateY(1px);
+}
+.btn-start-transcriber:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.btn-start-transcriber .start-icon {
+  flex-shrink: 0;
+}
+.btn-start-transcriber .start-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: rgba(255, 255, 255, 0.85);
+  border-radius: 50%;
+  animation: start-spin 0.7s linear infinite;
+  margin-left: 4px;
+}
+@keyframes start-spin {
+  to { transform: rotate(360deg); }
+}
+.offline-error {
+  font-size: 11px;
+  color: #ff8b8b;
+  max-width: 260px;
+  margin: 6px auto 12px;
+  line-height: 1.4;
+}
+.btn-setup-autostart {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.40);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 4px 0;
+  margin-top: 4px;
+  transition: color 0.15s;
+}
+.btn-setup-autostart:hover {
+  color: rgba(255, 255, 255, 0.65);
+}
+.setup-instructions {
+  margin-top: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.setup-step {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.50);
+  margin: 2px 0 6px;
+  text-align: left;
+}
+.setup-hint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  margin-top: 6px;
+  text-align: left;
+}
 .btn-check-again {
   display: inline-flex;
   align-items: center;
@@ -515,6 +598,41 @@ body::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.05);
 }
 
+/* Skeleton placeholder rows shown on first paint while the cached or fresh
+   list resolves. Same shape as a real .recent-item so the swap doesn't
+   reflow. */
+.recent-item-skeleton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  pointer-events: none;
+}
+.recent-skeleton-line {
+  height: 10px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.09) 50%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  background-size: 200% 100%;
+  animation: recent-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+.recent-skeleton-title { width: 70%; }
+.recent-skeleton-meta { width: 45%; height: 8px; margin-top: 6px; }
+.recent-item-skeleton .recent-skeleton-stack {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+@keyframes recent-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 /* Inline transcript drawer — mirrors web-app spring motion (stiffness=550,
    damping=5 approximated via springy cubic-bezier + grid row trick for
    height:auto transition). */
@@ -545,37 +663,52 @@ body::-webkit-scrollbar-thumb:hover {
   margin-bottom: 12px;
 }
 .transcript-speaker {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.55);
   margin-bottom: 4px;
 }
 .transcript-line {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: baseline;
 }
 .transcript-time {
   flex-shrink: 0;
-  width: 42px;
+  width: 44px;
   text-align: right;
   font-family: ui-monospace, SFMono-Regular, monospace;
-  font-size: 11px;
+  font-size: 12px;
   color: rgba(255, 255, 255, 0.35);
-  line-height: 1.55;
+  line-height: 1.6;
 }
 .transcript-text {
   flex: 1;
-  font-size: 13px;
-  line-height: 1.55;
-  color: rgba(255, 255, 255, 0.72);
+  font-size: 15px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.82);
 }
 .recent-transcript-loading,
 .recent-transcript-error {
-  padding: 16px;
+  padding: 20px;
   text-align: center;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Matches the web-app spinner pattern (h-6 w-6 border-t + spin). */
+.transcript-spinner {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-top-color: rgba(255, 255, 255, 0.55);
+  animation: transcript-spinner-rotate 0.8s linear infinite;
+}
+@keyframes transcript-spinner-rotate {
+  to { transform: rotate(360deg); }
 }
 
 /* Summarize-with-LLM — hover-reveal, mirrors web-app LlmLauncher */
@@ -1204,8 +1337,54 @@ body::-webkit-scrollbar-thumb:hover {
   font-size: 11px;
   color: var(--muted-3);
 }
-.destinations-row-status.connected {
-  color: #22c55e;
+.destinations-row-status:empty {
+  display: none;
+}
+/* Connector toggle — mirrors the Toggle in components/settings-panel.tsx.
+   44×24 track, 20×20 thumb, accent fill when on, white/20 when off. */
+.destinations-toggle {
+  position: relative;
+  flex-shrink: 0;
+  width: 44px;
+  height: 24px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  padding: 0;
+  transition: background-color 0.2s, opacity 0.2s;
+}
+.destinations-toggle:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+.destinations-toggle.is-on {
+  background: var(--accent);
+}
+.destinations-toggle.is-on:hover {
+  filter: brightness(1.1);
+}
+.destinations-toggle:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.2);
+  outline-offset: 2px;
+}
+.destinations-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+.destinations-toggle-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transform: translateX(0);
+  transition: transform 0.2s;
+}
+.destinations-toggle.is-on .destinations-toggle-thumb {
+  transform: translateX(20px);
 }
 .destinations-row-status.needs-reauth {
   color: #ef4444;
@@ -1373,14 +1552,23 @@ body::-webkit-scrollbar-thumb:hover {
 .obsidian-advuri-summary::-webkit-details-marker {
   display: none;
 }
-.obsidian-advuri-summary::before {
-  content: "▸";
-  font-size: 9px;
-  color: rgba(255, 255, 255, 0.3);
-  transition: transform 0.15s, color 0.15s;
+.obsidian-advuri-summary::after {
+  content: "";
+  width: 5px;
+  height: 5px;
+  flex-shrink: 0;
+  border-right: 1.25px solid rgba(255, 255, 255, 0.5);
+  border-bottom: 1.25px solid rgba(255, 255, 255, 0.5);
+  transform: rotate(-45deg);
+  transform-origin: 60% 60%;
+  transition: transform 0.15s, border-color 0.15s;
+  margin-left: 2px;
 }
-.obsidian-advuri-row[open] .obsidian-advuri-summary::before {
-  transform: rotate(90deg);
+.obsidian-advuri-row[open] .obsidian-advuri-summary::after {
+  transform: rotate(45deg);
+}
+.obsidian-advuri-summary:hover::after {
+  border-color: rgba(255, 255, 255, 0.85);
 }
 .obsidian-advuri-summary:hover {
   color: rgba(255, 255, 255, 0.6);
@@ -1644,6 +1832,9 @@ body::-webkit-scrollbar-thumb:hover {
   opacity: 0.3;
   transition: opacity 0.15s;
 }
+.github-link[hidden] {
+  display: none;
+}
 .github-link:hover {
   opacity: 0.7;
 }
@@ -1654,4 +1845,28 @@ body::-webkit-scrollbar-thumb:hover {
 }
 .github-star-label {
   display: none;
+}
+
+.cloud-link {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  gap: 4px;
+  text-decoration: none;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.9);
+  opacity: 0.45;
+  transition: opacity 0.15s;
+}
+.cloud-link[hidden] {
+  display: none;
+}
+.cloud-link:hover {
+  opacity: 0.85;
+}
+.cloud-link-label {
+  letter-spacing: 0.01em;
+}
+.cloud-link-icon {
+  flex-shrink: 0;
 }
