@@ -109,7 +109,7 @@ async function fetchWithRetry(
 /**
  * Fetch video metadata using the YouTube oEmbed API (no API key required).
  */
-async function fetchMetadata(videoId: string): Promise<VideoMetadata> {
+export async function fetchMetadata(videoId: string): Promise<VideoMetadata> {
   const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
 
   const res = await fetch(oembedUrl, { signal: AbortSignal.timeout(5000) });
