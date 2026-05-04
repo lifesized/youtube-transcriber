@@ -41,7 +41,19 @@ const el = {
   offlinePath: document.getElementById("offlinePath"),
   offlineCommand: document.getElementById("offlineCommand"),
   offlineLocalMsg: document.getElementById("offlineLocalMsg"),
+  btnTranscribeLabel: document.getElementById("btnTranscribeLabel"),
+  actionSection: document.getElementById("actionSection"),
+  modeTranscribe: document.getElementById("modeTranscribe"),
+  modeTranscribeSummarize: document.getElementById("modeTranscribeSummarize"),
+  modeSummarize: document.getElementById("modeSummarize"),
+  summarizeProviderRow: document.getElementById("summarizeProviderRow"),
+  providerPickerTrigger: document.getElementById("providerPickerTrigger"),
+  providerPickerIcon: document.getElementById("providerPickerIcon"),
+  providerPickerName: document.getElementById("providerPickerName"),
+  providerPickerMenu: document.getElementById("providerPickerMenu"),
   serverSection: document.getElementById("serverSection"),
+  serverStatus: document.getElementById("serverStatus"),
+  btnStartServer: document.getElementById("btnStartServer"),
   btnStopServer: document.getElementById("btnStopServer"),
   stopServerHint: document.getElementById("stopServerHint"),
   offlineCloudMsg: document.getElementById("offlineCloudMsg"),
@@ -110,6 +122,17 @@ let currentMode = "cloud";
 let progressWriteLabels = true;
 // When true, direct TRANSCRIBE response owns completion/error handling.
 let suppressPollFinalization = false;
+
+// YTT-259: primary button mode + chosen summarize provider. Persisted in
+// chrome.storage.sync. Mirrored here so doTranscribe / button-label updates
+// don't have to await an async read.
+//   transcribe                — current behavior (default)
+//   transcribe-and-summarize  — chain summarize after transcribe
+//   summarize                 — same as above; button labelled "Summarize"
+//                               instead, transcript step is hidden in the
+//                               label but surfaced in the progress UI
+let transcribeMode = "transcribe";
+let summarizeProvider = "claude";
 
 // ---------------------------------------------------------------------------
 // Progress bar
@@ -1966,6 +1989,9 @@ async function init() {
 
   const mode = syncStash?.mode || "cloud";
   currentMode = mode;
+  // Hydrate the YTT-259 transcribe-mode setting alongside `mode` so the
+  // primary button label is correct on first paint.
+  loadTranscribeAction();
   // Only treat the cache as a hard "they are signed in" signal — used to
   // broaden the cold-start retry below. We always paint optimistically
   // regardless, so the panel never shows a dark void while CHECK_SERVICE
@@ -2137,7 +2163,16 @@ async function init() {
       loadCachedPath();
       // Detect (or re-detect on each offline render) whether the native host
       // is installed so the right primary action shows.
-      ensureNativeHostDetected();
+      await ensureNativeHostDetected();
+      // Auto-route to Settings → Server when the host is installed. Server
+      // controls live there now; landing the user directly on the Start
+      // button feels more "embedded in the product" than the takeover
+      // offline screen. Polling continues from Settings.
+      if (nativeHostAvailable) {
+        startOfflinePolling();
+        showSettingsView();
+        return;
+      }
     }
 
     showState("NoService");
@@ -2283,6 +2318,20 @@ async function doTranscribe() {
 
   if (res?.success && res.data?.id) {
     await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
+    // YTT-259: chain summarize when the user has set the button mode to
+    // "transcribe-and-summarize" or "summarize". Same downstream flow in
+    // both cases — the only difference is the button label they clicked.
+    if (transcribeMode !== "transcribe") {
+      const provider = LLM_PROVIDERS.find((p) => p.id === summarizeProvider);
+      if (provider) {
+        // Fire-and-forget: handoff opens a new tab; the popup can then
+        // continue with its normal post-transcribe flow (showing the
+        // completed item, processing queue).
+        launchWithProvider(provider, res.data.id, pageInfo.title || "");
+      } else {
+        console.warn("[ytt-popup] summarize chain skipped: unknown provider", summarizeProvider);
+      }
+    }
     showCompletedAndReturn(res.data.id);
     processQueue();
   } else {
@@ -2584,7 +2633,116 @@ async function loadSettings() {
   if (!res?.success) return;
   const { mode } = res.data;
   setModeUI(mode);
+  await loadTranscribeAction();
 }
+
+// YTT-259: Load the user's primary-button mode + preferred summarize
+// provider from chrome.storage.sync. Default to Claude — the per-row
+// launcher's last-used has its own UX context and seeding from it surprised
+// users (they picked ChatGPT once and didn't expect it to become the
+// auto-summarize default).
+async function loadTranscribeAction() {
+  const sync = await chrome.storage.sync.get(["transcribeMode", "summarizeProvider"]);
+  transcribeMode = sync.transcribeMode || "transcribe";
+  summarizeProvider = sync.summarizeProvider || "claude";
+  applyTranscribeActionUI();
+}
+
+function applyTranscribeActionUI() {
+  // Radio state
+  el.modeTranscribe.checked = transcribeMode === "transcribe";
+  el.modeTranscribeSummarize.checked = transcribeMode === "transcribe-and-summarize";
+  el.modeSummarize.checked = transcribeMode === "summarize";
+  // Provider picker only visible when summarize is in play
+  el.summarizeProviderRow.hidden = transcribeMode === "transcribe";
+  applyProviderPickerTrigger();
+  // Primary button label morphs to match the mode
+  updateTranscribeButtonLabel();
+}
+
+// Custom provider picker — branded with each LLM's icon. Native <select>
+// can't render SVG inside <option>, so we use a button trigger + popup
+// menu sourced from LLM_PROVIDERS so adding a provider lights up here too.
+function applyProviderPickerTrigger() {
+  const provider = LLM_PROVIDERS.find((p) => p.id === summarizeProvider);
+  if (!provider) return;
+  el.providerPickerIcon.innerHTML = provider.icon;
+  el.providerPickerName.textContent = provider.name;
+}
+
+function buildProviderPickerMenu() {
+  el.providerPickerMenu.innerHTML = "";
+  for (const p of LLM_PROVIDERS) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "provider-picker-option";
+    item.dataset.provider = p.id;
+    item.innerHTML = `${p.icon}<span class="provider-picker-option-name">${escapeHtml(p.name)}</span>`;
+    item.addEventListener("click", (e) => {
+      e.stopPropagation();
+      saveSummarizeProvider(p.id);
+      el.providerPickerMenu.hidden = true;
+    });
+    el.providerPickerMenu.appendChild(item);
+  }
+}
+
+el.providerPickerTrigger.addEventListener("click", (e) => {
+  e.stopPropagation();
+  el.providerPickerMenu.hidden = !el.providerPickerMenu.hidden;
+});
+
+document.addEventListener("click", (e) => {
+  if (
+    !el.providerPickerMenu.hidden &&
+    !el.providerPickerTrigger.contains(e.target) &&
+    !el.providerPickerMenu.contains(e.target)
+  ) {
+    el.providerPickerMenu.hidden = true;
+  }
+});
+
+buildProviderPickerMenu();
+
+function updateTranscribeButtonLabel() {
+  if (!el.btnTranscribeLabel) return;
+  if (transcribeMode === "summarize") {
+    el.btnTranscribeLabel.textContent = "Summarize";
+  } else if (transcribeMode === "transcribe-and-summarize") {
+    el.btnTranscribeLabel.textContent = "Transcribe & Summarize";
+  } else {
+    el.btnTranscribeLabel.textContent = "Transcribe";
+  }
+}
+
+async function saveTranscribeMode(mode) {
+  transcribeMode = mode;
+  await chrome.storage.sync.set({ transcribeMode: mode });
+  applyTranscribeActionUI();
+}
+
+async function saveSummarizeProvider(providerId) {
+  summarizeProvider = providerId;
+  applyProviderPickerTrigger();
+  await chrome.storage.sync.set({ summarizeProvider: providerId });
+  // Also update the launcher's "last used" so cross-component history stays
+  // coherent — the per-row dropdown will surface it as last-used too.
+  try {
+    await chrome.storage.local.set({ [LLM_STORAGE_KEY]: providerId });
+  } catch {
+    // storage failure — non-critical
+  }
+}
+
+el.modeTranscribe.addEventListener("change", () => {
+  if (el.modeTranscribe.checked) saveTranscribeMode("transcribe");
+});
+el.modeTranscribeSummarize.addEventListener("change", () => {
+  if (el.modeTranscribeSummarize.checked) saveTranscribeMode("transcribe-and-summarize");
+});
+el.modeSummarize.addEventListener("change", () => {
+  if (el.modeSummarize.checked) saveTranscribeMode("summarize");
+});
 
 function setModeUI(mode) {
   currentSettingsMode = mode;
@@ -2606,13 +2764,63 @@ async function refreshServerSection(mode) {
     el.serverSection.hidden = true;
     return;
   }
-  // Need native host to actually stop. If we don't know yet, probe quickly.
+  // Need native host to actually start/stop. If we don't know yet, probe.
   if (nativeHostAvailable === undefined || nativeHostAvailable === null) {
     await detectNativeHost();
   }
-  el.serverSection.hidden = !nativeHostAvailable;
+  // Without the native host there's nothing to do here — the offline state's
+  // setup disclosure remains the install path. Hide the whole section.
+  if (!nativeHostAvailable) {
+    el.serverSection.hidden = true;
+    return;
+  }
+  el.serverSection.hidden = false;
   el.stopServerHint.hidden = true;
+
+  // Probe server state. Cheap — bg already polls and caches the result.
+  const serviceRes = await sendMsg({ type: "CHECK_SERVICE" });
+  const serverOnline = !!(serviceRes?.success && serviceRes.data?.online);
+  el.serverStatus.textContent = serverOnline ? "Server running" : "Server stopped";
+  el.serverStatus.hidden = false;
+  el.btnStartServer.hidden = serverOnline;
+  el.btnStopServer.hidden = !serverOnline;
 }
+
+async function startServerClicked() {
+  if (nativeStartInFlight) return;
+  nativeStartInFlight = true;
+  el.btnStartServer.disabled = true;
+  el.stopServerHint.hidden = true;
+  el.btnStartServer.querySelector(".start-spinner").hidden = false;
+  el.btnStartServer.querySelector(".start-server-label").textContent = "Starting…";
+  try {
+    const res = await callNativeHost("start", {}, 30000);
+    if (res?.ok || res?.reason === "already_running") {
+      // init() picks up the change, leaves Settings, shows Ready state.
+      stopOfflinePolling();
+      init();
+    } else if (res?.reason === "port_conflict") {
+      el.stopServerHint.textContent =
+        `Port ${res.port || 19720} is already in use by another app. ` +
+        `Close it (or change the port) and try again.`;
+      el.stopServerHint.hidden = false;
+    } else {
+      el.stopServerHint.textContent =
+        res?.error || "Couldn't start the server. Check ~/Library/Logs/Transcriber/native-host.log";
+      el.stopServerHint.hidden = false;
+    }
+  } catch (e) {
+    el.stopServerHint.textContent = `Start failed: ${e.message}`;
+    el.stopServerHint.hidden = false;
+  } finally {
+    nativeStartInFlight = false;
+    el.btnStartServer.disabled = false;
+    el.btnStartServer.querySelector(".start-spinner").hidden = true;
+    el.btnStartServer.querySelector(".start-server-label").textContent = "Start";
+  }
+}
+
+el.btnStartServer.addEventListener("click", startServerClicked);
 
 async function stopServerClicked() {
   if (nativeStartInFlight) return;
@@ -2640,6 +2848,8 @@ async function stopServerClicked() {
     el.btnStopServer.disabled = false;
     el.btnStopServer.querySelector(".start-spinner").hidden = true;
     el.btnStopServer.querySelector(".stop-label").textContent = "Stop";
+    // Refresh the section so the button flips Stop → Start.
+    refreshServerSection(currentSettingsMode);
   }
 }
 

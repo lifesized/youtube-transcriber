@@ -133,7 +133,7 @@
     <!-- Ready (not yet transcribed, or already transcribed) -->
     <div id="stateReady" class="state" hidden>
       <h1 class="panel-title" id="videoTitle"></h1>
-      <button class="btn-transcribe" id="btnTranscribe">Transcribe</button>
+      <button class="btn-transcribe" id="btnTranscribe"><span class="btn-transcribe-label" id="btnTranscribeLabel">Transcribe</span></button>
       <div class="live-notice" id="liveNotice" hidden>
         <span class="live-badge">LIVE</span>
         <span class="live-text">Live streams can't be transcribed yet</span>
@@ -206,11 +206,54 @@
       </div>
       <div id="serverSection" class="settings-server" hidden>
         <div class="section-label section-label-subsection">Server</div>
-        <button class="btn-transcribe btn-transcribe-secondary" id="btnStopServer">
+        <p class="settings-server-status" id="serverStatus" hidden></p>
+        <button class="btn-transcribe" id="btnStartServer" hidden>
+          <span class="start-server-label">Start</span>
+          <span class="start-spinner" hidden></span>
+        </button>
+        <button class="btn-transcribe" id="btnStopServer" hidden>
           <span class="stop-label">Stop</span>
           <span class="start-spinner" hidden></span>
         </button>
         <p class="settings-server-hint" id="stopServerHint" hidden></p>
+      </div>
+      <div id="actionSection" class="settings-action">
+        <div class="section-label section-label-subsection">Button action</div>
+        <label class="settings-radio">
+          <input type="radio" name="transcribeMode" value="transcribe" id="modeTranscribe" />
+          <span class="settings-radio-dot"></span>
+          <span class="settings-radio-text">
+            <span class="settings-radio-title">Transcribe</span>
+            <span class="settings-radio-desc">Get the transcript only</span>
+          </span>
+        </label>
+        <label class="settings-radio">
+          <input type="radio" name="transcribeMode" value="transcribe-and-summarize" id="modeTranscribeSummarize" />
+          <span class="settings-radio-dot"></span>
+          <span class="settings-radio-text">
+            <span class="settings-radio-title">Transcribe &amp; Summarize</span>
+            <span class="settings-radio-desc">Transcribe then open in your AI</span>
+          </span>
+        </label>
+        <label class="settings-radio">
+          <input type="radio" name="transcribeMode" value="summarize" id="modeSummarize" />
+          <span class="settings-radio-dot"></span>
+          <span class="settings-radio-text">
+            <span class="settings-radio-title">Summarize</span>
+            <span class="settings-radio-desc">Summary only — transcript happens in the background</span>
+          </span>
+        </label>
+        <div id="summarizeProviderRow" class="settings-action-provider" hidden>
+          <span class="settings-action-provider-label">Open in</span>
+          <div class="provider-picker">
+            <button type="button" class="provider-picker-trigger" id="providerPickerTrigger">
+              <span class="provider-picker-icon" id="providerPickerIcon"></span>
+              <span class="provider-picker-name" id="providerPickerName">Claude</span>
+              <span class="provider-picker-chevron"></span>
+            </button>
+            <div class="provider-picker-menu" id="providerPickerMenu" hidden></div>
+          </div>
+        </div>
       </div>
       <div id="destinationsSection" class="settings-destinations" hidden>
         <div class="section-label section-label-subsection">Connectors</div>
