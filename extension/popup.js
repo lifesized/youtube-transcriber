@@ -746,6 +746,7 @@ function buildDestinationRow(d, ctx) {
   const frag = document.createDocumentFragment();
   const row = document.createElement("div");
   row.className = "destinations-row";
+  if (d.locked) row.classList.add("destinations-row-locked");
 
   const icon = document.createElement("span");
   icon.className = "destinations-row-icon";
@@ -763,6 +764,15 @@ function buildDestinationRow(d, ctx) {
   const name = document.createElement("span");
   name.className = "destinations-row-name";
   name.textContent = d.name || d.adapterId;
+  if (d.locked && d.requiresTier) {
+    const pill = document.createElement("span");
+    pill.className = "destinations-row-pill";
+    // requiresTier is "pro" | "power" — title-case for display.
+    pill.textContent =
+      d.requiresTier.charAt(0).toUpperCase() + d.requiresTier.slice(1);
+    name.appendChild(document.createTextNode(" "));
+    name.appendChild(pill);
+  }
   const status = document.createElement("span");
   status.className = "destinations-row-status";
   text.appendChild(name);
@@ -770,7 +780,8 @@ function buildDestinationRow(d, ctx) {
 
   // Setup-help link — surfaced only when the connector isn't usable yet.
   // Hidden once connected so the row stays clean for happy-path users.
-  if (d.setupHelpUrl && !d.connected) {
+  // Hidden for locked rows too — Upgrade is the only relevant CTA there.
+  if (d.setupHelpUrl && !d.connected && !d.locked) {
     const help = document.createElement("a");
     help.className = "destinations-row-help";
     help.href = d.setupHelpUrl;
@@ -782,7 +793,23 @@ function buildDestinationRow(d, ctx) {
 
   let actionEl;
 
-  if (d.clientSide) {
+  if (d.locked) {
+    // Tier-gated adapter (YTT-268). Skip the Connect/OAuth flow entirely
+    // and surface an Upgrade link instead. Server also enforces — this
+    // is just the UX layer.
+    status.textContent = "Available on " +
+      (d.requiresTier
+        ? d.requiresTier.charAt(0).toUpperCase() + d.requiresTier.slice(1)
+        : "paid plans");
+    actionEl = document.createElement("a");
+    actionEl.href = d.upgradeUrl
+      ? `https://www.transcribed.dev${d.upgradeUrl}`
+      : "https://www.transcribed.dev/pricing";
+    actionEl.target = "_blank";
+    actionEl.rel = "noopener noreferrer";
+    actionEl.className = "destinations-row-action destinations-row-upgrade";
+    actionEl.textContent = "Upgrade";
+  } else if (d.clientSide) {
     // Client-side adapter (Obsidian). "Connected" = local config saved.
     // Connect focuses the vault-name input below; Disconnect clears it.
     if (d.connected) {
@@ -1038,11 +1065,36 @@ async function toggleRowActionsMenu(wrapper, transcriptId, videoTitle) {
             showPopupToast(`Sent to ${destName}`, "info");
           } else {
             const errData = res?.data || {};
-            const errMsg =
-              errData.error ||
-              res?.error ||
-              `Couldn't send to ${destName}`;
-            showPopupToast(errMsg, "error");
+            // YTT-268: defense-in-depth path — server refused because the
+            // user is on a tier below the adapter's requiresTier (rare:
+            // mid-session downgrade or stale destinations cache). Open
+            // pricing in a new tab so the upgrade is one click away, and
+            // explain what happened in the toast.
+            if (errData.upgradeRequired) {
+              const tier = errData.requiresTier
+                ? errData.requiresTier.charAt(0).toUpperCase() +
+                  errData.requiresTier.slice(1)
+                : "a paid plan";
+              const url = errData.upgradeUrl
+                ? `https://www.transcribed.dev${errData.upgradeUrl}`
+                : "https://www.transcribed.dev/pricing";
+              try {
+                chrome.tabs.create({ url, active: true });
+              } catch {
+                // tabs.create may be denied in some contexts — toast still
+                // tells the user what to do.
+              }
+              showPopupToast(
+                `${destName} requires ${tier} — opened pricing`,
+                "error"
+              );
+            } else {
+              const errMsg =
+                errData.error ||
+                res?.error ||
+                `Couldn't send to ${destName}`;
+              showPopupToast(errMsg, "error");
+            }
           }
         })
       );

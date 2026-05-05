@@ -3,6 +3,7 @@
 ## 2026-05-04
 
 ### Changed
+- **Notion gated behind Pro tier (1.6.21, YTT-268)** — Free cloud users now see Notion in the Settings → Destinations list as a locked row: muted icon/name, "Pro" pill, and an Upgrade CTA that opens `transcribed.dev/pricing` in a new tab. Obsidian stays free for everyone in all modes. Cloud server is the authoritative gate (`/api/destinations` marks the row `locked`, `/oauth/start` returns 403, `/send` returns 402); the extension UX layer just renders what cloud reports. Defense-in-depth: if a stale OAuth token survives a downgrade, the send route 402 opens pricing in a new tab and the toast explains why.
 - **First-time setup flow simplified (1.6.20)** — Offline state replaces the dual-path layout (`npm run dev` copybox + disclosure-wrapped install) with a single canonical install-native-host flow. Cleaner first impression; `npm run dev` still documented in README for power users running the server in a terminal. Tightens setup-step / setup-hint typography to match.
 
 ## 2026-04-28
