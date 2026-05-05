@@ -2984,6 +2984,11 @@ async function switchMode(newMode) {
   // click is silently blocked by the doTranscribe guard. User saw this as
   // "first click after mode switch does nothing".
   isTranscribing = false;
+  // Hide stale destinations rows immediately. The two awaits below take
+  // 100-500ms; without this, switching cloud → self-hosted leaves the
+  // Notion row visible during that window, looking like a bug. Skeletons
+  // are mode-agnostic so they're a safe placeholder.
+  if (isSettingsOpen()) renderDestinationsSkeleton();
   await sendMsg({ type: "CLEAR_TRANSCRIPTION" });
   await sendMsg({ type: "SAVE_SETTINGS", mode: newMode });
   // Persist FIRST, render SECOND. setModeUI triggers

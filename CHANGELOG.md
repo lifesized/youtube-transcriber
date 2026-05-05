@@ -2,6 +2,9 @@
 
 ## 2026-05-05
 
+### Fixed
+- **Stale destination rows during mode switch (1.6.23)** — `switchMode` invalidated `destinationsCache` but waited on two server roundtrips (`CLEAR_TRANSCRIPTION` + `SAVE_SETTINGS`) before re-rendering. During that 100-500ms window, switching cloud → self-hosted left the Notion row visible — looked like a bug. Now renders the destinations skeleton immediately when the settings panel is open, so stale rows clear at the moment of the toggle click.
+
 ### Changed
 - **Re-check destination tier on focus (1.6.22, YTT-268)** — Side panel keeps its JS context across tab switches, so a tier upgrade completed on transcribed.dev in another tab used to leave the destinations cache stale (Notion stayed "locked" until popup reload). Now on every focus / visibility-visible event the destinations cache is invalidated and the Settings list re-renders if visible. Throttled to once per 2s so platforms that fire `focus` on minor activations don't thrash the cloud.
 
