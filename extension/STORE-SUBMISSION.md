@@ -48,7 +48,7 @@ Key features:
 • One-click handoff to Claude or ChatGPT for summaries
 • Side panel stays open as you browse — queue videos as you find them
 • Searchable library of every transcript you've made
-• Send transcripts to Notion or Obsidian with one click
+• Send transcripts to Obsidian (free) or Notion (Pro) with one click
 • Works on YouTube and major podcast platforms (Spotify, with more coming)
 • Switch between local and cloud in settings
 ```
