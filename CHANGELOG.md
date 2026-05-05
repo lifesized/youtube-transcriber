@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-05-04
+
+### Changed
+- **First-time setup flow simplified (1.6.20)** — Offline state replaces the dual-path layout (`npm run dev` copybox + disclosure-wrapped install) with a single canonical install-native-host flow. Cleaner first impression; `npm run dev` still documented in README for power users running the server in a terminal. Tightens setup-step / setup-hint typography to match.
+
 ## 2026-04-28
 
 ### Fixed

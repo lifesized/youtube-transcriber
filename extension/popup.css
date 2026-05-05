@@ -706,16 +706,21 @@ body::-webkit-scrollbar-thumb:hover {
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 .setup-step {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.50);
-  margin: 2px 0 6px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.45);
+  margin: 0 0 4px;
   text-align: left;
+  line-height: 1.45;
+}
+.setup-step + .setup-step {
+  margin-top: 0;
 }
 .setup-hint {
-  font-size: 11px;
+  font-size: 10px;
   color: rgba(255, 255, 255, 0.35);
-  margin-top: 6px;
+  margin-top: 4px;
   text-align: left;
+  line-height: 1.45;
 }
 .btn-check-again {
   display: inline-flex;

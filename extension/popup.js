@@ -30,7 +30,6 @@ const el = {
   queueList: document.getElementById("queueList"),
   btnCancel: document.getElementById("btnCancel"),
   btnCheckAgain: document.getElementById("btnCheckAgain"),
-  btnCopyCommand: document.getElementById("btnCopyCommand"),
   btnStartTranscriber: document.getElementById("btnStartTranscriber"),
   offlineStartWrap: document.getElementById("offlineStartWrap"),
   offlineCopyWrap: document.getElementById("offlineCopyWrap"),
@@ -39,7 +38,6 @@ const el = {
   setupCommand: document.getElementById("setupCommand"),
   btnCopySetup: document.getElementById("btnCopySetup"),
   offlinePath: document.getElementById("offlinePath"),
-  offlineCommand: document.getElementById("offlineCommand"),
   offlineLocalMsg: document.getElementById("offlineLocalMsg"),
   btnTranscribeLabel: document.getElementById("btnTranscribeLabel"),
   actionSection: document.getElementById("actionSection"),
@@ -1354,8 +1352,6 @@ function startHeartbeat() {
 
 function loadCachedPath() {
   el.offlinePath.hidden = true;
-  el.offlineCommand.textContent = "npm run dev";
-  delete el.offlineCommand.dataset.fullCmd;
   refreshOfflineStartUI();
 }
 
@@ -2444,13 +2440,6 @@ el.cloudAuthGoogle.addEventListener("click", async () => {
 el.btnUseLocal.addEventListener("click", async () => {
   await sendMsg({ type: "SAVE_SETTINGS", mode: "local" });
   init();
-});
-
-el.btnCopyCommand.addEventListener("click", () => {
-  const cmd = el.offlineCommand.dataset.fullCmd || el.offlineCommand.textContent;
-  navigator.clipboard.writeText(cmd);
-  el.btnCopyCommand.classList.add("copied");
-  setTimeout(() => el.btnCopyCommand.classList.remove("copied"), 1500);
 });
 
 el.btnStartTranscriber.addEventListener("click", startTranscriberClicked);

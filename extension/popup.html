@@ -11,8 +11,8 @@
     <div id="stateNoService" class="state state-offline" hidden>
       <!-- Local mode offline -->
       <div id="offlineLocalMsg">
-        <p class="offline-heading">Waiting for server</p>
-        <p class="offline-sub" id="offlineSub">The transcriber service isn't running yet</p>
+        <p class="offline-heading" id="offlineHeading">One-time setup</p>
+        <p class="offline-sub" id="offlineSub">Run this in your terminal to get going</p>
         <p class="offline-path" id="offlinePath" hidden></p>
 
         <!-- Primary path: one-click start via native messaging host -->
@@ -24,40 +24,30 @@
           <p class="offline-error" id="offlineStartError" hidden></p>
         </div>
 
-        <!-- Fallback: copy/paste command when the native host isn't installed -->
+        <!-- First-time setup: install the native messaging host so the
+             extension can start the local server with one click forever after.
+             Single canonical path — no manual `npm run dev` alternative,
+             which forced a confusing two-options layout. README still
+             documents `npm run dev` for power users running the server in
+             a terminal session. -->
         <div id="offlineCopyWrap" hidden>
-          <div class="offline-copybox">
-            <code class="offline-copybox-code" id="offlineCommand">npm run dev</code>
-            <button class="offline-copybox-btn" id="btnCopyCommand" title="Copy to clipboard">
-              <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
-              </svg>
-              <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
-            </button>
-          </div>
-          <details class="setup-disclosure">
-            <summary class="setup-disclosure-summary">One-time setup for one-click start</summary>
-            <div class="setup-instructions">
-              <p class="setup-step">1. Open Terminal in the project folder</p>
-              <p class="setup-step">2. Run:</p>
-              <div class="offline-copybox">
-                <code class="offline-copybox-code" id="setupCommand">npm run install-native-host -- --ext-id=YOUR_ID</code>
-                <button class="offline-copybox-btn" id="btnCopySetup" title="Copy to clipboard">
-                  <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
-                  </svg>
-                  <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12"/>
-                  </svg>
-                </button>
-              </div>
-              <p class="setup-hint">3. Reload this popup</p>
+          <div class="setup-instructions">
+            <p class="setup-step">1. Open Terminal in the project folder</p>
+            <p class="setup-step">2. Run:</p>
+            <div class="offline-copybox">
+              <code class="offline-copybox-code" id="setupCommand">npm run install-native-host -- --ext-id=YOUR_ID</code>
+              <button class="offline-copybox-btn" id="btnCopySetup" title="Copy to clipboard">
+                <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                </svg>
+                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </button>
             </div>
-          </details>
+            <p class="setup-hint">3. Reload this popup</p>
+          </div>
         </div>
       </div>
 
