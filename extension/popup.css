@@ -1697,6 +1697,39 @@ body::-webkit-scrollbar-thumb:hover {
   opacity: 0.5;
   cursor: default;
 }
+/* YTT-268: tier-gated adapter rows. The row stays in place — visibility
+   drives upsell — but icon/name/status mute and the action becomes an
+   Upgrade link. */
+.destinations-row-locked .destinations-row-icon,
+.destinations-row-locked .destinations-row-name {
+  opacity: 0.55;
+}
+.destinations-row-pill {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  /* Pill opacity stays full so it reads as a tag, not muted noise. */
+  opacity: 1;
+}
+.destinations-row-upgrade {
+  /* Inherits .destinations-row-action sizing + colors; overrides only the
+     hover so the Upgrade CTA feels actionable rather than secondary. */
+  text-decoration: none;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.destinations-row-upgrade:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--accent);
+}
 .destinations-empty {
   font-size: 12px;
   color: var(--muted-3);

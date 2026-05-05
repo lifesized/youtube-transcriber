@@ -708,7 +708,15 @@ async function destinationsFetch(path, init = {}) {
     if (res.status === 204) return { ok: true, data: {} };
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      return { ok: false, error: data?.error || `HTTP ${res.status}` };
+      const out = { ok: false, error: data?.error || `HTTP ${res.status}` };
+      // Preserve tier-gate fields so the popup can render an Upgrade CTA
+      // instead of a generic error toast (YTT-268).
+      if (data?.error === "upgrade_required") {
+        out.upgradeRequired = true;
+        if (data.requiresTier) out.requiresTier = data.requiresTier;
+        if (data.upgradeUrl) out.upgradeUrl = data.upgradeUrl;
+      }
+      return out;
     }
     return { ok: true, data };
   } catch {
