@@ -588,6 +588,26 @@ chrome.runtime.onMessage.addListener((msg) => {
   }
 });
 
+// YTT-268: re-check destination tier-locks when the extension regains focus.
+// The side panel keeps its JS context across tab switches, so a tier
+// upgrade completed on transcribed.dev in another tab leaves
+// destinationsCache stale — Notion stays "locked" until popup reload.
+// Refetch on focus covers the upgrade-and-return flow without polling.
+// Throttled because some platforms fire `focus` on every minor activation.
+let lastDestinationsRefocus = 0;
+function onExtensionFocus() {
+  if (document.visibilityState === "hidden") return;
+  const now = Date.now();
+  if (now - lastDestinationsRefocus < 2000) return;
+  lastDestinationsRefocus = now;
+  destinationsCache = null;
+  if (el.settingsPanel && !el.settingsPanel.hidden) {
+    renderDestinationsSettings();
+  }
+}
+window.addEventListener("focus", onExtensionFocus);
+document.addEventListener("visibilitychange", onExtensionFocus);
+
 // Bundled icons — cloud returns relative paths like "/icons/notion.svg" that
 // 404 from chrome-extension:// origin, so we override by adapterId.
 const LOCAL_DESTINATION_ICONS = {

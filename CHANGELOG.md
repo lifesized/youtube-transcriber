@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-05-05
+
+### Changed
+- **Re-check destination tier on focus (1.6.22, YTT-268)** — Side panel keeps its JS context across tab switches, so a tier upgrade completed on transcribed.dev in another tab used to leave the destinations cache stale (Notion stayed "locked" until popup reload). Now on every focus / visibility-visible event the destinations cache is invalidated and the Settings list re-renders if visible. Throttled to once per 2s so platforms that fire `focus` on minor activations don't thrash the cloud.
+
 ## 2026-05-04
 
 ### Changed
