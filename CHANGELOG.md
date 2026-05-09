@@ -2,6 +2,9 @@
 
 ## 2026-05-08
 
+### Changed
+- **Persisted destinations cache (1.6.25)** — Destinations list now survives popup close. Settings panel reads the cached list from `chrome.storage.local` (5-min TTL) and paints rows instantly on open, while a fresh `fetchDestinations()` runs in the background. The new paint only replaces the cached one if a cheap signature differs (`adapterId|connected|needsReauth` per row + `cloudReady|cloudReason`), avoiding DOM thrash on the common "nothing changed" case. `fetchDestinations` now parallelizes the obsidian-vault read and `GET_SETTINGS` via `Promise.all` so the cloud round-trip is no longer waiting on serialized awaits. OAUTH return clears both in-memory and persisted caches so a fresh connection is picked up immediately.
+
 ### Fixed
 - **Kebab menu shows "Connect a destination" after transcribe-and-summarize (1.6.24, YTT-293)** — `onExtensionFocus` invalidated `destinationsCache` on every focus / visibility-visible event but only re-fetched when the Settings panel was open. The transcribe-and-summarize flow opens a new tab (ChatGPT/Claude handoff) and returns, firing visibilitychange twice on the side panel, so the cache landed null with the user on the Recent list. The kebab (⋯) menu's `fetchDestinations()` call wasn't awaited, so `connectedDestinations()` read the null cache synchronously and rendered the empty "Connect a destination in Settings to send" state despite working connections. Two fixes: (1) `onExtensionFocus` now refetches in both branches — Settings open *and* Recent list. (2) `toggleRowActionsMenu` awaits `fetchDestinations()` when the cache is empty so first-open paints with real destinations; hot-cache opens still fire-and-forget the refresh for next-open freshness.
 

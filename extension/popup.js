@@ -578,11 +578,47 @@ async function tryLlmHandoff(provider, prompt) {
 let destinationsCache = null;
 let destinationsLoading = false;
 
+// Persisted cache for destinations list. Survives popup close so the next
+// open renders instantly from cache (stale-while-revalidate). Network call
+// still fires in the background to catch any state changes; the rendered
+// list is replaced if the fresh result differs.
+const DESTINATIONS_CACHE_KEY = "destinationsCacheV1";
+const DESTINATIONS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function readPersistedDestinations() {
+  try {
+    const stored = await chrome.storage.local.get(DESTINATIONS_CACHE_KEY);
+    const cached = stored[DESTINATIONS_CACHE_KEY];
+    if (!cached || !cached.timestamp || !cached.payload) return null;
+    if (Date.now() - cached.timestamp > DESTINATIONS_CACHE_TTL_MS) return null;
+    return cached.payload;
+  } catch {
+    return null;
+  }
+}
+
+async function writePersistedDestinations(payload) {
+  try {
+    await chrome.storage.local.set({
+      [DESTINATIONS_CACHE_KEY]: { timestamp: Date.now(), payload },
+    });
+  } catch {
+    // Storage write failure is non-fatal — cache miss next time, that's all.
+  }
+}
+
+async function clearPersistedDestinations() {
+  try {
+    await chrome.storage.local.remove(DESTINATIONS_CACHE_KEY);
+  } catch {}
+}
+
 // Listen for OAuth return broadcasts from destination-connected.html so the settings
 // list reflects a fresh connection without waiting for the polling fallback.
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type !== "OAUTH_RETURN") return;
   destinationsCache = null;
+  clearPersistedDestinations();
   if (el.settingsPanel && !el.settingsPanel.hidden) {
     renderDestinationsSettings();
   }
@@ -648,9 +684,12 @@ async function fetchDestinations() {
   if (destinationsLoading) return destinationsCache;
   destinationsLoading = true;
   try {
-    const { obsidianVaultName } = await chrome.storage.sync.get(
-      "obsidianVaultName"
-    );
+    // Storage reads are independent of each other — fire in parallel so the
+    // network call below isn't waiting on serialized awaits.
+    const [{ obsidianVaultName }, settingsRes] = await Promise.all([
+      chrome.storage.sync.get("obsidianVaultName"),
+      sendMsg({ type: "GET_SETTINGS" }),
+    ]);
     const clientSide = CLIENT_SIDE_ADAPTERS.map((d) => {
       if (d.adapterId === "obsidian-scheme") {
         return { ...d, connected: !!(obsidianVaultName || "").trim() };
@@ -658,7 +697,6 @@ async function fetchDestinations() {
       return { ...d, connected: false };
     });
 
-    const settingsRes = await sendMsg({ type: "GET_SETTINGS" });
     const mode = settingsRes?.data?.mode || "cloud";
 
     let cloudAdapters;
@@ -693,6 +731,12 @@ async function fetchDestinations() {
       cloudReason,
       destinations: [...cloudAdapters, ...clientSide],
     };
+    // Persist for instant render on next popup open. Only cache cloud-ready
+    // results — teasers (auth error, unavailable) shouldn't be sticky since
+    // they reflect transient state.
+    if (cloudReady || mode !== "cloud") {
+      writePersistedDestinations(destinationsCache);
+    }
     return destinationsCache;
   } finally {
     destinationsLoading = false;
@@ -724,6 +768,37 @@ function renderDestinationsSkeleton(rows = 2) {
   }
 }
 
+// Cheap signature for change-detection so SWR doesn't thrash the DOM when
+// the freshly fetched destinations list matches the cached paint.
+function destinationsSignature(payload) {
+  if (!payload || !Array.isArray(payload.destinations)) return "";
+  const rows = payload.destinations
+    .map(
+      (d) =>
+        `${d.adapterId}|${d.connected ? 1 : 0}|${d.needsReauth ? 1 : 0}`
+    )
+    .join(",");
+  return `${payload.cloudReady ? 1 : 0}|${payload.cloudReason || ""}|${rows}`;
+}
+
+function paintDestinationsList(payload) {
+  el.destinationsList.innerHTML = "";
+  el.destinationsEmpty.hidden = true;
+  const list = payload.destinations || [];
+  if (!list.length) {
+    el.destinationsEmpty.hidden = false;
+    el.destinationsEmpty.textContent = "No destinations available.";
+    return;
+  }
+  const ctx = {
+    cloudReady: payload.cloudReady,
+    cloudReason: payload.cloudReason,
+  };
+  for (const d of list) {
+    el.destinationsList.appendChild(buildDestinationRow(d, ctx));
+  }
+}
+
 async function renderDestinationsSettings() {
   // Destinations always visible — Obsidian works in any mode (client-side
   // URL scheme), and cloud-only adapters render as "Sign in" teasers when
@@ -731,30 +806,29 @@ async function renderDestinationsSettings() {
   // somehow have zero adapters total, which shouldn't happen.
   el.destinationsSection.hidden = false;
   el.destinationsEmpty.hidden = true;
-  // Skeleton rows during the await — cloud mode hits LIST_DESTINATIONS in
-  // the background which is a visible round-trip; even local mode has a
-  // brief storage read. Replaced when fetchDestinations resolves.
-  renderDestinationsSkeleton();
 
-  const res = await fetchDestinations();
-  const list = res.destinations || [];
-
-  // Clear skeletons before rendering real rows / empty state.
-  el.destinationsList.innerHTML = "";
-
-  if (!list.length) {
-    el.destinationsEmpty.hidden = false;
-    el.destinationsEmpty.textContent = "No destinations available.";
-    return;
+  // Stale-while-revalidate: paint cached destinations from the previous popup
+  // session so the user sees real rows immediately. Network refresh happens
+  // below; rows are replaced only if the fresh result differs.
+  const cached = destinationsCache || (await readPersistedDestinations());
+  if (cached && cached.destinations?.length) {
+    paintDestinationsList(cached);
+  } else {
+    // No cache (first-ever open in this profile, or expired) — fall back to
+    // skeleton rows during the live fetch.
+    renderDestinationsSkeleton();
   }
 
-  const ctx = {
-    cloudReady: res.cloudReady,
-    cloudReason: res.cloudReason,
-  };
+  const res = await fetchDestinations();
 
-  for (const d of list) {
-    el.destinationsList.appendChild(buildDestinationRow(d, ctx));
+  // Re-paint only if the fresh result differs from what we already painted
+  // from cache. Avoids DOM thrash on the common "nothing changed" case.
+  const sameAsCached =
+    cached &&
+    cached.destinations?.length &&
+    destinationsSignature(cached) === destinationsSignature(res);
+  if (!sameAsCached) {
+    paintDestinationsList(res);
   }
 
   // Obsidian inputs always visible since Obsidian is always in the list.
