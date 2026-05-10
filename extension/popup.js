@@ -68,6 +68,10 @@ const el = {
   cloudAuthResend: document.getElementById("cloudAuthResend"),
   localDetectedBanner: document.getElementById("localDetectedBanner"),
   btnUseLocal: document.getElementById("btnUseLocal"),
+  btnDismissBanner: document.getElementById("btnDismissBanner"),
+  setupWallModal: document.getElementById("setupWallModal"),
+  setupWallStay: document.getElementById("setupWallStay"),
+  setupWallContinue: document.getElementById("setupWallContinue"),
   cloudNudge: document.getElementById("cloudNudge"),
   liveNotice: document.getElementById("liveNotice"),
   btnNavLibrary: document.getElementById("btnNavLibrary"),
@@ -585,22 +589,27 @@ let destinationsLoading = false;
 const DESTINATIONS_CACHE_KEY = "destinationsCacheV1";
 const DESTINATIONS_CACHE_TTL_MS = 5 * 60 * 1000;
 
-async function readPersistedDestinations() {
+async function readPersistedDestinations(currentMode) {
   try {
     const stored = await chrome.storage.local.get(DESTINATIONS_CACHE_KEY);
     const cached = stored[DESTINATIONS_CACHE_KEY];
     if (!cached || !cached.timestamp || !cached.payload) return null;
     if (Date.now() - cached.timestamp > DESTINATIONS_CACHE_TTL_MS) return null;
+    // Mode-tagged cache: ignore stale-mode entries so a local→cloud switch
+    // doesn't briefly paint the local-mode list (Obsidian only) before the
+    // network fetch returns the full cloud list. Skeleton stays visible
+    // through the fetch instead.
+    if (currentMode && cached.mode && cached.mode !== currentMode) return null;
     return cached.payload;
   } catch {
     return null;
   }
 }
 
-async function writePersistedDestinations(payload) {
+async function writePersistedDestinations(payload, mode) {
   try {
     await chrome.storage.local.set({
-      [DESTINATIONS_CACHE_KEY]: { timestamp: Date.now(), payload },
+      [DESTINATIONS_CACHE_KEY]: { timestamp: Date.now(), mode, payload },
     });
   } catch {
     // Storage write failure is non-fatal — cache miss next time, that's all.
@@ -735,7 +744,7 @@ async function fetchDestinations() {
     // results — teasers (auth error, unavailable) shouldn't be sticky since
     // they reflect transient state.
     if (cloudReady || mode !== "cloud") {
-      writePersistedDestinations(destinationsCache);
+      writePersistedDestinations(destinationsCache, mode);
     }
     return destinationsCache;
   } finally {
@@ -807,17 +816,23 @@ async function renderDestinationsSettings() {
   el.destinationsSection.hidden = false;
   el.destinationsEmpty.hidden = true;
 
+  // Paint skeleton synchronously when there's no in-memory cache. The
+  // persisted-cache read below is async (chrome.storage roundtrip) — without
+  // this sync paint, the section header is visible for one microtask + the
+  // storage read with an empty list underneath. Particularly noticeable after
+  // a mode switch (cache cleared) or when the persisted TTL has expired.
+  if (!destinationsCache) {
+    renderDestinationsSkeleton();
+  }
+
   // Stale-while-revalidate: paint cached destinations from the previous popup
   // session so the user sees real rows immediately. Network refresh happens
   // below; rows are replaced only if the fresh result differs.
-  const cached = destinationsCache || (await readPersistedDestinations());
+  const cached = destinationsCache || (await readPersistedDestinations(currentMode));
   if (cached && cached.destinations?.length) {
     paintDestinationsList(cached);
-  } else {
-    // No cache (first-ever open in this profile, or expired) — fall back to
-    // skeleton rows during the live fetch.
-    renderDestinationsSkeleton();
   }
+  // else: skeleton already showing from the sync paint above.
 
   const res = await fetchDestinations();
 
@@ -2305,11 +2320,19 @@ async function init() {
         el.cloudAuthErrorMsg.hidden = true;
       }
 
-      // Auto-detect local instance and show banner
-      const localRes = await sendMsg({ type: "DETECT_LOCAL" });
-      if (thisInit !== initVersion) return;
-      if (localRes?.success && localRes.data?.available) {
-        el.localDetectedBanner.hidden = false;
+      // Auto-detect local instance and show banner — unless user dismissed it.
+      // Dismissal is sticky (chrome.storage.sync.localBannerDismissed) so a
+      // casual cloud user with an unrelated localhost server isn't repeatedly
+      // nudged toward self-hosted.
+      const { localBannerDismissed } = await chrome.storage.sync.get([
+        "localBannerDismissed",
+      ]);
+      if (!localBannerDismissed) {
+        const localRes = await sendMsg({ type: "DETECT_LOCAL" });
+        if (thisInit !== initVersion) return;
+        if (localRes?.success && localRes.data?.available) {
+          el.localDetectedBanner.hidden = false;
+        }
       }
     } else {
       el.offlineLocalMsg.hidden = false;
@@ -2826,7 +2849,12 @@ function buildProviderPickerMenu() {
     item.type = "button";
     item.className = "provider-picker-option";
     item.dataset.provider = p.id;
-    item.innerHTML = `${p.icon}<span class="provider-picker-option-name">${escapeHtml(p.name)}</span>`;
+    const isSelected = p.id === summarizeProvider;
+    if (isSelected) item.classList.add("is-selected");
+    const check = isSelected
+      ? `<svg class="provider-picker-option-check" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.2 4.8 8.5 9.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+      : "";
+    item.innerHTML = `${p.icon}<span class="provider-picker-option-name">${escapeHtml(p.name)}</span>${check}`;
     item.addEventListener("click", (e) => {
       e.stopPropagation();
       saveSummarizeProvider(p.id);
@@ -2838,6 +2866,7 @@ function buildProviderPickerMenu() {
 
 el.providerPickerTrigger.addEventListener("click", (e) => {
   e.stopPropagation();
+  if (el.providerPickerMenu.hidden) buildProviderPickerMenu();
   el.providerPickerMenu.hidden = !el.providerPickerMenu.hidden;
 });
 
@@ -3093,8 +3122,93 @@ async function switchMode(newMode) {
   if (!isSettingsOpen()) init();
 }
 
-el.btnModeLocal.addEventListener("click", () => switchMode("local"));
+// Setup wall — gates first-time switch to self-hosted. Skipped for users
+// who've already set up self-hosted before (selfHostedSetupCompleted flag).
+const SETUP_GUIDE_URL =
+  "https://github.com/lifesized/youtube-transcriber#install";
+
+async function isSelfHostedSetupCompleted() {
+  const { selfHostedSetupCompleted } = await chrome.storage.sync.get([
+    "selfHostedSetupCompleted",
+  ]);
+  return !!selfHostedSetupCompleted;
+}
+
+async function markSelfHostedSetupCompleted() {
+  await chrome.storage.sync.set({ selfHostedSetupCompleted: true });
+}
+
+function showSetupWall() {
+  el.setupWallModal.hidden = false;
+}
+
+function hideSetupWall() {
+  el.setupWallModal.hidden = true;
+}
+
+el.setupWallStay.addEventListener("click", () => {
+  hideSetupWall();
+  // Toggle visually reverts — UI state is driven by currentMode (still "cloud").
+  setModeUI(currentMode);
+});
+
+el.setupWallContinue.addEventListener("click", async () => {
+  hideSetupWall();
+  await markSelfHostedSetupCompleted();
+  chrome.tabs.create({ url: SETUP_GUIDE_URL });
+  await switchMode("local");
+});
+
+el.btnModeLocal.addEventListener("click", async () => {
+  if (currentMode === "local") return;
+  if (await isSelfHostedSetupCompleted()) {
+    switchMode("local");
+    return;
+  }
+  showSetupWall();
+});
 el.btnModeCloud.addEventListener("click", () => switchMode("cloud"));
+
+// Auto-detect path: server already running, so by definition setup is done.
+// Mark graduated immediately so subsequent toggles skip the wall. The original
+// btnUseLocal handler (above) still runs and flips mode — both run on click.
+el.btnUseLocal.addEventListener("click", () => {
+  markSelfHostedSetupCompleted();
+});
+
+// Local-detected banner dismiss — stops the nudge for users who don't want
+// to switch but happen to have a server running on localhost (other tools).
+el.btnDismissBanner.addEventListener("click", async () => {
+  el.localDetectedBanner.hidden = true;
+  await chrome.storage.sync.set({ localBannerDismissed: true });
+});
+
+// Existing self-hosted users: retroactively mark setup completed and show
+// a one-time toast that the toggle moved into Advanced. Runs once per install.
+async function migrateExistingSelfHostedUser() {
+  const stored = await chrome.storage.sync.get([
+    "mode",
+    "selfHostedSetupCompleted",
+    "advancedRelocationToastShown",
+  ]);
+  if (stored.mode === "local" && !stored.selfHostedSetupCompleted) {
+    await chrome.storage.sync.set({ selfHostedSetupCompleted: true });
+  }
+  if (
+    stored.mode === "local" &&
+    !stored.advancedRelocationToastShown &&
+    el.popupToast
+  ) {
+    el.popupToast.textContent =
+      "Settings moved — Self-hosted mode is now under Advanced.";
+    el.popupToast.hidden = false;
+    setTimeout(() => {
+      el.popupToast.hidden = true;
+    }, 5000);
+    await chrome.storage.sync.set({ advancedRelocationToastShown: true });
+  }
+}
+migrateExistingSelfHostedUser();
 
 // Start
 init();

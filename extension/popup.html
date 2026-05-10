@@ -107,10 +107,12 @@
         </a>
         <p class="cloud-nudge-copy">No install needed · 30 free/month</p>
       </div>
-      <!-- Local instance detected banner -->
+      <!-- Local instance detected banner. Dismiss persists in chrome.storage
+           so casual cloud users aren't repeatedly nudged toward self-hosted. -->
       <div id="localDetectedBanner" class="local-detected-banner" hidden>
         <span class="local-detected-text">Local server detected</span>
         <button class="btn-use-local" id="btnUseLocal">Switch to self-hosted</button>
+        <button class="btn-dismiss-banner" id="btnDismissBanner" aria-label="Dismiss">×</button>
       </div>
     </div>
 
@@ -182,13 +184,6 @@
     <!-- Settings Panel (exclusive view — hides all other content when open) -->
     <div id="settingsPanel" class="settings-panel" hidden>
       <div class="section-label">Settings</div>
-      <div class="settings-row">
-        <span class="settings-label">Mode</span>
-        <div class="settings-toggle-group">
-          <button class="settings-mode-btn active" id="btnModeCloud" data-mode="cloud">Cloud</button>
-          <button class="settings-mode-btn" id="btnModeLocal" data-mode="local">Self-hosted</button>
-        </div>
-      </div>
       <div id="cloudAccountSection" class="settings-account" hidden>
         <a class="settings-account-link" href="https://www.transcribed.dev/account" target="_blank">
           Manage account
@@ -266,6 +261,54 @@
             community plugin.
           </p>
         </details>
+      </div>
+
+      <!-- Advanced — collapsible at bottom. Holds developer-oriented options
+           (currently just self-hosted mode toggle). Keeps the toggle reachable
+           for users who genuinely need it without leading casual cloud users
+           to flip away from the paid product. -->
+      <details id="advancedSection" class="settings-advanced">
+        <summary class="settings-advanced-summary">Advanced</summary>
+        <div class="settings-advanced-body">
+          <div class="settings-row">
+            <span class="settings-label">Self-hosted mode</span>
+            <div class="settings-toggle-group">
+              <button class="settings-mode-btn active" id="btnModeCloud" data-mode="cloud">Cloud</button>
+              <button class="settings-mode-btn" id="btnModeLocal" data-mode="local">Self-hosted</button>
+            </div>
+          </div>
+          <p class="settings-advanced-help">
+            Cloud is recommended. Self-hosted runs transcription on your own machine — requires Python, ffmpeg, and a local server.
+          </p>
+        </div>
+      </details>
+    </div>
+
+    <!-- Self-hosted setup wall — shown when user enables self-hosted for the
+         first time. Honest about requirements + perf reality so casual flippers
+         bounce back to cloud. Skipped for users who've completed setup before. -->
+    <div id="setupWallModal" class="setup-wall-modal" hidden>
+      <div class="setup-wall-backdrop"></div>
+      <div class="setup-wall-card">
+        <h2 class="setup-wall-title">Self-hosted setup</h2>
+        <p class="setup-wall-lead">Transcription runs on your machine. Audio never leaves your device.</p>
+        <div class="setup-wall-section">
+          <div class="setup-wall-section-label">You'll need</div>
+          <ul class="setup-wall-list">
+            <li>~3GB disk for the Whisper model</li>
+            <li>Python 3.10+ and ffmpeg</li>
+            <li>Native messaging host installed</li>
+            <li>Local server kept running</li>
+          </ul>
+        </div>
+        <div class="setup-wall-section">
+          <div class="setup-wall-section-label">Performance</div>
+          <p class="setup-wall-perf">A 1-hour video takes ~2-3 hours on Apple Silicon. Cloud is roughly 5× faster.</p>
+        </div>
+        <div class="setup-wall-actions">
+          <button type="button" class="setup-wall-btn-secondary" id="setupWallStay">Stay on Cloud</button>
+          <button type="button" class="setup-wall-btn-primary" id="setupWallContinue">Continue</button>
+        </div>
       </div>
     </div>
 

@@ -546,7 +546,7 @@ body::-webkit-scrollbar-thumb:hover {
   height: 5px;
   border-right: 1.25px solid rgba(255, 255, 255, 0.5);
   border-bottom: 1.25px solid rgba(255, 255, 255, 0.5);
-  transform: rotate(45deg);
+  transform: translateY(-2px) rotate(45deg);
   transform-origin: 60% 60%;
   margin-left: 4px;
   transition: border-color 0.15s;
@@ -597,6 +597,12 @@ body::-webkit-scrollbar-thumb:hover {
 }
 .provider-picker-option-name {
   flex: 1;
+}
+.provider-picker-option svg.provider-picker-option-check {
+  width: 12px;
+  height: 12px;
+  margin-left: 4px;
+  color: var(--accent);
 }
 
 /* Settings → Server section (self-hosted + native host installed only). */
@@ -1595,9 +1601,9 @@ body::-webkit-scrollbar-thumb:hover {
 .destinations-skeleton-toggle {
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.04) 0%,
-    rgba(255, 255, 255, 0.09) 50%,
-    rgba(255, 255, 255, 0.04) 100%
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.18) 50%,
+    rgba(255, 255, 255, 0.08) 100%
   );
   background-size: 200% 100%;
   animation: recent-skeleton-shimmer 1.4s ease-in-out infinite;
@@ -2186,4 +2192,157 @@ body::-webkit-scrollbar-thumb:hover {
 }
 .cloud-link-icon {
   flex-shrink: 0;
+}
+
+/* Local-detected banner dismiss button */
+.btn-dismiss-banner {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  color: var(--muted-3);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  margin-left: 8px;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+.btn-dismiss-banner:hover {
+  opacity: 1;
+}
+
+/* Advanced settings — collapsible at bottom of settings panel */
+.settings-advanced {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.settings-advanced-summary {
+  list-style: none;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--muted-3);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  user-select: none;
+  padding: 4px 0;
+}
+.settings-advanced-summary::-webkit-details-marker {
+  display: none;
+}
+.settings-advanced-summary::after {
+  content: " +";
+  opacity: 0.6;
+}
+.settings-advanced[open] .settings-advanced-summary::after {
+  content: " −";
+}
+.settings-advanced-body {
+  margin-top: 8px;
+}
+.settings-advanced-help {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--muted-3);
+  line-height: 1.5;
+}
+
+/* Self-hosted setup wall modal */
+.setup-wall-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.setup-wall-modal[hidden] {
+  display: none;
+}
+.setup-wall-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+}
+.setup-wall-card {
+  position: relative;
+  width: calc(100% - 32px);
+  max-width: 320px;
+  padding: 20px;
+  border-radius: 12px;
+  background: var(--bg, #1a1a1a);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+.setup-wall-title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.setup-wall-lead {
+  margin: 0 0 16px;
+  font-size: 12px;
+  color: var(--muted-2);
+  line-height: 1.5;
+}
+.setup-wall-section {
+  margin-bottom: 14px;
+}
+.setup-wall-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+.setup-wall-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--muted-2);
+  line-height: 1.6;
+}
+.setup-wall-perf {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted-2);
+  line-height: 1.5;
+}
+.setup-wall-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+.setup-wall-btn-primary,
+.setup-wall-btn-secondary {
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+}
+.setup-wall-btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.setup-wall-btn-primary:hover {
+  opacity: 0.9;
+}
+.setup-wall-btn-secondary {
+  background: transparent;
+  color: var(--muted-2);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.setup-wall-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
 }
