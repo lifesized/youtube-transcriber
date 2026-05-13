@@ -108,37 +108,46 @@ async function fetchWithRetry(
 
 /**
  * Fetch video metadata using the YouTube oEmbed API (no API key required).
+ *
+ * oEmbed returns 401 for embed-disabled and age-restricted videos even
+ * when the video is publicly viewable. In those cases we fall back to
+ * placeholder metadata so transcript fetching can still proceed — the
+ * transcript path is independent of oEmbed. Only 404 (video gone) is
+ * treated as fatal.
  */
 export async function fetchMetadata(videoId: string): Promise<VideoMetadata> {
   const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
 
   const res = await fetch(oembedUrl, { signal: AbortSignal.timeout(5000) });
 
-  if (!res.ok) {
-    if (res.status === 401) {
-      throw new Error(
-        `Video ${videoId} is private or restricted — metadata unavailable.`
-      );
-    }
-    if (res.status === 404) {
-      throw new Error(
-        `Video ${videoId} not found — it may have been removed.`
-      );
-    }
+  if (res.ok) {
+    const data = await res.json();
+    return {
+      videoId,
+      title: data.title ?? "Untitled",
+      author: data.author_name ?? "Unknown",
+      channelUrl: data.author_url ?? "",
+      thumbnailUrl:
+        data.thumbnail_url ?? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+    };
+  }
+
+  if (res.status === 404) {
     throw new Error(
-      `Failed to fetch metadata for video ${videoId} (HTTP ${res.status}).`
+      `Video ${videoId} not found — it may have been removed.`
     );
   }
 
-  const data = await res.json();
+  console.warn(
+    `[transcript] oEmbed returned ${res.status} for ${videoId} — using placeholder metadata.`
+  );
 
   return {
     videoId,
-    title: data.title ?? "Untitled",
-    author: data.author_name ?? "Unknown",
-    channelUrl: data.author_url ?? "",
-    thumbnailUrl:
-      data.thumbnail_url ?? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+    title: "Untitled",
+    author: "Unknown",
+    channelUrl: "",
+    thumbnailUrl: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
   };
 }
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-05-13
+
+### Fixed
+- **Embed-disabled videos no longer fail with "private or restricted" (YTT-319)** — `lib/transcript.ts:fetchMetadata()` was throwing on oEmbed 401 with a misleading "private or restricted — metadata unavailable" error, and because metadata + transcript run in `Promise.all`, the entire transcribe operation failed. But oEmbed 401s happen on **publicly viewable** videos whenever the channel has disabled embed (common) or the video is age-restricted. Confirmed via direct curl: `IFElGv5ZmRM` (Hormozi-adjacent talk) → 401 every time, both URL formats and with/without browser User-Agent; a normal video (`dQw4w9WgXcQ`) → 200. Now `fetchMetadata` falls back to placeholder metadata (`title: "Untitled"`, `author: "Unknown"`, thumbnail URL guessed from videoId) on any non-OK response other than 404. 404 still throws "video not found". Transcript path is independent of oEmbed, so the user gets their transcript with a placeholder title instead of a wrongful error.
+
 ## 2026-05-08
 
 ### Changed
