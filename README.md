@@ -28,6 +28,10 @@ Open [http://localhost:19720](http://localhost:19720) — paste a YouTube or Spo
 ## Chrome Extension
 <img width="375" height="565" alt="CleanShot 2026-03-17 at 22 53 31@2x" src="https://github.com/user-attachments/assets/d4bccf92-9941-46cc-b4f4-b7bbc3454ff7" />
 
+
+https://github.com/user-attachments/assets/081c8d90-a6e1-4b4d-b6cd-bc8787bc0a3b
+
+
 Transcribe any YouTube video or Spotify podcast episode directly from your browser without leaving the page. The extension opens as a persistent side panel — it stays open as you navigate between videos and detects each one automatically.
 
 The extension works in two modes:
