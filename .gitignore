@@ -67,6 +67,9 @@ scripts/send-email-test.ts
 # Internal build prompts / roadmap docs — never publish to OSS
 docs/ytt-*-build-prompt.md
 
+# Tester checklist — internal until product is ready for public beta
+docs/TEST_USER_CHECKLIST.md
+
 # Private strategy / marketing / branding docs — never commit, even if copied in
 # (these normally live in the parent transcriber/ folder which is not a git repo)
 /0*-*.md
@@ -81,3 +84,6 @@ docs/ytt-*-build-prompt.md
 /design/
 /_marketing-validation/
 tmp/email-renders/
+
+# Chrome unpacked dev keypair — never commit
+extension/dev-key.pem

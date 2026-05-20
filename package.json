@@ -17,7 +17,9 @@
     "fresh": "tsx scripts/fresh.ts",
     "test:setup": "bash scripts/test-setup.sh",
     "install-native-host": "node scripts/install-native-host.js",
-    "uninstall-native-host": "node scripts/install-native-host.js --remove"
+    "uninstall-native-host": "node scripts/install-native-host.js --remove",
+    "build:ext": "node extension/build.js",
+    "build:ext:dev": "node extension/build.js --dev"
   },
   "keywords": [],
   "author": "",
