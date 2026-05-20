@@ -108,7 +108,7 @@ Tracked as a multi-phase initiative in Linear (see YTT-214).
 
 The extension has become a lot of surface area in one artifact:
 
-- Popup / side-panel UI
+- Extension side-panel UI
 - Background service worker
 - Content scripts for YouTube and Spotify
 - Message passing across all three

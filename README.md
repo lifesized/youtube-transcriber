@@ -69,7 +69,7 @@ Each transcript row's `⋯` menu can push the result to an external app. Connect
 4. (Recommended for long transcripts) Install the [Advanced URI](https://github.com/Vinzent03/obsidian-advanced-uri) community plugin in Obsidian, then expand **More** under the vault field and check **Use Advanced URI plugin**. Stock `obsidian://new` has a URL length cap that truncates long videos; Advanced URI handles them reliably.
 5. From any recent transcript, click `⋯` → **Send to Obsidian**. Allow the protocol handler the first time Chrome prompts you.
 
-**Notion** — cloud mode only. Uses OAuth; tokens are stored encrypted on transcribed.dev. Toggle **Notion** on in Connectors, authorize in the popup, and share at least one page or database (a dedicated database works best) with the integration. Full setup: [docs/destinations](https://www.transcribed.dev/docs/destinations).
+**Notion** — cloud mode only. Uses OAuth; tokens are stored encrypted on transcribed.dev. Toggle **Notion** on in Connectors, authorize from the side panel, and share at least one page or database (a dedicated database works best) with the integration. Full setup: [docs/destinations](https://www.transcribed.dev/docs/destinations).
 
 ---
 

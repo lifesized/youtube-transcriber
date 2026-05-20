@@ -1,6 +1,6 @@
 # Permission Justifications — Chrome Web Store Review
 
-Paste these into the corresponding fields in the Chrome Web Store developer console when submitting. Each justification answers "why does this extension need this permission?"
+Paste these into the corresponding fields in the Chrome Web Store developer console when checking or updating the published listing. Each justification answers "why does this extension need this permission?"
 
 ## Single purpose statement
 

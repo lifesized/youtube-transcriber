@@ -91,7 +91,7 @@ function writeManifest({ ids, remove, replace }) {
       console.log("");
       console.log("Native host removed.");
       console.log("");
-      console.log("The 'Start Transcriber' button in the extension popup will no");
+      console.log("The 'Start Transcriber' button in the extension side panel will no");
       console.log("longer work. You can still start the server manually with:");
       console.log("  npm run dev");
       console.log("");
