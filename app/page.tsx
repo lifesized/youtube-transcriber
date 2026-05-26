@@ -939,7 +939,7 @@ function HomeInner() {
                 {url.trim() && (
                   <button
                     type="submit"
-                    className="shrink-0 rounded-full px-6 py-3 text-sm font-semibold text-black/90 transition-all duration-150 hover:brightness-110 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 disabled:opacity-50 disabled:pointer-events-none"
+                    className="shrink-0 rounded-full px-6 py-3 text-sm font-semibold text-black/90 transition-all duration-150 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 disabled:opacity-50 disabled:pointer-events-none"
                     style={{ backgroundColor: "#a0a0a0" }}
                   >
                     {isProcessing ? "Add" : "Transcribe"}
@@ -1373,7 +1373,7 @@ function HomeInner() {
                                     </svg>
                                   ) : (
                                     <svg
-                                      className="transition-transform duration-300 group-hover/cp:scale-110"
+                                      className="transition-transform duration-300"
                                       width="16"
                                       height="16"
                                       viewBox="0 0 20 20"

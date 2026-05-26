@@ -115,7 +115,6 @@ body::-webkit-scrollbar-thumb:hover {
 }
 .btn-transcribe:active {
   background: rgba(255, 255, 255, 0.12);
-  transform: scale(0.98);
 }
 .btn-transcribe:focus-visible {
   outline: none;
