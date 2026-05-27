@@ -63,6 +63,12 @@ const CONTENT_SCRIPTS = [
     runAt: "document_idle",
   },
   {
+    id: "app-presence",
+    matches: ["https://transcribed.dev/*", "https://www.transcribed.dev/*"],
+    js: ["content-app-presence.js"],
+    runAt: "document_start",
+  },
+  {
     id: "claude-handoff",
     matches: ["https://claude.ai/*"],
     js: ["content-llm-handoff.js"],
