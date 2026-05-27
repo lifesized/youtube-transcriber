@@ -609,7 +609,12 @@ async function classifyError(status, data) {
     return data?.error || `HTTP ${status}`;
   }
   if (status === 401) return "Sign in at transcribed.dev to continue.";
-  if (status === 429) return "Quota reached. Upgrade your plan at transcribed.dev/pricing";
+  if (status === 429) {
+    return (
+      data?.error ||
+      "Too many requests right now. Please wait a minute and try again."
+    );
+  }
   if (status >= 500) return "Cloud service error. Try again in a moment.";
   return data?.error || `HTTP ${status}`;
 }
