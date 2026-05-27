@@ -771,6 +771,15 @@ body::-webkit-scrollbar-thumb:hover {
   background: rgba(239, 68, 68, 0.15);
   border-color: rgba(239, 68, 68, 0.30);
 }
+.btn-retry.btn-upgrade {
+  border-color: rgba(165, 137, 89, 0.45);
+  background: rgba(165, 137, 89, 0.18);
+  color: var(--text);
+}
+.btn-retry.btn-upgrade:hover {
+  background: rgba(165, 137, 89, 0.26);
+  border-color: rgba(165, 137, 89, 0.60);
+}
 
 /* Recent transcripts */
 .recent-section {

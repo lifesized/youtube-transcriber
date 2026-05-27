@@ -2,6 +2,7 @@ const HAS_EXTENSION_APIS =
   typeof chrome !== "undefined" &&
   chrome.runtime &&
   typeof chrome.runtime.connect === "function";
+const PRICING_URL = "https://www.transcribed.dev/pricing";
 
 if (!HAS_EXTENSION_APIS) {
   window.addEventListener("DOMContentLoaded", () => {
@@ -174,6 +175,7 @@ let currentMode = "cloud";
 let progressWriteLabels = true;
 // When true, direct TRANSCRIBE response owns completion/error handling.
 let suppressPollFinalization = false;
+let errorAction = "retry";
 
 // YTT-259: primary button mode + chosen summarize provider. Persisted in
 // chrome.storage.sync. Mirrored here so doTranscribe / button-label updates
@@ -581,6 +583,39 @@ async function openNextToCurrentTab(url) {
     // Fallback if tabs.query fails for any reason — just open at the end.
     await chrome.tabs.create({ url, active: true });
   }
+}
+
+function isQuotaError(message) {
+  const text = String(message || "").toLowerCase();
+  return (
+    text.includes("quota") ||
+    text.includes("monthly transcript limit") ||
+    text.includes("limit reached") ||
+    text.includes("upgrade your plan") ||
+    text.includes("/pricing")
+  );
+}
+
+function showErrorState(message) {
+  const errorMessage = message || "Transcription failed";
+  const upgradeRequired = isQuotaError(errorMessage);
+  errorAction = upgradeRequired ? "upgrade" : "retry";
+  el.errorMessage.textContent = errorMessage;
+  el.btnRetry.textContent = upgradeRequired ? "Upgrade" : "Retry";
+  el.btnRetry.classList.toggle("btn-upgrade", upgradeRequired);
+  el.btnRetry.setAttribute(
+    "aria-label",
+    upgradeRequired ? "Upgrade plan" : "Retry transcription"
+  );
+  showState("Error");
+}
+
+async function handleErrorAction() {
+  if (errorAction === "upgrade") {
+    await openNextToCurrentTab(PRICING_URL);
+    return;
+  }
+  doTranscribe();
 }
 
 // Neither Claude nor ChatGPT expose a public URL path that both fills the
@@ -2304,8 +2339,7 @@ async function init() {
         init();
         return;
       }
-      el.errorMessage.textContent = pending.error || "Transcription failed";
-      showState("Error");
+      showErrorState(pending.error);
       if (!optimisticRendered) loadRecent();
       return;
     }
@@ -2475,8 +2509,7 @@ function pollTranscriptionStatus() {
       if (isServerDownError(pending.error)) {
         init();
       } else {
-        el.errorMessage.textContent = pending.error || "Transcription failed";
-        showState("Error");
+        showErrorState(pending.error);
       }
     }
   }, 2000);
@@ -2581,8 +2614,7 @@ async function doTranscribe() {
         return;
       }
     }
-    el.errorMessage.textContent = res?.error || "Transcription failed";
-    showState("Error");
+    showErrorState(res?.error);
   }
 }
 
@@ -2606,7 +2638,7 @@ async function processQueue() {
 // ---------------------------------------------------------------------------
 
 el.btnTranscribe.addEventListener("click", doTranscribe);
-el.btnRetry.addEventListener("click", doTranscribe);
+el.btnRetry.addEventListener("click", handleErrorAction);
 el.btnCheckAgain.addEventListener("click", init);
 
 // In-panel sign-in. The user never leaves the YouTube tab:
