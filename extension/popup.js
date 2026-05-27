@@ -1,3 +1,53 @@
+const HAS_EXTENSION_APIS =
+  typeof chrome !== "undefined" &&
+  chrome.runtime &&
+  typeof chrome.runtime.connect === "function";
+
+if (!HAS_EXTENSION_APIS) {
+  window.addEventListener("DOMContentLoaded", () => {
+    document.body.classList.add("preview-mode");
+
+    const show = (id) => {
+      const node = document.getElementById(id);
+      if (node) node.hidden = false;
+      return node;
+    };
+    const hide = (id) => {
+      const node = document.getElementById(id);
+      if (node) node.hidden = true;
+      return node;
+    };
+
+    [
+      "stateNoService",
+      "stateNotYoutube",
+      "stateTranscribing",
+      "stateError",
+      "settingsPanel",
+    ].forEach(hide);
+
+    show("stateReady");
+    show("recentSection");
+
+    const videoTitle = document.getElementById("videoTitle");
+    if (videoTitle) videoTitle.textContent = "Preview: YouTube video detected";
+
+    const label = document.getElementById("btnTranscribeLabel");
+    if (label) label.textContent = "Transcribe & Summarize";
+
+    const recentList = document.getElementById("recentList");
+    if (recentList) {
+      recentList.innerHTML = `
+        <div class="recent-item">
+          <div class="recent-main">
+            <div class="recent-title">Example transcript</div>
+            <div class="recent-meta">transcribed.dev · just now</div>
+          </div>
+        </div>
+      `;
+    }
+  });
+} else {
 // Keep a port open so the background script knows the side panel is active
 const port = chrome.runtime.connect({ name: "sidepanel" });
 
@@ -133,7 +183,7 @@ let suppressPollFinalization = false;
 //   summarize                 — same as above; button labelled "Summarize"
 //                               instead, transcript step is hidden in the
 //                               label but surfaced in the progress UI
-let transcribeMode = "transcribe";
+let transcribeMode = "transcribe-and-summarize";
 let summarizeProvider = "claude";
 
 // ---------------------------------------------------------------------------
@@ -2809,13 +2859,16 @@ async function loadSettings() {
 }
 
 // YTT-259: Load the user's primary-button mode + preferred summarize
-// provider from chrome.storage.sync. Default to Claude — the per-row
-// launcher's last-used has its own UX context and seeding from it surprised
-// users (they picked ChatGPT once and didn't expect it to become the
-// auto-summarize default).
+// provider from chrome.storage.sync. First-run default is Transcribe &
+// Summarize because the strongest user-facing value is transcript-to-LLM
+// handoff, and the explicit label makes the transcript step clear. Users can
+// still switch back to transcript-only in Settings. Provider defaults to
+// Claude — the per-row launcher's last-used has its own UX context and
+// seeding from it surprised users (they picked ChatGPT once and didn't expect
+// it to become the auto-summarize default).
 async function loadTranscribeAction() {
   const sync = await chrome.storage.sync.get(["transcribeMode", "summarizeProvider"]);
-  transcribeMode = sync.transcribeMode || "transcribe";
+  transcribeMode = sync.transcribeMode || "transcribe-and-summarize";
   summarizeProvider = sync.summarizeProvider || "claude";
   applyTranscribeActionUI();
 }
@@ -3212,3 +3265,4 @@ migrateExistingSelfHostedUser();
 
 // Start
 init();
+}
