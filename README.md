@@ -25,7 +25,7 @@ Open [http://localhost:19720](http://localhost:19720) — paste a YouTube or Spo
 
 > **Mac/Linux only for auto-setup.** Windows: use WSL or follow the [Manual Installation](#manual-installation) section.
 
-> `npm run setup` installs all dependencies (yt-dlp, ffmpeg, Whisper, MLX on Apple Silicon) and configures everything automatically. Requires Node.js 18+, Python 3.8+, and a package manager (Homebrew / apt / dnf / pacman).
+> `npm run setup` installs all dependencies (yt-dlp, ffmpeg, Whisper, MLX on Apple Silicon) and configures everything automatically. Requires Node.js 20.19+, 22.12+, or 24+, Python 3.8+, and a package manager (Homebrew / apt / dnf / pacman).
 
 ## Chrome Extension
 <img width="375" height="565" alt="CleanShot 2026-03-17 at 22 53 31@2x" src="https://github.com/user-attachments/assets/d4bccf92-9941-46cc-b4f4-b7bbc3454ff7" />
@@ -289,7 +289,7 @@ After setup, verify everything is wired up correctly:
 npm run test:setup
 ```
 
-This checks Node.js, Python, ffmpeg, yt-dlp, Whisper, database, and environment configuration. Each check prints pass/fail with actionable fix messages. It runs automatically at the end of `npm run setup`.
+This checks Node.js, Python, ffmpeg, yt-dlp, Whisper, the native SQLite driver, database, and environment configuration. Each check prints pass/fail with actionable fix messages. It runs automatically at the end of `npm run setup`, and setup stops instead of reporting success if a required check fails.
 
 For a running instance, hit the health endpoint:
 

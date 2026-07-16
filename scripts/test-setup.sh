@@ -29,10 +29,13 @@ echo "Node.js"
 if command -v node &>/dev/null; then
     NODE_VER=$(node -v | sed 's/v//')
     NODE_MAJOR=$(echo "$NODE_VER" | cut -d. -f1)
-    if [ "$NODE_MAJOR" -ge 18 ]; then
-        pass "Node.js $NODE_VER (>= 18 required)"
+    NODE_MINOR=$(echo "$NODE_VER" | cut -d. -f2)
+    if { [ "$NODE_MAJOR" -eq 20 ] && [ "$NODE_MINOR" -ge 19 ]; } || \
+       { [ "$NODE_MAJOR" -eq 22 ] && [ "$NODE_MINOR" -ge 12 ]; } || \
+       [ "$NODE_MAJOR" -ge 24 ]; then
+        pass "Node.js $NODE_VER (20.19+, 22.12+, or 24+ required)"
     else
-        fail "Node.js $NODE_VER found but >= 18 required"
+        fail "Node.js $NODE_VER found but 20.19+, 22.12+, or 24+ required"
     fi
 else
     fail "Node.js not found"
@@ -114,6 +117,12 @@ if [ -f "node_modules/.prisma/client/index.js" ] || [ -f "node_modules/@prisma/c
     pass "Prisma client generated"
 else
     fail "Prisma client not generated — run: npx prisma generate"
+fi
+
+if node -e 'const Database = require("better-sqlite3"); const db = new Database(":memory:"); db.close();' 2>/dev/null; then
+    pass "better-sqlite3 native binding loads"
+else
+    fail "better-sqlite3 native binding failed to load — run: npm rebuild better-sqlite3"
 fi
 
 # The better-sqlite3 adapter resolves DATABASE_URL relative to CWD, not prisma/

@@ -7,7 +7,17 @@ echo ""
 
 # Check for Node.js
 if ! command -v node &> /dev/null; then
-    echo "❌ Node.js is not installed. Please install Node.js 18+ first."
+    echo "❌ Node.js is not installed. Please install Node.js 20.19+, 22.12+, or 24+ first."
+    exit 1
+fi
+
+NODE_VER=$(node -v | sed 's/v//')
+NODE_MAJOR=$(echo "$NODE_VER" | cut -d. -f1)
+NODE_MINOR=$(echo "$NODE_VER" | cut -d. -f2)
+if ! { [ "$NODE_MAJOR" -eq 20 ] && [ "$NODE_MINOR" -ge 19 ]; } && \
+   ! { [ "$NODE_MAJOR" -eq 22 ] && [ "$NODE_MINOR" -ge 12 ]; } && \
+   [ "$NODE_MAJOR" -lt 24 ]; then
+    echo "❌ Node.js $NODE_VER is unsupported. Install Node.js 20.19+, 22.12+, or 24+."
     exit 1
 fi
 
@@ -84,6 +94,25 @@ if command -v bun &> /dev/null; then
 else
     npm install
 fi
+
+check_sqlite_binding() {
+    node -e 'const Database = require("better-sqlite3"); const db = new Database(":memory:"); db.close();' 2>/dev/null
+}
+
+if ! check_sqlite_binding; then
+    echo "⚠️  better-sqlite3's native binding did not load; rebuilding it for Node.js $NODE_VER..."
+    if ! npm rebuild better-sqlite3; then
+        echo "⚠️  Automatic better-sqlite3 rebuild failed."
+    fi
+fi
+
+if ! check_sqlite_binding; then
+    echo "❌ better-sqlite3's native binding failed to load."
+    echo "   Use the same supported Node.js version for setup and npm run dev, then re-run setup."
+    echo "   Manual repair: npm rebuild better-sqlite3"
+    exit 1
+fi
+echo "✓ better-sqlite3 native binding ready"
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -175,7 +204,7 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "Running setup verification..."
-bash scripts/test-setup.sh || true
+bash scripts/test-setup.sh
 
 echo ""
 echo "✅ Setup complete!"

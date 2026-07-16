@@ -26,7 +26,7 @@ This runs `scripts/test-setup.sh` which checks every dependency and configuratio
 
 | Check | What it verifies |
 |-------|-----------------|
-| Node.js | Version >= 18 |
+| Node.js | Version 20.19+, 22.12+, or 24+ |
 | Python | `python3` in PATH |
 | Virtual env | `.venv/` directory exists |
 | ffmpeg | In PATH |
@@ -35,6 +35,7 @@ This runs `scripts/test-setup.sh` which checks every dependency and configuratio
 | Whisper CLI | Path from `WHISPER_CLI` env var is a real file |
 | Python bin | Path from `WHISPER_PYTHON_BIN` env var is a real file |
 | Prisma client | Generated in `node_modules/` |
+| SQLite native binding | `better-sqlite3` loads and opens an in-memory database |
 | SQLite DB | `prisma/dev.db` exists and `Video` table is queryable |
 | Disk | `tmp/` directory is writable |
 | Whisper imports | OpenAI Whisper and MLX Whisper (on Apple Silicon) importable |

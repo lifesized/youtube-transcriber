@@ -2,6 +2,15 @@
   "name": "youtube-transcriber",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "^20.19 || ^22.12 || >=24.0"
+  },
+  "trustedDependencies": [
+    "better-sqlite3"
+  ],
+  "overrides": {
+    "better-sqlite3": "^12.10.0"
+  },
   "scripts": {
     "setup": "bash scripts/setup.sh",
     "dev": "next dev -p 19720 --hostname 127.0.0.1 --webpack",
@@ -27,6 +36,7 @@
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.4.0",
     "@prisma/client": "^7.4.0",
+    "better-sqlite3": "^12.10.0",
     "dotenv": "^17.2.4",
     "framer-motion": "^12.34.0",
     "geist": "^1.7.0",

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-15
+
+### Changed
+- **Accurate Node.js setup requirement** — Setup and documentation now require Node.js 20.19+, 22.12+, or 24+, matching the application dependencies. The SQLite driver is pinned to a release that also supports Node.js 26.
+
+### Fixed
+- **Setup no longer reports success with a broken database driver** — Bun is explicitly allowed to run `better-sqlite3`'s native install script, setup verifies the binding immediately after dependency installation, automatically rebuilds it when lifecycle scripts were skipped or the Node ABI changed, and stops if post-setup verification fails. `npm run test:setup` also opens an in-memory SQLite database so missing or ABI-mismatched native bindings are caught before the app starts returning HTTP 500 errors.
+
 ## 2026-05-13
 
 ### Fixed
