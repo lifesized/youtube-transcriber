@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-15
+
+### Fixed
+- **YouTube audio-only HTTP 403 fallback** — Local Whisper downloads now retry with YouTube's progressive format 18 when separate audio-only streams are rejected with HTTP 403. This restores transcription for videos such as `UIEzt1gGCmk` whose metadata and progressive stream are available but whose DASH audio streams are forbidden.
+
 ## 2026-05-13
 
 ### Fixed
