@@ -42,6 +42,8 @@ This runs `scripts/test-setup.sh` which checks every dependency and configuratio
 
 Each check prints `[PASS]`, `[FAIL]`, or `[WARN]` with an actionable fix message. Exit code 0 means all checks passed.
 
+`npm run test:setup` then runs `node --test tests/setup-verification.test.mjs`, a regression suite that drives `scripts/test-setup.sh` against synthetic fixtures to prove the verification logic itself still catches a broken `better-sqlite3` binding, rejects unsupported Node.js versions, accepts supported ones, and that `setup.sh` never swallows a verification failure.
+
 This runs automatically at the end of `npm run setup`.
 
 ## Layer 2: Runtime Health Check (`GET /api/health`)

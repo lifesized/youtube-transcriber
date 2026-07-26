@@ -204,7 +204,7 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "Running setup verification..."
-bash scripts/test-setup.sh
+npm run test:setup
 
 echo ""
 echo "✅ Setup complete!"

@@ -24,7 +24,7 @@
     "backup": "tsx scripts/backup.ts",
     "restore": "tsx scripts/restore.ts",
     "fresh": "tsx scripts/fresh.ts",
-    "test:setup": "bash scripts/test-setup.sh",
+    "test:setup": "bash scripts/test-setup.sh && node --test tests/setup-verification.test.mjs",
     "install-native-host": "node scripts/install-native-host.js",
     "uninstall-native-host": "node scripts/install-native-host.js --remove",
     "build:ext": "node extension/build.js",
