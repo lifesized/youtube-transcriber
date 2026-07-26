@@ -292,7 +292,7 @@ export async function downloadAudio(videoId: string, outputDir: string, onProgre
       onProgress?.({ stage: "transcribing", progress: 40, statusText: "Transcribing with Whisper..." });
       return audioPath;
     } catch (err) {
-      const raw = err instanceof Error ? err.message : String(err);
+      let raw = err instanceof Error ? err.message : String(err);
       const isNetworkError = /unable to download webpage|urlopen error|timed out|network is unreachable|name or service not known|temporary failure/i.test(raw);
 
       if (isNetworkError && attempt < maxAttempts) {
@@ -317,6 +317,21 @@ export async function downloadAudio(videoId: string, outputDir: string, onProgre
         } catch (cookieErr) {
           const cookieRaw = cookieErr instanceof Error ? cookieErr.message : String(cookieErr);
           console.log(`[whisper] Cookie retry also failed: ${cookieRaw.slice(0, 300)}`);
+        }
+      }
+
+      if (/HTTP Error 403|403: Forbidden/i.test(raw)) {
+        console.log("[whisper] Audio-only stream returned HTTP 403; trying progressive format 18...");
+        try {
+          const fallbackArgs = ["-f", "18", ...baseArgs];
+          const { stderr } = await execFileAsync(YTDLP_PATH, fallbackArgs, { timeout: 120000 });
+          if (stderr) console.log(`[whisper] yt-dlp stderr (format 18 fallback): ${stderr.slice(0, 500)}`);
+          const audioPath = path.join(outputDir, `${videoId}.mp3`);
+          await fs.access(audioPath);
+          onProgress?.({ stage: "transcribing", progress: 40, statusText: "Transcribing with Whisper..." });
+          return audioPath;
+        } catch (fallbackErr) {
+          raw = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
         }
       }
 
