@@ -47,6 +47,7 @@ const COPY_FILES = [
   "transcription-progress.js",
   "google-drive-import.js",
   "server-control-state.js",
+  "startup-policy.js",
   "content-spotify.js",
   "content-substack.js",
   "content-twitter.js",

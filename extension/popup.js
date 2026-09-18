@@ -49,7 +49,9 @@ if (!HAS_EXTENSION_APIS) {
     }
   });
 } else {
-// Keep a port open so the background script knows the side panel is active
+// Command channel for content-script CLOSE_PANEL requests (for example when a
+// YouTube player enters fullscreen). This is not a panel-visibility signal;
+// Chrome exclusively owns toolbar-icon open/close behavior.
 const port = chrome.runtime.connect({ name: "sidepanel" });
 
 // Listen for close requests from background (e.g. fullscreen)
@@ -2629,10 +2631,7 @@ function recentRenderHash(items) {
   return `${recentListHash(items)}:native=${nativeSummaryFlow.isEnabled()}`;
 }
 
-async function loadRecent() {
-  const modeRes = await sendMsg({ type: "GET_SETTINGS" });
-  const mode = modeRes?.data?.mode || "cloud";
-
+async function loadRecent(mode = currentMode) {
   // 1. Optimistic render. Cached list if we have one (instant + correct
   // shape); otherwise a skeleton so the panel never shows a dark void
   // while the first /api/transcripts fetch is in flight.
@@ -2648,9 +2647,18 @@ async function loadRecent() {
   // 2. Fetch fresh; reconcile.
   const res = await sendMsg({ type: "GET_RECENT" });
   if (isSettingsOpen()) return;
-  if (!res?.success || !res.data?.length) {
-    // Empty list — clear cache and hide section unless we're still rendering
-    // a stale optimistic list that we now know is gone.
+  const refreshAction = globalThis.TranscriberStartupPolicy.recentRefreshAction(res);
+  if (refreshAction === "preserve") {
+    // A transient service-worker or network failure is not evidence that the
+    // library is empty. Keep a usable cached list instead of flashing blank.
+    if (!cached?.length) {
+      el.recentSection.hidden = true;
+      el.recentList.innerHTML = "";
+    }
+    return;
+  }
+  if (refreshAction === "clear") {
+    // Only a successful empty response is allowed to clear the cache.
     await setCachedRecent(mode, []);
     el.recentSection.hidden = true;
     el.recentList.innerHTML = "";
@@ -2842,6 +2850,7 @@ let coldStartHandled = false;
 
 async function init() {
   const thisInit = ++initVersion;
+  let serviceConfirmedOnline = false;
 
   // Close settings if open, mark library active
   el.settingsPanel.hidden = true;
@@ -2865,6 +2874,9 @@ async function init() {
   // pending transcription. Otherwise the doTranscribe guard would block
   // every future click in this panel session.
   isTranscribing = false;
+  // Paint before any Chrome API or service-worker round-trip. This guarantees
+  // the side panel never opens as an empty dark surface on a cold start.
+  renderRecentSkeleton();
 
   // PHASE 1 — cheap parallel reads. None of these hit the network. Combined
   // they take a few ms; doing them in parallel (and skipping the bg
@@ -2891,6 +2903,9 @@ async function init() {
 
   const mode = syncStash?.mode || "cloud";
   currentMode = mode;
+  // Cache hydration is independent of page detection, so start it as soon as
+  // the mode is known. The network refresh runs behind the optimistic list.
+  loadRecent(mode);
   // Hydrate the YTT-259 transcribe-mode setting alongside `mode` so the
   // primary button label is correct on first paint.
   transcribeMode =
@@ -2906,7 +2921,25 @@ async function init() {
   const cachedAuthOk = mode === "cloud" && isAuthCacheFresh(authCache);
   const tab = tabResult?.[0];
   if (tab) {
-    const storedPageInfo = await getFreshPageInfoForTab(tab);
+    const pageInfoRequest = getFreshPageInfoForTab(tab);
+    const storedPageInfo = await globalThis.TranscriberStartupPolicy.withTimeout(
+      pageInfoRequest,
+      350,
+      {},
+      (latePageInfo) => {
+        if (initWasSuperseded(thisInit)) return;
+        const reconciledPageInfo = pageInfoFromTab(tab, latePageInfo);
+        if (!reconciledPageInfo.videoId) return;
+        pageInfo = reconciledPageInfo;
+        currentTabUrl = tab.url;
+        currentTabId = tab.id;
+        updateTranscribeButtonLabel();
+        // Phase 3 checks the global in-flight job regardless of page metadata;
+        // it also makes initWasSuperseded() true while active. Once online,
+        // this reruns the complete per-video existing-transcript check.
+        if (serviceConfirmedOnline) showCurrentPageState();
+      }
+    );
     pageInfo = pageInfoFromTab(tab, storedPageInfo);
     currentTabUrl = tab.url;
     currentTabId = tab.id;
@@ -2942,7 +2975,6 @@ async function init() {
   } else {
     showState("NotYoutube");
   }
-  loadRecent();
   optimisticRendered = true;
 
   // PHASE 3 — in-flight transcription check. Done after optimistic paint so
@@ -3132,6 +3164,7 @@ async function init() {
     return;
   }
   stopOfflinePolling();
+  serviceConfirmedOnline = true;
 
   // Confirmed online. Refresh auth cache for cloud so next reopen paints
   // optimistically without the round-trip gating.

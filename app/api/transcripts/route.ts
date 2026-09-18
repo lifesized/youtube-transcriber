@@ -9,6 +9,7 @@ import {
   NoCaptionsError,
 } from "@/lib/transcript";
 import { isTranscriptionInProgress } from "@/lib/whisper";
+import { parseRequestLimit } from "@/lib/request-limit";
 
 type ClientSegment = { start: number; duration?: number; text: string };
 
@@ -301,16 +302,29 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   const q = request.nextUrl.searchParams.get("q")?.trim();
+  const videoId = request.nextUrl.searchParams.get("videoId")?.trim();
+  const parsedLimit = parseRequestLimit(request.nextUrl.searchParams.get("limit"));
+  if (!parsedLimit.ok) {
+    return NextResponse.json(
+      { error: "limit must be a positive integer" },
+      { status: 400 }
+    );
+  }
+  const limit = parsedLimit.value;
+
+  const filters = [];
+  if (q) {
+    filters.push({
+      OR: [
+        { title: { contains: q } },
+        { author: { contains: q } },
+      ],
+    });
+  }
+  if (videoId) filters.push({ videoId });
 
   const videos = await prisma.video.findMany({
-    where: q
-      ? {
-          OR: [
-            { title: { contains: q } },
-            { author: { contains: q } },
-          ],
-        }
-      : undefined,
+    where: filters.length ? { AND: filters } : undefined,
     select: {
       id: true,
       videoId: true,
@@ -324,6 +338,7 @@ export async function GET(request: NextRequest) {
       updatedAt: true,
     },
     orderBy: { createdAt: "desc" },
+    take: limit,
   });
 
   return NextResponse.json(videos);

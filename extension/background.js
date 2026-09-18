@@ -866,13 +866,13 @@ async function classifyError(status, data) {
 
 async function getRecent() {
   const config = await getApiConfig();
-  const res = await fetch(`${config.baseUrl}/api/transcripts`, {
+  const res = await fetch(`${config.baseUrl}/api/transcripts?limit=5`, {
     headers: config.headers,
     credentials: config.credentials,
+    signal: AbortSignal.timeout(5000),
   });
   if (!res.ok) throw new Error(await classifyError(res.status, {}));
-  const all = await res.json();
-  return all.slice(0, 5);
+  return await res.json();
 }
 
 async function getTranscript(id) {
@@ -967,9 +967,10 @@ async function getPreferences() {
 
 async function checkExisting(videoId) {
   const config = await getApiConfig();
-  const res = await fetch(`${config.baseUrl}/api/transcripts`, {
+  const res = await fetch(`${config.baseUrl}/api/transcripts?videoId=${encodeURIComponent(videoId)}&limit=1`, {
     headers: config.headers,
     credentials: config.credentials,
+    signal: AbortSignal.timeout(5000),
   });
   if (!res.ok) return null;
   const all = await res.json();
@@ -1951,9 +1952,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // ---------------------------------------------------------------------------
-// Side panel — toggle on extension icon click
+// Side panel — let Chrome own toolbar-icon open/close behavior
 // ---------------------------------------------------------------------------
 
+// A connected side-panel document is not proof that the panel is currently
+// visible: Chrome can keep the document alive while another tab/window is
+// active. Using that connection as a toggle flag made toolbar clicks take the
+// "close" path even when no panel was visible. Chrome already provides the
+// correct per-window action behavior, so delegate toolbar clicks to it.
+chrome.sidePanel
+  .setPanelBehavior({ openPanelOnActionClick: true })
+  .catch((err) => {
+    console.error("[ytt-bg] could not enable side-panel action", err?.message || err);
+  });
+
+// Retained only as a command channel for CLOSE_PANEL. A connected document is
+// deliberately never treated as evidence that the panel is visible.
 let sidePanelPort = null;
 
 chrome.runtime.onConnect.addListener((port) => {
@@ -1962,21 +1976,6 @@ chrome.runtime.onConnect.addListener((port) => {
     port.onDisconnect.addListener(() => {
       sidePanelPort = null;
     });
-  }
-});
-
-chrome.action.onClicked.addListener(async (tab) => {
-  if (sidePanelPort) {
-    // Ask the side panel to close itself
-    try { sidePanelPort.postMessage({ type: "CLOSE" }); } catch { /* ignore */ }
-    // Also try the API
-    try {
-      if (chrome.sidePanel.close) {
-        await chrome.sidePanel.close({ windowId: tab.windowId });
-      }
-    } catch { /* ignore */ }
-  } else {
-    await chrome.sidePanel.open({ tabId: tab.id });
   }
 });
 

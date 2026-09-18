@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-18
+
+### Fixed
+- **The side panel now paints immediately and keeps its recent transcripts during transient failures** — Startup renders a skeleton before any Chrome API work, bounds live page detection to 350 ms, reads the mode-specific recent cache without a service-worker settings round-trip, and only clears that cache after a successful empty response.
+- **Recent and existing-transcript checks no longer download the complete local library** — The extension requests five recent rows or one exact video match, the transcripts API supports bounded queries, and the local database now indexes transcript creation time. With 1,081 local transcripts, the measured recent response fell from about 478 KB to 2.2 KB and warm response time fell from roughly 80–227 ms to 9–15 ms.
+
 ## 2026-08-30
 
 ### Fixed

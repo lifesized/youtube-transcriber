@@ -55,4 +55,6 @@ model Video {
   platform     String   @default("youtube")  // "youtube" | "spotify"
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([createdAt])
 }
