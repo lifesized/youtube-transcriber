@@ -1,3 +1,4 @@
+globalThis.TranscriberPanelDiagnostics?.mark("popup-script");
 const HAS_EXTENSION_APIS =
   typeof chrome !== "undefined" &&
   chrome.runtime &&
@@ -7,6 +8,9 @@ const PRICING_URL = "https://www.transcribed.dev/pricing";
 if (!HAS_EXTENSION_APIS) {
   window.addEventListener("DOMContentLoaded", () => {
     document.body.classList.add("preview-mode");
+
+    const startupShell = document.getElementById("startupShell");
+    if (startupShell) startupShell.hidden = true;
 
     const show = (id) => {
       const node = document.getElementById(id);
@@ -63,6 +67,7 @@ port.onMessage.addListener((msg) => {
 
 // DOM refs
 const el = {
+  startupShell: document.getElementById("startupShell"),
   stateNoService: document.getElementById("stateNoService"),
   stateNotYoutube: document.getElementById("stateNotYoutube"),
   stateReady: document.getElementById("stateReady"),
@@ -150,6 +155,16 @@ const el = {
   sourceIntegrityDetail: document.getElementById("sourceIntegrityDetail"),
   popupToast: document.getElementById("popupToast"),
 };
+
+const panelScriptReadyAt = performance.now();
+function hideStartupShell() {
+  if (!el.startupShell || el.startupShell.hidden) return;
+  el.startupShell.hidden = true;
+  console.info("[ytt-popup] startup shell replaced", {
+    scriptReadyMs: Math.round(panelScriptReadyAt),
+    uiReadyMs: Math.round(performance.now()),
+  });
+}
 
 const SOURCE_INTEGRITY = globalThis.TranscriberSourceIntegrity;
 
@@ -1975,6 +1990,7 @@ function sendMsg(msg) {
   return new Promise((resolve) => {
     const startedAt = Date.now();
     chrome.runtime.sendMessage(msg, (response) => {
+      globalThis.TranscriberPanelDiagnostics?.mark(`message:${msg.type}`, Date.now() - startedAt);
       if (chrome.runtime.lastError) {
         const error = chrome.runtime.lastError.message || "runtime_send_failed";
         console.debug("[ytt-popup] sendMessage failed", {
@@ -2631,22 +2647,30 @@ function recentRenderHash(items) {
   return `${recentListHash(items)}:native=${nativeSummaryFlow.isEnabled()}`;
 }
 
+let recentLoadVersion = 0;
 async function loadRecent(mode = currentMode) {
+  const requestVersion = ++recentLoadVersion;
+  const startupVersion = initVersion;
+  const stale = () => requestVersion !== recentLoadVersion ||
+    startupVersion !== initVersion || mode !== currentMode;
   // 1. Optimistic render. Cached list if we have one (instant + correct
   // shape); otherwise a skeleton so the panel never shows a dark void
   // while the first /api/transcripts fetch is in flight.
   const cached = await getCachedRecent(mode);
+  if (stale()) return;
   if (!isSettingsOpen()) {
     if (cached && cached.length) {
       renderRecentList(cached);
+      globalThis.TranscriberPanelDiagnostics?.mark("recent-cache-rendered");
     } else {
       renderRecentSkeleton();
     }
   }
 
   // 2. Fetch fresh; reconcile.
-  const res = await sendMsg({ type: "GET_RECENT" });
-  if (isSettingsOpen()) return;
+  const res = await sendMsg({ type: "GET_RECENT", mode });
+  globalThis.TranscriberPanelDiagnostics?.mark("recent-response");
+  if (stale() || isSettingsOpen()) return;
   const refreshAction = globalThis.TranscriberStartupPolicy.recentRefreshAction(res);
   if (refreshAction === "preserve") {
     // A transient service-worker or network failure is not evidence that the
@@ -2849,6 +2873,7 @@ function initWasSuperseded(version) {
 let coldStartHandled = false;
 
 async function init() {
+  globalThis.TranscriberPanelDiagnostics?.mark("init-start");
   const thisInit = ++initVersion;
   let serviceConfirmedOnline = false;
 
@@ -2874,31 +2899,35 @@ async function init() {
   // pending transcription. Otherwise the doTranscribe guard would block
   // every future click in this panel session.
   isTranscribing = false;
-  // Paint before any Chrome API or service-worker round-trip. This guarantees
-  // the side panel never opens as an empty dark surface on a cold start.
+  // Update the DOM before Chrome API work. Actual paint still depends on Chrome
+  // activating and scheduling this document; it is not guaranteed by this call.
   renderRecentSkeleton();
+  hideStartupShell();
+  globalThis.TranscriberPanelDiagnostics?.mark("skeleton-dom-updated");
 
-  // PHASE 1 — cheap parallel reads. None of these hit the network. Combined
-  // they take a few ms; doing them in parallel (and skipping the bg
-  // GET_SETTINGS round-trip in favor of a direct chrome.storage.sync read)
-  // means we have everything needed for an optimistic first paint before the
-  // first network fetch even starts.
-  let tabResult = [];
-  let syncStash = {};
-  let authCache = null;
+  // PHASE 1 — start reads together, but only settings determine the library
+  // mode. Tab detection and auth-cache reads must not hold cached history back.
+  const readsStartedAt = performance.now();
+  const tabRead = chrome.tabs.query({ active: true, currentWindow: true })
+    .catch(() => [])
+    .finally(() => globalThis.TranscriberPanelDiagnostics?.mark("tabs-query-complete", performance.now() - readsStartedAt));
+  const authRead = getCachedAuth()
+    .catch(() => null)
+    .finally(() => globalThis.TranscriberPanelDiagnostics?.mark("auth-cache-complete", performance.now() - readsStartedAt));
+  let syncStash;
   try {
-    [tabResult, syncStash, authCache] = await Promise.all([
-      chrome.tabs.query({ active: true, currentWindow: true }),
-      chrome.storage.sync.get([
+    syncStash = await chrome.storage.sync.get([
         "mode",
         "transcribeMode",
         "summarizeProvider",
         "summaryExperienceV2",
         SUMMARY_EXPERIENCE_DEFAULT_KEY,
-      ]),
-      getCachedAuth(),
-    ]);
-  } catch { /* ignore */ }
+      ]).finally(() => globalThis.TranscriberPanelDiagnostics?.mark("settings-read-complete", performance.now() - readsStartedAt));
+  } catch {
+    // Unknown mode is not permission to display another server's cached list.
+    if (!initWasSuperseded(thisInit)) showErrorState("Couldn't read extension settings. Please retry.");
+    return;
+  }
   if (initWasSuperseded(thisInit)) return;
 
   const mode = syncStash?.mode || "cloud";
@@ -2906,6 +2935,9 @@ async function init() {
   // Cache hydration is independent of page detection, so start it as soon as
   // the mode is known. The network refresh runs behind the optimistic list.
   loadRecent(mode);
+  const [tabResult, authCache] = await Promise.all([tabRead, authRead]);
+  if (initWasSuperseded(thisInit)) return;
+  globalThis.TranscriberPanelDiagnostics?.mark("startup-reads-complete");
   // Hydrate the YTT-259 transcribe-mode setting alongside `mode` so the
   // primary button label is correct on first paint.
   transcribeMode =

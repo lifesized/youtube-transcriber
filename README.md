@@ -4,11 +4,7 @@
 
 **YouTube & Spotify podcast to LLM-ready transcript in one click. Runs locally, costs nothing.**
 
-
 https://github.com/user-attachments/assets/32491284-5c78-4a74-a580-ff3a8c256243
-
-
-
 
 **Don't want to install anything?** A hosted version is coming soon — no setup required. **[Join the waitlist →](https://waitlist-site-alpha.vercel.app)**
 
@@ -28,11 +24,10 @@ Open [http://localhost:19720](http://localhost:19720) — paste a YouTube or Spo
 > `npm run setup` installs all dependencies (yt-dlp, ffmpeg, Whisper, MLX on Apple Silicon) and configures everything automatically. Requires Node.js 18+, Python 3.8+, and a package manager (Homebrew / apt / dnf / pacman).
 
 ## Chrome Extension
+
 <img width="375" height="565" alt="CleanShot 2026-03-17 at 22 53 31@2x" src="https://github.com/user-attachments/assets/d4bccf92-9941-46cc-b4f4-b7bbc3454ff7" />
 
-
 https://github.com/user-attachments/assets/081c8d90-a6e1-4b4d-b6cd-bc8787bc0a3b
-
 
 Transcribe any YouTube video or Spotify podcast episode directly from your browser without leaving the page. The extension opens as a persistent side panel — it stays open as you navigate between videos and detects each one automatically.
 
@@ -55,6 +50,11 @@ The extension works in two modes:
 6. Select the `extension/dist/` folder inside this repo
 7. Open extension settings and switch mode to **Self-hosted**
 8. Click the YouTube Transcriber icon in your toolbar to open the side panel
+
+`Load unpacked` is a one-time step. After another `npm run build:ext:dev`, use
+the existing Transcriber card's **Reload** button in `chrome://extensions`
+instead of loading the folder again. The build prints the stable development
+extension ID; keep the card with that ID.
 
 ### Usage
 
@@ -95,18 +95,14 @@ npm run setup && npm run dev
 
 **Claude Desktop / Cursor** — run `npm run mcp:config` and add the output to your client config ([full setup guide](./docs/MCP.md)):
 
-| Client | Config file |
-|--------|-------------|
+| Client         | Config file                                                       |
+| -------------- | ----------------------------------------------------------------- |
 | Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| Cursor | `.cursor/mcp.json` |
+| Cursor         | `.cursor/mcp.json`                                                |
 
 ### Skill (no server needed)
 
-
-
 https://github.com/user-attachments/assets/73a62192-746c-4ec0-b1d5-b46608441bdd
-
-
 
 Install as a Claude Code or OpenClaw skill. Two flavors: **Lite** (zero setup, just `yt-dlp`, YouTube subtitles only) or **Full** (requires the service running, adds Whisper fallback, diarization, and persistent library).
 
@@ -118,22 +114,22 @@ cp contrib/claude-code/SKILL-lite.md ~/.claude/skills/youtube-transcriber/SKILL.
 cp -r contrib/claude-code ~/.claude/skills/youtube-transcriber
 ```
 
-| | Lite Skill | Full Skill / MCP |
-|--|:---:|:----:|
-| YouTube captions | Yes | Yes |
-| Auto-generated subs | Yes | Yes |
-| Whisper transcription | — | Yes |
-| Speaker diarization | — | Yes |
-| Persistent library | — | Yes |
-| Requires server | No | Yes |
+|                       | Lite Skill | Full Skill / MCP |
+| --------------------- | :--------: | :--------------: |
+| YouTube captions      |    Yes     |       Yes        |
+| Auto-generated subs   |    Yes     |       Yes        |
+| Whisper transcription |     —      |       Yes        |
+| Speaker diarization   |     —      |       Yes        |
+| Persistent library    |     —      |       Yes        |
+| Requires server       |     No     |       Yes        |
 
 ### Triggers
 
 Once set up (MCP or skill), just type naturally:
 
-> *"summarize https://youtube.com/watch?v=..."*
-> *"ts https://youtube.com/watch?v=..."* (transcribe + summarize)
-> *"t https://youtube.com/watch?v=..."* (transcript only)
+> _"summarize https://youtube.com/watch?v=..."_
+> _"ts https://youtube.com/watch?v=..."_ (transcribe + summarize)
+> _"t https://youtube.com/watch?v=..."_ (transcript only)
 
 Or just paste a YouTube URL — it auto-activates.
 
@@ -144,12 +140,14 @@ Or just paste a YouTube URL — it auto-activates.
 Paste a URL. The app grabs the transcript using the fastest method available on your system:
 
 **YouTube:**
+
 1. **YouTube Captions** — fetches official captions when they exist (< 5 sec)
 2. **Cloud Whisper** — optional Groq, OpenRouter, or custom API with your own key (10-30 sec for 10 min)
 3. **MLX Whisper** — local GPU transcription on Apple Silicon (30-60 sec for 10 min)
 4. **OpenAI Whisper** — local CPU fallback that works everywhere (2-5 min for 10 min)
 
 **Spotify Podcasts:**
+
 1. Fetches episode metadata from Spotify's official API
 2. Discovers the podcast's public RSS feed via iTunes
 3. Downloads full episode audio from the podcast CDN
@@ -158,6 +156,7 @@ Paste a URL. The app grabs the transcript using the fastest method available on 
 > Spotify support requires `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` in `.env` (free from [developer.spotify.com](https://developer.spotify.com/dashboard)). Spotify-exclusive podcasts without a public RSS feed are not supported.
 
 **Private Google Drive videos (self-hosted extension):**
+
 1. Opens Google's Picker and requests the narrow `drive.file` scope for the selected file
 2. Downloads that file to a temporary folder on the local machine
 3. Transcribes with local Whisper only; configured cloud transcription providers are not used
@@ -186,6 +185,7 @@ Works fully offline by default for YouTube. Cloud Whisper is optional — bring 
 Full REST API docs: [`docs/API.md`](./docs/API.md) | OpenAPI spec: [`docs/openapi.yaml`](./docs/openapi.yaml)
 
 ## Cloud Transcription Providers
+
 <img width="1824" height="1175" alt="CleanShot 2026-03-17 at 22 50 27" src="https://github.com/user-attachments/assets/4a413c9b-965c-44d0-a264-2b1ae9ed12d5" />
 
 Add one or more cloud providers in **Settings** (gear icon, bottom-left). Drag to reorder priority — the app tries each enabled provider in order, then falls back to local Whisper.
@@ -217,6 +217,7 @@ Point to any OpenAI-compatible transcription API by providing a base URL, API ke
 By default, the app fetches English captions. You can change this per-request or globally.
 
 **Per-request** — pass `lang` in the API body:
+
 ```bash
 curl -X POST http://localhost:19720/api/transcripts \
   -H 'Content-Type: application/json' \
@@ -224,11 +225,13 @@ curl -X POST http://localhost:19720/api/transcripts \
 ```
 
 **Multi-language priority** — tries each language in order, falls back to first available:
+
 ```bash
 -d '{"url": "...", "lang": "ja,en"}'   # Japanese preferred, English fallback
 ```
 
 **Global default** — set in `.env`:
+
 ```env
 YTT_CAPTION_LANGS="zh-Hans,zh-Hant,en"
 ```
@@ -293,6 +296,7 @@ WHISPER_PYTHON_BIN="/path/to/your/.venv/bin/python3"
 ```
 
 **Windows paths:**
+
 ```env
 WHISPER_CLI="C:\\Users\\YourName\\project\\.venv\\Scripts\\whisper.exe"
 WHISPER_PYTHON_BIN="C:\\Users\\YourName\\project\\.venv\\Scripts\\python.exe"
@@ -321,11 +325,40 @@ Returns JSON with per-check pass/fail — useful for Docker health checks or deb
 ## Troubleshooting
 
 <details>
+<summary>The unpacked extension disappeared, is duplicated, or opens a blank panel</summary>
+
+1. Run `npm run build:ext:dev` and note the printed **Stable dev extension ID**.
+2. Open `chrome://extensions` with **Developer mode** enabled.
+3. If that ID already exists, click **Reload** on its card. Do not click **Load unpacked** again.
+4. If two Transcriber cards point to the same `extension/dist` folder, confirm the stable-ID card opens and retains the expected settings, then remove only the other card.
+5. For self-hosted mode, verify the local service separately with `curl http://127.0.0.1:19720/api/health`; start it with `npm run dev` if it is unavailable.
+6. Close and reopen the side panel after reloading the extension.
+
+Development builds publish staged files into the existing `extension/dist`
+directory without deleting that directory or replacing byte-identical files.
+This matters because Chrome runs an unpacked extension directly from the
+selected folder: removing the loaded path can unregister it, while replacing an
+unchanged live panel resource can leave the persistent side panel blank until
+the extension is reloaded.
+
+The panel should show a **Loading Transcriber…** shell immediately. If the
+shell remains for an unusually long time, inspect the side panel console for
+the `[ytt-popup] startup shell replaced` timing entry; `scriptReadyMs` measures
+when the application script became available and `uiReadyMs` measures its DOM
+update. Neither value proves that Chrome painted the panel at that moment.
+If the Chrome panel container is visible without that shell, reload the
+extension: the service worker now configures `popup.html` before handling
+toolbar clicks, and the click calls Chrome's programmatic open API directly.
+The toolbar action is open-only; use the panel header's × to close it.
+</details>
+
+<details>
 <summary>"spawn whisper ENOENT" error</summary>
 
 - Check that `WHISPER_CLI` and `WHISPER_PYTHON_BIN` paths in `.env` are correct
 - Use absolute paths, not relative paths
 - Restart the dev server after updating `.env`
+
 </details>
 
 <details>
@@ -335,6 +368,7 @@ Returns JSON with per-check pass/fail — useful for Docker health checks or deb
 - On Apple Silicon, install `mlx-whisper` for 3-5x local speedup
 - Use smaller Whisper models (`tiny`, `base`) for faster local results
 - Set `WHISPER_BACKEND="mlx"` in `.env` to force MLX
+
 </details>
 
 <details>
@@ -343,6 +377,7 @@ Returns JSON with per-check pass/fail — useful for Docker health checks or deb
 - The app automatically tries multiple InnerTube clients
 - Wait a few minutes and retry if YouTube blocks requests
 - Disable VPN if you're getting consistent 403 errors
+
 </details>
 
 ## Contributing

@@ -58,6 +58,20 @@ test("popup paints a recent skeleton before startup awaits", () => {
   );
 });
 
+test("popup has an HTML-first shell while deferred scripts start", () => {
+  const html = fs.readFileSync(path.join(__dirname, "popup.html"), "utf8");
+  const shellIndex = html.indexOf('id="startupShell"');
+
+  assert.ok(shellIndex > -1, "startup shell must exist in static HTML");
+  assert.match(html, /<script defer src="popup\.js"><\/script>/);
+
+  const initStart = popupSource.indexOf("async function init() {");
+  const firstPhase = popupSource.indexOf("// PHASE 1", initStart);
+  const synchronousPaint = popupSource.slice(initStart, firstPhase);
+  assert.match(synchronousPaint, /renderRecentSkeleton\(\)/);
+  assert.match(synchronousPaint, /hideStartupShell\(\)/);
+});
+
 test("recent cache does not wait for a background settings round-trip", () => {
   const loadRecentStart = popupSource.indexOf("async function loadRecent(");
   const loadRecentEnd = popupSource.indexOf(

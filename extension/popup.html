@@ -2,11 +2,31 @@
 <html>
 <head>
   <meta charset="utf-8">
+  <script defer src="panel-diagnostics.js"></script>
   <link rel="stylesheet" href="popup.css">
   <link rel="stylesheet" href="setup-link.css">
+  <script defer src="ui-icons.js"></script>
+  <script defer src="url-utils.js"></script>
+  <script defer src="media-page-detector.js"></script>
+  <script defer src="source-integrity.js"></script>
+  <script defer src="server-control-state.js"></script>
+  <script defer src="startup-policy.js"></script>
+  <script defer src="popup.js"></script>
 </head>
 <body>
   <div class="popup">
+    <!-- Static loading feedback, independent of popup.js. The build embeds
+         bundled CSS here; Chrome still controls document activation/paint. -->
+    <div id="startupShell" class="startup-shell" role="status" aria-live="polite">
+      <div class="startup-shell-heading">Loading Transcriber…</div>
+      <div class="startup-shell-action"></div>
+      <div class="startup-shell-divider"></div>
+      <div class="startup-shell-label">Recent</div>
+      <div class="startup-shell-row"><span></span><span></span></div>
+      <div class="startup-shell-row"><span></span><span></span></div>
+      <div class="startup-shell-row"><span></span><span></span></div>
+    </div>
+
     <!-- No Service -->
     <div id="stateNoService" class="state state-offline" hidden>
       <!-- Local mode offline -->
@@ -352,12 +372,5 @@
     <div id="popupToast" class="popup-toast" hidden></div>
   </div>
 
-  <script src="ui-icons.js"></script>
-  <script src="url-utils.js"></script>
-  <script src="media-page-detector.js"></script>
-  <script src="source-integrity.js"></script>
-  <script src="server-control-state.js"></script>
-  <script src="startup-policy.js"></script>
-  <script src="popup.js"></script>
 </body>
 </html>

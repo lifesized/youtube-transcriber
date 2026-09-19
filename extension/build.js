@@ -15,6 +15,11 @@
 const fs = require("fs");
 const path = require("path");
 const { execFileSync } = require("child_process");
+const { inlinePanelStyles } = require("./build-styles.js");
+const {
+  syncDirectoryPreservingRoot,
+  withTemporaryBuildDirectory,
+} = require("./build-output.js");
 
 const IS_DEV = process.argv.includes("--dev");
 const SRC = __dirname;
@@ -48,6 +53,7 @@ const COPY_FILES = [
   "google-drive-import.js",
   "server-control-state.js",
   "startup-policy.js",
+  "panel-diagnostics.js",
   "content-spotify.js",
   "content-substack.js",
   "content-twitter.js",
@@ -87,88 +93,112 @@ function copyDir(src, dest) {
   }
 }
 
-// --- Clean & create dist ---
+// --- Build away from Chrome's loaded directory ---
 
-fs.rmSync(DIST, { recursive: true, force: true });
-ensureDir(DIST);
+withTemporaryBuildDirectory((BUILD_DIR) => {
+  // --- Copy all source files ---
 
-// --- Copy all source files ---
-
-for (const file of COPY_FILES) {
-  const src = path.join(SRC, file);
-  if (!fs.existsSync(src)) {
-    console.warn(`Warning: ${file} not found, skipping`);
-    continue;
+  for (const file of COPY_FILES) {
+    const src = path.join(SRC, file);
+    if (!fs.existsSync(src)) {
+      console.warn(`Warning: ${file} not found, skipping`);
+      continue;
+    }
+    copyFile(src, path.join(BUILD_DIR, file));
   }
-  copyFile(src, path.join(DIST, file));
-}
 
-copyDir(DESIGN_SYSTEM_SRC, path.join(DIST, "design-system"));
+  copyDir(DESIGN_SYSTEM_SRC, path.join(BUILD_DIR, "design-system"));
 
-for (const cssFile of ["foundations.css", "motion.css"]) {
-  const cssPath = path.join(DIST, cssFile);
-  if (!fs.existsSync(cssPath)) continue;
-  const css = fs.readFileSync(cssPath, "utf8");
   fs.writeFileSync(
-    cssPath,
-    css.replaceAll("../design-system/", "./design-system/")
+    path.join(BUILD_DIR, "popup.html"),
+    inlinePanelStyles(fs.readFileSync(path.join(SRC, "popup.html"), "utf8"), SRC),
   );
-}
 
-// --- Dev tagging: pin key so dev build has stable ID ---
-
-if (IS_DEV) {
-  const manifestPath = path.join(DIST, "manifest.json");
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-  const label = DEV_LABEL || "dev";
-  manifest.name = DEV_NAME || "Transcriber";
-  manifest.short_name = DEV_SHORT_NAME || "Transcriber";
-  if (DEV_LABEL) {
-    const versionLabel = DEV_LABEL.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-    if (versionLabel) manifest.version_name = `${manifest.version}-${versionLabel}`;
-  }
-
-  // Inject "key" field from local keypair so unpacked dev ext gets a stable ID.
-  // Without this, Chrome derives the ID from the install path — meaning every
-  // path change (e.g. loading dist/ vs extension/) produces a new ID and breaks
-  // the native messaging whitelist. .dev/extension-dev-key.pem is gitignored and
-  // machine-local:
-  // each contributor gets their own keypair (and thus their own stable dev ID).
-  if (!fs.existsSync(DEV_KEY_PATH) && fs.existsSync(LEGACY_DEV_KEY_PATH)) {
-    ensureDir(path.dirname(DEV_KEY_PATH));
-    fs.renameSync(LEGACY_DEV_KEY_PATH, DEV_KEY_PATH);
-    console.log(
-      `Moved legacy dev keypair to ${path.relative(process.cwd(), DEV_KEY_PATH)}`
+  for (const cssFile of ["foundations.css", "motion.css"]) {
+    const cssPath = path.join(BUILD_DIR, cssFile);
+    if (!fs.existsSync(cssPath)) continue;
+    const css = fs.readFileSync(cssPath, "utf8");
+    fs.writeFileSync(
+      cssPath,
+      css.replaceAll("../design-system/", "./design-system/"),
     );
   }
-  if (!fs.existsSync(DEV_KEY_PATH)) {
-    console.log(`No dev keypair found — generating ${path.relative(process.cwd(), DEV_KEY_PATH)}`);
-    ensureDir(path.dirname(DEV_KEY_PATH));
-    const pem = execFileSync("openssl", ["genrsa", "2048"], { stdio: ["ignore", "pipe", "ignore"] });
-    const pkcs8 = execFileSync(
+
+  // --- Dev tagging: pin key so dev build has stable ID ---
+
+  if (IS_DEV) {
+    const manifestPath = path.join(BUILD_DIR, "manifest.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    const label = DEV_LABEL || "dev";
+    manifest.name = DEV_NAME || "Transcriber";
+    manifest.short_name = DEV_SHORT_NAME || "Transcriber";
+    if (DEV_LABEL) {
+      const versionLabel = DEV_LABEL.toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
+      if (versionLabel)
+        manifest.version_name = `${manifest.version}-${versionLabel}`;
+    }
+
+    // Inject "key" field from local keypair so unpacked dev ext gets a stable ID.
+    // Without this, Chrome derives the ID from the install path — meaning every
+    // path change (e.g. loading dist/ vs extension/) produces a new ID and breaks
+    // the native messaging whitelist. .dev/extension-dev-key.pem is gitignored and
+    // machine-local:
+    // each contributor gets their own keypair (and thus their own stable dev ID).
+    if (!fs.existsSync(DEV_KEY_PATH) && fs.existsSync(LEGACY_DEV_KEY_PATH)) {
+      ensureDir(path.dirname(DEV_KEY_PATH));
+      fs.renameSync(LEGACY_DEV_KEY_PATH, DEV_KEY_PATH);
+      console.log(
+        `Moved legacy dev keypair to ${path.relative(process.cwd(), DEV_KEY_PATH)}`,
+      );
+    }
+    if (!fs.existsSync(DEV_KEY_PATH)) {
+      console.log(
+        `No dev keypair found — generating ${path.relative(process.cwd(), DEV_KEY_PATH)}`,
+      );
+      ensureDir(path.dirname(DEV_KEY_PATH));
+      const pem = execFileSync("openssl", ["genrsa", "2048"], {
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      const pkcs8 = execFileSync(
+        "openssl",
+        ["pkcs8", "-topk8", "-nocrypt", "-out", DEV_KEY_PATH],
+        { input: pem, stdio: ["pipe", "ignore", "ignore"] },
+      );
+      void pkcs8;
+      fs.chmodSync(DEV_KEY_PATH, 0o600);
+    }
+    const pubKeyDer = execFileSync(
       "openssl",
-      ["pkcs8", "-topk8", "-nocrypt", "-out", DEV_KEY_PATH],
-      { input: pem, stdio: ["pipe", "ignore", "ignore"] }
+      ["rsa", "-in", DEV_KEY_PATH, "-pubout", "-outform", "DER"],
+      { stdio: ["ignore", "pipe", "ignore"] },
     );
-    void pkcs8;
-    fs.chmodSync(DEV_KEY_PATH, 0o600);
+    manifest.key = pubKeyDer.toString("base64");
+
+    // Derive + log the resulting Chrome ext ID so contributors know what to
+    // whitelist when running `npm run install-native-host`.
+    const crypto = require("crypto");
+    const idHash = crypto
+      .createHash("sha256")
+      .update(pubKeyDer)
+      .digest("hex")
+      .slice(0, 32);
+    const stableId = idHash.replace(
+      /[0-9a-f]/g,
+      (c) => "abcdefghijklmnop"["0123456789abcdef".indexOf(c)],
+    );
+    console.log(`Stable dev extension ID: ${stableId}`);
+
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   }
-  const pubKeyDer = execFileSync("openssl", [
-    "rsa",
-    "-in", DEV_KEY_PATH,
-    "-pubout",
-    "-outform", "DER",
-  ], { stdio: ["ignore", "pipe", "ignore"] });
-  manifest.key = pubKeyDer.toString("base64");
 
-  // Derive + log the resulting Chrome ext ID so contributors know what to
-  // whitelist when running `npm run install-native-host`.
-  const crypto = require("crypto");
-  const idHash = crypto.createHash("sha256").update(pubKeyDer).digest("hex").slice(0, 32);
-  const stableId = idHash.replace(/[0-9a-f]/g, (c) => "abcdefghijklmnop"["0123456789abcdef".indexOf(c)]);
-  console.log(`Stable dev extension ID: ${stableId}`);
+  // Chrome executes unpacked extensions directly from dist. Never delete or
+  // replace that directory: doing so can unregister a running extension. Publish
+  // staged files into the existing root, then remove only stale child entries.
+  syncDirectoryPreservingRoot(BUILD_DIR, DIST);
+});
 
-  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
-}
-
-console.log(`Built ${IS_DEV ? "dev " : ""}extension → ${path.relative(process.cwd(), DIST)}`);
+console.log(
+  `Built ${IS_DEV ? "dev " : ""}extension → ${path.relative(process.cwd(), DIST)}`,
+);

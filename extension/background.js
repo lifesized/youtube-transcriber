@@ -864,8 +864,13 @@ async function classifyError(status, data) {
   return data?.error || `HTTP ${status}`;
 }
 
-async function getRecent() {
+async function getRecent(expectedMode) {
   const config = await getApiConfig();
+  // A queued request from the old panel mode must not fetch the new server's
+  // rows and then persist them under the old mode's cache key.
+  if (expectedMode !== undefined && expectedMode !== config.mode) {
+    throw new Error("Library mode changed. Please retry.");
+  }
   const res = await fetch(`${config.baseUrl}/api/transcripts?limit=5`, {
     headers: config.headers,
     credentials: config.credentials,
@@ -1652,7 +1657,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return { ok: true };
 
       case "GET_RECENT":
-        return await getRecent();
+        return await getRecent(message.mode);
 
       case "GET_TRANSCRIPT": {
         if (!validId(message.id)) throw new Error("Invalid id");
@@ -1952,19 +1957,43 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // ---------------------------------------------------------------------------
-// Side panel — let Chrome own toolbar-icon open/close behavior
+// Side panel — explicitly attach the document before opening the container
 // ---------------------------------------------------------------------------
 
-// A connected side-panel document is not proof that the panel is currently
-// visible: Chrome can keep the document alive while another tab/window is
-// active. Using that connection as a toggle flag made toolbar clicks take the
-// "close" path even when no panel was visible. Chrome already provides the
-// correct per-window action behavior, so delegate toolbar clicks to it.
+// Use one explicit opening path: configure the global document during worker
+// initialization, then open directly inside the click user gesture with no
+// preceding await. This action is
+// intentionally open-only: Chrome exposes no reliable panel-visibility query,
+// and a connected side-panel port can remain alive while its pane is hidden.
+// The panel header's native × remains the unambiguous close control.
 chrome.sidePanel
-  .setPanelBehavior({ openPanelOnActionClick: true })
+  .setOptions({ path: "popup.html", enabled: true })
   .catch((err) => {
-    console.error("[ytt-bg] could not enable side-panel action", err?.message || err);
+    console.error("[ytt-bg] could not configure side panel", err?.message || err);
   });
+
+chrome.sidePanel
+  .setPanelBehavior({ openPanelOnActionClick: false })
+  .catch((err) => {
+    console.error("[ytt-bg] could not disable implicit side-panel action", err?.message || err);
+  });
+
+chrome.action.onClicked.addListener((tab) => {
+  if (!Number.isInteger(tab.windowId)) return;
+  const clickedAt = Date.now();
+  const traceKey = `panelClick_${clickedAt}_${crypto.randomUUID()}`;
+  // Invoke open before any diagnostic storage work; keep the user gesture.
+  chrome.sidePanel.open({ windowId: tab.windowId }).catch((err) => {
+    console.error("[ytt-bg] could not open side panel", err?.message || err);
+  });
+  void (async () => {
+    await chrome.storage.local.set({ [traceKey]: { clickedAt, windowId: tab.windowId } });
+    const keys = chrome.storage.local.getKeys ? await chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null));
+    const stale = keys.filter((key) => key.startsWith("panelClick_"))
+      .sort((a, b) => Number(b.split("_")[1]) - Number(a.split("_")[1])).slice(40);
+    if (stale.length) await chrome.storage.local.remove(stale);
+  })().catch(() => {});
+});
 
 // Retained only as a command channel for CLOSE_PANEL. A connected document is
 // deliberately never treated as evidence that the panel is visible.
