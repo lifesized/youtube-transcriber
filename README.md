@@ -295,6 +295,11 @@ WHISPER_PYTHON_BIN="/path/to/your/.venv/bin/python3"
 # GOOGLE_DRIVE_MAX_BYTES="5368709120" # default: 5 GiB
 ```
 
+`GOOGLE_DRIVE_EXTENSION_IDS` is required for local private-Drive imports. The
+server rejects every extension caller when the list is empty. See
+[Google Drive import diagnosis](./docs/GOOGLE-DRIVE-IMPORT-DIAGNOSIS.md) for the
+verified failure mode and recovery steps.
+
 **Windows paths:**
 
 ```env

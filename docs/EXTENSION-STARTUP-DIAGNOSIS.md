@@ -1,11 +1,66 @@
 # Measuring the blank-panel delay
 
-Status: cause unconfirmed in the user's Chrome profile. Previous HTTP preview
-tests used mocked Chrome APIs; they did not measure native side-panel startup.
-The screenshots do not establish that Chrome cached an empty document, that
-file replacement caused the delay, or that the implicit opener was defective.
+Status: the slow stage is confirmed; its underlying Chrome cause is not. Real
+profile diagnostics show the native panel container and navigation start, then
+Chrome can wait tens of seconds before executing the first extension script.
+In the two clean foreground captures, cached history and the local API were fast
+after the document started. The older background-window run does not establish
+post-script performance. Track the product fix in
+[YTT-428](https://linear.app/jaybee/issue/YTT-428/fix-blank-side-panel-before-extension-document-activation).
 
 ## September 19 trace evidence and targeted changes
+
+### Existing-profile reproduction
+
+Later captures from the installed unpacked extension reproduced the reported
+blank panel in both authorized profiles:
+
+| Profile / run | HTML response end | First document script | First contentful paint | Cache DOM event | `GET_RECENT` |
+| ------------- | ----------------: | --------------------: | ----------------------: | --------------: | -----------: |
+| ClickHouse current foreground run | 0.007 s | 36.214 s | 36.860 s | 36.810 s | 37.411 s |
+| ClickHouse earlier run | 0.015 s | 88.886 s | 204.824 s | unavailable before Chrome API reads completed | 205.455 s |
+| lifesized slow run | 0.014 s | 51.026 s | 51.140 s | 51.089 s | 51.452 s |
+
+The current ClickHouse run is the cleanest evidence boundary: the HTML response
+ended in 7 ms, Chrome did not execute the first script for 36.2 seconds, then
+the `recent-cache-rendered` DOM instrumentation event fired 596 ms after the
+first script. First contentful paint followed 50 ms later. `GET_RECENT` took
+602 ms and its response event occurred 551 ms after first contentful paint. The
+cache event does not prove that history was visible before that paint. The
+screenshot during the earlier interval showed the native Transcriber header
+with a completely blank body. Google Drive was merely the active page; it was
+not on the panel startup path.
+
+The earlier ClickHouse run included a long background-window interval and must
+not be used as a foreground performance benchmark. It remains useful evidence
+that the panel can remain delayed after the first script as well. Whether that
+post-script interval came from background throttling, Chrome API reads, or
+another cause remains unresolved.
+
+### Proposed immediate-shell experiment
+
+Before changing the panel's browsing-context architecture, create a controlled
+build that moves only the critical shell ahead of noncritical panel resources in
+the existing top-level `popup.html`. Compare its first paint with the current
+packaged document in the same profiles. Do not introduce an iframe merely to
+cover the delay: that would change focus, visibility, accessibility and lifecycle
+semantics without making history available sooner.
+
+If a tiny static top-level document is still needed to isolate Chrome scheduling,
+use it only as a diagnostic build first. A production host must prove that it
+improves real-profile paint and preserve close, focus, accessibility and panel
+lifecycle behaviour before adoption.
+
+Suggested next fixes, in order:
+
+1. Move critical shell markup/styles ahead of noncritical resources in the same
+   document and capture cold/warm paint timings.
+2. If that does not change paint, test a static diagnostic document with no
+   scripts or application frame and file a minimal Chromium reproduction.
+3. Keep history/backend work out of the critical investigation unless its own
+   measured duration regresses.
+4. Treat extension reload as profile-specific. An unpacked build may be current
+   in one profile while another retains an older service worker.
 
 Six user-supplied Chrome traces (`trace_transcriber-startup1` through `6`) show:
 
