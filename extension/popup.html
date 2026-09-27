@@ -2,11 +2,25 @@
 <html>
 <head>
   <meta charset="utf-8">
+  <script defer src="panel-diagnostics.js"></script>
   <link rel="stylesheet" href="popup.css">
   <link rel="stylesheet" href="setup-link.css">
+  <script defer src="popup.js"></script>
 </head>
 <body>
   <div class="popup">
+    <!-- Static loading feedback, independent of popup.js. Chrome still owns
+         document activation and first paint. -->
+    <div id="startupShell" class="startup-shell" role="status" aria-live="polite">
+      <div class="startup-shell-heading">Loading Transcriber…</div>
+      <div class="startup-shell-action"></div>
+      <div class="startup-shell-divider"></div>
+      <div class="startup-shell-label">Recent</div>
+      <div class="startup-shell-row"><span></span><span></span></div>
+      <div class="startup-shell-row"><span></span><span></span></div>
+      <div class="startup-shell-row"><span></span><span></span></div>
+    </div>
+
     <!-- No Service -->
     <div id="stateNoService" class="state state-offline" hidden>
       <!-- Local mode offline -->
@@ -340,6 +354,5 @@
     <div id="popupToast" class="popup-toast" hidden></div>
   </div>
 
-  <script src="popup.js"></script>
 </body>
 </html>
