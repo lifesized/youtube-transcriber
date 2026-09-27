@@ -29,8 +29,14 @@ test("toolbar clicks explicitly open the preconfigured panel", () => {
     "chrome.action.onClicked.addListener"
   );
   const clickHandlerEnd = backgroundSource.indexOf(
-    "// Retained only as a command channel",
+    "const sidePanelPorts = new Map();",
     clickHandlerStart
+  );
+  assert.notEqual(clickHandlerStart, -1, "the toolbar click handler must exist");
+  assert.notEqual(
+    clickHandlerEnd,
+    -1,
+    "the toolbar click handler must end before retained-panel port handling"
   );
   const clickHandler = backgroundSource.slice(clickHandlerStart, clickHandlerEnd);
   assert.match(
