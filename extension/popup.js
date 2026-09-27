@@ -56,13 +56,76 @@ if (!HAS_EXTENSION_APIS) {
 // Command channel for content-script CLOSE_PANEL requests (for example when a
 // YouTube player enters fullscreen). This is not a panel-visibility signal;
 // Chrome exclusively owns toolbar-icon open/close behavior.
-const port = chrome.runtime.connect({ name: "sidepanel" });
+let port = null;
+let panelWindowId = null;
+let pendingPanelLaunchId = null;
+let pendingPanelLaunchExpiresAt = 0;
+let currentPanelState = null;
+const PANEL_LAUNCH_CONTEXT_TTL_MS = 120000;
 
-// Listen for close requests from background (e.g. fullscreen)
-port.onMessage.addListener((msg) => {
+function getPanelLaunchContext() {
+  if (
+    !pendingPanelLaunchId ||
+    Date.now() >= pendingPanelLaunchExpiresAt
+  ) {
+    pendingPanelLaunchId = null;
+    pendingPanelLaunchExpiresAt = 0;
+    return undefined;
+  }
+  return { launchId: pendingPanelLaunchId };
+}
+
+function handlePanelPortMessage(msg) {
   if (msg.type === "CLOSE") {
     window.close();
+  } else if (msg.type === "PANEL_LAUNCH") {
+    pendingPanelLaunchId = msg.launchId;
+    pendingPanelLaunchExpiresAt = Date.now() + PANEL_LAUNCH_CONTEXT_TTL_MS;
+    const launchContext = { launchId: msg.launchId };
+    globalThis.TranscriberPanelDiagnostics?.mark(
+      "launch-signal",
+      undefined,
+      launchContext,
+    );
+    globalThis.TranscriberPanelDiagnostics?.afterNextPaint(
+      "launch-frame-presented",
+      launchContext,
+    );
+    if (currentPanelState) {
+      globalThis.TranscriberPanelDiagnostics?.afterNextPaint(
+        `state:${currentPanelState}-frame-presented`,
+        launchContext,
+      );
+    }
   }
+}
+
+function connectPanelPort() {
+  if (port) return;
+  const nextPort = chrome.runtime.connect({ name: "sidepanel" });
+  port = nextPort;
+  nextPort.onMessage.addListener(handlePanelPortMessage);
+  nextPort.onDisconnect.addListener(() => {
+    if (port === nextPort) port = null;
+  });
+  const sendContext = (windowId) => {
+    if (port !== nextPort || !Number.isInteger(windowId)) return;
+    panelWindowId = windowId;
+    nextPort.postMessage({ type: "PANEL_CONTEXT", windowId });
+  };
+  if (Number.isInteger(panelWindowId)) sendContext(panelWindowId);
+  else chrome.windows.getCurrent().then((currentWindow) => {
+    sendContext(currentWindow?.id);
+  }).catch(() => {});
+}
+
+connectPanelPort();
+// MV3 may suspend the worker and disconnect a retained panel. Re-handshake
+// only when Chrome presents this document again; do not create a keep-alive
+// reconnect loop while the panel is hidden.
+window.addEventListener("focus", connectPanelPort);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") connectPanelPort();
 });
 
 // DOM refs
@@ -160,6 +223,10 @@ const panelScriptReadyAt = performance.now();
 function hideStartupShell() {
   if (!el.startupShell || el.startupShell.hidden) return;
   el.startupShell.hidden = true;
+  globalThis.TranscriberPanelDiagnostics?.mark("shell-replaced");
+  globalThis.TranscriberPanelDiagnostics?.afterNextPaint(
+    "replacement-frame-presented",
+  );
   console.info("[ytt-popup] startup shell replaced", {
     scriptReadyMs: Math.round(panelScriptReadyAt),
     uiReadyMs: Math.round(performance.now()),
@@ -2041,6 +2108,17 @@ function showState(name) {
   if (name === "NoService") {
     el.recentSection.hidden = true;
   }
+  currentPanelState = name;
+  const launchContext = getPanelLaunchContext();
+  globalThis.TranscriberPanelDiagnostics?.mark(
+    `state:${name}-dom-updated`,
+    undefined,
+    launchContext,
+  );
+  globalThis.TranscriberPanelDiagnostics?.afterNextPaint(
+    `state:${name}-frame-presented`,
+    launchContext,
+  );
 }
 
 function stopOfflinePolling() {
@@ -2661,7 +2739,15 @@ async function loadRecent(mode = currentMode) {
   if (!isSettingsOpen()) {
     if (cached && cached.length) {
       renderRecentList(cached);
-      globalThis.TranscriberPanelDiagnostics?.mark("recent-cache-rendered");
+      globalThis.TranscriberPanelDiagnostics?.mark(
+        "recent-cache-rendered",
+        undefined,
+        getPanelLaunchContext(),
+      );
+      globalThis.TranscriberPanelDiagnostics?.afterNextPaint(
+        "recent-cache-frame-presented",
+        getPanelLaunchContext(),
+      );
     } else {
       renderRecentSkeleton();
     }
@@ -2669,7 +2755,11 @@ async function loadRecent(mode = currentMode) {
 
   // 2. Fetch fresh; reconcile.
   const res = await sendMsg({ type: "GET_RECENT", mode });
-  globalThis.TranscriberPanelDiagnostics?.mark("recent-response");
+  globalThis.TranscriberPanelDiagnostics?.mark(
+    "recent-response",
+    undefined,
+    getPanelLaunchContext(),
+  );
   if (stale() || isSettingsOpen()) return;
   const refreshAction = globalThis.TranscriberStartupPolicy.recentRefreshAction(res);
   if (refreshAction === "preserve") {
@@ -2693,6 +2783,11 @@ async function loadRecent(mode = currentMode) {
     return;
   }
   renderRecentList(res.data);
+  globalThis.TranscriberPanelDiagnostics?.mark("recent-fresh-rendered");
+  globalThis.TranscriberPanelDiagnostics?.afterNextPaint(
+    "recent-fresh-frame-presented",
+    getPanelLaunchContext(),
+  );
   await setCachedRecent(mode, res.data);
 }
 
@@ -2904,6 +2999,9 @@ async function init() {
   renderRecentSkeleton();
   hideStartupShell();
   globalThis.TranscriberPanelDiagnostics?.mark("skeleton-dom-updated");
+  globalThis.TranscriberPanelDiagnostics?.afterNextPaint(
+    "skeleton-frame-presented",
+  );
 
   // PHASE 1 — start reads together, but only settings determine the library
   // mode. Tab detection and auth-cache reads must not hold cached history back.

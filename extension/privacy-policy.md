@@ -1,6 +1,6 @@
 # Privacy Policy — Transcriber for YouTube Chrome Extension
 
-**Last updated:** April 26, 2026
+**Last updated:** September 26, 2026
 
 ## Overview
 
@@ -63,6 +63,13 @@ The extension uses Chrome's `storage` API to save:
 - **Session storage** — current transcription progress and queue (cleared when the browser closes).
 - **Local storage** — cached preferences (persisted across sessions).
 
+The extension also keeps a bounded local startup-diagnostics buffer containing
+technical timestamps, Chrome window IDs, extension resource filenames, and
+coarse success/failure states. It never contains page URLs, page titles,
+transcript text, or raw error messages. These diagnostics are not transmitted
+automatically; they leave the browser only if you manually export them for
+debugging.
+
 This data is stored within your browser profile and managed by Chrome. The extension does not transmit this data anywhere except as described in the modes above.
 
 ## Permissions
@@ -104,7 +111,7 @@ Optional host permissions (requested only when the relevant feature is used):
 - We don't read or transmit pages other than the supported video, podcast, or social video post pages you transcribe.
 - We don't access your YouTube, Spotify, or other source-platform credentials.
 - We don't store destination access tokens inside the extension. Cloud-proxied destinations (e.g. Notion) keep tokens server-side on transcribed.dev; client-side destinations (e.g. Obsidian) require no tokens at all.
-- We don't include third-party analytics, telemetry, or A/B tooling inside the extension.
+- We don't include third-party analytics, remote telemetry, or A/B tooling inside the extension.
 
 ## Data retention and deletion
 

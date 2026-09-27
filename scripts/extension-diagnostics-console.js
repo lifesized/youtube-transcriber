@@ -1,6 +1,9 @@
-// Paste in the Transcriber SERVICE WORKER DevTools console, not YouTube's.
-// Prints a report and copies JSON using the DevTools copy() helper if available.
+// Paste in DevTools opened by right-clicking inside the Transcriber side panel.
+// Prints a report and copies its JSON without depending on the service worker.
 (async () => {
+  if (!globalThis.TranscriberStartupReport) {
+    await import(chrome.runtime.getURL("startup-report.js"));
+  }
   const data = await chrome.storage.local.get(null);
   const traces = Object.entries(data)
     .filter(([key]) => key.startsWith("panelTrace_"))
@@ -10,11 +13,22 @@
     .filter(([key]) => key.startsWith("panelClick_"))
     .map(([, value]) => value)
     .sort((a, b) => a.clickedAt - b.clickedAt);
-  const report = {
-    version: chrome.runtime.getManifest().version,
+  const capturedAt = Date.now();
+  const launches = globalThis.TranscriberStartupReport.buildLaunchRows({
     traces,
     clicks,
+    capturedAt,
+  });
+  const report = {
+    schemaVersion: 2,
+    version: chrome.runtime.getManifest().version,
+    capturedAt,
+    traces,
+    clicks,
+    launches,
   };
+  console.log("Toolbar launch attempts (all durations from click, ms):");
+  console.table(launches);
   console.table(
     traces.map((trace) => {
       const event = (name) =>
@@ -42,6 +56,14 @@
     }),
   );
   console.log(JSON.stringify(report, null, 2));
-  if (typeof copy === "function") copy(JSON.stringify(report, null, 2));
+  const textarea = document.createElement("textarea");
+  textarea.value = JSON.stringify(report, null, 2);
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  console.log("Transcriber startup report copied:", copied);
   return report;
 })();

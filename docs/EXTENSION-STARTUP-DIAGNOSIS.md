@@ -112,32 +112,71 @@ existing authorized profile; do not infer a browser cause from a mocked preview.
 
 ## Capture a real run
 
+The diagnostics now use one launch attempt as the reporting grain. Each toolbar
+click records the Chrome `sidePanel.open()` request and whether that API
+resolved or rejected. Panel events carry wall-clock timestamps so the exporter
+can correlate that click with a new panel document or with a retained document
+being shown again. The resulting `launches` table measures, from the click:
+
+- Chrome open-API completion;
+- panel navigation and first extension script;
+- first contentful paint of the static HTML shell, the frame after that shell
+  is replaced by application UI, or the next frame of a retained panel being
+  reopened;
+- the first usable primary-state frame;
+- cached and freshly fetched history frames.
+
+`pending` means Chrome accepted the click but the two-minute correlation window
+is still open, while `open-pending` means the native `sidePanel.open()` promise
+itself has not settled. `panel-signal-without-frame` means a retained panel
+received the launch-specific signal but did not record its next presented
+frame during the full correlation window. `evidence-unavailable` means the
+collector has no matching proof; it must not be interpreted as a native panel
+failure because a trace can be missing or evicted. `open-rejected` means Chrome
+rejected the native panel open request before the extension UI could
+participate. `legacy-unavailable` identifies a click retained from an older
+diagnostic schema that cannot support open-lifecycle conclusions. Launch IDs
+keep retained-panel reopen frames attached to the correct click, while
+`superseded` means another same-window click began before the earlier launch
+produced presentation evidence.
+
 1. Build with `npm run build:ext:dev`, then reload the existing extension card.
 2. Close the panel with its ×. Open it from the toolbar, noting the approximate
    wall-clock delay. Keep DevTools closed during this measurement: inspecting
    the worker can keep it awake and change the result.
-3. Wait 30 seconds after content appears. In `chrome://extensions`, inspect
-   Transcriber's service worker. Paste the contents of
-   `scripts/extension-diagnostics-console.js` into its Console. This prints a
-   table and copies a JSON report via DevTools' `copy()` helper.
+3. Wait 30 seconds after content appears. Right-click inside the Transcriber
+   side panel, choose **Inspect**, and paste the contents of
+   `scripts/extension-diagnostics-console.js` into that Console. The exporter
+   loads its classifier only in this inspected extension document, prints one
+   row per toolbar launch plus the document detail table, and copies a JSON
+   report through a temporary invisible text area. Do not use the service
+   worker inspector: reloading the extension can leave that DevTools window
+   attached to an obsolete worker and report `No SW`.
+   If the UI never appears, wait the full two minutes before exporting so the
+   result is a completed `panel-signal-without-frame` or
+   `evidence-unavailable`, rather than `pending`.
 4. Save that clipboard JSON as `output/panel-startup.json`, then run
    `node scripts/analyze-extension-startup.js output/panel-startup.json`.
 5. Repeat a cold open, a warm reopen, and a switch between two video tabs.
    Capture the report before further reloads. No reinstall or cache clearing.
 
 Reports contain timings and packaged resource filenames, never transcript
-content, page URLs, video titles, or raw exception messages. The last 12 panel
+content, page URLs, video titles, or raw exception messages. The last 40 panel
 documents and 40 clicks are retained locally. Initial snapshots run through
 30 seconds; later application/focus/visibility events trigger throttled saves
 for retained panels. Each document keeps its latest 160 events.
-Toolbar timestamps include window IDs; correlation with document navigation is
-approximate and cannot measure time before the worker receives the click.
-Reopening a retained panel creates no navigation trace. Null means unavailable.
+Toolbar timestamps include window IDs; the measurement begins when the service
+worker receives the action click, so any browser delay before worker dispatch
+remains outside extension telemetry. Reopening a retained panel creates no new
+navigation, but later wall-clock panel events can still correlate to the launch.
+Null means unavailable, never zero.
 
 ## Interpret the stages
 
 | Observation                                        | Investigate next                                                                   |
 | -------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Open API resolves, no panel-document event         | Chrome native side-panel activation/worker-to-renderer handoff                     |
+| Open API rejects                                   | Chrome side-panel configuration, window context, or extension runtime error        |
 | Long observed delay but all recorded stages fast   | Before worker click dispatch/document navigation; capture Chrome Performance trace |
 | Late document-script                               | Deferred scripts or stylesheets and renderer scheduling; consult resource timings  |
 | Early document-script, late first-contentful-paint | CSS dependency chain, resource loading, long tasks                                 |

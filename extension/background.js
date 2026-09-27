@@ -1586,11 +1586,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     switch (message.type) {
       case "CLOSE_PANEL": {
         // Tell the side panel to close itself via the port
-        if (sidePanelPort) {
-          try { sidePanelPort.postMessage({ type: "CLOSE" }); } catch { /* ignore */ }
+        const tabWindowId = sender.tab?.windowId;
+        const panelPort = sidePanelPorts.get(tabWindowId);
+        if (panelPort) {
+          try { panelPort.postMessage({ type: "CLOSE" }); } catch { /* ignore */ }
         }
         // Also try the sidePanel API as backup
-        const tabWindowId = sender.tab?.windowId;
         if (tabWindowId) {
           try {
             if (chrome.sidePanel.close) {
@@ -1981,29 +1982,113 @@ chrome.sidePanel
 chrome.action.onClicked.addListener((tab) => {
   if (!Number.isInteger(tab.windowId)) return;
   const clickedAt = Date.now();
-  const traceKey = `panelClick_${clickedAt}_${crypto.randomUUID()}`;
+  const launchId = crypto.randomUUID();
+  const traceKey = `panelClick_${clickedAt}_${launchId}`;
+  const launch = {
+    launchId,
+    clickedAt,
+    openRequestedAt: Date.now(),
+    windowId: tab.windowId,
+  };
+  const launchSignal = {
+    type: "PANEL_LAUNCH",
+    launchId,
+    clickedAt,
+    windowId: tab.windowId,
+  };
   // Invoke open before any diagnostic storage work; keep the user gesture.
-  chrome.sidePanel.open({ windowId: tab.windowId }).catch((err) => {
-    console.error("[ytt-bg] could not open side panel", err?.message || err);
-  });
+  const openRequest = chrome.sidePanel.open({ windowId: tab.windowId });
+  const initialSave = chrome.storage.local.set({ [traceKey]: launch });
+  openRequest.then(
+    () => {
+      launch.openResolvedAt = Date.now();
+      // A retained panel port can stay connected while its native surface is
+      // hidden. Arm its next-frame evidence only after Chrome confirms open.
+      deliverPanelLaunchSignal(tab.windowId, launchSignal);
+      return initialSave.then(async () => {
+        await chrome.storage.local.set({ [traceKey]: launch });
+        await prunePanelClickDiagnostics();
+      });
+    },
+    (err) => {
+      launch.openRejectedAt = Date.now();
+      launch.openErrorType = err?.name || "Error";
+      console.error("[ytt-bg] could not open side panel", err?.message || err);
+      return initialSave.then(async () => {
+        await chrome.storage.local.set({ [traceKey]: launch });
+        await prunePanelClickDiagnostics();
+      });
+    },
+  ).catch(() => {});
   void (async () => {
-    await chrome.storage.local.set({ [traceKey]: { clickedAt, windowId: tab.windowId } });
-    const keys = chrome.storage.local.getKeys ? await chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null));
-    const stale = keys.filter((key) => key.startsWith("panelClick_"))
-      .sort((a, b) => Number(b.split("_")[1]) - Number(a.split("_")[1])).slice(40);
-    if (stale.length) await chrome.storage.local.remove(stale);
+    await initialSave;
+    await prunePanelClickDiagnostics();
   })().catch(() => {});
 });
 
-// Retained only as a command channel for CLOSE_PANEL. A connected document is
-// deliberately never treated as evidence that the panel is visible.
-let sidePanelPort = null;
+async function prunePanelClickDiagnostics() {
+  const keys = chrome.storage.local.getKeys
+    ? await chrome.storage.local.getKeys()
+    : Object.keys(await chrome.storage.local.get(null));
+  const stale = keys
+    .filter((key) => key.startsWith("panelClick_"))
+    .sort((a, b) => Number(b.split("_")[1]) - Number(a.split("_")[1]))
+    .slice(40);
+  if (stale.length) await chrome.storage.local.remove(stale);
+}
+
+// Retained only as command/diagnostic channels. Connections are keyed by
+// browser window because Chrome can keep one hidden panel document per window.
+// A connected document is deliberately never treated as visibility evidence.
+const sidePanelPorts = new Map();
+const pendingPanelLaunchSignals = new Map();
+
+function queuePanelLaunchSignal(windowId, launchSignal) {
+  const queued = pendingPanelLaunchSignals.get(windowId) || [];
+  queued.push(launchSignal);
+  pendingPanelLaunchSignals.set(windowId, queued.slice(-10));
+}
+
+function deliverPanelLaunchSignal(windowId, launchSignal) {
+  try {
+    const panelPort = sidePanelPorts.get(windowId);
+    if (panelPort) panelPort.postMessage(launchSignal);
+    else queuePanelLaunchSignal(windowId, launchSignal);
+  } catch {
+    // A retained document can disconnect between open resolution and delivery.
+    queuePanelLaunchSignal(windowId, launchSignal);
+  }
+}
 
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name === "sidepanel") {
-    sidePanelPort = port;
+    let portWindowId = null;
+    port.onMessage.addListener((message) => {
+      if (
+        message?.type !== "PANEL_CONTEXT" ||
+        !Number.isInteger(message.windowId)
+      ) {
+        return;
+      }
+      portWindowId = message.windowId;
+      sidePanelPorts.set(portWindowId, port);
+      const pendingLaunches = pendingPanelLaunchSignals.get(portWindowId) || [];
+      for (const pendingLaunch of pendingLaunches) {
+        if (Date.now() - pendingLaunch.clickedAt < 120_000) {
+          port.postMessage(pendingLaunch);
+        }
+      }
+      if (pendingLaunches.length) {
+        pendingPanelLaunchSignals.delete(portWindowId);
+      }
+    });
     port.onDisconnect.addListener(() => {
-      sidePanelPort = null;
+      if (
+        portWindowId !== null &&
+        sidePanelPorts.get(portWindowId) === port
+      ) {
+        sidePanelPorts.delete(portWindowId);
+      }
     });
   }
 });

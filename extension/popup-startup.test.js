@@ -72,6 +72,63 @@ test("popup has an HTML-first shell while deferred scripts start", () => {
   assert.match(synchronousPaint, /hideStartupShell\(\)/);
 });
 
+test("startup diagnostics run before stylesheet parsing and deferred app scripts", () => {
+  const html = fs.readFileSync(path.join(__dirname, "popup.html"), "utf8");
+  const diagnosticsIndex = html.indexOf(
+    '<script src="panel-diagnostics.js"></script>',
+  );
+  const firstStylesheetIndex = html.indexOf('<link rel="stylesheet"');
+  const popupScriptIndex = html.indexOf(
+    '<script defer src="popup.js"></script>',
+  );
+
+  assert.ok(diagnosticsIndex > -1, "diagnostics must be parser-blocking");
+  assert.ok(
+    diagnosticsIndex < firstStylesheetIndex,
+    "the first timing mark must precede stylesheet parsing",
+  );
+  assert.ok(
+    diagnosticsIndex < popupScriptIndex,
+    "the timing mark must precede deferred application scripts",
+  );
+});
+
+test("retained panel launch signals measure the next presented frame", () => {
+  assert.match(
+    popupSource,
+    /function connectPanelPort\(\)[\s\S]*type:\s*"PANEL_CONTEXT"[\s\S]*windows\.getCurrent\(\)/,
+  );
+  assert.match(
+    popupSource,
+    /onDisconnect\.addListener[\s\S]*port === nextPort[\s\S]*window\.addEventListener\("focus", connectPanelPort\)[\s\S]*visibilityState === "visible"[\s\S]*connectPanelPort\(\)/,
+    "a retained panel should re-handshake after normal MV3 worker suspension",
+  );
+  assert.match(
+    popupSource,
+    /msg\.type === "PANEL_LAUNCH"[\s\S]*pendingPanelLaunchId = msg\.launchId[\s\S]*pendingPanelLaunchExpiresAt[\s\S]*mark\(\s*"launch-signal"[\s\S]*afterNextPaint\(\s*"launch-frame-presented"/,
+  );
+  assert.match(
+    popupSource,
+    /function showState\(name\)[\s\S]*currentPanelState = name[\s\S]*getPanelLaunchContext\(\)[\s\S]*`state:\$\{name\}-frame-presented`[\s\S]*launchContext/,
+    "usable retained-panel evidence must come from a post-launch state frame",
+  );
+  assert.doesNotMatch(
+    popupSource,
+    /function showState\(name\)[\s\S]*pendingPanelLaunchId = null/,
+    "the launch ID must survive long enough to correlate async history frames",
+  );
+  assert.match(
+    popupSource,
+    /msg\.type === "PANEL_LAUNCH"[\s\S]*currentPanelState[\s\S]*`state:\$\{currentPanelState\}-frame-presented`/,
+    "a retained panel whose state was already rendered should re-present that state after open resolves",
+  );
+  assert.match(
+    popupSource,
+    /"recent-cache-rendered",\s*undefined,\s*getPanelLaunchContext\(\)[\s\S]*"recent-cache-frame-presented",\s*getPanelLaunchContext\(\)[\s\S]*"recent-response",\s*undefined,\s*getPanelLaunchContext\(\)[\s\S]*"recent-fresh-frame-presented",\s*getPanelLaunchContext\(\)/,
+    "cached and fresh history milestones should retain the bounded launch context",
+  );
+});
+
 test("recent cache does not wait for a background settings round-trip", () => {
   const loadRecentStart = popupSource.indexOf("async function loadRecent(");
   const loadRecentEnd = popupSource.indexOf(

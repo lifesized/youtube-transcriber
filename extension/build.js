@@ -54,6 +54,7 @@ const COPY_FILES = [
   "server-control-state.js",
   "startup-policy.js",
   "panel-diagnostics.js",
+  "startup-report.js",
   "content-spotify.js",
   "content-substack.js",
   "content-twitter.js",

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-26
+
+### Added
+
+- **End-to-end side-panel launch telemetry** — Each toolbar click now records the Chrome `sidePanel.open()` lifecycle and correlates it with wall-clock panel events through static-shell paint, the replacement UI frame, a usable primary-state frame, cached history, and fresh history. The local exporter reports one row per launch, including clicks where Chrome resolves the native open request but never produces a panel-document event. Diagnostics remain bounded, local-only, and exclude URLs, titles, transcript content, and raw errors.
+
 ## 2026-09-19
 
 ### Added
