@@ -15,6 +15,10 @@
 const fs = require("fs");
 const path = require("path");
 const { execFileSync } = require("child_process");
+const {
+  syncDirectoryPreservingRoot,
+  withTemporaryBuildDirectory,
+} = require("./build-output.js");
 
 const IS_DEV = process.argv.includes("--dev");
 const SRC = __dirname;
@@ -32,6 +36,8 @@ const COPY_FILES = [
   "destination-connected.js",
   "setup-link.css",
   "content.js",
+  "panel-diagnostics.js",
+  "startup-report.js",
   "content-spotify.js",
   "content-substack.js",
   "content-app-presence.js",
@@ -54,29 +60,25 @@ function copyFile(src, dest) {
   fs.copyFileSync(src, dest);
 }
 
-// --- Clean & create dist ---
-
-fs.rmSync(DIST, { recursive: true, force: true });
-ensureDir(DIST);
-
-// --- Copy all source files ---
-
-for (const file of COPY_FILES) {
-  const src = path.join(SRC, file);
-  if (!fs.existsSync(src)) {
-    console.warn(`Warning: ${file} not found, skipping`);
-    continue;
+// Build away from Chrome's loaded directory. Replacing the dist root can
+// unregister a running unpacked extension and leave its side panel blank.
+withTemporaryBuildDirectory((buildDir) => {
+  for (const file of COPY_FILES) {
+    const src = path.join(SRC, file);
+    if (!fs.existsSync(src)) {
+      console.warn(`Warning: ${file} not found, skipping`);
+      continue;
+    }
+    copyFile(src, path.join(buildDir, file));
   }
-  copyFile(src, path.join(DIST, file));
-}
 
-// --- Dev tagging: rename + pin key so dev build has stable, distinguishable ID ---
+  // --- Dev tagging: rename + pin key so dev build has stable, distinguishable ID ---
 
-if (IS_DEV) {
-  const manifestPath = path.join(DIST, "manifest.json");
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-  manifest.name = `${manifest.name} (dev)`;
-  manifest.short_name = "Transcriber dev";
+  if (IS_DEV) {
+    const manifestPath = path.join(buildDir, "manifest.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    manifest.name = `${manifest.name} (dev)`;
+    manifest.short_name = "Transcriber dev";
 
   // Inject "key" field from local keypair so unpacked dev ext gets a stable ID.
   // Without this, Chrome derives the ID from the install path — meaning every
@@ -109,7 +111,10 @@ if (IS_DEV) {
   const stableId = idHash.replace(/[0-9a-f]/g, (c) => "abcdefghijklmnop"["0123456789abcdef".indexOf(c)]);
   console.log(`Stable dev extension ID: ${stableId}`);
 
-  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
-}
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+  }
+
+  syncDirectoryPreservingRoot(buildDir, DIST);
+});
 
 console.log(`Built ${IS_DEV ? "dev " : ""}extension → ${path.relative(process.cwd(), DIST)}`);

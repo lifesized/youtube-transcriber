@@ -1206,11 +1206,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     switch (message.type) {
       case "CLOSE_PANEL": {
         // Tell the side panel to close itself via the port
-        if (sidePanelPort) {
-          try { sidePanelPort.postMessage({ type: "CLOSE" }); } catch { /* ignore */ }
+        const tabWindowId = sender.tab?.windowId;
+        const panelPort = sidePanelPorts.get(tabWindowId);
+        if (panelPort) {
+          try { panelPort.postMessage({ type: "CLOSE" }); } catch { /* ignore */ }
         }
         // Also try the sidePanel API as backup
-        const tabWindowId = sender.tab?.windowId;
         if (tabWindowId) {
           try {
             if (chrome.sidePanel.close) {
@@ -1481,32 +1482,138 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // ---------------------------------------------------------------------------
-// Side panel — toggle on extension icon click
+// Side panel — explicitly attach the document before opening the container
 // ---------------------------------------------------------------------------
 
-let sidePanelPort = null;
+// Use one explicit opening path: configure the global document during worker
+// initialization, then open directly inside the click user gesture with no
+// preceding await. This action is
+// intentionally open-only: Chrome exposes no reliable panel-visibility query,
+// and a connected side-panel port can remain alive while its pane is hidden.
+// The panel header's native × remains the unambiguous close control.
+chrome.sidePanel
+  .setOptions({ path: "popup.html", enabled: true })
+  .catch((err) => {
+    console.error("[ytt-bg] could not configure side panel", err?.message || err);
+  });
+
+chrome.sidePanel
+  .setPanelBehavior({ openPanelOnActionClick: false })
+  .catch((err) => {
+    console.error("[ytt-bg] could not disable implicit side-panel action", err?.message || err);
+  });
+
+chrome.action.onClicked.addListener((tab) => {
+  if (!Number.isInteger(tab.windowId)) return;
+  const clickedAt = Date.now();
+  const launchId = crypto.randomUUID();
+  const traceKey = `panelClick_${clickedAt}_${launchId}`;
+  const launch = {
+    launchId,
+    clickedAt,
+    openRequestedAt: Date.now(),
+    windowId: tab.windowId,
+  };
+  const launchSignal = {
+    type: "PANEL_LAUNCH",
+    launchId,
+    clickedAt,
+    windowId: tab.windowId,
+  };
+  // Invoke open before any diagnostic storage work; keep the user gesture.
+  const openRequest = chrome.sidePanel.open({ windowId: tab.windowId });
+  const initialSave = chrome.storage.local.set({ [traceKey]: launch });
+  openRequest.then(
+    () => {
+      launch.openResolvedAt = Date.now();
+      // A retained panel port can stay connected while its native surface is
+      // hidden. Arm its next-frame evidence only after Chrome confirms open.
+      deliverPanelLaunchSignal(tab.windowId, launchSignal);
+      return initialSave.then(async () => {
+        await chrome.storage.local.set({ [traceKey]: launch });
+        await prunePanelClickDiagnostics();
+      });
+    },
+    (err) => {
+      launch.openRejectedAt = Date.now();
+      launch.openErrorType = err?.name || "Error";
+      console.error("[ytt-bg] could not open side panel", err?.message || err);
+      return initialSave.then(async () => {
+        await chrome.storage.local.set({ [traceKey]: launch });
+        await prunePanelClickDiagnostics();
+      });
+    },
+  ).catch(() => {});
+  void (async () => {
+    await initialSave;
+    await prunePanelClickDiagnostics();
+  })().catch(() => {});
+});
+
+async function prunePanelClickDiagnostics() {
+  const keys = chrome.storage.local.getKeys
+    ? await chrome.storage.local.getKeys()
+    : Object.keys(await chrome.storage.local.get(null));
+  const stale = keys
+    .filter((key) => key.startsWith("panelClick_"))
+    .sort((a, b) => Number(b.split("_")[1]) - Number(a.split("_")[1]))
+    .slice(40);
+  if (stale.length) await chrome.storage.local.remove(stale);
+}
+
+// Retained only as command/diagnostic channels. Connections are keyed by
+// browser window because Chrome can keep one hidden panel document per window.
+// A connected document is deliberately never treated as visibility evidence.
+const sidePanelPorts = new Map();
+const pendingPanelLaunchSignals = new Map();
+
+function queuePanelLaunchSignal(windowId, launchSignal) {
+  const queued = pendingPanelLaunchSignals.get(windowId) || [];
+  queued.push(launchSignal);
+  pendingPanelLaunchSignals.set(windowId, queued.slice(-10));
+}
+
+function deliverPanelLaunchSignal(windowId, launchSignal) {
+  try {
+    const panelPort = sidePanelPorts.get(windowId);
+    if (panelPort) panelPort.postMessage(launchSignal);
+    else queuePanelLaunchSignal(windowId, launchSignal);
+  } catch {
+    // A retained document can disconnect between open resolution and delivery.
+    queuePanelLaunchSignal(windowId, launchSignal);
+  }
+}
 
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name === "sidepanel") {
-    sidePanelPort = port;
-    port.onDisconnect.addListener(() => {
-      sidePanelPort = null;
-    });
-  }
-});
-
-chrome.action.onClicked.addListener(async (tab) => {
-  if (sidePanelPort) {
-    // Ask the side panel to close itself
-    try { sidePanelPort.postMessage({ type: "CLOSE" }); } catch { /* ignore */ }
-    // Also try the API
-    try {
-      if (chrome.sidePanel.close) {
-        await chrome.sidePanel.close({ windowId: tab.windowId });
+    let portWindowId = null;
+    port.onMessage.addListener((message) => {
+      if (
+        message?.type !== "PANEL_CONTEXT" ||
+        !Number.isInteger(message.windowId)
+      ) {
+        return;
       }
-    } catch { /* ignore */ }
-  } else {
-    await chrome.sidePanel.open({ tabId: tab.id });
+      portWindowId = message.windowId;
+      sidePanelPorts.set(portWindowId, port);
+      const pendingLaunches = pendingPanelLaunchSignals.get(portWindowId) || [];
+      for (const pendingLaunch of pendingLaunches) {
+        if (Date.now() - pendingLaunch.clickedAt < 120_000) {
+          port.postMessage(pendingLaunch);
+        }
+      }
+      if (pendingLaunches.length) {
+        pendingPanelLaunchSignals.delete(portWindowId);
+      }
+    });
+    port.onDisconnect.addListener(() => {
+      if (
+        portWindowId !== null &&
+        sidePanelPorts.get(portWindowId) === port
+      ) {
+        sidePanelPorts.delete(portWindowId);
+      }
+    });
   }
 });
 

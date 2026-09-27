@@ -1,3 +1,5 @@
+globalThis.TranscriberPanelDiagnostics?.mark("popup-script");
+
 const HAS_EXTENSION_APIS =
   typeof chrome !== "undefined" &&
   chrome.runtime &&
@@ -7,6 +9,9 @@ const PRICING_URL = "https://www.transcribed.dev/pricing";
 if (!HAS_EXTENSION_APIS) {
   window.addEventListener("DOMContentLoaded", () => {
     document.body.classList.add("preview-mode");
+
+    const startupShell = document.getElementById("startupShell");
+    if (startupShell) startupShell.hidden = true;
 
     const show = (id) => {
       const node = document.getElementById(id);
@@ -49,18 +54,77 @@ if (!HAS_EXTENSION_APIS) {
     }
   });
 } else {
-// Keep a port open so the background script knows the side panel is active
-const port = chrome.runtime.connect({ name: "sidepanel" });
+// Command channel for content-script CLOSE_PANEL requests (for example when a
+// YouTube player enters fullscreen). Chrome owns toolbar-icon open behavior.
+let port = null;
+let panelWindowId = null;
+let pendingPanelLaunchId = null;
+let pendingPanelLaunchExpiresAt = 0;
+let currentPanelState = null;
+const PANEL_LAUNCH_CONTEXT_TTL_MS = 120000;
 
-// Listen for close requests from background (e.g. fullscreen)
-port.onMessage.addListener((msg) => {
+function getPanelLaunchContext() {
+  if (!pendingPanelLaunchId || Date.now() >= pendingPanelLaunchExpiresAt) {
+    pendingPanelLaunchId = null;
+    pendingPanelLaunchExpiresAt = 0;
+    return undefined;
+  }
+  return { launchId: pendingPanelLaunchId };
+}
+
+function handlePanelPortMessage(msg) {
   if (msg.type === "CLOSE") {
     window.close();
+  } else if (msg.type === "PANEL_LAUNCH") {
+    pendingPanelLaunchId = msg.launchId;
+    pendingPanelLaunchExpiresAt = Date.now() + PANEL_LAUNCH_CONTEXT_TTL_MS;
+    const launchContext = { launchId: msg.launchId };
+    globalThis.TranscriberPanelDiagnostics?.mark(
+      "launch-signal",
+      undefined,
+      launchContext,
+    );
+    globalThis.TranscriberPanelDiagnostics?.afterNextPaint(
+      "launch-frame-presented",
+      launchContext,
+    );
+    if (currentPanelState) {
+      globalThis.TranscriberPanelDiagnostics?.afterNextPaint(
+        `state:${currentPanelState}-frame-presented`,
+        launchContext,
+      );
+    }
   }
+}
+
+function connectPanelPort() {
+  if (port) return;
+  const nextPort = chrome.runtime.connect({ name: "sidepanel" });
+  port = nextPort;
+  nextPort.onMessage.addListener(handlePanelPortMessage);
+  nextPort.onDisconnect.addListener(() => {
+    if (port === nextPort) port = null;
+  });
+  const sendContext = (windowId) => {
+    if (port !== nextPort || !Number.isInteger(windowId)) return;
+    panelWindowId = windowId;
+    nextPort.postMessage({ type: "PANEL_CONTEXT", windowId });
+  };
+  if (Number.isInteger(panelWindowId)) sendContext(panelWindowId);
+  else chrome.windows.getCurrent().then((currentWindow) => {
+    sendContext(currentWindow?.id);
+  }).catch(() => {});
+}
+
+connectPanelPort();
+window.addEventListener("focus", connectPanelPort);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") connectPanelPort();
 });
 
 // DOM refs
 const el = {
+  startupShell: document.getElementById("startupShell"),
   stateNoService: document.getElementById("stateNoService"),
   stateNotYoutube: document.getElementById("stateNotYoutube"),
   stateReady: document.getElementById("stateReady"),
@@ -143,6 +207,20 @@ const el = {
   obsidianAdvUriInput: document.getElementById("obsidianAdvUriInput"),
   popupToast: document.getElementById("popupToast"),
 };
+
+const panelScriptReadyAt = performance.now();
+function hideStartupShell() {
+  if (!el.startupShell || el.startupShell.hidden) return;
+  el.startupShell.hidden = true;
+  globalThis.TranscriberPanelDiagnostics?.mark("shell-replaced");
+  globalThis.TranscriberPanelDiagnostics?.afterNextPaint(
+    "replacement-frame-presented",
+  );
+  console.info("[ytt-popup] startup shell replaced", {
+    scriptReadyMs: Math.round(panelScriptReadyAt),
+    uiReadyMs: Math.round(performance.now()),
+  });
+}
 
 let popupToastTimer = null;
 function showPopupToast(message, kind = "info") {
@@ -1558,6 +1636,7 @@ function showState(name) {
   // Settings view is exclusive — don't let a stale init() / async flow
   // resurface library panels on top of it.
   if (isSettingsOpen()) return;
+  hideStartupShell();
   for (const s of ALL_STATES) {
     const elem = el[`state${s}`];
     if (elem) elem.hidden = s !== name;
@@ -1569,6 +1648,17 @@ function showState(name) {
   if (name === "NoService") {
     el.recentSection.hidden = true;
   }
+  currentPanelState = name;
+  const launchContext = getPanelLaunchContext();
+  globalThis.TranscriberPanelDiagnostics?.mark(
+    `state:${name}-dom-updated`,
+    undefined,
+    launchContext,
+  );
+  globalThis.TranscriberPanelDiagnostics?.afterNextPaint(
+    `state:${name}-frame-presented`,
+    launchContext,
+  );
 }
 
 function stopOfflinePolling() {
@@ -1998,10 +2088,12 @@ function recentListHash(items) {
   return items.map((t) => `${t.id}:${t.title}:${t.createdAt}`).join("|");
 }
 
-async function loadRecent() {
-  const modeRes = await sendMsg({ type: "GET_SETTINGS" });
-  const mode = modeRes?.data?.mode || "cloud";
+function recentRefreshAction(response) {
+  if (!response?.success || !Array.isArray(response.data)) return "preserve";
+  return response.data.length ? "replace" : "clear";
+}
 
+async function loadRecent(mode = currentMode) {
   // 1. Optimistic render. Cached list if we have one (instant + correct
   // shape); otherwise a skeleton so the panel never shows a dark void
   // while the first /api/transcripts fetch is in flight.
@@ -2009,6 +2101,15 @@ async function loadRecent() {
   if (!isSettingsOpen()) {
     if (cached && cached.length) {
       renderRecentList(cached);
+      globalThis.TranscriberPanelDiagnostics?.mark(
+        "recent-cache-rendered",
+        undefined,
+        getPanelLaunchContext(),
+      );
+      globalThis.TranscriberPanelDiagnostics?.afterNextPaint(
+        "recent-cache-frame-presented",
+        getPanelLaunchContext(),
+      );
     } else {
       renderRecentSkeleton();
     }
@@ -2016,10 +2117,21 @@ async function loadRecent() {
 
   // 2. Fetch fresh; reconcile.
   const res = await sendMsg({ type: "GET_RECENT" });
+  globalThis.TranscriberPanelDiagnostics?.mark(
+    "recent-response",
+    undefined,
+    getPanelLaunchContext(),
+  );
   if (isSettingsOpen()) return;
-  if (!res?.success || !res.data?.length) {
-    // Empty list — clear cache and hide section unless we're still rendering
-    // a stale optimistic list that we now know is gone.
+  const refreshAction = recentRefreshAction(res);
+  if (refreshAction === "preserve") {
+    if (!cached?.length) {
+      el.recentSection.hidden = true;
+      el.recentList.innerHTML = "";
+    }
+    return;
+  }
+  if (refreshAction === "clear") {
     await setCachedRecent(mode, []);
     el.recentSection.hidden = true;
     el.recentList.innerHTML = "";
@@ -2030,6 +2142,11 @@ async function loadRecent() {
     return;
   }
   renderRecentList(res.data);
+  globalThis.TranscriberPanelDiagnostics?.mark("recent-fresh-rendered");
+  globalThis.TranscriberPanelDiagnostics?.afterNextPaint(
+    "recent-fresh-frame-presented",
+    getPanelLaunchContext(),
+  );
   await setCachedRecent(mode, res.data);
 }
 
@@ -2201,6 +2318,7 @@ let coldStartHandled = false;
 
 async function init() {
   const thisInit = ++initVersion;
+  globalThis.TranscriberPanelDiagnostics?.mark("init-start");
 
   // Close settings if open, mark library active
   el.settingsPanel.hidden = true;
@@ -2846,6 +2964,7 @@ let currentSettingsMode = "cloud";
 function showSettingsView() {
   closeLlmDropdown();
   closeRowActionsMenu();
+  hideStartupShell();
   for (const s of ALL_STATES) {
     const elem = el[`state${s}`];
     if (elem) elem.hidden = true;

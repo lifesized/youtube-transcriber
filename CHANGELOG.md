@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-09-27
+
+### Fixed
+- **Side-panel startup no longer blocks the loading shell behind diagnostics** — Startup diagnostics and application scripts are deferred so Chrome can parse the static loading UI without waiting for extension JavaScript. The shell remains visible until a concrete panel state replaces it, and development builds preserve the loaded `dist` directory instead of invalidating Chrome's unpacked extension root.
+
+### Added
+- **Bounded local startup diagnostics** — Toolbar launches, panel lifecycle milestones, and paint timings can be exported locally for debugging without collecting page URLs, titles, transcript text, or raw error messages.
+
 ## 2026-07-15
 
 ### Changed
