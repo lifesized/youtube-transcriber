@@ -6,6 +6,7 @@ import {
   rejectClientApiKey,
   requestLocalSummary,
 } from "@/lib/local-summary";
+import { SecretsKeyError } from "@/lib/secrets-store.js";
 import type { TranscriptSegment } from "@/lib/types";
 
 /**
@@ -43,7 +44,15 @@ export async function POST(
     );
   }
 
-  const apiKey = await getOpenRouterKey();
+  let apiKey: string | null;
+  try {
+    apiKey = await getOpenRouterKey();
+  } catch (e) {
+    if (e instanceof SecretsKeyError) {
+      return NextResponse.json({ error: e.message }, { status: 503 });
+    }
+    throw e;
+  }
   if (!apiKey) {
     return NextResponse.json(
       {

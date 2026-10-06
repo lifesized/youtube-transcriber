@@ -178,7 +178,7 @@ Full REST API docs: [`docs/API.md`](./docs/API.md) | OpenAPI spec: [`docs/openap
 ## Cloud Transcription Providers
 <img width="1824" height="1175" alt="CleanShot 2026-03-17 at 22 50 27" src="https://github.com/user-attachments/assets/4a413c9b-965c-44d0-a264-2b1ae9ed12d5" />
 
-Add one or more cloud providers in **Settings** (gear icon, bottom-left). Drag to reorder priority — the app tries each enabled provider in order, then falls back to local Whisper.
+Add one or more cloud providers in **Settings** (gear icon, bottom-left). Keys are encrypted at rest — set `TRANSCRIBER_SECRETS_KEY` in `.env` first (see [Encrypting provider keys at rest](#encrypting-provider-keys-at-rest)). Drag to reorder priority — the app tries each enabled provider in order, then falls back to local Whisper.
 
 ### Groq (Free)
 
@@ -317,6 +317,20 @@ All `/api/*` routes require a Bearer token (or the httpOnly cookie set when you 
 | Windows | `%APPDATA%/Transcriber/local-api.token` |
 
 Override with `TRANSCRIBER_LOCAL_TOKEN`. Rotate by deleting the file (or setting a new env value) and restarting. The extension obtains the token via the native host (`getLocalToken`); MCP reads the same file. Never commit the token; never put it in URLs or `chrome.storage`.
+
+### Encrypting provider keys at rest
+
+Cloud provider API keys saved in Settings (OpenRouter, Groq, custom) and the legacy `groq_api_key` setting are encrypted in SQLite with AES-256-GCM. Set a master key in `.env`:
+
+```bash
+openssl rand -hex 32
+# → add to .env:
+# TRANSCRIBER_SECRETS_KEY=<that hex value>
+```
+
+Restart the server (or run `npm run migrate:secrets`) so existing plaintext rows are re-encrypted. New keys cannot be saved until this is set. Decrypt happens only in the server process when calling providers; the web UI continues to show masked keys only. Keep `TRANSCRIBER_SECRETS_KEY` out of git — losing it makes ciphertext unrecoverable (re-enter keys in Settings after rotating).
+
+Env-only alternatives (`OPENROUTER_API_KEY`, `WHISPER_CLOUD_API_KEY`) are not written to the database and do not need this master key.
 
 ## Troubleshooting
 

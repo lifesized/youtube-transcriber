@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { testProviderConnection } from "@/lib/providers";
 import type { ProviderType } from "@/lib/providers";
+import {
+  decryptApiKeyForUse,
+  SecretsKeyError,
+} from "@/lib/secrets-store.js";
 
 export async function POST(
   _request: Request,
@@ -18,17 +22,19 @@ export async function POST(
       );
     }
 
+    const apiKey = decryptApiKeyForUse(config.apiKey);
     const result = await testProviderConnection(
       config.provider as ProviderType,
-      config.apiKey,
+      apiKey,
       config.baseUrl
     );
 
     return NextResponse.json(result);
   } catch (e) {
+    const status = e instanceof SecretsKeyError ? 503 : 500;
     return NextResponse.json(
       { success: false, error: e instanceof Error ? e.message : "Test failed" },
-      { status: 500 }
+      { status }
     );
   }
 }

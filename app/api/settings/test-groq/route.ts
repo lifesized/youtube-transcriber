@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import {
+  decryptApiKeyForUse,
+  SecretsKeyError,
+} from "@/lib/secrets-store.js";
 
 export async function POST() {
   try {
@@ -7,7 +11,12 @@ export async function POST() {
     const dbKey = await prisma.setting.findUnique({
       where: { key: "groq_api_key" },
     });
-    const apiKey = dbKey?.value || process.env.WHISPER_CLOUD_API_KEY?.trim();
+    let apiKey: string | undefined;
+    if (dbKey?.value?.trim()) {
+      apiKey = decryptApiKeyForUse(dbKey.value);
+    } else {
+      apiKey = process.env.WHISPER_CLOUD_API_KEY?.trim();
+    }
 
     if (!apiKey) {
       return NextResponse.json(
@@ -35,6 +44,12 @@ export async function POST() {
 
     return NextResponse.json({ success: true });
   } catch (e) {
+    if (e instanceof SecretsKeyError) {
+      return NextResponse.json(
+        { success: false, error: e.message },
+        { status: 503 }
+      );
+    }
     return NextResponse.json(
       {
         success: false,

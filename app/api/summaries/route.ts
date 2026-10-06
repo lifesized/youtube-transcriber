@@ -8,13 +8,24 @@ import {
   rejectClientApiKey,
   requestLocalSummary,
 } from "@/lib/local-summary";
+import { SecretsKeyError } from "@/lib/secrets-store.js";
 import type { TranscriptSegment } from "@/lib/types";
 
 export async function GET() {
-  return NextResponse.json({
-    available: !!(await getOpenRouterKey()),
-    model: LOCAL_SUMMARY_MODEL,
-  });
+  try {
+    return NextResponse.json({
+      available: !!(await getOpenRouterKey()),
+      model: LOCAL_SUMMARY_MODEL,
+    });
+  } catch (e) {
+    if (e instanceof SecretsKeyError) {
+      return NextResponse.json(
+        { available: false, model: LOCAL_SUMMARY_MODEL, error: e.message },
+        { status: 503 }
+      );
+    }
+    throw e;
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -39,7 +50,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const apiKey = await getOpenRouterKey();
+  let apiKey: string | null;
+  try {
+    apiKey = await getOpenRouterKey();
+  } catch (e) {
+    if (e instanceof SecretsKeyError) {
+      return NextResponse.json({ error: e.message }, { status: 503 });
+    }
+    throw e;
+  }
   if (!apiKey) {
     return NextResponse.json(
       {

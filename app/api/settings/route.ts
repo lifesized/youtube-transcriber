@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import {
+  encryptApiKeyForStorage,
+  isMaskedPlaceholder,
+  maskApiKeyForResponse,
+  SecretsKeyError,
+} from "@/lib/secrets-store.js";
 
 const ALLOWED_KEYS = [
   "groq_api_key",
@@ -12,11 +18,6 @@ const ALLOWED_KEYS = [
   "groq_rate_limit",
 ];
 
-function maskApiKey(key: string): string {
-  if (key.length <= 4) return "****";
-  return "*".repeat(key.length - 4) + key.slice(-4);
-}
-
 export async function GET() {
   try {
     const settings = await prisma.setting.findMany({
@@ -26,7 +27,7 @@ export async function GET() {
     const result: Record<string, string> = {};
     for (const s of settings) {
       result[s.key] =
-        s.key === "groq_api_key" ? maskApiKey(s.value) : s.value;
+        s.key === "groq_api_key" ? maskApiKeyForResponse(s.value) : s.value;
     }
 
     return NextResponse.json(result);
@@ -54,20 +55,32 @@ export async function PUT(request: Request) {
     }
 
     await Promise.all(
-      entries.map(([key, value]) =>
-        prisma.setting.upsert({
+      entries.map(([key, value]) => {
+        let stored = value;
+        if (key === "groq_api_key") {
+          if (isMaskedPlaceholder(value)) {
+            return Promise.resolve();
+          }
+          stored = encryptApiKeyForStorage(value);
+        }
+        return prisma.setting.upsert({
           where: { key },
-          update: { value },
-          create: { key, value },
-        })
-      )
+          update: { value: stored },
+          create: { key, value: stored },
+        });
+      })
     );
 
-    return NextResponse.json({ saved: entries.map(([k]) => k) });
+    return NextResponse.json({
+      saved: entries
+        .filter(([k, v]) => !(k === "groq_api_key" && isMaskedPlaceholder(v)))
+        .map(([k]) => k),
+    });
   } catch (e) {
+    const status = e instanceof SecretsKeyError ? 503 : 500;
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Failed to save settings" },
-      { status: 500 }
+      { status }
     );
   }
 }
