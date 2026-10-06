@@ -140,7 +140,9 @@ function eventCategory(type: string): keyof DebugFilters {
 function HomeInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const selectedId = searchParams.get("id");
+  const rawId = searchParams.get("id");
+  // Validate transcript ID format (same as extension)
+  const selectedId = rawId && /^[A-Za-z0-9_-]{1,128}$/.test(rawId) ? rawId : null;
   const scrollHint = searchParams.get("t");
   const libraryLayout = searchParams.get("layout") === "tiles" ? "tiles" : "list";
 
@@ -407,7 +409,7 @@ function HomeInner() {
       setVideoError((prev) => (prev === null ? prev : null));
       setVideoLoading((prev) => (prev ? prev : true));
       try {
-        const res = await fetch(`/api/transcripts/${id}`);
+        const res = await fetch(`/api/transcripts/${encodeURIComponent(id)}`);
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
           setVideoError(data.error || "Transcript not found.");
@@ -444,7 +446,7 @@ function HomeInner() {
     let attempts = 0;
     const tryScroll = () => {
       if (cancelled) return;
-      const el = document.querySelector(`[data-transcript-id="${selectedId}"]`);
+      const el = document.querySelector(`[data-transcript-id="${CSS.escape(selectedId)}"]`);
       if (el) {
         const rect = el.getBoundingClientRect();
         const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
@@ -513,7 +515,7 @@ function HomeInner() {
 
   const handleCopyFromLibrary = useCallback(async (id: string) => {
     try {
-      const res = await fetch(`/api/transcripts/${id}`);
+      const res = await fetch(`/api/transcripts/${encodeURIComponent(id)}`);
       if (!res.ok) return;
       const data = await res.json();
       const segs: TranscriptSegment[] = JSON.parse(data.transcript);
@@ -956,7 +958,7 @@ function HomeInner() {
                 <button
                   type="button"
                   onClick={() => {
-                    const el = document.querySelector(`[data-transcript-id="${duplicateHint.id}"]`);
+                    const el = document.querySelector(`[data-transcript-id="${CSS.escape(duplicateHint.id)}"]`);
                     el?.scrollIntoView({ behavior: "smooth", block: "start" });
                   }}
                   className="inline-flex items-center rounded-md p-0.5 text-white/40 transition-colors hover:text-white/70"
@@ -1328,7 +1330,7 @@ function HomeInner() {
                                   }}
                                 />
                                 <a
-                                  href={`/api/transcripts/${t.id}/download`}
+                                  href={`/api/transcripts/${encodeURIComponent(t.id)}/download`}
                                   title="Download as Markdown"
                                   className={`${iconButtonClassName("sm")} group/dl`}
                                   onClick={(e) => e.stopPropagation()}
@@ -1580,7 +1582,7 @@ function HomeInner() {
                 onClick={async () => {
                   setDeleting(true);
                   try {
-                    const res = await fetch(`/api/transcripts/${deleteId}`, {
+                    const res = await fetch(`/api/transcripts/${encodeURIComponent(deleteId)}`, {
                       method: "DELETE",
                     });
                     if (res.ok) {

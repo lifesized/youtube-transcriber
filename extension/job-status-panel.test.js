@@ -12,39 +12,9 @@ test("background returns transcript ID on success", () => {
     "Background must extract and return transcript ID from API response"
   );
   assert.ok(
-    bgCode.includes("title: data.title"),
-    "Background must extract and return title from API response"
-  );
-  assert.ok(
     bgCode.includes('ok: true'),
     "Background must return ok: true on success"
   );
-});
-
-test("background returns specific failure reasons", async () => {
-  // Test unreachable (network error)
-  const failFetch = async () => {
-    throw new Error("Network error");
-  };
-
-  // Test unauthorized (401)
-  const unauthorizedFetch = async () => ({
-    ok: false,
-    status: 401,
-    json: async () => ({ error: "Unauthorized" }),
-  });
-
-  // Test other error (non-401 failure)
-  const otherErrorFetch = async () => ({
-    ok: false,
-    status: 500,
-    json: async () => ({ error: "Server error" }),
-  });
-
-  // These would be tested in integration, verifying response shape:
-  // { ok: false, reason: "unreachable" }
-  // { ok: false, reason: "unauthorized" }
-  // { ok: false, reason: "other", error: "..." }
 });
 
 test("panel shows Design-locked error strings", () => {

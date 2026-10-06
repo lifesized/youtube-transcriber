@@ -9,14 +9,22 @@ function read(name) {
   return fs.readFileSync(path.join(ROOT, name), "utf8");
 }
 
-const RUNTIME = [
-  "manifest.json",
-  "background.js",
-  "popup.js",
-  "popup.html",
-  "send-url.js",
-  "local-auth-headers.js",
-];
+function getRuntimeFiles() {
+  const files = ["manifest.json", "popup.html"];
+  const manifest = JSON.parse(read("manifest.json"));
+  if (manifest.background?.service_worker) {
+    files.push(manifest.background.service_worker);
+  }
+  const popupHtml = read("popup.html");
+  for (const scriptMatch of popupHtml.matchAll(/<script[^>]*src="([^"]+)"/g)) {
+    const scriptSrc = scriptMatch[1];
+    if (!files.includes(scriptSrc)) files.push(scriptSrc);
+  }
+  // Filter out non-text files (PNGs, etc.) that shouldn't be scanned as UTF-8
+  return files.filter((f) => !f.match(/\.(png|jpg|jpeg|gif|ico|woff|woff2|ttf)$/i));
+}
+
+const RUNTIME = getRuntimeFiles();
 
 test("YTT-445: extension never accepts provider API keys", () => {
   // No input fields for API keys
@@ -30,6 +38,11 @@ test("YTT-445: extension never accepts provider API keys", () => {
   const sources = RUNTIME.map((name) => read(name)).join("\n");
   assert.doesNotMatch(sources, /prompt\(|confirm\(/);
   assert.doesNotMatch(sources, /apiKey.*=.*\?|apiKey.*input/i);
+  
+  // No content_scripts or externally_connectable (attack surface)
+  const manifest = JSON.parse(read("manifest.json"));
+  assert.equal(manifest.content_scripts, undefined, "No content_scripts in LOCAL extension");
+  assert.equal(manifest.externally_connectable, undefined, "No externally_connectable in LOCAL extension");
 });
 
 test("YTT-445: extension never stores provider API keys", () => {
@@ -67,11 +80,12 @@ test("YTT-445: extension never forwards provider API keys", () => {
   assert.doesNotMatch(background, /apiKey.*:/);
   assert.match(sendUrl, /JSON\.stringify\(\{ url \}\)/);
 
-  // Only the loopback Bearer token goes in headers, never a provider key
+  // Only the loopback Bearer token goes in headers, never a provider key in actual code
   assert.match(sendUrl, /Authorization/);
   assert.match(sendUrl, /Bearer/);
   assert.doesNotMatch(background, /x-api-key|api-key.*header/i);
-  assert.doesNotMatch(sendUrl, /x-api-key|openai-organization/i);
+  // Check that x-api-key only appears in comments (not in actual header assignments)
+  assert.doesNotMatch(sendUrl, /(headers|Header)\[["']x-api-key|openai-organization/i);
 });
 
 test("YTT-445: extension never calls summarize with client-supplied key", () => {

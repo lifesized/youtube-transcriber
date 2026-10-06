@@ -66,3 +66,59 @@ test("buildLocalSendRequest body is always exactly {url:...} even with secret qu
   assert.equal(parsed.url.includes("auth"), false);
   assert.equal(parsed.url.includes("v=123"), true);
 });
+
+test("secret denylist normalizes keys (lowercase, strip hyphens/underscores)", () => {
+  const { isSecretQueryKey } = require("./send-url.js");
+  
+  // Base names with various casings and separators
+  assert.equal(isSecretQueryKey("api_key"), true);
+  assert.equal(isSecretQueryKey("API_KEY"), true);
+  assert.equal(isSecretQueryKey("api-key"), true);
+  assert.equal(isSecretQueryKey("API-KEY"), true);
+  assert.equal(isSecretQueryKey("apikey"), true);
+  assert.equal(isSecretQueryKey("ApiKey"), true);
+  
+  assert.equal(isSecretQueryKey("access_token"), true);
+  assert.equal(isSecretQueryKey("access-token"), true);
+  assert.equal(isSecretQueryKey("ACCESS_TOKEN"), true);
+  assert.equal(isSecretQueryKey("accesstoken"), true);
+  
+  assert.equal(isSecretQueryKey("private_token"), true);
+  assert.equal(isSecretQueryKey("private-token"), true);
+  assert.equal(isSecretQueryKey("PRIVATE_TOKEN"), true);
+  assert.equal(isSecretQueryKey("privatetoken"), true);
+  
+  assert.equal(isSecretQueryKey("jwt"), true);
+  assert.equal(isSecretQueryKey("JWT"), true);
+  
+  assert.equal(isSecretQueryKey("code"), true); // OAuth code
+  assert.equal(isSecretQueryKey("CODE"), true);
+});
+
+test("secret denylist matches x-api-*, X-Amz-*, x-goog-* patterns", () => {
+  const { isSecretQueryKey } = require("./send-url.js");
+  
+  // x-api-* patterns
+  assert.equal(isSecretQueryKey("x-api-key"), true);
+  assert.equal(isSecretQueryKey("X-API-KEY"), true);
+  assert.equal(isSecretQueryKey("x_api_key"), true);
+  assert.equal(isSecretQueryKey("xapi-token"), true);
+  assert.equal(isSecretQueryKey("X_API_TOKEN"), true);
+  
+  // X-Amz-* patterns (AWS)
+  assert.equal(isSecretQueryKey("X-Amz-Security-Token"), true);
+  assert.equal(isSecretQueryKey("X-Amz-Signature"), true);
+  assert.equal(isSecretQueryKey("x-amz-credential"), true);
+  assert.equal(isSecretQueryKey("x_amz_signature"), true);
+  
+  // x-goog-* patterns (Google)
+  assert.equal(isSecretQueryKey("x-goog-api-key"), true);
+  assert.equal(isSecretQueryKey("X-GOOG-API-KEY"), true);
+  assert.equal(isSecretQueryKey("x_goog_api_key"), true);
+  
+  // Non-secret keys should not match
+  assert.equal(isSecretQueryKey("v"), false);
+  assert.equal(isSecretQueryKey("id"), false);
+  assert.equal(isSecretQueryKey("timestamp"), false);
+  assert.equal(isSecretQueryKey("user"), false);
+});

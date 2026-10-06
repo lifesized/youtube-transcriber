@@ -9,9 +9,40 @@
 const LOCAL_SEND_ENDPOINT = "http://127.0.0.1:19720/api/transcripts";
 
 function isSecretQueryKey(key) {
-  return /^(token|access_token|refresh_token|id_token|api_key|apikey|x-goog-api-key|yttx|password|auth|authorization|secret|client_secret)$/i.test(
-    String(key || "")
-  );
+  const str = String(key || "");
+  // Normalize: lowercase and strip hyphens/underscores for matching
+  const normalized = str.toLowerCase().replace(/[-_]/g, "");
+  
+  // Base secret names (normalized)
+  const secretBases = [
+    "token",
+    "accesstoken",
+    "refreshtoken",
+    "idtoken",
+    "apikey",
+    "privatetoken",
+    "password",
+    "auth",
+    "authorization",
+    "secret",
+    "clientsecret",
+    "jwt",
+    "code", // OAuth authorization code
+    "yttx",
+  ];
+  
+  if (secretBases.includes(normalized)) {
+    return true;
+  }
+  
+  // Prefix patterns (case-insensitive, stripped)
+  if (normalized.startsWith("xapi") || // x-api-key, x-api-token, etc.
+      normalized.startsWith("xamz") || // X-Amz-Security-Token, X-Amz-Signature, etc.
+      normalized.startsWith("xgoog")) { // x-goog-api-key, etc.
+    return true;
+  }
+  
+  return false;
 }
 
 function authHeaders(token) {

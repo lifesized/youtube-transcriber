@@ -39,7 +39,7 @@ test("sendPageUrl returns { ok: false, reason: 'unauthorized' } when no token", 
   assert.equal(result.reason, "unauthorized");
 });
 
-test("sendPageUrl returns { ok: false, reason: 'failed' } when buildLocalSendRequest fails", async () => {
+test("sendPageUrl returns { ok: false, reason: 'other' } when buildLocalSendRequest fails", async () => {
   resetMocks();
   const { sendPageUrl } = await loadBackgroundModule();
   
@@ -51,7 +51,7 @@ test("sendPageUrl returns { ok: false, reason: 'failed' } when buildLocalSendReq
   
   const result = await sendPageUrl("https://www.youtube.com/watch?v=test");
   assert.equal(result.ok, false);
-  assert.equal(result.reason, "failed");
+  assert.equal(result.reason, "other");
 });
 
 test("sendPageUrl returns { ok: false, reason: 'unreachable' } on fetch error with valid token", async () => {
@@ -92,7 +92,7 @@ test("sendPageUrl returns { ok: false, reason: 'unauthorized' } on 401 and clear
   assert.equal(global._localTokenMemoryTest, null);
 });
 
-test("sendPageUrl returns { ok: false, reason: 'failed' } on other non-OK HTTP", async () => {
+test("sendPageUrl returns { ok: false, reason: 'other' } on other non-OK HTTP", async () => {
   resetMocks();
   const { sendPageUrl } = await loadBackgroundModule();
   
@@ -107,28 +107,63 @@ test("sendPageUrl returns { ok: false, reason: 'failed' } on other non-OK HTTP",
   
   const result = await sendPageUrl("https://www.youtube.com/watch?v=test");
   assert.equal(result.ok, false);
-  assert.equal(result.reason, "failed");
+  assert.equal(result.reason, "other");
 });
 
-test("sendPageUrl returns { ok: true } on successful send", async () => {
+test("sendPageUrl returns { ok: true, transcriptId } on successful send with valid ID", async () => {
   resetMocks();
   const { sendPageUrl } = await loadBackgroundModule();
   
   // Mock getLocalApiToken to return a token
   global.getLocalApiTokenMock = async () => ({ ok: true, token: "a".repeat(64) });
   
-  // Mock fetch to return 200
+  // Mock fetch to return 200 with valid transcript response
   global.fetch = async () => ({
     status: 200,
     ok: true,
+    json: async () => ({ id: "abc123_-xyz" }),
   });
   
   const result = await sendPageUrl("https://www.youtube.com/watch?v=test");
   assert.equal(result.ok, true);
+  assert.equal(result.transcriptId, "abc123_-xyz");
   assert.equal(result.reason, undefined);
+  assert.equal(result.title, undefined);
 });
 
-// Helper to load background.js in a testable way
+test("sendPageUrl returns { ok: false, reason: 'other' } when transcript ID is invalid", async () => {
+  resetMocks();
+  const { sendPageUrl } = await loadBackgroundModule();
+  
+  // Mock getLocalApiToken to return a token
+  global.getLocalApiTokenMock = async () => ({ ok: true, token: "a".repeat(64) });
+  
+  // Mock fetch to return 200 but with invalid transcript ID format
+  global.fetch = async () => ({
+    status: 200,
+    ok: true,
+    json: async () => ({ id: "invalid/id!" }),
+  });
+  
+  const result = await sendPageUrl("https://www.youtube.com/watch?v=test");
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "other");
+});
+
+test("sendPageUrl returns { ok: false, reason: 'other' } when native host returns {ok:false}", async () => {
+  resetMocks();
+  const { sendPageUrl } = await loadBackgroundModule();
+  
+  // Mock getLocalApiToken to return host { ok: false }
+  global.getLocalApiTokenMock = async () => ({ ok: false, reason: "other" });
+  
+  const result = await sendPageUrl("https://www.youtube.com/watch?v=test");
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "other");
+});
+
+// Helper to load background.js sendPageUrl logic in a testable way.
+// This matches the exact behavior of the real background.js (lines 72-132).
 async function loadBackgroundModule() {
   // Mock chrome APIs
   global.chrome = {
@@ -156,7 +191,7 @@ async function loadBackgroundModule() {
   global.buildLocalSendRequest = sendUrlModule.buildLocalSendRequest;
   global.localAuthHeadersFromToken = require("./local-auth-headers.js").localAuthHeadersFromToken;
   
-  // Create a mock sendPageUrl implementation matching the new logic
+  // Mock implementation that matches real background.js exactly
   let _localTokenMemory = null;
   
   async function getLocalApiToken() {
@@ -184,12 +219,17 @@ async function loadBackgroundModule() {
       return { ok: false, reason: "unauthorized" };
     }
     
+    // YTT-448: Native host { ok:false } maps to "other"
+    if (!tokenResult.ok && tokenResult.reason === "other") {
+      return { ok: false, reason: "other" };
+    }
+    
     // Build request with token
     const buildFn = global.buildLocalSendRequestMock || global.buildLocalSendRequest;
     const request = buildFn(pageUrl, tokenResult.token);
     if (!request.ok) {
-      // Token present but request build failed (bad URL etc.)
-      return { ok: false, reason: "failed" };
+      // Token present but request build failed (bad URL etc.) → "other"
+      return { ok: false, reason: "other" };
     }
 
     let res;
@@ -211,11 +251,24 @@ async function loadBackgroundModule() {
     }
     
     if (!res.ok) {
-      return { ok: false, reason: "failed" };
+      // YTT-448: Server errors return "other"
+      return { ok: false, reason: "other" };
     }
     
-    return { ok: true };
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      return { ok: false, reason: "other" };
+    }
+
+    // YTT-448: Validate transcriptId format before success
+    if (typeof data?.id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(data.id)) {
+    return { ok: false, reason: "other" };
   }
+
+  return { ok: true, transcriptId: data.id };
+}
   
   return { sendPageUrl, clearLocalTokenMemory, _localTokenMemory };
 }

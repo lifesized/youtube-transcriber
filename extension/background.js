@@ -129,7 +129,7 @@ async function sendPageUrl(pageUrl) {
     return { ok: false, reason: "other" };
   }
 
-  return { ok: true, transcriptId: data.id, title: data.title };
+  return { ok: true, transcriptId: data.id };
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
