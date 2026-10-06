@@ -34,7 +34,9 @@ Open [http://localhost:19720](http://localhost:19720) — paste a YouTube or Spo
 https://github.com/user-attachments/assets/081c8d90-a6e1-4b4d-b6cd-bc8787bc0a3b
 
 
-Send the page you are on to Transcriber running on this computer. The extension opens a side panel with one action: **Send this page**. Transcription stays in the local app at `http://127.0.0.1:19720`. The extension does not store API keys or the local auth token, and it does not put secrets in URLs.
+Send the page you are on to Transcriber running on this computer. The extension opens a side panel with one action: **Send this page**. Transcription stays in the local app at `http://127.0.0.1:19720`.
+
+**Supported send path:** The extension authenticates via the native host and sends the page URL directly to `http://127.0.0.1:19720/api/transcripts`. The extension does not store API keys or the local auth token, and it does not put secrets in URLs.
 
 ### Install from Chrome Web Store
 
