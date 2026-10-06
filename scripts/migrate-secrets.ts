@@ -13,7 +13,7 @@ async function main() {
   if (!process.env[ENV_NAME]?.trim()) {
     console.error(
       `Set ${ENV_NAME} first (openssl rand -hex 32), then re-run.\n` +
-        "Plaintext keys are left unchanged until the master key is present."
+        "Plaintext database secrets are not used until they are encrypted."
     );
     process.exit(1);
   }

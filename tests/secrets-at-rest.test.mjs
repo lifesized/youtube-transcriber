@@ -88,11 +88,38 @@ test("maskStoredSecret never returns plaintext", async () => {
   }
 });
 
-test("plaintext passthrough until migration; write requires master key", () => {
+test("plaintext rows are rejected when the master key is set", async () => {
+  const keyHex = cryptoMod.generateSecretsKeyHex();
+  await withKey(keyHex, () => {
+    assert.throws(
+      () => cryptoMod.decryptSecret("plain-gsk-key"),
+      (err) =>
+        err instanceof cryptoMod.SecretsKeyError &&
+        /plaintext/i.test(err.message) &&
+        !err.message.includes("plain-gsk-key")
+    );
+    assert.throws(
+      () => store.decryptApiKeyForUse("plain-gsk-key"),
+      (err) => err instanceof cryptoMod.SecretsKeyError && /plaintext/i.test(err.message)
+    );
+    const enc = cryptoMod.encryptSecret("plain-gsk-key");
+    assert.equal(cryptoMod.decryptSecret(enc), "plain-gsk-key");
+  });
+});
+
+test("plaintext rows are rejected when the master key is unset", () => {
   const prev = process.env[ENV];
   delete process.env[ENV];
   try {
-    assert.equal(cryptoMod.decryptSecret("plain-gsk-key"), "plain-gsk-key");
+    assert.throws(
+      () => cryptoMod.decryptSecret("plain-gsk-key"),
+      (err) =>
+        err instanceof cryptoMod.SecretsKeyError && /plaintext/i.test(err.message)
+    );
+    assert.throws(
+      () => store.decryptApiKeyForUse("plain-gsk-key"),
+      (err) => err instanceof cryptoMod.SecretsKeyError
+    );
     assert.throws(
       () => store.encryptApiKeyForStorage("plain-gsk-key"),
       (err) => err instanceof cryptoMod.SecretsKeyError
@@ -143,9 +170,170 @@ test("migratePlaintextSecrets encrypts provider + groq_api_key rows", async () =
     assert.equal(providers[1].apiKey, "yttenc:v1:already:encrypted:value");
     assert.ok(setting && cryptoMod.isEncryptedSecret(setting.value));
     assert.equal(cryptoMod.decryptSecret(setting.value), "gsk_plain_legacy");
+    assert.equal(result.warned, false);
+    assert.equal(result.plaintextProviders, 0);
+    assert.equal(result.plaintextSettings, 0);
   } finally {
     if (prev === undefined) delete process.env[ENV];
     else process.env[ENV] = prev;
+  }
+});
+
+test("boot warns when plaintext remains and no master key is configured", async () => {
+  const prev = process.env[ENV];
+  delete process.env[ENV];
+  /** @type {string[]} */
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => {
+    warnings.push(args.map(String).join(" "));
+  };
+  /** @type {Array<{ id: string, apiKey: string }>} */
+  const providers = [{ id: "p1", apiKey: "sk-openrouter-plain" }];
+  const setting = { key: "groq_api_key", value: "gsk_plain_legacy" };
+  let providerUpdates = 0;
+  let settingUpdates = 0;
+  const fakePrisma = {
+    providerConfig: {
+      findMany: async () => providers.map((p) => ({ ...p })),
+      update: async () => {
+        providerUpdates += 1;
+      },
+    },
+    setting: {
+      findUnique: async () => ({ ...setting }),
+      update: async () => {
+        settingUpdates += 1;
+      },
+    },
+  };
+  try {
+    const result = await store.ensureSecretsMigrated(async () => fakePrisma);
+    assert.equal(result.skipped, true);
+    assert.equal(result.warned, true);
+    assert.equal(result.plaintextProviders, 1);
+    assert.equal(result.plaintextSettings, 1);
+    assert.equal(providerUpdates, 0);
+    assert.equal(settingUpdates, 0);
+    assert.equal(providers[0].apiKey, "sk-openrouter-plain");
+    assert.equal(setting.value, "gsk_plain_legacy");
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /TRANSCRIBER_SECRETS_KEY is not set/);
+    assert.match(warnings[0], /1 provider key\(s\) and 1 setting key\(s\)/);
+    assert.match(warnings[0], /will not be used/);
+    assert.equal(warnings[0].includes("sk-openrouter-plain"), false);
+    assert.equal(warnings[0].includes("gsk_plain_legacy"), false);
+  } finally {
+    console.warn = originalWarn;
+    if (prev === undefined) delete process.env[ENV];
+    else process.env[ENV] = prev;
+  }
+});
+
+test("boot stays quiet when no plaintext secrets remain and no master key is set", async () => {
+  const prev = process.env[ENV];
+  delete process.env[ENV];
+  /** @type {string[]} */
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => {
+    warnings.push(args.map(String).join(" "));
+  };
+  const fakePrisma = {
+    providerConfig: {
+      findMany: async () => [
+        { id: "p2", apiKey: "yttenc:v1:already:encrypted:value" },
+      ],
+      update: async () => {
+        throw new Error("should not write");
+      },
+    },
+    setting: {
+      findUnique: async () => null,
+      update: async () => {
+        throw new Error("should not write");
+      },
+    },
+  };
+  try {
+    const result = await store.ensureSecretsMigrated(async () => fakePrisma);
+    assert.equal(result.skipped, true);
+    assert.equal(result.warned, false);
+    assert.equal(result.plaintextProviders, 0);
+    assert.equal(result.plaintextSettings, 0);
+    assert.equal(warnings.length, 0);
+  } finally {
+    console.warn = originalWarn;
+    if (prev === undefined) delete process.env[ENV];
+    else process.env[ENV] = prev;
+  }
+});
+
+test("env-only keys are not written to the database", async () => {
+  const prevKey = process.env[ENV];
+  const prevOpenRouter = process.env.OPENROUTER_API_KEY;
+  const prevWhisper = process.env.WHISPER_CLOUD_API_KEY;
+  delete process.env[ENV];
+  process.env.OPENROUTER_API_KEY = "sk-or-env-only-not-for-db";
+  process.env.WHISPER_CLOUD_API_KEY = "gsk-env-only-not-for-db";
+
+  /** @type {unknown[]} */
+  const writes = [];
+  const fakePrisma = {
+    providerConfig: {
+      findMany: async () => [],
+      update: async (args) => {
+        writes.push(args);
+      },
+    },
+    setting: {
+      findUnique: async ({ where }) => {
+        assert.equal(where.key, "groq_api_key");
+        return null;
+      },
+      update: async (args) => {
+        writes.push(args);
+      },
+    },
+  };
+
+  try {
+    const result = await store.migratePlaintextSecrets(fakePrisma);
+    assert.equal(result.skipped, true);
+    assert.equal(result.warned, false);
+    assert.equal(writes.length, 0);
+    assert.equal(process.env.OPENROUTER_API_KEY, "sk-or-env-only-not-for-db");
+    assert.equal(process.env.WHISPER_CLOUD_API_KEY, "gsk-env-only-not-for-db");
+
+    const storeSrc = readFileSync(path.join(repoRoot, "lib/secrets-store.js"), "utf8");
+    assert.doesNotMatch(storeSrc, /process\.env\.OPENROUTER_API_KEY/);
+    assert.doesNotMatch(storeSrc, /process\.env\.WHISPER_CLOUD_API_KEY/);
+
+    const summary = readFileSync(path.join(repoRoot, "lib/local-summary.ts"), "utf8");
+    assert.match(summary, /process\.env\.OPENROUTER_API_KEY/);
+    assert.doesNotMatch(summary, /prisma\.(setting|providerConfig)\.(create|update|upsert)/);
+    assert.doesNotMatch(
+      summary,
+      /OPENROUTER_API_KEY[\s\S]{0,400}prisma\.(setting|providerConfig)\.(create|update|upsert)/
+    );
+
+    const whisper = readFileSync(path.join(repoRoot, "lib/whisper-cloud.ts"), "utf8");
+    assert.match(whisper, /process\.env\.WHISPER_CLOUD_API_KEY/);
+    assert.doesNotMatch(
+      whisper,
+      /WHISPER_CLOUD_API_KEY[\s\S]{0,500}prisma\.(setting|providerConfig)\.(create|update|upsert)/
+    );
+    assert.doesNotMatch(
+      whisper,
+      /prisma\.(setting|providerConfig)\.(create|update|upsert)[\s\S]{0,500}WHISPER_CLOUD_API_KEY/
+    );
+  } finally {
+    if (prevKey === undefined) delete process.env[ENV];
+    else process.env[ENV] = prevKey;
+    if (prevOpenRouter === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = prevOpenRouter;
+    if (prevWhisper === undefined) delete process.env.WHISPER_CLOUD_API_KEY;
+    else process.env.WHISPER_CLOUD_API_KEY = prevWhisper;
   }
 });
 

@@ -328,7 +328,7 @@ openssl rand -hex 32
 # TRANSCRIBER_SECRETS_KEY=<that hex value>
 ```
 
-Restart the server (or run `npm run migrate:secrets`) so existing plaintext rows are re-encrypted. New keys cannot be saved until this is set. Decrypt happens only in the server process when calling providers; the web UI continues to show masked keys only. Keep `TRANSCRIBER_SECRETS_KEY` out of git — losing it makes ciphertext unrecoverable (re-enter keys in Settings after rotating).
+Restart the server (or run `npm run migrate:secrets`) so existing plaintext rows are re-encrypted. Plaintext database secrets are not used: a provider or `groq_api_key` row is usable only as ciphertext together with this master key. If plaintext rows are still present and the master key is missing, the server logs a warning at boot and refuses those keys. New keys cannot be saved until this is set. Decrypt happens only in the server process when calling providers; the web UI continues to show masked keys only. Keep `TRANSCRIBER_SECRETS_KEY` out of git — losing it makes ciphertext unrecoverable (re-enter keys in Settings after rotating).
 
 Env-only alternatives (`OPENROUTER_API_KEY`, `WHISPER_CLOUD_API_KEY`) are not written to the database and do not need this master key.
 

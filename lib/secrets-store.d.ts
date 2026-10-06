@@ -26,6 +26,9 @@ export declare function migratePlaintextSecrets(prisma: {
   migratedSettings: number;
   skipped: boolean;
   reason?: string;
+  plaintextProviders: number;
+  plaintextSettings: number;
+  warned: boolean;
 }>;
 
 export declare function ensureSecretsMigrated(
@@ -38,4 +41,7 @@ export declare function ensureSecretsMigrated(
   migratedSettings: number;
   skipped: boolean;
   reason?: string;
+  plaintextProviders: number;
+  plaintextSettings: number;
+  warned: boolean;
 }>;
