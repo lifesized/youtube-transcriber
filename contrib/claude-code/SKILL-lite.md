@@ -24,8 +24,10 @@ This skill operates in two modes, detected automatically:
 ### Mode Detection
 
 ```bash
+# From the youtube-transcriber repo root. Does not print the token.
+YTT_AUTH=( -H "Authorization: Bearer $(node -e 'process.stdout.write(require("./lib/local-api-token.js").ensureLocalApiToken())')" )
 # Check if full service is available
-if curl -s --max-time 2 http://127.0.0.1:19720/api/transcripts > /dev/null 2>&1; then
+if curl "${YTT_AUTH[@]}" -s --max-time 2 http://127.0.0.1:19720/api/transcripts > /dev/null 2>&1; then
   echo "FULL_MODE"  # Use service API (Whisper fallback, diarization, library)
 else
   echo "LITE_MODE"  # Use yt-dlp directly (subtitles only)
@@ -41,7 +43,9 @@ When the YouTube Transcriber service is detected, use the full API for transcrip
 ### Capture a Transcript
 
 ```bash
-RESPONSE=$(curl -s -X POST 'http://127.0.0.1:19720/api/transcripts' \
+# From the youtube-transcriber repo root. Does not print the token.
+YTT_AUTH=( -H "Authorization: Bearer $(node -e 'process.stdout.write(require("./lib/local-api-token.js").ensureLocalApiToken())')" )
+RESPONSE=$(curl "${YTT_AUTH[@]}" -s -X POST 'http://127.0.0.1:19720/api/transcripts' \
   -H 'Content-Type: application/json' \
   -d '{"url": "YOUTUBE_URL"}')
 ```

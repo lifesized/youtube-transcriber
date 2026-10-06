@@ -208,7 +208,9 @@ By default, the app fetches English captions. You can change this per-request or
 
 **Per-request** — pass `lang` in the API body:
 ```bash
-curl -X POST http://localhost:19720/api/transcripts \
+# From the repo root. Sends the local API token without printing it.
+curl -X POST http://127.0.0.1:19720/api/transcripts \
+  -H "Authorization: Bearer $(node -e 'process.stdout.write(require("./lib/local-api-token.js").ensureLocalApiToken())')" \
   -H 'Content-Type: application/json' \
   -d '{"url": "https://youtube.com/watch?v=...", "lang": "es"}'
 ```
@@ -291,13 +293,37 @@ npm run test:setup
 
 This checks Node.js, Python, ffmpeg, yt-dlp, Whisper, the native SQLite driver, database, and environment configuration. Each check prints pass/fail with actionable fix messages. It runs automatically at the end of `npm run setup`, and setup stops instead of reporting success if a required check fails.
 
-For a running instance, hit the health endpoint:
+For a running instance, hit the health endpoint from the repo root. The command reads the local API token into the header and does not print it:
 
 ```bash
-curl http://localhost:19720/api/health
+curl -H "Authorization: Bearer $(node -e 'process.stdout.write(require("./lib/local-api-token.js").ensureLocalApiToken())')" \
+  http://127.0.0.1:19720/api/health
 ```
 
-Returns JSON with per-check pass/fail — useful for Docker health checks or debugging. See [docs/TESTING.md](./docs/TESTING.md) for the full test protocol.
+Returns JSON with per-check pass/fail — useful for debugging. Requests without the token get **401**. See [docs/TESTING.md](./docs/TESTING.md) for the full test protocol.
+
+## Local API authentication
+
+The app listens on `127.0.0.1:19720`. Every `/api/*` route also requires a loopback bearer token so other local processes cannot read transcripts or change settings.
+
+The token is generated on first run and stored mode `0600`:
+
+- macOS: `~/Library/Application Support/Transcriber/local-api.token`
+- Linux: `${XDG_CONFIG_HOME:-~/.config}/transcriber/local-api.token`
+- Windows: `%APPDATA%\Transcriber\local-api.token`
+
+`node lib/local-api-token.js --path` prints that path and not the token. The web UI, Chrome extension, and MCP server share it. The extension asks the native host for `getLocalToken` and keeps the value in memory only. The server never writes the token to its logs.
+
+Set `TRANSCRIBER_LOCAL_TOKEN` to choose the value yourself. The file is updated to match so every client stays in sync.
+
+### Rotate the token
+
+1. Stop the app. Quit MCP clients and reload the extension.
+2. Delete the token file, or export a new `TRANSCRIBER_LOCAL_TOKEN` (one line, no spaces).
+3. Start the app. A deleted file is replaced; an env override is written to the file.
+4. Restart MCP clients and reload the extension.
+
+Details and curl examples: [docs/API.md](./docs/API.md).
 
 ## Troubleshooting
 

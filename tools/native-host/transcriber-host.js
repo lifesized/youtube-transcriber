@@ -11,6 +11,7 @@
  *   { id, cmd: "start" }    → { started: true, pid } | { started: false, reason }
  *   { id, cmd: "stop" }     → { stopped: bool }
  *   { id, cmd: "status" }   → { running: bool, pid?, uptimeMs?, projectRoot, port }
+ *   { id, cmd: "getLocalToken" } → { token }  (not written to the host log)
  */
 
 const fs = require("fs");
@@ -18,6 +19,7 @@ const path = require("path");
 const os = require("os");
 const http = require("http");
 const { spawn } = require("child_process");
+const { ensureLocalApiToken } = require("../../lib/local-api-token");
 
 const PORT = 19720;
 const HEALTH_URL = `http://127.0.0.1:${PORT}/api/health`;
@@ -27,6 +29,7 @@ const IDENTITY_HEADER = "x-transcriber-service";
 const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
 
 const STATE_DIR = (() => {
+  if (process.env.TRANSCRIBER_STATE_DIR) return process.env.TRANSCRIBER_STATE_DIR;
   if (process.platform === "darwin") {
     return path.join(os.homedir(), "Library", "Application Support", "Transcriber");
   }
@@ -227,6 +230,9 @@ async function handleMessage(msg) {
         return { id, ok: true, ...stopServer() };
       case "status":
         return { id, ok: true, ...getStatus() };
+      case "getLocalToken":
+        // Reply on stdout only. Do not log the token.
+        return { id, ok: true, token: ensureLocalApiToken() };
       default:
         return { id, ok: false, error: "unknown_cmd", cmd };
     }

@@ -51,7 +51,9 @@ This runs automatically at the end of `npm run setup`.
 **When to use**: To verify a running instance is healthy. Useful for Docker health checks, monitoring dashboards, or debugging "the API returns 500 but I don't know why."
 
 ```bash
-curl http://localhost:19720/api/health
+# From the repo root. Unauthenticated calls return 401.
+curl -H "Authorization: Bearer $(node -e 'process.stdout.write(require("./lib/local-api-token.js").ensureLocalApiToken())')" \
+  http://127.0.0.1:19720/api/health
 ```
 
 Returns JSON:
@@ -79,8 +81,10 @@ Returns JSON:
 
 ```dockerfile
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-  CMD curl -f http://localhost:19720/api/health || exit 1
+  CMD curl -f -H "Authorization: Bearer $(cat /path/to/local-api.token)" http://127.0.0.1:19720/api/health || exit 1
 ```
+
+The healthcheck must send the loopback token. Do not echo that file into image logs.
 
 ## Layer 3: End-to-End Integration (Future)
 

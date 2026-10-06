@@ -38,7 +38,7 @@ Claude will call the local API and return the formatted transcript.
 
 The skill teaches Claude Code how to interact with the YouTube Transcriber REST API. When you ask to transcribe a video, Claude will:
 
-1. POST the URL to `http://127.0.0.1:3000/api/transcripts`
+1. POST the URL to `http://127.0.0.1:19720/api/transcripts` with `Authorization: Bearer` set to the local API token (`node lib/local-api-token.js --path`)
 2. Parse the response
 3. Format the transcript with timestamps
 4. Display the result

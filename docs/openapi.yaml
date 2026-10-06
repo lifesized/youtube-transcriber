@@ -13,6 +13,9 @@ servers:
   - url: http://127.0.0.1:19720
     description: Local development server
 
+security:
+  - localBearer: []
+
 paths:
   /api/transcripts:
     post:
@@ -173,6 +176,13 @@ paths:
           description: Transcript not found
 
 components:
+  securitySchemes:
+    localBearer:
+      type: http
+      scheme: bearer
+      description: >
+        Local loopback token from the Transcriber state directory
+        (local-api.token, mode 0600). The server does not log this value.
   schemas:
     Video:
       type: object

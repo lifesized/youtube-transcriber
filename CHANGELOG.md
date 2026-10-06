@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-10-06
+
+### Added
+- **Local API loopback token (YTT-435)** — Every `/api/*` route requires `Authorization: Bearer`. The token is created on first run at mode 0600 in the Transcriber state directory (`~/Library/Application Support/Transcriber/local-api.token` on macOS). The web UI, Chrome extension (via the native host `getLocalToken` command), and MCP server share that file. `TRANSCRIBER_LOCAL_TOKEN` overrides it. Rotation steps are in the README and `docs/API.md`. The token is not written to server logs, extension storage, or URLs.
+
+### Changed
+- **Health check no longer returns `projectPath`** — `GET /api/health` still identifies the app with `X-Transcriber-Service: 1`, including on 401, and now requires the local token like the other API routes.
+
+### Fixed
+- **Local extension downloads** — Self-hosted markdown download sends the bearer token instead of opening an unauthenticated URL.
+
 ## 2026-09-27
 
 ### Fixed

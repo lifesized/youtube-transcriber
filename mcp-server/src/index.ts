@@ -1,6 +1,16 @@
+import { createRequire } from "node:module";
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+
+const require = createRequire(import.meta.url);
+const { ensureLocalApiToken } = require("../../lib/local-api-token.js") as {
+  ensureLocalApiToken: () => string;
+};
+
+function localAuthHeaders(): Record<string, string> {
+  return { Authorization: `Bearer ${ensureLocalApiToken()}` };
+}
 
 // ---------------------------------------------------------------------------
 // Config
@@ -38,7 +48,11 @@ async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   try {
     return await fetch(`${BASE_URL}${path}`, {
       ...init,
-      headers: { "Content-Type": "application/json", ...init?.headers },
+      headers: {
+        "Content-Type": "application/json",
+        ...localAuthHeaders(),
+        ...init?.headers,
+      },
     });
   } catch (err: unknown) {
     if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ECONNREFUSED") {
@@ -86,6 +100,7 @@ function streamProgress(reporter: ProgressReporter): AbortController {
     try {
       const res = await fetch(`${BASE_URL}/api/transcripts/progress`, {
         signal: controller.signal,
+        headers: localAuthHeaders(),
       });
       if (!res.ok || !res.body) return;
 

@@ -149,6 +149,7 @@ const el = {
   offlineStartWrap: document.getElementById("offlineStartWrap"),
   offlineCopyWrap: document.getElementById("offlineCopyWrap"),
   offlineStartError: document.getElementById("offlineStartError"),
+  offlineHeading: document.getElementById("offlineHeading"),
   offlineSub: document.getElementById("offlineSub"),
   setupCommand: document.getElementById("setupCommand"),
   btnCopySetup: document.getElementById("btnCopySetup"),
@@ -1523,9 +1524,25 @@ async function copyTranscriptText(transcriptId) {
 async function downloadTranscriptMarkdown(transcriptId) {
   const cfgRes = await sendMsg({ type: "GET_SETTINGS" });
   const mode = cfgRes?.data?.mode || "cloud";
-  const base = mode === "cloud"
-    ? "https://www.transcribed.dev"
-    : "http://localhost:19720";
+  if (mode === "local") {
+    const res = await sendMsg({ type: "DOWNLOAD_TRANSCRIPT", id: transcriptId });
+    if (!res?.success || typeof res.data?.markdown !== "string") {
+      showPopupToast(res?.error || "Couldn't download transcript", "error");
+      return;
+    }
+    const blob = new Blob([res.data.markdown], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = res.data.filename || "transcript.md";
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    return;
+  }
+  const base = "https://www.transcribed.dev";
   // The download route sets Content-Disposition: attachment, so a plain
   // anchor click triggers a file save rather than navigating the popup.
   const a = document.createElement("a");
@@ -2540,6 +2557,14 @@ async function init() {
       el.offlineCloudMsg.hidden = true;
       el.cloudNudge.hidden = false;
       el.localDetectedBanner.hidden = true;
+      const tokenError = serviceRes?.data?.tokenError;
+      if (tokenError) {
+        el.offlineHeading.textContent = "Local API token required";
+        el.offlineSub.textContent = tokenError;
+      } else {
+        el.offlineHeading.textContent = "One-time setup";
+        el.offlineSub.textContent = "Run this in your terminal to get going";
+      }
       loadCachedPath();
       // Detect (or re-detect on each offline render) whether the native host
       // is installed so the right primary action shows.
@@ -2548,7 +2573,8 @@ async function init() {
       // controls live there now; landing the user directly on the Start
       // button feels more "embedded in the product" than the takeover
       // offline screen. Polling continues from Settings.
-      if (nativeHostAvailable) {
+      // A missing token stays on this explicit error instead of a blank panel.
+      if (nativeHostAvailable && !tokenError) {
         startOfflinePolling();
         showSettingsView();
         return;

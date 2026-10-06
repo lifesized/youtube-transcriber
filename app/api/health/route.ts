@@ -119,7 +119,7 @@ export async function GET() {
   const status = hasFail ? "unhealthy" : "healthy";
 
   return NextResponse.json(
-    { status, checks, projectPath: process.cwd() },
+    { status, checks },
     {
       status: hasFail ? 503 : 200,
       headers: { "X-Transcriber-Service": "1" },

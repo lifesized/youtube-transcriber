@@ -10,7 +10,7 @@ The Next.js app must be running:
 npm run dev
 ```
 
-The MCP server makes HTTP calls to `http://127.0.0.1:19720`. If you changed the port, set `YTT_API_URL` in your MCP client config's `env` block.
+The MCP server makes HTTP calls to `http://127.0.0.1:19720` and sends `Authorization: Bearer` with the local API token. It reads the token file itself (or `TRANSCRIBER_LOCAL_TOKEN` when that is set). Do not put the token in the MCP config. If you changed the port, set `YTT_API_URL` in your MCP client config's `env` block.
 
 ## Setup
 
@@ -20,7 +20,7 @@ The MCP server is built automatically when you run `npm run setup` or `npm insta
 npm run mcp:config
 ```
 
-This prints the JSON block with the correct absolute path to `mcp-server/dist/index.js`.
+This prints the JSON block with the correct absolute path to `mcp-server/dist/index.js`, plus the local API token file path. The token value is not printed.
 
 ## Client Configuration
 
@@ -98,6 +98,8 @@ Add to `.cursor/mcp.json`:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `YTT_API_URL` | `http://127.0.0.1:19720` | Override the YouTube Transcriber API URL |
+| `TRANSCRIBER_LOCAL_TOKEN` | token file | Same override the app uses. Leave it unset to read the 0600 token file. |
+| `TRANSCRIBER_STATE_DIR` | platform state dir | Override the directory that contains `local-api.token` |
 
 ## Troubleshooting
 

@@ -1,8 +1,15 @@
+importScripts("local-auth.js");
+
 // ---------------------------------------------------------------------------
 // API Configuration — runtime mode switching (local / cloud)
 // ---------------------------------------------------------------------------
 
 const LOCAL_BASE = "http://localhost:19720";
+const NATIVE_HOST = "com.transcribed.host";
+const LOCAL_TOKEN_ERROR =
+  "Couldn't read the local API token. Install or update the native host (npm run install-native-host) and reload this panel. The token is not stored in the extension.";
+const LOCAL_TOKEN_REJECTED =
+  "The local API rejected the token. Reload this panel after rotating the token file. The token is not stored in the extension.";
 // Apex (no `www.`) — the site 307-redirects `www.` to apex, and that
 // redirect hop can drop the session cookie when host-only. Hitting the
 // apex directly keeps credentials intact.
@@ -10,26 +17,83 @@ const CLOUD_BASE = "https://transcribed.dev";
 
 let _apiConfigCache = null;
 
+function callNativeHost(cmd, timeoutMs = 5000) {
+  return new Promise((resolve, reject) => {
+    let port;
+    try {
+      port = chrome.runtime.connectNative(NATIVE_HOST);
+    } catch {
+      reject(new Error("local_token_unavailable"));
+      return;
+    }
+    let settled = false;
+    const timer = setTimeout(() => {
+      finish(() => reject(new Error("local_token_unavailable")));
+    }, timeoutMs);
+    function finish(fn) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { port.disconnect(); } catch { /* already closed */ }
+      fn();
+    }
+    port.onMessage.addListener((msg) => {
+      finish(() => resolve(msg));
+    });
+    port.onDisconnect.addListener(() => {
+      finish(() => reject(new Error("local_token_unavailable")));
+    });
+    port.postMessage({ id: Math.random().toString(36).slice(2), cmd });
+  });
+}
+
+async function readLocalTokenFromHost() {
+  const res = await callNativeHost("getLocalToken");
+  if (!res || res.ok !== true || typeof res.token !== "string") {
+    throw new Error("local_token_unavailable");
+  }
+  return res.token;
+}
+
 async function getApiConfig() {
   if (_apiConfigCache) return _apiConfigCache;
   const { mode } = await chrome.storage.sync.get(["mode"]);
-  _apiConfigCache = buildConfig(mode || "cloud");
-  return _apiConfigCache;
-}
-
-function buildConfig(mode) {
-  if (mode === "cloud") {
+  if ((mode || "cloud") !== "local") {
     // Cloud auth rides on the user's transcribed.dev session cookie.
     // `credentials: "include"` on fetch sends the cookie cross-origin;
     // host_permissions for transcribed.dev allows it.
-    return {
+    _apiConfigCache = {
       mode: "cloud",
       baseUrl: CLOUD_BASE,
       headers: {},
       credentials: "include",
     };
+    return _apiConfigCache;
   }
-  return { mode: "local", baseUrl: LOCAL_BASE, headers: {}, credentials: "omit" };
+  try {
+    const token = await readLocalTokenFromHost();
+    _apiConfigCache = {
+      mode: "local",
+      baseUrl: LOCAL_BASE,
+      headers: localAuthorizationHeader(token),
+      credentials: "omit",
+    };
+    return _apiConfigCache;
+  } catch {
+    return {
+      mode: "local",
+      baseUrl: LOCAL_BASE,
+      headers: {},
+      credentials: "omit",
+      tokenError: LOCAL_TOKEN_ERROR,
+    };
+  }
+}
+
+async function requireApiConfig() {
+  const config = await getApiConfig();
+  if (config.tokenError) throw new Error(config.tokenError);
+  return config;
 }
 
 // Invalidate cache when settings change
@@ -250,6 +314,14 @@ function setBadge(text, color) {
 
 async function checkService() {
   const config = await getApiConfig();
+  if (config.tokenError) {
+    return {
+      online: false,
+      mode: "local",
+      authError: true,
+      tokenError: config.tokenError,
+    };
+  }
   const health = await tryHealthCheck(config.baseUrl, config.headers, config.mode, config.credentials);
 
   // In cloud mode, /api/health doesn't require auth — so a 200 from it
@@ -392,7 +464,8 @@ async function detectLocalInstance() {
       method: "GET",
       signal: AbortSignal.timeout(2000),
     });
-    return res.ok;
+    // 401 still identifies our server. The probe must not send the token.
+    return res.headers.get("x-transcriber-service") === "1" || res.ok;
   } catch {
     return false;
   }
@@ -406,13 +479,18 @@ async function tryHealthCheck(baseUrl, headers, mode, credentials) {
       credentials: credentials || "omit",
       signal: AbortSignal.timeout(3000),
     });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.projectPath) {
-        chrome.storage.local.set({ projectPath: data.projectPath });
+    if (res.status === 401) {
+      if (mode === "local") {
+        _apiConfigCache = null;
+        return {
+          online: false,
+          mode,
+          authError: true,
+          tokenError: LOCAL_TOKEN_REJECTED,
+        };
       }
+      return { online: false, mode, authError: true };
     }
-    if (res.status === 401) return { online: false, mode, authError: true };
     return { online: res.ok || res.status === 503, mode };
   } catch {
     return { online: false, mode };
@@ -420,7 +498,7 @@ async function tryHealthCheck(baseUrl, headers, mode, credentials) {
 }
 
 async function transcribeRequest(url, extras = {}) {
-  const config = await getApiConfig();
+  const config = await requireApiConfig();
   const body = { url };
   if (extras?.segments?.length) {
     body.segments = extras.segments;
@@ -604,7 +682,11 @@ async function pollUntilDone(id, config) {
 async function classifyError(status, data) {
   const config = await getApiConfig();
   if (config.mode === "local") {
-    if (status === 401) return "Server rejected the request. Check your local setup.";
+    if (config.tokenError) return config.tokenError;
+    if (status === 401) {
+      _apiConfigCache = null;
+      return LOCAL_TOKEN_REJECTED;
+    }
     if (status >= 500) return "Local server error. Check the terminal for details.";
     return data?.error || `HTTP ${status}`;
   }
@@ -620,7 +702,7 @@ async function classifyError(status, data) {
 }
 
 async function getRecent() {
-  const config = await getApiConfig();
+  const config = await requireApiConfig();
   const res = await fetch(`${config.baseUrl}/api/transcripts`, {
     headers: config.headers,
     credentials: config.credentials,
@@ -631,7 +713,7 @@ async function getRecent() {
 }
 
 async function getTranscript(id) {
-  const config = await getApiConfig();
+  const config = await requireApiConfig();
   const res = await fetch(`${config.baseUrl}/api/transcripts/${id}`, {
     headers: config.headers,
     credentials: config.credentials,
@@ -657,7 +739,7 @@ async function getPreferences() {
 }
 
 async function checkExisting(videoId) {
-  const config = await getApiConfig();
+  const config = await requireApiConfig();
   const res = await fetch(`${config.baseUrl}/api/transcripts`, {
     headers: config.headers,
     credentials: config.credentials,
@@ -1252,6 +1334,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "GET_TRANSCRIPT": {
         if (!validId(message.id)) throw new Error("Invalid id");
         return await getTranscript(message.id);
+      }
+
+      case "DOWNLOAD_TRANSCRIPT": {
+        if (!validId(message.id)) throw new Error("Invalid id");
+        const config = await requireApiConfig();
+        const res = await fetch(
+          `${config.baseUrl}/api/transcripts/${message.id}/download`,
+          { headers: config.headers, credentials: config.credentials }
+        );
+        if (!res.ok) throw new Error(await classifyError(res.status, {}));
+        const markdown = await res.text();
+        const disposition = res.headers.get("content-disposition") || "";
+        const match = /filename="([^"]+)"/.exec(disposition);
+        return { markdown, filename: match ? match[1] : "transcript.md" };
       }
 
       case "GET_PREFERENCES":

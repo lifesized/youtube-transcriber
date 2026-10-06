@@ -24,7 +24,9 @@ Activate when the user wants to:
 Before making any API calls, check if the service is available:
 
 ```bash
-curl -s http://127.0.0.1:19720/api/health | jq -r '.status'
+# From the youtube-transcriber repo root. Does not print the token.
+YTT_AUTH=( -H "Authorization: Bearer $(node -e 'process.stdout.write(require("./lib/local-api-token.js").ensureLocalApiToken())')" )
+curl "${YTT_AUTH[@]}" -s http://127.0.0.1:19720/api/health | jq -r '.status'
 ```
 
 - If this returns `"healthy"` — you're ready to go, skip to the API section.
@@ -73,7 +75,9 @@ npm run dev
 
 After starting, confirm everything is working:
 ```bash
-curl -s http://127.0.0.1:19720/api/health | jq .
+# From the youtube-transcriber repo root. Does not print the token.
+YTT_AUTH=( -H "Authorization: Bearer $(node -e 'process.stdout.write(require("./lib/local-api-token.js").ensureLocalApiToken())')" )
+curl "${YTT_AUTH[@]}" -s http://127.0.0.1:19720/api/health | jq .
 ```
 
 All checks should show `"status": "pass"`. If any show `"fail"`, run `npm run test:setup` for detailed diagnostics.
@@ -87,7 +91,9 @@ Base URL: `http://127.0.0.1:19720`
 ### Transcribe a Video
 
 ```bash
-curl -X POST 'http://127.0.0.1:19720/api/transcripts' \
+# From the youtube-transcriber repo root. Does not print the token.
+YTT_AUTH=( -H "Authorization: Bearer $(node -e 'process.stdout.write(require("./lib/local-api-token.js").ensureLocalApiToken())')" )
+curl "${YTT_AUTH[@]}" -X POST 'http://127.0.0.1:19720/api/transcripts' \
   -H 'Content-Type: application/json' \
   -d '{"url": "YOUTUBE_URL"}'
 ```
@@ -111,7 +117,9 @@ The `transcript` field is a JSON string. Parse it to get segments with `text`, `
 To extract plain text with no timestamps:
 
 ```bash
-RESP=$(curl -s -X POST 'http://127.0.0.1:19720/api/transcripts' \
+# From the youtube-transcriber repo root. Does not print the token.
+YTT_AUTH=( -H "Authorization: Bearer $(node -e 'process.stdout.write(require("./lib/local-api-token.js").ensureLocalApiToken())')" )
+RESP=$(curl "${YTT_AUTH[@]}" -s -X POST 'http://127.0.0.1:19720/api/transcripts' \
   -H 'Content-Type: application/json' \
   -d '{"url": "USER_URL"}')
 
@@ -140,32 +148,40 @@ for s in json.load(sys.stdin):
 ### List Saved Transcripts
 
 ```bash
-curl 'http://127.0.0.1:19720/api/transcripts'
+# From the youtube-transcriber repo root. Does not print the token.
+YTT_AUTH=( -H "Authorization: Bearer $(node -e 'process.stdout.write(require("./lib/local-api-token.js").ensureLocalApiToken())')" )
+curl "${YTT_AUTH[@]}" 'http://127.0.0.1:19720/api/transcripts'
 ```
 
 ### Search Transcripts
 
 ```bash
-curl 'http://127.0.0.1:19720/api/transcripts?q=SEARCH_TERM'
+# From the youtube-transcriber repo root. Does not print the token.
+YTT_AUTH=( -H "Authorization: Bearer $(node -e 'process.stdout.write(require("./lib/local-api-token.js").ensureLocalApiToken())')" )
+curl "${YTT_AUTH[@]}" 'http://127.0.0.1:19720/api/transcripts?q=SEARCH_TERM'
 ```
 
 ### Get by ID
 
 ```bash
-curl 'http://127.0.0.1:19720/api/transcripts/ID'
+# From the youtube-transcriber repo root. Does not print the token.
+YTT_AUTH=( -H "Authorization: Bearer $(node -e 'process.stdout.write(require("./lib/local-api-token.js").ensureLocalApiToken())')" )
+curl "${YTT_AUTH[@]}" 'http://127.0.0.1:19720/api/transcripts/ID'
 ```
 
 ### Delete
 
 ```bash
-curl -X DELETE 'http://127.0.0.1:19720/api/transcripts/ID'
+# From the youtube-transcriber repo root. Does not print the token.
+YTT_AUTH=( -H "Authorization: Bearer $(node -e 'process.stdout.write(require("./lib/local-api-token.js").ensureLocalApiToken())')" )
+curl "${YTT_AUTH[@]}" -X DELETE 'http://127.0.0.1:19720/api/transcripts/ID'
 ```
 
 ## Recommended Workflow
 
 When a user shares a YouTube URL and wants the transcript:
 
-1. Check the service is running: `curl -s http://127.0.0.1:19720/api/health | jq -r '.status'`
+1. Check the service is running with the local API token: `curl -s -H "Authorization: Bearer $(node -e 'process.stdout.write(require("./lib/local-api-token.js").ensureLocalApiToken())')" http://127.0.0.1:19720/api/health | jq -r '.status'`
 2. If not running, inform the user and provide setup instructions from the Prerequisites section
 3. POST the URL to `/api/transcripts`
 4. Parse the response
@@ -173,7 +189,9 @@ When a user shares a YouTube URL and wants the transcript:
 6. Return the clean text directly — it's ready to use
 
 ```bash
-RESP=$(curl -s -X POST 'http://127.0.0.1:19720/api/transcripts' \
+# From the youtube-transcriber repo root. Does not print the token.
+YTT_AUTH=( -H "Authorization: Bearer $(node -e 'process.stdout.write(require("./lib/local-api-token.js").ensureLocalApiToken())')" )
+RESP=$(curl "${YTT_AUTH[@]}" -s -X POST 'http://127.0.0.1:19720/api/transcripts' \
   -H 'Content-Type: application/json' \
   -d '{"url": "USER_URL"}')
 

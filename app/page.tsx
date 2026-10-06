@@ -137,6 +137,23 @@ function eventCategory(type: string): keyof DebugFilters {
   return "state";
 }
 
+async function downloadTranscriptFile(id: string) {
+  const res = await fetch(`/api/transcripts/${id}/download`);
+  if (!res.ok) return;
+  const blob = await res.blob();
+  const header = res.headers.get("Content-Disposition") || "";
+  const match = /filename="([^"]+)"/.exec(header);
+  const filename = match?.[1] || "transcript.md";
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 function HomeInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1327,11 +1344,14 @@ function HomeInner() {
                                     setTimeout(() => setToast(null), 2500);
                                   }}
                                 />
-                                <a
-                                  href={`/api/transcripts/${t.id}/download`}
+                                <button
+                                  type="button"
                                   title="Download as Markdown"
                                   className={`${iconButtonClassName("sm")} group/dl`}
-                                  onClick={(e) => e.stopPropagation()}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void downloadTranscriptFile(t.id);
+                                  }}
                                 >
                                   <svg
                                     className="transition-transform duration-300 group-hover/dl:translate-y-0.5"
@@ -1347,7 +1367,7 @@ function HomeInner() {
                                     <path d="M10 3v10m0 0l-3.5-3.5M10 13l3.5-3.5" />
                                     <path d="M3 15v1a1 1 0 001 1h12a1 1 0 001-1v-1" />
                                   </svg>
-                                </a>
+                                </button>
                                 <button
                                   type="button"
                                   title={copiedId === t.id ? "Copied!" : "Copy transcript"}

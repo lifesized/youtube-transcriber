@@ -25,6 +25,7 @@
     "restore": "tsx scripts/restore.ts",
     "fresh": "tsx scripts/fresh.ts",
     "test:setup": "bash scripts/test-setup.sh && node --test tests/setup-verification.test.mjs",
+    "test:auth": "node --test tests/local-api-auth.test.mjs tests/local-api-url.test.mjs tests/native-host-token.test.mjs extension/local-auth.test.js && node --import tsx --test tests/local-api-proxy.test.ts",
     "install-native-host": "node scripts/install-native-host.js",
     "uninstall-native-host": "node scripts/install-native-host.js --remove",
     "build:ext": "node extension/build.js",

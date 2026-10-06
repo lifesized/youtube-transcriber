@@ -2,6 +2,46 @@
 
 Base URL: `http://127.0.0.1:19720`
 
+## Authentication
+
+Every `/api/*` route requires the local loopback token:
+
+```
+Authorization: Bearer <token>
+```
+
+The token is created on first run and stored at mode `0600`:
+
+| Platform | Path |
+|----------|------|
+| macOS | `~/Library/Application Support/Transcriber/local-api.token` |
+| Linux | `${XDG_CONFIG_HOME:-~/.config}/transcriber/local-api.token` |
+| Windows | `%APPDATA%\Transcriber\local-api.token` |
+
+From the repo root, print the path (not the token):
+
+```bash
+node lib/local-api-token.js --path
+```
+
+Unauthenticated requests return **401**. The server does not log the token. `GET /api/health` is included; its response no longer includes `projectPath`. A 401 from this app still sends `X-Transcriber-Service: 1` so local probes can tell it apart from another process on the port.
+
+Set `TRANSCRIBER_LOCAL_TOKEN` to override the file. On startup the file is rewritten to match. The extension reads the token through the native messaging host (`getLocalToken`) and does not store it. The MCP server reads the same file.
+
+### Rotate the token
+
+1. Stop the app, the MCP client, and reload the extension.
+2. Delete the token file, or set `TRANSCRIBER_LOCAL_TOKEN` to a new single-line value with no spaces.
+3. Start the app again. A missing file is replaced with a new token; an env override is written back to the file.
+4. Restart MCP clients and reload the extension so they re-read it.
+
+Do not paste the token into shell history, logs, URLs, or extension storage. From the repo root, curl reads it straight into the header:
+
+```bash
+curl -H "Authorization: Bearer $(node -e 'process.stdout.write(require("./lib/local-api-token.js").ensureLocalApiToken())')" \
+  http://127.0.0.1:19720/api/health
+```
+
 ## Endpoints
 
 ### Create Transcript
@@ -243,33 +283,36 @@ Returns **503** with `"status": "unhealthy"` when any check fails. Individual ch
 ### cURL
 
 ```bash
+# From the repo root. The token is not printed.
+AUTH=( -H "Authorization: Bearer $(node -e 'process.stdout.write(require("./lib/local-api-token.js").ensureLocalApiToken())')" )
+
 # Create transcript
-curl -X POST 'http://127.0.0.1:19720/api/transcripts' \
+curl "${AUTH[@]}" -X POST 'http://127.0.0.1:19720/api/transcripts' \
   -H 'Content-Type: application/json' \
   -d '{"url": "https://youtu.be/dQw4w9WgXcQ"}'
 
 # List all
-curl 'http://127.0.0.1:19720/api/transcripts'
+curl "${AUTH[@]}" 'http://127.0.0.1:19720/api/transcripts'
 
 # Search
-curl 'http://127.0.0.1:19720/api/transcripts?q=rick+astley'
+curl "${AUTH[@]}" 'http://127.0.0.1:19720/api/transcripts?q=rick+astley'
 
 # Get by ID
-curl 'http://127.0.0.1:19720/api/transcripts/cm5abc123def'
+curl "${AUTH[@]}" 'http://127.0.0.1:19720/api/transcripts/cm5abc123def'
 
 # Delete
-curl -X DELETE 'http://127.0.0.1:19720/api/transcripts/cm5abc123def'
+curl "${AUTH[@]}" -X DELETE 'http://127.0.0.1:19720/api/transcripts/cm5abc123def'
 
 # Download markdown
-curl 'http://127.0.0.1:19720/api/transcripts/cm5abc123def/download' -o transcript.md
+curl "${AUTH[@]}" 'http://127.0.0.1:19720/api/transcripts/cm5abc123def/download' -o transcript.md
 
 # Summarize with OpenAI
-curl -X POST 'http://127.0.0.1:19720/api/transcripts/cm5abc123def/summarize' \
+curl "${AUTH[@]}" -X POST 'http://127.0.0.1:19720/api/transcripts/cm5abc123def/summarize' \
   -H 'Content-Type: application/json' \
   -d '{"provider": "openai", "apiKey": "sk-...", "format": "bullets"}'
 
 # Summarize with Anthropic
-curl -X POST 'http://127.0.0.1:19720/api/transcripts/cm5abc123def/summarize' \
+curl "${AUTH[@]}" -X POST 'http://127.0.0.1:19720/api/transcripts/cm5abc123def/summarize' \
   -H 'Content-Type: application/json' \
   -d '{"provider": "anthropic", "apiKey": "sk-ant-...", "model": "claude-sonnet-4-5-20250929"}'
 ```
@@ -278,9 +321,16 @@ curl -X POST 'http://127.0.0.1:19720/api/transcripts/cm5abc123def/summarize' \
 
 ```javascript
 // Create transcript
+const token = require('fs').readFileSync(
+  require('./lib/local-api-token').tokenFilePath(),
+  'utf8'
+).trim();
 const response = await fetch('http://127.0.0.1:19720/api/transcripts', {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  },
   body: JSON.stringify({ url: 'https://youtu.be/dQw4w9WgXcQ' })
 });
 const video = await response.json();
@@ -299,10 +349,16 @@ for (const seg of segments) {
 ```python
 import requests
 import json
+from pathlib import Path
+
+token = Path.home().joinpath(
+    "Library", "Application Support", "Transcriber", "local-api.token"
+).read_text().strip()  # Linux: ~/.config/transcriber/local-api.token
 
 # Create transcript
 response = requests.post(
     'http://127.0.0.1:19720/api/transcripts',
+    headers={'Authorization': f'Bearer {token}'},
     json={'url': 'https://youtu.be/dQw4w9WgXcQ'}
 )
 video = response.json()
