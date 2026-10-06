@@ -13,9 +13,9 @@
   },
   "scripts": {
     "setup": "bash scripts/setup.sh",
-    "dev": "next dev -p 19720 --hostname 127.0.0.1 --webpack",
+    "dev": "node scripts/run-with-local-token.js next dev -p 19720 --hostname 127.0.0.1 --webpack",
     "build": "next build",
-    "start": "next start -p 19720 --hostname 127.0.0.1",
+    "start": "node scripts/run-with-local-token.js next start -p 19720 --hostname 127.0.0.1",
     "lint": "eslint .",
     "postinstall": "prisma generate",
     "mcp:build": "cd mcp-server && npm run build",
@@ -28,7 +28,8 @@
     "install-native-host": "node scripts/install-native-host.js",
     "uninstall-native-host": "node scripts/install-native-host.js --remove",
     "build:ext": "node extension/build.js",
-    "build:ext:dev": "node extension/build.js --dev"
+    "build:ext:dev": "node extension/build.js --dev",
+    "test:local-auth": "node --test tests/local-api-auth.test.mjs tools/native-host/get-local-token.test.mjs extension/local-auth-headers.test.js"
   },
   "keywords": [],
   "author": "",

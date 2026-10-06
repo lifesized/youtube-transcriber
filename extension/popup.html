@@ -25,6 +25,12 @@
     <div id="stateNoService" class="state state-offline" hidden>
       <!-- Local mode offline -->
       <div id="offlineLocalMsg">
+        <div id="offlineLocalAuthError" hidden>
+          <p class="offline-heading">Local API needs auth</p>
+          <p class="offline-sub" id="offlineLocalAuthErrorMsg">Local API needs auth — restart the Transcriber host</p>
+          <p class="offline-error" style="margin-top:8px">The side panel could not get a loopback token from the native host. Restart Transcriber (or re-run install-native-host), then reload this panel.</p>
+        </div>
+        <div id="offlineLocalSetup">
         <p class="offline-heading" id="offlineHeading">One-time setup</p>
         <p class="offline-sub" id="offlineSub">Run this in your terminal to get going</p>
         <p class="offline-path" id="offlinePath" hidden></p>
@@ -63,6 +69,7 @@
             <p class="setup-hint">3. Reload the side panel</p>
           </div>
         </div>
+        </div><!-- /offlineLocalSetup -->
       </div>
 
       <!-- Cloud mode: mini sign-in card mirroring /auth/login -->

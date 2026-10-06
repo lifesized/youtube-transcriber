@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-06
+
+### Security
+- **Local API loopback auth (YTT-435)** — All `/api/*` routes on the self-hosted server require `Authorization: Bearer <token>` (or the httpOnly `transcriber_local_token` cookie for the same-origin web UI). The token lives in the Transcriber state dir (`~/Library/Application Support/Transcriber/local-api.token` on macOS; `~/.config/transcriber/local-api.token` on Linux; `%APPDATA%/Transcriber/local-api.token` on Windows) with mode `0600`, or in `TRANSCRIBER_LOCAL_TOKEN`. The Chrome native host exposes `getLocalToken` so the extension can attach Bearer headers without storing the token in `chrome.storage` or URLs. MCP reads the same file/env. `/api/health` no longer returns `projectPath`.
+
+### Changed
+- **`npm run dev` / `start`** — Wrappers ensure the loopback token is present in the process env before Next.js boots (required for middleware).
+- **`npm run mcp:config`** — Prints the token file path and documents auth; does not recommend raw DB reads as a recall workaround.
+
+
 ## 2026-09-27
 
 ### Fixed

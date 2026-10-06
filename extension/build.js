@@ -28,6 +28,7 @@ const DEV_KEY_PATH = path.join(SRC, "dev-key.pem");
 // Files to copy as-is (relative to extension/)
 const COPY_FILES = [
   "manifest.json",
+  "local-auth-headers.js",
   "background.js",
   "popup.html",
   "popup.js",

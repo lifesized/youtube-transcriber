@@ -11,6 +11,7 @@
  *   { id, cmd: "start" }    → { started: true, pid } | { started: false, reason }
  *   { id, cmd: "stop" }     → { stopped: bool }
  *   { id, cmd: "status" }   → { running: bool, pid?, uptimeMs?, projectRoot, port }
+ *   { id, cmd: "getLocalToken" } → { token }  (loopback API Bearer; never log value)
  */
 
 const fs = require("fs");
@@ -18,6 +19,12 @@ const path = require("path");
 const os = require("os");
 const http = require("http");
 const { spawn } = require("child_process");
+const {
+  ensureLocalApiToken,
+  ensureInEnv,
+  getLocalApiTokenPath,
+  ENV_NAME,
+} = require("../../lib/local-api-token.js");
 
 const PORT = 19720;
 const HEALTH_URL = `http://127.0.0.1:${PORT}/api/health`;
@@ -86,17 +93,35 @@ function isPidAlive(pid) {
   }
 }
 
+function authHeaders() {
+  try {
+    const token = ensureLocalApiToken();
+    return { Authorization: `Bearer ${token}` };
+  } catch {
+    return {};
+  }
+}
+
 function probeOnce(timeoutMs = 1500) {
   return new Promise((resolve) => {
-    const req = http.get(HEALTH_URL, { timeout: timeoutMs }, (res) => {
-      const identity = res.headers[IDENTITY_HEADER];
-      // Drain body so the socket closes cleanly.
-      res.on("data", () => {});
-      res.on("end", () => {
-        if (identity) resolve({ status: "ready", identity, statusCode: res.statusCode });
-        else resolve({ status: "foreign", statusCode: res.statusCode });
-      });
-    });
+    const req = http.get(
+      HEALTH_URL,
+      { timeout: timeoutMs, headers: authHeaders() },
+      (res) => {
+        const identity = res.headers[IDENTITY_HEADER];
+        // Drain body so the socket closes cleanly.
+        res.on("data", () => {});
+        res.on("end", () => {
+          // 401 with our identity header still means "our server" (auth misconfig).
+          if (identity) resolve({ status: "ready", identity, statusCode: res.statusCode });
+          else if (res.statusCode === 401) {
+            // Server up but token mismatch / middleware without env — treat as ready
+            // only if we can distinguish; without identity, call it foreign/auth.
+            resolve({ status: "foreign", statusCode: res.statusCode });
+          } else resolve({ status: "foreign", statusCode: res.statusCode });
+        });
+      }
+    );
     req.on("error", () => resolve({ status: "down" }));
     req.on("timeout", () => {
       req.destroy();
@@ -149,11 +174,20 @@ async function startServer() {
     .filter(Boolean)
     .join(path.delimiter);
 
+  // Ensure loopback token exists and is passed to Next (middleware reads env).
+  let tokenEnv = {};
+  try {
+    const token = ensureInEnv();
+    tokenEnv = { [ENV_NAME]: token };
+  } catch (e) {
+    log("token_ensure_failed", { message: e && e.message });
+  }
+
   const child = spawn(npmCmd, ["run", "dev"], {
     cwd: PROJECT_ROOT,
     detached: true,
     stdio: "ignore",
-    env: { ...process.env, PATH: extendedPath },
+    env: { ...process.env, PATH: extendedPath, ...tokenEnv },
   });
   child.unref();
 
@@ -227,6 +261,12 @@ async function handleMessage(msg) {
         return { id, ok: true, ...stopServer() };
       case "status":
         return { id, ok: true, ...getStatus() };
+      case "getLocalToken": {
+        const token = ensureLocalApiToken();
+        // Do not log token. Path is ok for diagnostics.
+        log("getLocalToken", { path: getLocalApiTokenPath() });
+        return { id, ok: true, token };
+      }
       default:
         return { id, ok: false, error: "unknown_cmd", cmd };
     }
