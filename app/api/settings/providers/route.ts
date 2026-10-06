@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { ProviderType } from "@/lib/providers";
+import {
+  encryptApiKeyForStorage,
+  isMaskedPlaceholder,
+  maskApiKeyForResponse,
+  SecretsKeyError,
+} from "@/lib/secrets-store.js";
 
 const VALID_PROVIDERS = ["openrouter", "groq", "custom"];
-
-function maskApiKey(key: string): string {
-  if (key.length <= 4) return "****";
-  return "*".repeat(key.length - 4) + key.slice(-4);
-}
 
 export async function GET() {
   try {
@@ -17,7 +18,7 @@ export async function GET() {
 
     const masked = providers.map((p) => ({
       ...p,
-      apiKey: maskApiKey(p.apiKey),
+      apiKey: maskApiKeyForResponse(p.apiKey),
     }));
 
     return NextResponse.json(masked);
@@ -46,7 +47,9 @@ export async function POST(request: Request) {
       // Partial update — only set fields that were provided
       const data: Record<string, unknown> = {};
       if (provider !== undefined) data.provider = provider;
-      if (apiKey && !apiKey.startsWith("***")) data.apiKey = apiKey.trim();
+      if (apiKey && !isMaskedPlaceholder(apiKey)) {
+        data.apiKey = encryptApiKeyForStorage(apiKey);
+      }
       if (model !== undefined) data.model = model?.trim() || null;
       if (baseUrl !== undefined) data.baseUrl = baseUrl?.trim() || null;
       if (enabled !== undefined) data.enabled = enabled;
@@ -56,13 +59,18 @@ export async function POST(request: Request) {
         where: { id },
         data,
       });
-      return NextResponse.json({ ...updated, apiKey: maskApiKey(updated.apiKey) });
+      return NextResponse.json({
+        ...updated,
+        apiKey: maskApiKeyForResponse(updated.apiKey),
+      });
     }
 
     // Create new — require provider and apiKey
     if (!provider || !VALID_PROVIDERS.includes(provider)) {
       return NextResponse.json(
-        { error: `Invalid provider: ${provider}. Must be one of: ${VALID_PROVIDERS.join(", ")}` },
+        {
+          error: `Invalid provider: ${provider}. Must be one of: ${VALID_PROVIDERS.join(", ")}`,
+        },
         { status: 400 }
       );
     }
@@ -84,7 +92,7 @@ export async function POST(request: Request) {
     const created = await prisma.providerConfig.create({
       data: {
         provider,
-        apiKey: apiKey.trim(),
+        apiKey: encryptApiKeyForStorage(apiKey),
         model: model?.trim() || null,
         baseUrl: baseUrl?.trim() || null,
         enabled: enabled ?? true,
@@ -92,13 +100,14 @@ export async function POST(request: Request) {
       },
     });
     return NextResponse.json(
-      { ...created, apiKey: maskApiKey(created.apiKey) },
+      { ...created, apiKey: maskApiKeyForResponse(created.apiKey) },
       { status: 201 }
     );
   } catch (e) {
+    const status = e instanceof SecretsKeyError ? 503 : 500;
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Failed to save provider" },
-      { status: 500 }
+      { status }
     );
   }
 }

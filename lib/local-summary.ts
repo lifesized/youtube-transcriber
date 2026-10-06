@@ -5,6 +5,10 @@ import {
   rejectClientApiKey,
   requestLocalSummary,
 } from "./local-summary-core.js";
+import {
+  decryptApiKeyForUse,
+  SecretsKeyError,
+} from "./secrets-store.js";
 
 export {
   LOCAL_SUMMARY_MODEL,
@@ -14,8 +18,9 @@ export {
 };
 
 /**
- * Server-held OpenRouter key for built-in summarize (YTT-436).
+ * Server-held OpenRouter key for built-in summarize (YTT-436 / YTT-437).
  * Never read a client-supplied apiKey — env or ProviderConfig only.
+ * DB-stored keys are decrypted in-process; never returned to clients.
  */
 export async function getOpenRouterKey(): Promise<string | null> {
   const envKey = process.env.OPENROUTER_API_KEY?.trim();
@@ -28,5 +33,14 @@ export async function getOpenRouterKey(): Promise<string | null> {
     orderBy: { priority: "asc" },
     select: { apiKey: true },
   });
-  return provider?.apiKey?.trim() || null;
+  if (!provider?.apiKey?.trim()) return null;
+  try {
+    return decryptApiKeyForUse(provider.apiKey);
+  } catch (err) {
+    if (err instanceof SecretsKeyError) {
+      console.error(`[local-summary] ${err.message}`);
+      throw err;
+    }
+    throw err;
+  }
 }

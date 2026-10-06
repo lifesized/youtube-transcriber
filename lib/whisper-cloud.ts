@@ -1,6 +1,7 @@
 import { promises as fs } from "fs";
 import type { TranscriptSegment } from "./types";
 import { prisma } from "./prisma";
+import { decryptApiKeyForUse } from "./secrets-store.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -53,7 +54,12 @@ export async function getCloudWhisperConfig(): Promise<CloudWhisperConfig | null
       prisma.setting.findUnique({ where: { key: "whisper_cloud_model" } }),
     ]);
 
-    const apiKey = dbKey?.value?.trim() || process.env.WHISPER_CLOUD_API_KEY?.trim();
+    let apiKey: string | undefined;
+    if (dbKey?.value?.trim()) {
+      apiKey = decryptApiKeyForUse(dbKey.value);
+    } else {
+      apiKey = process.env.WHISPER_CLOUD_API_KEY?.trim();
+    }
     if (!apiKey) return null;
 
     const raw = dbProvider?.value?.trim().toLowerCase() ||

@@ -1,6 +1,7 @@
 import { prisma } from "./prisma";
 import { sendCloudTranscription, trackGroqUsage, getCloudWhisperConfig } from "./whisper-cloud";
 import type { TranscriptSegment } from "./types";
+import { decryptApiKeyForUse } from "./secrets-store.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -76,7 +77,7 @@ export async function getEnabledProviders(): Promise<ProviderEndpointConfig[]> {
         id: row.id,
         provider: row.provider as ProviderType,
         endpoint,
-        apiKey: row.apiKey,
+        apiKey: decryptApiKeyForUse(row.apiKey),
         model,
       };
     });
