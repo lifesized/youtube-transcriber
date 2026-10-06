@@ -383,24 +383,28 @@ server.tool(
 
 server.tool(
   "summarize_transcript",
-  "Summarize a transcript using an LLM provider. Requires an API key for the chosen provider.",
+  "Summarize a transcript with the server-held OpenRouter key (Settings / OPENROUTER_API_KEY). Do not pass API keys — client keys are rejected (YTT-436).",
   {
     id: z.string().describe("Transcript ID to summarize"),
-    provider: z.enum(["openai", "anthropic"]).describe("LLM provider"),
-    apiKey: z.string().describe("API key for the provider"),
-    model: z.string().optional().describe("Model override (defaults: gpt-4o / claude-sonnet-4-5)"),
-    format: z.enum(["markdown", "text", "bullets"]).optional().describe("Output format (default: markdown)"),
+    promptOverride: z
+      .string()
+      .optional()
+      .describe("Optional custom summarize prompt (server appends the transcript)"),
   },
-  async ({ id, provider, apiKey, model, format }) => {
+  async ({ id, promptOverride }) => {
     try {
-      const result = await apiJSON<{ summary: string; model_used: string }>(
-        `/api/transcripts/${encodeURIComponent(id)}/summarize`,
+      const body: { transcriptId: string; promptOverride?: string } = {
+        transcriptId: id,
+      };
+      if (promptOverride?.trim()) body.promptOverride = promptOverride.trim();
+      const result = await apiJSON<{ summary_md: string; model: string }>(
+        "/api/summaries",
         {
           method: "POST",
-          body: JSON.stringify({ provider, apiKey, model, format }),
+          body: JSON.stringify(body),
         }
       );
-      return text(`Summary (${result.model_used}):\n\n${result.summary}`);
+      return text(`Summary (${result.model}):\n\n${result.summary_md}`);
     } catch (err: unknown) {
       return errorText((err as Error).message);
     }

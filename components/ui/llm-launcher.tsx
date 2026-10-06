@@ -29,8 +29,6 @@ const PROVIDERS: LlmProvider[] = [
   {
     id: "chatgpt",
     name: "ChatGPT",
-    // Avoid transcript-in-URL launches; long prompts can hit browser/site
-    // request limits before ChatGPT has a chance to load.
     urlTemplate: null,
     clipboardFallback: true,
     icon: PROVIDER_ICONS.chatgpt,
@@ -38,8 +36,6 @@ const PROVIDERS: LlmProvider[] = [
   {
     id: "claude",
     name: "Claude",
-    // Claude.ai's ?q= path triggers an external-prompt warning banner —
-    // worse UX than the clipboard hop. Use the extension for one-press parity.
     urlTemplate: null,
     clipboardFallback: true,
     icon: PROVIDER_ICONS.claude,
@@ -65,9 +61,7 @@ interface LlmLauncherProps {
 
 export function LlmLauncher({ videoId, videoTitle, onToast }: LlmLauncherProps) {
   const [open, setOpen] = useState(false);
-  // Lazy init avoids the React 19 set-state-in-effect warning. Same-component
-  // writes (line ~93) keep this in sync; cross-tab updates are an accepted
-  // edge case.
+  const [busy, setBusy] = useState(false);
   const [lastProvider, setLastProvider] = useState<string | null>(() =>
     typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null
   );
@@ -84,13 +78,50 @@ export function LlmLauncher({ videoId, videoTitle, onToast }: LlmLauncherProps) 
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [open]);
 
+  /** Built-in summarize — server OpenRouter key only (YTT-436). No pasted keys. */
+  const summarizeBuiltIn = useCallback(async () => {
+    setOpen(false);
+    setBusy(true);
+    try {
+      const res = await fetch("/api/summaries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcriptId: videoId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        onToast?.(
+          typeof data.error === "string"
+            ? data.error
+            : "Summarize failed — add an OpenRouter key in Settings."
+        );
+        return;
+      }
+      const summary =
+        typeof data.summary_md === "string" ? data.summary_md : "";
+      if (summary) {
+        try {
+          await navigator.clipboard.writeText(summary);
+          onToast?.("Summary ready — copied to clipboard");
+        } catch {
+          onToast?.("Summary ready");
+        }
+      } else {
+        onToast?.("Summary ready");
+      }
+    } catch {
+      onToast?.("Summarize failed");
+    } finally {
+      setBusy(false);
+    }
+  }, [videoId, onToast]);
+
   const launchWithProvider = useCallback(
     async (provider: LlmProvider) => {
       setOpen(false);
       localStorage.setItem(STORAGE_KEY, provider.id);
       setLastProvider(provider.id);
 
-      // Fetch full transcript text
       let transcriptText: string;
       try {
         const res = await fetch(`/api/transcripts/${videoId}`);
@@ -100,11 +131,14 @@ export function LlmLauncher({ videoId, videoTitle, onToast }: LlmLauncherProps) 
         }
         const data = await res.json();
         const segments = JSON.parse(data.transcript);
-        transcriptText = segments.map((s: { text: string; speaker?: string }, idx: number) => {
-          const prev = segments[idx - 1] as { speaker?: string } | undefined;
-          const speakerChanged = s.speaker && (!prev || prev.speaker !== s.speaker);
-          return speakerChanged ? `\n${s.speaker}: ${s.text}` : s.text;
-        }).join(" ");
+        transcriptText = segments
+          .map((s: { text: string; speaker?: string }, idx: number) => {
+            const prev = segments[idx - 1] as { speaker?: string } | undefined;
+            const speakerChanged =
+              s.speaker && (!prev || prev.speaker !== s.speaker);
+            return speakerChanged ? `\n${s.speaker}: ${s.text}` : s.text;
+          })
+          .join(" ");
       } catch {
         onToast?.("Failed to load transcript");
         return;
@@ -114,7 +148,6 @@ export function LlmLauncher({ videoId, videoTitle, onToast }: LlmLauncherProps) 
 
       if (provider.urlTemplate && !provider.clipboardFallback) {
         const encoded = encodeURIComponent(prompt);
-        // Truncate if URL would be excessively long (browsers cap around 2000-8000 chars)
         const maxLen = 6000;
         const url =
           encoded.length > maxLen
@@ -122,7 +155,6 @@ export function LlmLauncher({ videoId, videoTitle, onToast }: LlmLauncherProps) 
             : provider.urlTemplate.replace("{prompt}", encoded);
         window.open(url, "_blank", "noopener,noreferrer");
       } else {
-        // Clipboard fallback — copy prompt then open the provider
         try {
           await navigator.clipboard.writeText(prompt);
           onToast?.("Prompt copied — paste into " + provider.name + " (⌘V)");
@@ -138,7 +170,6 @@ export function LlmLauncher({ videoId, videoTitle, onToast }: LlmLauncherProps) 
     [videoId, videoTitle, onToast]
   );
 
-  // Sort providers so the last-used one appears first
   const sortedProviders = lastProvider
     ? [
         ...PROVIDERS.filter((p) => p.id === lastProvider),
@@ -150,14 +181,14 @@ export function LlmLauncher({ videoId, videoTitle, onToast }: LlmLauncherProps) 
     <div ref={dropdownRef} className="relative">
       <button
         type="button"
+        disabled={busy}
         onClick={(e) => {
           e.stopPropagation();
           setOpen((prev) => !prev);
         }}
-        title="Summarize with LLM..."
-        className="group/llm inline-flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition hover:bg-white/5 hover:text-white/90 active:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+        title="Summarize…"
+        className="group/llm inline-flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition hover:bg-white/5 hover:text-white/90 active:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 disabled:opacity-40"
       >
-        {/* Sparkle / wand icon */}
         <svg
           className="transition-transform duration-300 group-hover/llm:rotate-15"
           width="16"
@@ -177,12 +208,27 @@ export function LlmLauncher({ videoId, videoTitle, onToast }: LlmLauncherProps) 
 
       {open && (
         <div
-          className="absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-lg border border-white/15 bg-[hsl(var(--panel))] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7)]"
+          className="absolute right-0 top-full z-50 mt-1 min-w-[200px] rounded-lg border border-white/15 bg-[hsl(var(--panel))] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7)]"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="px-3 py-2">
             <p className="text-[10px] font-medium uppercase tracking-widest text-white/40">
-              Summarize with
+              Summarize
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => summarizeBuiltIn()}
+            className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-white/90 transition hover:bg-white/5 disabled:opacity-40"
+          >
+            <span className="flex-1">Built-in (OpenRouter)</span>
+            <span className="text-[10px] text-white/35">server key</span>
+          </button>
+          <div className="mx-3 border-t border-white/10" />
+          <div className="px-3 py-2">
+            <p className="text-[10px] font-medium uppercase tracking-widest text-white/40">
+              Open transcript in
             </p>
           </div>
           {sortedProviders.map((provider) => (
@@ -196,11 +242,6 @@ export function LlmLauncher({ videoId, videoTitle, onToast }: LlmLauncherProps) 
               <span className="flex-1">{provider.name}</span>
               {provider.id === lastProvider && (
                 <span className="text-[10px] text-white/30">last used</span>
-              )}
-              {provider.clipboardFallback && (
-                <span className="pointer-events-none absolute bottom-full left-1/2 z-10 -mb-1.5 -translate-x-[calc(50%-10px)] whitespace-nowrap rounded-md border border-white/10 bg-[hsl(var(--panel))] px-2.5 py-1.5 text-[11px] text-white/50 opacity-0 shadow-lg transition-opacity duration-200 group-hover/btn:opacity-100 group-hover/btn:delay-400">
-                  <span className="text-white/70">{typeof navigator !== "undefined" && /mac/i.test(navigator.userAgent) ? "⌘+V" : "Ctrl+V"}</span>{" "}to paste transcript
-                </span>
               )}
             </button>
           ))}

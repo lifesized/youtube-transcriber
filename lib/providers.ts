@@ -167,7 +167,27 @@ export async function transcribeWithProviderChain(
 
 /**
  * Test a provider's API key by hitting their models endpoint.
+ * SSRF note (YTT-436): custom baseUrl is only used with a *stored* provider
+ * key from Settings (see providers/[id]/test). Still restrict custom URLs to
+ * http(s) and block obvious credential-exfil to non-http schemes.
  */
+function assertSafeCustomBaseUrl(baseUrl: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    return "Invalid base URL";
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    return "Custom base URL must use http or https";
+  }
+  // Block userinfo (https://key@evil/) style exfil disguises
+  if (parsed.username || parsed.password) {
+    return "Custom base URL must not include credentials";
+  }
+  return null;
+}
+
 export async function testProviderConnection(
   provider: ProviderType,
   apiKey: string,
@@ -177,6 +197,8 @@ export async function testProviderConnection(
 
   if (provider === "custom") {
     if (!baseUrl) return { success: false, error: "Base URL is required for custom providers" };
+    const unsafe = assertSafeCustomBaseUrl(baseUrl);
+    if (unsafe) return { success: false, error: unsafe };
     modelsUrl = `${baseUrl.replace(/\/+$/, "")}/models`;
   } else {
     modelsUrl = PROVIDER_MODELS_ENDPOINTS[provider];

@@ -90,7 +90,7 @@ Add to `.cursor/mcp.json`:
 | `search_transcripts` | Search by title or author | `query` |
 | `get_transcript` | Get full timestamped transcript | `id` |
 | `delete_transcript` | Delete a transcript | `id` |
-| `summarize_transcript` | Summarize via OpenAI or Anthropic | `id`, `provider`, `apiKey`, `model?`, `format?` |
+| `summarize_transcript` | Summarize via server OpenRouter key (no client apiKey) | `id`, `promptOverride?` |
 
 ## Resources
 
