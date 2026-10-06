@@ -142,8 +142,44 @@ body {
   color: var(--danger);
 }
 
+.btn-deep-link {
+  appearance: none;
+  width: 100%;
+  min-height: 40px;
+  margin: 0;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: var(--edge);
+  color: var(--text);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 150ms, box-shadow 150ms;
+}
+
+.btn-deep-link:hover {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: var(--edge-strong);
+}
+
+.btn-deep-link:focus-visible {
+  outline: 2px solid var(--ok);
+  outline-offset: 2px;
+}
+
+.btn-deep-link:active {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.btn-deep-link[hidden] {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .btn-send {
+  .btn-send,
+  .btn-deep-link {
     transition: none;
   }
 }

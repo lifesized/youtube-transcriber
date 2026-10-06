@@ -81,7 +81,7 @@ async function sendPageUrl(pageUrl) {
   const request = buildLocalSendRequest(pageUrl, tokenResult.token);
   if (!request.ok) {
     // Token present but request build failed (bad URL etc.)
-    return { ok: false, reason: "failed" };
+    return { ok: false, reason: "other" };
   }
 
   let res;
@@ -103,10 +103,24 @@ async function sendPageUrl(pageUrl) {
   }
   
   if (!res.ok) {
-    return { ok: false, reason: "failed" };
+    let errorMsg;
+    try {
+      const data = await res.json();
+      errorMsg = data.error || "Couldn't send this URL.";
+    } catch {
+      errorMsg = "Couldn't send this URL.";
+    }
+    return { ok: false, reason: "other", error: errorMsg };
   }
   
-  return { ok: true };
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    return { ok: false, reason: "other", error: "Couldn't send this URL." };
+  }
+
+  return { ok: true, transcriptId: data.id, title: data.title };
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

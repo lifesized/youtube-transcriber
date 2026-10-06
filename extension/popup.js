@@ -2,9 +2,11 @@ const pageUrlEl = document.getElementById("pageUrl");
 const pageUrlText = document.getElementById("pageUrlText");
 const sendButton = document.getElementById("btnSend");
 const statusEl = document.getElementById("status");
+const deepLinkEl = document.getElementById("deepLink");
 
 let currentUrl = null;
 let sending = false;
+let lastTranscriptId = null;
 
 function setStatus(message, tone) {
   statusEl.textContent = message;
@@ -53,27 +55,43 @@ sendButton.addEventListener("click", async () => {
   sendButton.setAttribute("aria-busy", "true");
   sendButton.textContent = "Sending…";
   setStatus("Sending…", "pending");
+  deepLinkEl.hidden = true;
   try {
     const response = await chrome.runtime.sendMessage({
       type: "SEND_PAGE_URL",
       url,
     });
     if (response?.ok === true) {
+      lastTranscriptId = response.transcriptId;
       setStatus("Sent. Transcriber will take it from here.", "ok");
-    } else if (response?.reason === "unreachable") {
-      setStatus("Start the Transcriber app.", "error");
-    } else if (response?.reason === "unauthorized") {
-      setStatus("Token missing or out of date — restart Transcriber.", "error");
+      if (lastTranscriptId) {
+        deepLinkEl.hidden = false;
+      }
     } else {
-      setStatus("Couldn't send this URL.", "error");
+      lastTranscriptId = null;
+      if (response?.reason === "unreachable") {
+        setStatus("Start the Transcriber app.", "error");
+      } else if (response?.reason === "unauthorized") {
+        setStatus("Token missing or out of date — restart Transcriber.", "error");
+      } else {
+        setStatus(response?.error || "Couldn't send this URL.", "error");
+      }
     }
   } catch {
+    lastTranscriptId = null;
     setStatus("Couldn't send this URL.", "error");
   } finally {
     sending = false;
     sendButton.textContent = "Send this page";
     sendButton.removeAttribute("aria-busy");
     await refresh();
+  }
+});
+
+deepLinkEl.addEventListener("click", () => {
+  if (lastTranscriptId) {
+    const targetUrl = `http://127.0.0.1:19720/?id=${encodeURIComponent(lastTranscriptId)}`;
+    chrome.tabs.create({ url: targetUrl });
   }
 });
 
