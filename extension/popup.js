@@ -60,6 +60,10 @@ sendButton.addEventListener("click", async () => {
     });
     if (response?.ok === true) {
       setStatus("Sent. Transcriber will take it from here.", "ok");
+    } else if (response?.reason === "unreachable") {
+      setStatus("Start the Transcriber app.", "error");
+    } else if (response?.reason === "unauthorized") {
+      setStatus("Token missing or out of date — restart Transcriber.", "error");
     } else {
       setStatus("Couldn't send this URL.", "error");
     }

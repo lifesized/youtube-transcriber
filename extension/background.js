@@ -61,7 +61,9 @@ function clearLocalTokenMemory() {
 async function sendPageUrl(pageUrl) {
   const { token } = await getLocalApiToken();
   const request = buildLocalSendRequest(pageUrl, token);
-  if (!request.ok) return { ok: false };
+  if (!request.ok) {
+    return { ok: false, reason: "unauthorized" };
+  }
 
   let res;
   try {
@@ -72,11 +74,19 @@ async function sendPageUrl(pageUrl) {
       body: request.body,
     });
   } catch {
-    return { ok: false };
+    return { ok: false, reason: "unreachable" };
   }
 
-  if (res.status === 401) clearLocalTokenMemory();
-  return { ok: res.ok };
+  if (res.status === 401) {
+    clearLocalTokenMemory();
+    return { ok: false, reason: "unauthorized" };
+  }
+  
+  if (!res.ok) {
+    return { ok: false, reason: "failed" };
+  }
+  
+  return { ok: true };
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
