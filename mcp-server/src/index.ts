@@ -1,36 +1,29 @@
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { createRequire } from "node:module";
 import { z } from "zod";
+
+const require = createRequire(import.meta.url);
+
+/**
+ * Same loopback Bearer as the Next.js API (YTT-435). Fail closed: no token
+ * means no HTTP call (YTT-438). Header builder is localAuthHeadersFromToken.
+ */
+const { authorizedFetch, guardedDeleteTranscript } = require("../../lib/local-api-fetch.js") as {
+  authorizedFetch: (url: string, init?: RequestInit) => Promise<Response>;
+  guardedDeleteTranscript: (args: {
+    id: string;
+    confirm: unknown;
+    getTranscript: (id: string) => Promise<{ title?: string }>;
+    deleteTranscript: (id: string) => Promise<void>;
+  }) => Promise<{ deleted: boolean; title?: string; message?: string }>;
+};
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
 const BASE_URL = process.env.YTT_API_URL || "http://127.0.0.1:19720";
-
-/**
- * Loopback Bearer (YTT-435). Prefer TRANSCRIBER_LOCAL_TOKEN; else read/create
- * the shared token file. Never log the token value.
- */
-function resolveLocalApiToken(): string | null {
-  const fromEnv = process.env.TRANSCRIBER_LOCAL_TOKEN;
-  if (typeof fromEnv === "string" && fromEnv.length > 0) return fromEnv;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { ensureLocalApiToken } = require("../../lib/local-api-token.js") as {
-      ensureLocalApiToken: () => string;
-    };
-    return ensureLocalApiToken();
-  } catch {
-    return null;
-  }
-}
-
-function localAuthHeaders(): Record<string, string> {
-  const token = resolveLocalApiToken();
-  if (!token) return {};
-  return { Authorization: `Bearer ${token}` };
-}
 
 // ---------------------------------------------------------------------------
 // Types (mirrors lib/types.ts — kept inline to avoid cross-package imports)
@@ -60,12 +53,11 @@ interface Video {
 
 async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   try {
-    return await fetch(`${BASE_URL}${path}`, {
+    return await authorizedFetch(`${BASE_URL}${path}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",
-        ...localAuthHeaders(),
-        ...init?.headers,
+        ...(init?.headers as Record<string, string> | undefined),
       },
     });
   } catch (err: unknown) {
@@ -112,9 +104,8 @@ function streamProgress(reporter: ProgressReporter): AbortController {
 
   (async () => {
     try {
-      const res = await fetch(`${BASE_URL}/api/transcripts/progress`, {
+      const res = await authorizedFetch(`${BASE_URL}/api/transcripts/progress`, {
         signal: controller.signal,
-        headers: localAuthHeaders(),
       });
       if (!res.ok || !res.body) return;
 
@@ -367,14 +358,41 @@ server.tool(
 
 server.tool(
   "delete_transcript",
-  "Delete a transcript from the library.",
-  { id: z.string().describe("Transcript ID to delete") },
-  async ({ id }) => {
+  "Permanently delete a transcript from the library. Nothing is deleted unless confirm is true.",
+  {
+    id: z.string().describe("Transcript ID to delete"),
+    confirm: z
+      .boolean()
+      .describe(
+        "Must be true to permanently delete. false leaves the transcript in place."
+      ),
+  },
+  async ({ id, confirm }) => {
     try {
-      // Fetch title first for confirmation message
-      const video = await apiJSON<Video>(`/api/transcripts/${encodeURIComponent(id)}`);
-      await apiFetch(`/api/transcripts/${encodeURIComponent(id)}`, { method: "DELETE" });
-      return text(`Deleted: ${video.title}`);
+      const result = await guardedDeleteTranscript({
+        id,
+        confirm,
+        getTranscript: (transcriptId) =>
+          apiJSON<Video>(`/api/transcripts/${encodeURIComponent(transcriptId)}`),
+        deleteTranscript: async (transcriptId) => {
+          const res = await apiFetch(
+            `/api/transcripts/${encodeURIComponent(transcriptId)}`,
+            { method: "DELETE" }
+          );
+          if (!res.ok) {
+            let message = `API error ${res.status}`;
+            try {
+              const body = (await res.json()) as { error?: string };
+              if (body.error) message = body.error;
+            } catch {
+              // non-JSON error body
+            }
+            throw new Error(message);
+          }
+        },
+      });
+      if (!result.deleted) return errorText(result.message || "Delete refused.");
+      return text(`Deleted: ${result.title}`);
     } catch (err: unknown) {
       return errorText((err as Error).message);
     }

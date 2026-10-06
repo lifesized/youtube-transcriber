@@ -316,7 +316,7 @@ All `/api/*` routes require a Bearer token (or the httpOnly cookie set when you 
 | Linux | `~/.config/transcriber/local-api.token` |
 | Windows | `%APPDATA%/Transcriber/local-api.token` |
 
-Override with `TRANSCRIBER_LOCAL_TOKEN`. Rotate by deleting the file (or setting a new env value) and restarting. The extension obtains the token via the native host (`getLocalToken`); MCP reads the same file. Never commit the token; never put it in URLs or `chrome.storage`.
+Override with `TRANSCRIBER_LOCAL_TOKEN`. Rotate by deleting the file (or setting a new env value) and restarting. The extension obtains the token via the native host (`getLocalToken`); MCP reads the same file and does not call the API without it. `delete_transcript` requires `confirm: true`. Never commit the token; never put it in URLs or `chrome.storage`.
 
 ### Encrypting provider keys at rest
 

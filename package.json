@@ -32,7 +32,8 @@
     "test:local-auth": "node --test tests/local-api-auth.test.mjs tools/native-host/get-local-token.test.mjs extension/local-auth-headers.test.js",
     "test:summarize-auth": "node --test tests/summarize-no-client-apikey.test.mjs",
     "test:secrets": "node --test tests/secrets-at-rest.test.mjs",
-    "migrate:secrets": "tsx scripts/migrate-secrets.ts"
+    "migrate:secrets": "tsx scripts/migrate-secrets.ts",
+    "test:mcp-auth": "node --test tests/mcp-local-auth.test.mjs"
   },
   "keywords": [],
   "author": "",
