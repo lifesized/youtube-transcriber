@@ -3,7 +3,8 @@ import test from "node:test";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 
 const require = createRequire(import.meta.url);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -15,21 +16,53 @@ const { localAuthHeadersFromToken } = require(
 const SECRET = "super-secret-loopback-token";
 
 test("resolveSharedLocalToken prefers TRANSCRIBER_LOCAL_TOKEN and does not read the file", () => {
-  let ensured = false;
+  let reads = 0;
   const token = client.resolveSharedLocalToken(
     { TRANSCRIBER_LOCAL_TOKEN: SECRET },
     () => {
-      ensured = true;
+      reads += 1;
       return "from-file";
     }
   );
   assert.equal(token, SECRET);
-  assert.equal(ensured, false);
+  assert.equal(reads, 0);
 });
 
-test("resolveSharedLocalToken falls back to the shared token file", () => {
-  const token = client.resolveSharedLocalToken({}, () => SECRET);
-  assert.equal(token, SECRET);
+test("resolveSharedLocalToken reads an existing token file and does not mint", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "ytt-mcp-token-"));
+  const prevXdg = process.env.XDG_CONFIG_HOME;
+  const prevAppData = process.env.APPDATA;
+  const stored = "d".repeat(64);
+  try {
+    let tokenDir;
+    if (process.platform === "win32") {
+      process.env.APPDATA = dir;
+      tokenDir = path.join(dir, "Transcriber");
+    } else if (process.platform !== "darwin") {
+      process.env.XDG_CONFIG_HOME = dir;
+      tokenDir = path.join(dir, "transcriber");
+    } else {
+      return;
+    }
+    assert.equal(client.resolveSharedLocalToken({}), null);
+    assert.equal(existsSync(path.join(tokenDir, "local-api.token")), false);
+
+    mkdirSync(tokenDir, { recursive: true });
+    const filePath = path.join(tokenDir, "local-api.token");
+    writeFileSync(filePath, stored, { mode: 0o600 });
+    assert.equal(client.resolveSharedLocalToken({}), stored);
+    assert.equal(readFileSync(filePath, "utf8"), stored);
+
+    writeFileSync(filePath, "too-short", { mode: 0o600 });
+    assert.equal(client.resolveSharedLocalToken({}), null);
+    assert.equal(readFileSync(filePath, "utf8"), "too-short");
+  } finally {
+    if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = prevXdg;
+    if (prevAppData === undefined) delete process.env.APPDATA;
+    else process.env.APPDATA = prevAppData;
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("resolveSharedLocalToken is null when the token file cannot be read", () => {
@@ -84,7 +117,7 @@ test("empty token and failed file lookup also do not call fetch", async () => {
   await assert.rejects(() =>
     client.authorizedFetch("http://127.0.0.1:19720/api/health", undefined, {
       env: {},
-      ensureToken: () => {
+      readTokenFile: () => {
         throw new Error("missing");
       },
       fetchImpl,
@@ -192,6 +225,13 @@ test("confirmed delete still does not reach fetch when the token is missing", as
       })
   );
   assert.equal(fetches, 0);
+});
+
+test("MCP client source does not mint a local API token", () => {
+  const src = readFileSync(path.join(repoRoot, "lib/local-api-fetch.js"), "utf8");
+  assert.doesNotMatch(src, /ensureLocalApiToken/);
+  assert.doesNotMatch(src, /writeFileSync|mkdirSync|generateToken|writeTokenFile/);
+  assert.match(src, /readFileSync/);
 });
 
 test("MCP tool source has no apiKey and delete is confirm-gated", () => {
