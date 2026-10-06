@@ -114,58 +114,72 @@ Returns a `.md` file with the formatted transcript.
 
 ---
 
-### Summarize Transcript
+### Summarize Transcript (built-in)
 
-Summarize a transcript using an LLM provider. The API key is passed per-request and never stored.
+Summarize with the **server-held** OpenRouter key (`OPENROUTER_API_KEY` or an OpenRouter row in Settings). **Client-supplied `apiKey` is rejected (HTTP 400)** — this endpoint is not an LLM proxy (YTT-436).
+
+Preferred path:
 
 ```
-POST /api/transcripts/{id}/summarize
+GET  /api/summaries          → { available, model }
+POST /api/summaries
 ```
 
 **Request:**
 ```json
 {
-  "provider": "openai",
-  "apiKey": "sk-...",
-  "model": "gpt-4o",
-  "prompt": "Optional custom prompt. Transcript is appended automatically.",
-  "format": "markdown"
+  "transcriptId": "cm5abc123def",
+  "promptOverride": "Optional custom prompt"
 }
 ```
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `provider` | Yes | `"openai"` or `"anthropic"` |
-| `apiKey` | Yes | Your API key for the chosen provider (never stored) |
-| `model` | No | Model override. Defaults to `gpt-4o` (OpenAI) or `claude-sonnet-4-5-20250929` (Anthropic) |
-| `prompt` | No | Custom prompt. If omitted, a default summarization prompt is used |
-| `format` | No | `"markdown"` (default), `"text"`, or `"bullets"` |
+| `transcriptId` | Yes | Library transcript id |
+| `promptOverride` | No | Custom prompt (transcript appended server-side) |
+| `apiKey` | **Forbidden** | Always rejected |
 
 **Response:**
 ```json
 {
-  "summary": "## Key Points\n\n- Point one...\n- Point two...",
-  "model_used": "gpt-4o-2024-08-06",
-  "provider": "openai",
-  "format": "markdown",
-  "token_count": {
-    "prompt_tokens": 1250,
-    "completion_tokens": 340
-  },
-  "video": {
-    "id": "cm5abc123def",
-    "title": "Rick Astley - Never Gonna Give You Up",
-    "videoUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-  }
+  "summary_md": "## TL;DR\n...",
+  "model": "google/gemini-2.5-flash-lite",
+  "cached": false,
+  "cost_usd": 0.0001,
+  "prompt_hash": "…"
 }
 ```
 
 | Status | Description |
 |--------|-------------|
 | 200 | Summary generated |
-| 400 | Invalid request (missing provider, apiKey, empty transcript) |
+| 400 | Invalid body or client `apiKey` supplied |
 | 404 | Transcript not found |
-| 502 | LLM provider returned an error |
+| 503 | No OpenRouter key configured on the server |
+| 502 | OpenRouter returned an error |
+
+Legacy alias (same server key rules — no client `apiKey`):
+
+```
+POST /api/transcripts/{id}/summarize
+```
+
+Optional body fields: `prompt`, `format` (`markdown`|`text`|`bullets`). Response keeps the older `{ summary, model_used, provider, … }` shape for compatibility. Prefer `/api/summaries` for new clients.
+
+**Examples:**
+```bash
+TOKEN=$(cat "$HOME/Library/Application Support/Transcriber/local-api.token")
+
+# Preferred
+curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"transcriptId":"cm5abc123def"}' \
+  http://127.0.0.1:19720/api/summaries
+
+# Rejected (400)
+curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"transcriptId":"cm5abc123def","apiKey":"sk-attacker"}' \
+  http://127.0.0.1:19720/api/summaries
+```
 
 ---
 
@@ -264,14 +278,7 @@ curl -X DELETE 'http://127.0.0.1:19720/api/transcripts/cm5abc123def'
 curl 'http://127.0.0.1:19720/api/transcripts/cm5abc123def/download' -o transcript.md
 
 # Summarize with OpenAI
-curl -X POST 'http://127.0.0.1:19720/api/transcripts/cm5abc123def/summarize' \
-  -H 'Content-Type: application/json' \
-  -d '{"provider": "openai", "apiKey": "sk-...", "format": "bullets"}'
-
 # Summarize with Anthropic
-curl -X POST 'http://127.0.0.1:19720/api/transcripts/cm5abc123def/summarize' \
-  -H 'Content-Type: application/json' \
-  -d '{"provider": "anthropic", "apiKey": "sk-ant-...", "model": "claude-sonnet-4-5-20250929"}'
 ```
 
 ### JavaScript

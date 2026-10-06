@@ -3,9 +3,14 @@
 ## 2026-10-06
 
 ### Security
+- **No client `apiKey` on summarize (YTT-436)** — `POST /api/transcripts/[id]/summarize` and `POST /api/summaries` reject any client-supplied `apiKey` (HTTP 400). Summarize uses only a server-held OpenRouter key (`OPENROUTER_API_KEY` or Settings → OpenRouter). MCP `summarize_transcript` no longer accepts or forwards `apiKey`. Custom provider test URLs must be http(s) without embedded credentials.
 - **Local API loopback auth (YTT-435)** — All `/api/*` routes on the self-hosted server require `Authorization: Bearer <token>` (or the httpOnly `transcriber_local_token` cookie for the same-origin web UI). The token lives in the Transcriber state dir (`~/Library/Application Support/Transcriber/local-api.token` on macOS; `~/.config/transcriber/local-api.token` on Linux; `%APPDATA%/Transcriber/local-api.token` on Windows) with mode `0600`, or in `TRANSCRIBER_LOCAL_TOKEN`. The Chrome native host exposes `getLocalToken` so the extension can attach Bearer headers without storing the token in `chrome.storage` or URLs. MCP reads the same file/env. `/api/health` no longer returns `projectPath`.
 
+### Added
+- **`GET`/`POST /api/summaries`** — built-in summarize (server OpenRouter key). Web sparkle menu offers **Built-in (OpenRouter)** as the primary action.
+
 ### Changed
+- **Legacy `POST /api/transcripts/{id}/summarize`** — same server-key rules; prefer `/api/summaries`.
 - **`npm run dev` / `start`** — Wrappers ensure the loopback token is present in the process env before Next.js boots (required for middleware).
 - **`npm run mcp:config`** — Prints the token file path and documents auth; does not recommend raw DB reads as a recall workaround.
 
