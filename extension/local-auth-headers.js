@@ -9,4 +9,6 @@ function localAuthHeadersFromToken(token) {
   return { Authorization: `Bearer ${token}` };
 }
 
-module.exports = { localAuthHeadersFromToken };
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { localAuthHeadersFromToken };
+}

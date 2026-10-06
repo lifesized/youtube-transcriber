@@ -8,86 +8,33 @@ const backgroundSource = fs.readFileSync(
   "utf8"
 );
 
-test("toolbar clicks explicitly open the preconfigured panel", () => {
+test("toolbar clicks open the side panel without storing anything", () => {
   assert.match(
     backgroundSource,
-    /chrome\.sidePanel\s*\.setPanelBehavior\(\{\s*openPanelOnActionClick:\s*false\s*\}\)/,
-    "Chrome's implicit opener must be disabled"
+    /chrome\.sidePanel\s*\.setPanelBehavior\(\{\s*openPanelOnActionClick:\s*false\s*\}\)/
   );
   assert.match(
     backgroundSource,
-    /chrome\.action\.onClicked\.addListener/,
-    "the toolbar click should explicitly configure and open the panel"
-  );
-  assert.match(
-    backgroundSource,
-    /setOptions\(\{\s*path:\s*"popup\.html",\s*enabled:\s*true\s*\}\)[\s\S]*chrome\.action\.onClicked\.addListener/,
-    "the document path must be configured during worker initialization"
+    /setOptions\(\{\s*path:\s*"popup\.html",\s*enabled:\s*true\s*\}\)/
   );
 
-  const clickHandlerStart = backgroundSource.indexOf(
+  const clickStart = backgroundSource.indexOf(
     "chrome.action.onClicked.addListener"
   );
-  const clickHandlerEnd = backgroundSource.indexOf(
-    "const sidePanelPorts = new Map();",
-    clickHandlerStart
-  );
-  assert.notEqual(clickHandlerStart, -1, "the toolbar click handler must exist");
-  assert.notEqual(
-    clickHandlerEnd,
-    -1,
-    "the toolbar click handler must end before retained-panel port handling"
-  );
-  const clickHandler = backgroundSource.slice(clickHandlerStart, clickHandlerEnd);
-  assert.match(
-    clickHandler,
-    /type:\s*"PANEL_LAUNCH"[\s\S]*openResolvedAt[\s\S]*deliverPanelLaunchSignal\(tab\.windowId, launchSignal\)/,
-    "a retained panel should receive the launch timestamp only after Chrome resolves the open request"
-  );
-  assert.ok(
-    clickHandler.indexOf("launch.openResolvedAt") <
-      clickHandler.indexOf("deliverPanelLaunchSignal(tab.windowId, launchSignal)"),
-    "a retained document must not report a presented frame before sidePanel.open resolves",
-  );
+  assert.ok(clickStart > -1);
+  const clickHandler = backgroundSource.slice(clickStart);
+  assert.match(clickHandler, /chrome\.sidePanel\.open\(\{\s*windowId:\s*tab\.windowId\s*\}\)/);
+  assert.doesNotMatch(clickHandler, /await|chrome\.storage|setOptions/);
+  assert.doesNotMatch(backgroundSource, /chrome\.storage/);
+});
+
+test("send uses the native-host token in memory and a header, not a URL", () => {
+  assert.match(backgroundSource, /getLocalToken/);
+  assert.match(backgroundSource, /_localTokenMemory/);
+  assert.match(backgroundSource, /buildLocalSendRequest\(pageUrl,\s*token\)/);
+  assert.match(backgroundSource, /credentials:\s*"omit"/);
   assert.doesNotMatch(
-    backgroundSource.slice(clickHandlerStart, clickHandlerEnd),
-    /setOptions/,
-    "opening must remain directly inside the toolbar user gesture"
-  );
-  assert.match(
-    backgroundSource.slice(clickHandlerStart, clickHandlerEnd),
-    /open\(\{\s*windowId:\s*tab\.windowId\s*\}\)/
-  );
-  assert.match(
-    backgroundSource.slice(clickHandlerStart, clickHandlerEnd),
-    /openRequestedAt[\s\S]*openResolvedAt[\s\S]*openRejectedAt/,
-    "each toolbar launch should record the Chrome open API lifecycle"
-  );
-  assert.match(
-    clickHandler,
-    /openResolvedAt[\s\S]*storage\.local\.set\(\{ \[traceKey\]: launch \}\)[\s\S]*prunePanelClickDiagnostics\(\)[\s\S]*openRejectedAt[\s\S]*storage\.local\.set\(\{ \[traceKey\]: launch \}\)[\s\S]*prunePanelClickDiagnostics\(\)/,
-    "late open completion must reapply retention after updating its lifecycle",
-  );
-  assert.doesNotMatch(backgroundSource.slice(clickHandlerStart,
-    backgroundSource.indexOf("chrome.sidePanel.open", clickHandlerStart)), /await/);
-  assert.ok(
-    clickHandler.indexOf("chrome.sidePanel.open") <
-      clickHandler.indexOf("deliverPanelLaunchSignal"),
-    "diagnostics must never gate the native side-panel open call"
-  );
-  assert.match(
     backgroundSource,
-    /sidePanelPorts\.set\(portWindowId, port\)[\s\S]*sidePanelPorts\.get\(portWindowId\) === port[\s\S]*sidePanelPorts\.delete\(portWindowId\)/,
-    "disconnecting an older window port must not remove its replacement"
-  );
-  assert.match(
-    backgroundSource,
-    /deliverPanelLaunchSignal\(tab\.windowId, launchSignal\)[\s\S]*queuePanelLaunchSignal\(windowId, launchSignal\)[\s\S]*pendingPanelLaunchSignals\.get\(portWindowId\)[\s\S]*for \(const pendingLaunch of pendingLaunches\)[\s\S]*port\.postMessage\(pendingLaunch\)/,
-    "a newly created panel should receive every queued launch ID after its context handshake"
-  );
-  assert.match(
-    backgroundSource,
-    /queued\.push\(launchSignal\)[\s\S]*queued\.slice\(-10\)/,
-    "pre-connection rapid-click telemetry must be bounded without overwriting the previous click",
+    /searchParams|chrome\.storage|transcribed\.dev|\?token|yttx/
   );
 });

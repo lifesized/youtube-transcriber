@@ -34,12 +34,7 @@ Open [http://localhost:19720](http://localhost:19720) — paste a YouTube or Spo
 https://github.com/user-attachments/assets/081c8d90-a6e1-4b4d-b6cd-bc8787bc0a3b
 
 
-Transcribe any YouTube video or Spotify podcast episode directly from your browser without leaving the page. The extension opens as a persistent side panel — it stays open as you navigate between videos and detects each one automatically.
-
-The extension works in two modes:
-
-- **Cloud** (default) — hosted transcription for private beta users. Enter your API key in extension settings and go. No local setup needed.
-- **Self-hosted** — connect to your local instance at `localhost:19720`. Switch to "Self-hosted" in extension settings.
+Send the page you are on to Transcriber running on this computer. The extension opens a side panel with one action: **Send this page**. Transcription stays in the local app at `http://127.0.0.1:19720`. The extension does not store API keys or the local auth token, and it does not put secrets in URLs.
 
 ### Install from Chrome Web Store
 
@@ -52,26 +47,10 @@ The extension works in two modes:
 3. Enable **Developer mode** (toggle, top right)
 4. Click **Load unpacked**
 5. Select the `extension/` folder inside this repo
-6. Open extension settings and switch mode to **Self-hosted**
-7. Click the YouTube Transcriber icon in your toolbar to open the side panel
+6. Click the Transcriber icon in your toolbar to open the side panel
+7. On a video or podcast page, click **Send this page**
 
-### Usage
-
-Navigate to any YouTube video or Spotify episode, open the side panel, and click **Transcribe**. In cloud mode, transcripts open in the hosted app. In self-hosted mode, they open in the local web app at `http://localhost:19720`.
-
-### Connectors — send transcripts to Obsidian or Notion
-
-Each transcript row's `⋯` menu can push the result to an external app. Connect once in **Settings → Connectors**, then use the menu on any recent transcript.
-
-**Obsidian** — works in both cloud and self-hosted mode. Stateless: the extension builds an `obsidian://new?...` URL on your machine and hands it to the desktop app. Nothing transcript-related leaves the device.
-
-1. Install [Obsidian](https://obsidian.md) and open your vault.
-2. In the extension panel: gear icon → **Connectors** → toggle **Obsidian** on.
-3. Type your vault name **exactly** as it appears in Obsidian's sidebar (case-sensitive).
-4. (Recommended for long transcripts) Install the [Advanced URI](https://github.com/Vinzent03/obsidian-advanced-uri) community plugin in Obsidian, then expand **More** under the vault field and check **Use Advanced URI plugin**. Stock `obsidian://new` has a URL length cap that truncates long videos; Advanced URI handles them reliably.
-5. From any recent transcript, click `⋯` → **Send to Obsidian**. Allow the protocol handler the first time Chrome prompts you.
-
-**Notion** — cloud mode only. Uses OAuth; tokens are stored encrypted by the hosted service. Toggle **Notion** on in Connectors, authorize from the side panel, and share at least one page or database (a dedicated database works best) with the integration. Setup docs will ship with the hosted version.
+The panel asks the native host for the loopback token and sends `POST /api/transcripts` with that token in the `Authorization` header. Install the native host (`npm run install-native-host`) so the send can authenticate. Open `http://127.0.0.1:19720` to read the transcript.
 
 ---
 
@@ -162,7 +141,7 @@ Works fully offline by default for YouTube. Cloud Whisper is optional — bring 
 
 - **YouTube + Spotify** — paste a YouTube video URL or Spotify podcast episode URL
 - **Local + cloud transcription** — free local Whisper by default, optional cloud providers (Groq, OpenRouter, or custom endpoint) for faster results with your own API key
-- **Chrome extension** — persistent side panel that transcribes YouTube videos and Spotify episodes from your browser
+- **Chrome extension** — one-tap send of the current page URL to the local app (no keys in extension storage or URLs)
 - **Multi-language captions** — request captions in any language YouTube supports (see [Language Preference](#language-preference) below)
 - **Summarize with LLM** — built-in summarize uses a server-held OpenRouter key (Settings / `OPENROUTER_API_KEY`); no pasted API keys. You can still open a transcript in ChatGPT or Claude via clipboard handoff
 - **Queue system** — batch-process multiple videos

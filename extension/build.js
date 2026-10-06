@@ -7,9 +7,9 @@
  *   node build.js          → dist/        (Store build)
  *   node build.js --dev    → dist/        (dev build: renamed so toolbar shows it's the local one)
  *
- * The extension handles local/cloud mode switching at runtime via settings,
- * so there is no need for separate build variants for that. --dev only changes
- * naming so dev and Store installs are visually distinguishable side-by-side.
+ * LOCAL Store build (YTT-442): one-tap send of the current page URL to
+ * loopback / the native host. No remote host and no cloud mode. --dev only
+ * changes naming so dev and Store installs are visually distinguishable.
  */
 
 const fs = require("fs");
@@ -29,25 +29,14 @@ const DEV_KEY_PATH = path.join(SRC, "dev-key.pem");
 const COPY_FILES = [
   "manifest.json",
   "local-auth-headers.js",
+  "send-url.js",
   "background.js",
   "popup.html",
   "popup.js",
   "popup.css",
-  "destination-connected.html",
-  "destination-connected.js",
-  "setup-link.css",
-  "content.js",
-  "panel-diagnostics.js",
-  "startup-report.js",
-  "content-spotify.js",
-  "content-substack.js",
-  "content-app-presence.js",
-  "content-llm-handoff.js",
   "icons/icon16.png",
   "icons/icon48.png",
   "icons/icon128.png",
-  "icons/notion.svg",
-  "icons/obsidian.svg",
 ];
 
 // --- Helpers ---

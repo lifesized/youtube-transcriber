@@ -2,6 +2,9 @@
 
 ## 2026-10-06
 
+### Changed
+- **LOCAL extension sends the page URL only (YTT-442)** — The Chrome extension side panel has one action, **Send this page**, which posts that URL to `http://127.0.0.1:19720/api/transcripts`. The loopback token stays in service-worker memory and is sent only as an `Authorization` header. The extension does not write secrets to `chrome.storage`, does not put them in query strings, and does not talk to a remote host.
+
 ### Security
 - **Block SSRF on custom provider URLs (#16)** — Connection tests and cloud transcription refuse custom `baseUrl` values that are private, loopback, link-local, or cloud metadata (including `169.254.169.254`, `metadata.google.internal`, and DNS answers that land on those ranges). The check runs before the stored provider key is sent. Groq, OpenRouter, and OpenAI stay on a known-host allowlist; a known host that resolves to a blocked address is still refused. Custom URLs must not redirect. Saving a blocked base URL returns HTTP 400.
 - **Fail closed on plaintext database secrets (#18)** — `ProviderConfig.apiKey` and Setting `groq_api_key` are usable only as `yttenc:v1` ciphertext with `TRANSCRIBER_SECRETS_KEY`. Plaintext rows are refused (including when the master key is set, until boot or `npm run migrate:secrets` re-encrypts them). If plaintext rows remain and the master key is missing, boot logs a warning and those keys are not used. Env-only keys (`OPENROUTER_API_KEY`, `WHISPER_CLOUD_API_KEY`) stay in the environment and are not written to the database.
