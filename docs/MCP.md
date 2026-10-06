@@ -14,7 +14,9 @@ The MCP server makes HTTP calls to `http://127.0.0.1:19720`. If you changed the 
 
 ## Local API authentication
 
-Self-hosted `/api/*` requires a loopback Bearer token (YTT-435). The MCP server reads `TRANSCRIBER_LOCAL_TOKEN` or the shared token file (see `npm run mcp:config` for the path on your machine). Do **not** work around auth by reading `prisma/dev.db` / SQLite directly for recall — that bypasses access control and is not supported.
+Self-hosted `/api/*` requires a loopback Bearer token (YTT-435). The MCP server reads `TRANSCRIBER_LOCAL_TOKEN` or the shared token file (see `npm run mcp:config` for the path on your machine) and sends `Authorization: Bearer`. If that token cannot be resolved, MCP does not call the API. Do **not** work around auth by reading `prisma/dev.db` / SQLite directly for recall — that bypasses access control and is not supported.
+
+`summarize_transcript` does not take an API key. Summaries use the server-held OpenRouter key. `delete_transcript` deletes only when `confirm` is `true`.
 
 
 ## Setup
@@ -89,7 +91,7 @@ Add to `.cursor/mcp.json`:
 | `list_transcripts` | List all saved transcripts | — |
 | `search_transcripts` | Search by title or author | `query` |
 | `get_transcript` | Get full timestamped transcript | `id` |
-| `delete_transcript` | Delete a transcript | `id` |
+| `delete_transcript` | Permanently delete a transcript. Refuses unless `confirm` is `true` | `id`, `confirm` |
 | `summarize_transcript` | Summarize via server OpenRouter key (no client apiKey) | `id`, `promptOverride?` |
 
 ## Resources
@@ -103,11 +105,15 @@ Add to `.cursor/mcp.json`:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `YTT_API_URL` | `http://127.0.0.1:19720` | Override the YouTube Transcriber API URL |
+| `TRANSCRIBER_LOCAL_TOKEN` | token file | Same loopback Bearer as the Next.js app. When unset, MCP reads the shared token file. Missing token → no request |
 
 ## Troubleshooting
 
 **"YouTube Transcriber is not running"**
 Start the app: `npm run dev`
+
+**"Refusing to call the local API without a loopback token"**
+Start the app once so it creates the shared token file, or set `TRANSCRIBER_LOCAL_TOKEN` in the MCP client `env` block to the same value the server uses. Restart the MCP client after changing it.
 
 **Tools don't appear in client**
 1. Verify the path in your config is absolute and correct

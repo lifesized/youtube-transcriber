@@ -22,7 +22,9 @@ echo ""
 echo "Local API token file (YTT-435):"
 echo "  $TOKEN_PATH"
 echo "  The MCP server reads this file automatically (or TRANSCRIBER_LOCAL_TOKEN)."
+echo "  Requests are not sent when that token cannot be resolved."
 echo "  Do not commit the token. Do not use a raw SQLite/dev.db read as a recall workaround."
+echo "  delete_transcript requires confirm: true. summarize_transcript does not take an API key."
 echo ""
 cat <<EOF
 {
