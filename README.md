@@ -208,7 +208,9 @@ By default, the app fetches English captions. You can change this per-request or
 
 **Per-request** — pass `lang` in the API body:
 ```bash
-curl -X POST http://localhost:19720/api/transcripts \
+TOKEN=$(cat "$HOME/Library/Application Support/Transcriber/local-api.token")  # see Local API auth
+curl -X POST http://127.0.0.1:19720/api/transcripts \
+  -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"url": "https://youtube.com/watch?v=...", "lang": "es"}'
 ```
@@ -291,13 +293,30 @@ npm run test:setup
 
 This checks Node.js, Python, ffmpeg, yt-dlp, Whisper, the native SQLite driver, database, and environment configuration. Each check prints pass/fail with actionable fix messages. It runs automatically at the end of `npm run setup`, and setup stops instead of reporting success if a required check fails.
 
-For a running instance, hit the health endpoint:
+For a running instance, hit the health endpoint (requires the local loopback token — YTT-435):
 
 ```bash
-curl http://localhost:19720/api/health
+# Without a token → 401 {"error":"unauthorized"}
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:19720/api/health
+
+# With Bearer token (macOS example path):
+TOKEN=$(cat "$HOME/Library/Application Support/Transcriber/local-api.token")
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:19720/api/health
 ```
 
 Returns JSON with per-check pass/fail — useful for Docker health checks or debugging. See [docs/TESTING.md](./docs/TESTING.md) for the full test protocol.
+
+### Local API auth (self-hosted)
+
+All `/api/*` routes require a Bearer token (or the httpOnly cookie set when you open the web UI in a browser). The token file is created on first run:
+
+| OS | Path |
+|----|------|
+| macOS | `~/Library/Application Support/Transcriber/local-api.token` |
+| Linux | `~/.config/transcriber/local-api.token` |
+| Windows | `%APPDATA%/Transcriber/local-api.token` |
+
+Override with `TRANSCRIBER_LOCAL_TOKEN`. Rotate by deleting the file (or setting a new env value) and restarting. The extension obtains the token via the native host (`getLocalToken`); MCP reads the same file. Never commit the token; never put it in URLs or `chrome.storage`.
 
 ## Troubleshooting
 

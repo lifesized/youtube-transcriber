@@ -118,8 +118,9 @@ export async function GET() {
   const hasFail = checks.some((c) => c.status === "fail");
   const status = hasFail ? "unhealthy" : "healthy";
 
+  // projectPath intentionally omitted (YTT-435) — path disclosure not needed for clients.
   return NextResponse.json(
-    { status, checks, projectPath: process.cwd() },
+    { status, checks },
     {
       status: hasFail ? 503 : 200,
       headers: { "X-Transcriber-Service": "1" },

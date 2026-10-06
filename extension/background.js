@@ -1,3 +1,5 @@
+importScripts("local-auth-headers.js");
+
 // ---------------------------------------------------------------------------
 // API Configuration — runtime mode switching (local / cloud)
 // ---------------------------------------------------------------------------
@@ -9,15 +11,72 @@ const LOCAL_BASE = "http://localhost:19720";
 const CLOUD_BASE = "https://transcribed.dev";
 
 let _apiConfigCache = null;
+// In-memory only — never persist the loopback token to chrome.storage or URLs (YTT-435).
+let _localTokenMemory = null;
+let _localTokenError = null;
+const NATIVE_HOST_NAME = "com.transcribed.host";
+
+function callNativeHostCmd(cmd, payload = {}, timeoutMs = 5000) {
+  return new Promise((resolve, reject) => {
+    let port;
+    try {
+      port = chrome.runtime.connectNative(NATIVE_HOST_NAME);
+    } catch (e) {
+      reject(new Error("native_host_unavailable"));
+      return;
+    }
+    const timer = setTimeout(() => {
+      try { port.disconnect(); } catch {}
+      reject(new Error("native_host_timeout"));
+    }, timeoutMs);
+    port.onMessage.addListener((msg) => {
+      clearTimeout(timer);
+      try { port.disconnect(); } catch {}
+      resolve(msg);
+    });
+    port.onDisconnect.addListener(() => {
+      clearTimeout(timer);
+      const err = chrome.runtime.lastError?.message || "disconnected";
+      reject(new Error(err));
+    });
+    const id = Math.random().toString(36).slice(2);
+    port.postMessage({ id, cmd, ...payload });
+  });
+}
+
+/**
+ * Fetch loopback Bearer via native host. Token stays in service-worker memory only.
+ * @returns {Promise<{ token?: string, error?: string }>}
+ */
+async function getLocalApiToken() {
+  if (_localTokenMemory) return { token: _localTokenMemory };
+  try {
+    const res = await callNativeHostCmd("getLocalToken", {}, 5000);
+    if (res?.ok && typeof res.token === "string" && res.token.length > 0) {
+      _localTokenMemory = res.token;
+      _localTokenError = null;
+      return { token: _localTokenMemory };
+    }
+    _localTokenError = "Local API needs auth — restart the Transcriber host";
+    return { error: _localTokenError };
+  } catch {
+    _localTokenError = "Local API needs auth — restart the Transcriber host";
+    return { error: _localTokenError };
+  }
+}
+
+function clearLocalTokenMemory() {
+  _localTokenMemory = null;
+}
 
 async function getApiConfig() {
   if (_apiConfigCache) return _apiConfigCache;
   const { mode } = await chrome.storage.sync.get(["mode"]);
-  _apiConfigCache = buildConfig(mode || "cloud");
+  _apiConfigCache = await buildConfig(mode || "cloud");
   return _apiConfigCache;
 }
 
-function buildConfig(mode) {
+async function buildConfig(mode) {
   if (mode === "cloud") {
     // Cloud auth rides on the user's transcribed.dev session cookie.
     // `credentials: "include"` on fetch sends the cookie cross-origin;
@@ -29,15 +88,37 @@ function buildConfig(mode) {
       credentials: "include",
     };
   }
-  return { mode: "local", baseUrl: LOCAL_BASE, headers: {}, credentials: "omit" };
+  const { token, error } = await getLocalApiToken();
+  if (!token) {
+    return {
+      mode: "local",
+      baseUrl: LOCAL_BASE,
+      headers: {},
+      credentials: "omit",
+      authError: true,
+      authErrorMessage: error || "Local API needs auth — restart the Transcriber host",
+    };
+  }
+  return {
+    mode: "local",
+    baseUrl: LOCAL_BASE,
+    headers: localAuthHeadersFromToken(token),
+    credentials: "omit",
+  };
 }
 
-// Invalidate cache when settings change
+// Invalidate cache when settings change (token memory kept until worker dies /
+// explicit clear — mode flip should refresh headers).
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "sync" && changes.mode) {
     _apiConfigCache = null;
+    if (changes.mode.newValue !== "local") {
+      clearLocalTokenMemory();
+    }
   }
 });
+
+
 
 // ---------------------------------------------------------------------------
 // Dynamic content script registration (replaces static content_scripts block)
@@ -250,6 +331,16 @@ function setBadge(text, color) {
 
 async function checkService() {
   const config = await getApiConfig();
+  if (config.mode === "local" && config.authError) {
+    return {
+      online: false,
+      mode: "local",
+      authError: true,
+      authErrorMessage:
+        config.authErrorMessage ||
+        "Local API needs auth — restart the Transcriber host",
+    };
+  }
   const health = await tryHealthCheck(config.baseUrl, config.headers, config.mode, config.credentials);
 
   // In cloud mode, /api/health doesn't require auth — so a 200 from it
@@ -392,7 +483,8 @@ async function detectLocalInstance() {
       method: "GET",
       signal: AbortSignal.timeout(2000),
     });
-    return res.ok;
+    // After YTT-435, unauthenticated health returns 401 — that still means up.
+    return res.ok || res.status === 401 || res.status === 503;
   } catch {
     return false;
   }
@@ -400,19 +492,34 @@ async function detectLocalInstance() {
 
 async function tryHealthCheck(baseUrl, headers, mode, credentials) {
   try {
+    // Local mode without a Bearer token cannot succeed after YTT-435.
+    if (mode === "local" && !headers?.Authorization) {
+      return {
+        online: false,
+        mode,
+        authError: true,
+        authErrorMessage:
+          "Local API needs auth — restart the Transcriber host",
+      };
+    }
     const res = await fetch(`${baseUrl}/api/health`, {
       method: "GET",
       headers,
       credentials: credentials || "omit",
       signal: AbortSignal.timeout(3000),
     });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.projectPath) {
-        chrome.storage.local.set({ projectPath: data.projectPath });
-      }
+    if (res.status === 401) {
+      // Token rejected — clear memory so next attempt re-fetches from native host.
+      if (mode === "local") clearLocalTokenMemory();
+      _apiConfigCache = null;
+      return {
+        online: false,
+        mode,
+        authError: true,
+        authErrorMessage:
+          "Local API needs auth — restart the Transcriber host",
+      };
     }
-    if (res.status === 401) return { online: false, mode, authError: true };
     return { online: res.ok || res.status === 503, mode };
   } catch {
     return { online: false, mode };

@@ -8,6 +8,30 @@ import { z } from "zod";
 
 const BASE_URL = process.env.YTT_API_URL || "http://127.0.0.1:19720";
 
+/**
+ * Loopback Bearer (YTT-435). Prefer TRANSCRIBER_LOCAL_TOKEN; else read/create
+ * the shared token file. Never log the token value.
+ */
+function resolveLocalApiToken(): string | null {
+  const fromEnv = process.env.TRANSCRIBER_LOCAL_TOKEN;
+  if (typeof fromEnv === "string" && fromEnv.length > 0) return fromEnv;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { ensureLocalApiToken } = require("../../lib/local-api-token.js") as {
+      ensureLocalApiToken: () => string;
+    };
+    return ensureLocalApiToken();
+  } catch {
+    return null;
+  }
+}
+
+function localAuthHeaders(): Record<string, string> {
+  const token = resolveLocalApiToken();
+  if (!token) return {};
+  return { Authorization: `Bearer ${token}` };
+}
+
 // ---------------------------------------------------------------------------
 // Types (mirrors lib/types.ts — kept inline to avoid cross-package imports)
 // ---------------------------------------------------------------------------
@@ -38,7 +62,11 @@ async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   try {
     return await fetch(`${BASE_URL}${path}`, {
       ...init,
-      headers: { "Content-Type": "application/json", ...init?.headers },
+      headers: {
+        "Content-Type": "application/json",
+        ...localAuthHeaders(),
+        ...init?.headers,
+      },
     });
   } catch (err: unknown) {
     if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ECONNREFUSED") {
@@ -86,6 +114,7 @@ function streamProgress(reporter: ProgressReporter): AbortController {
     try {
       const res = await fetch(`${BASE_URL}/api/transcripts/progress`, {
         signal: controller.signal,
+        headers: localAuthHeaders(),
       });
       if (!res.ok || !res.body) return;
 

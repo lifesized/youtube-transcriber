@@ -12,6 +12,11 @@ npm run dev
 
 The MCP server makes HTTP calls to `http://127.0.0.1:19720`. If you changed the port, set `YTT_API_URL` in your MCP client config's `env` block.
 
+## Local API authentication
+
+Self-hosted `/api/*` requires a loopback Bearer token (YTT-435). The MCP server reads `TRANSCRIBER_LOCAL_TOKEN` or the shared token file (see `npm run mcp:config` for the path on your machine). Do **not** work around auth by reading `prisma/dev.db` / SQLite directly for recall — that bypasses access control and is not supported.
+
+
 ## Setup
 
 The MCP server is built automatically when you run `npm run setup` or `npm install`. To get your config snippet:

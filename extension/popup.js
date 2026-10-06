@@ -154,6 +154,9 @@ const el = {
   btnCopySetup: document.getElementById("btnCopySetup"),
   offlinePath: document.getElementById("offlinePath"),
   offlineLocalMsg: document.getElementById("offlineLocalMsg"),
+  offlineLocalAuthError: document.getElementById("offlineLocalAuthError"),
+  offlineLocalAuthErrorMsg: document.getElementById("offlineLocalAuthErrorMsg"),
+  offlineLocalSetup: document.getElementById("offlineLocalSetup"),
   btnTranscribeLabel: document.getElementById("btnTranscribeLabel"),
   actionSection: document.getElementById("actionSection"),
   modeTranscribe: document.getElementById("modeTranscribe"),
@@ -2540,6 +2543,29 @@ async function init() {
       el.offlineCloudMsg.hidden = true;
       el.cloudNudge.hidden = false;
       el.localDetectedBanner.hidden = true;
+      const localAuthError = !!authError;
+      const authMsg =
+        serviceRes?.data?.authErrorMessage ||
+        "Local API needs auth — restart the Transcriber host";
+      if (el.offlineLocalAuthError && el.offlineLocalSetup) {
+        if (localAuthError) {
+          el.offlineLocalAuthError.hidden = false;
+          if (el.offlineLocalAuthErrorMsg) {
+            el.offlineLocalAuthErrorMsg.textContent = authMsg;
+          }
+          el.offlineLocalSetup.hidden = true;
+          // Also surface on the start-error line when the start wrap is visible.
+          if (el.offlineStartError) {
+            el.offlineStartError.textContent = authMsg;
+            el.offlineStartError.hidden = false;
+          }
+          showState("NoService");
+          startOfflinePolling();
+          return;
+        }
+        el.offlineLocalAuthError.hidden = true;
+        el.offlineLocalSetup.hidden = false;
+      }
       loadCachedPath();
       // Detect (or re-detect on each offline render) whether the native host
       // is installed so the right primary action shows.
