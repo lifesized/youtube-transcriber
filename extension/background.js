@@ -41,17 +41,23 @@ function callNativeHostCmd(cmd, payload = {}, timeoutMs = 5000) {
 }
 
 async function getLocalApiToken() {
-  if (_localTokenMemory) return { token: _localTokenMemory };
+  if (_localTokenMemory) return { ok: true, token: _localTokenMemory };
+  
+  let res;
   try {
-    const res = await callNativeHostCmd("getLocalToken", {}, 5000);
-    if (res?.ok && typeof res.token === "string" && res.token.length > 0) {
-      _localTokenMemory = res.token;
-      return { token: _localTokenMemory };
-    }
-  } catch {
-    /* native host down — fail closed, no stored fallback */
+    res = await callNativeHostCmd("getLocalToken", {}, 5000);
+  } catch (err) {
+    // Native host unavailable, timeout, or disconnect
+    return { ok: false, reason: "unreachable" };
   }
-  return { token: null };
+  
+  if (res?.ok && typeof res.token === "string" && res.token.length > 0) {
+    _localTokenMemory = res.token;
+    return { ok: true, token: _localTokenMemory };
+  }
+  
+  // Host OK but token missing/empty
+  return { ok: false, reason: "unauthorized" };
 }
 
 function clearLocalTokenMemory() {
@@ -59,10 +65,23 @@ function clearLocalTokenMemory() {
 }
 
 async function sendPageUrl(pageUrl) {
-  const { token } = await getLocalApiToken();
-  const request = buildLocalSendRequest(pageUrl, token);
-  if (!request.ok) {
+  const tokenResult = await getLocalApiToken();
+  
+  // Native host unavailable
+  if (!tokenResult.ok && tokenResult.reason === "unreachable") {
+    return { ok: false, reason: "unreachable" };
+  }
+  
+  // Host OK but no token
+  if (!tokenResult.ok && tokenResult.reason === "unauthorized") {
     return { ok: false, reason: "unauthorized" };
+  }
+  
+  // Build request with token
+  const request = buildLocalSendRequest(pageUrl, tokenResult.token);
+  if (!request.ok) {
+    // Token present but request build failed (bad URL etc.)
+    return { ok: false, reason: "failed" };
   }
 
   let res;
@@ -74,6 +93,7 @@ async function sendPageUrl(pageUrl) {
       body: request.body,
     });
   } catch {
+    // Fetch failed after token was present
     return { ok: false, reason: "unreachable" };
   }
 

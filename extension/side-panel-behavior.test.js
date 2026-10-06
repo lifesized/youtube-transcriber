@@ -31,7 +31,7 @@ test("toolbar clicks open the side panel without storing anything", () => {
 test("send uses the native-host token in memory and a header, not a URL", () => {
   assert.match(backgroundSource, /getLocalToken/);
   assert.match(backgroundSource, /_localTokenMemory/);
-  assert.match(backgroundSource, /buildLocalSendRequest\(pageUrl,\s*token\)/);
+  assert.match(backgroundSource, /buildLocalSendRequest\(pageUrl,\s*tokenResult\.token\)/);
   assert.match(backgroundSource, /credentials:\s*"omit"/);
   assert.doesNotMatch(
     backgroundSource,
