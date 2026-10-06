@@ -9,7 +9,7 @@
 const LOCAL_SEND_ENDPOINT = "http://127.0.0.1:19720/api/transcripts";
 
 function isSecretQueryKey(key) {
-  return /^(token|access_token|refresh_token|id_token|api_key|apikey|yttx|password)$/i.test(
+  return /^(token|access_token|refresh_token|id_token|api_key|apikey|x-goog-api-key|yttx|password|auth|authorization|secret|client_secret)$/i.test(
     String(key || "")
   );
 }

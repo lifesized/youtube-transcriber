@@ -56,6 +56,11 @@ async function getLocalApiToken() {
     return { ok: true, token: _localTokenMemory };
   }
   
+  // YTT-448: Native host { ok:false } maps to reason "other" (not unauthorized)
+  if (res?.ok === false) {
+    return { ok: false, reason: "other" };
+  }
+  
   // Host OK but token missing/empty
   return { ok: false, reason: "unauthorized" };
 }
@@ -75,6 +80,11 @@ async function sendPageUrl(pageUrl) {
   // Host OK but no token
   if (!tokenResult.ok && tokenResult.reason === "unauthorized") {
     return { ok: false, reason: "unauthorized" };
+  }
+  
+  // YTT-448: Native host { ok:false } maps to other
+  if (!tokenResult.ok && tokenResult.reason === "other") {
+    return { ok: false, reason: "other" };
   }
   
   // Build request with token
@@ -103,21 +113,20 @@ async function sendPageUrl(pageUrl) {
   }
   
   if (!res.ok) {
-    let errorMsg;
-    try {
-      const data = await res.json();
-      errorMsg = data.error || "Couldn't send this URL.";
-    } catch {
-      errorMsg = "Couldn't send this URL.";
-    }
-    return { ok: false, reason: "other", error: errorMsg };
+    // YTT-448: Never return server error text
+    return { ok: false, reason: "other" };
   }
   
   let data;
   try {
     data = await res.json();
   } catch {
-    return { ok: false, reason: "other", error: "Couldn't send this URL." };
+    return { ok: false, reason: "other" };
+  }
+
+  // YTT-448: Validate transcriptId format before success
+  if (typeof data?.id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(data.id)) {
+    return { ok: false, reason: "other" };
   }
 
   return { ok: true, transcriptId: data.id, title: data.title };

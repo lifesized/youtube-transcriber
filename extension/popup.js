@@ -63,18 +63,20 @@ sendButton.addEventListener("click", async () => {
     });
     if (response?.ok === true) {
       lastTranscriptId = response.transcriptId;
-      setStatus("Sent. Transcriber will take it from here.", "ok");
+      // YTT-448: Shorten to "Sent." when deep-link button is showing
+      setStatus("Sent.", "ok");
       if (lastTranscriptId) {
         deepLinkEl.hidden = false;
       }
     } else {
       lastTranscriptId = null;
+      // YTT-448: Design-locked strings, never show server error
       if (response?.reason === "unreachable") {
         setStatus("Start the Transcriber app.", "error");
       } else if (response?.reason === "unauthorized") {
         setStatus("Token missing or out of date — restart Transcriber.", "error");
       } else {
-        setStatus(response?.error || "Couldn't send this URL.", "error");
+        setStatus("Couldn't send this URL.", "error");
       }
     }
   } catch {

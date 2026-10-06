@@ -9,17 +9,26 @@ function read(name) {
   return fs.readFileSync(path.join(ROOT, name), "utf8");
 }
 
-const RUNTIME = [
-  "manifest.json",
-  "background.js",
-  "popup.js",
-  "popup.html",
-  "popup.css",
-  "send-url.js",
-  "local-auth-headers.js",
-];
+function getRuntimeFiles() {
+  const buildJs = read("build.js");
+  const copyFilesMatch = buildJs.match(/const COPY_FILES = \[([\s\S]*?)\];/);
+  if (!copyFilesMatch) throw new Error("COPY_FILES not found in build.js");
+  const copyFilesStr = copyFilesMatch[1];
+  const files = [];
+  for (const match of copyFilesStr.matchAll(/"([^"]+)"/g)) {
+    files.push(match[1]);
+  }
+  const manifest = JSON.parse(read("manifest.json"));
+  const popupHtml = read("popup.html");
+  for (const scriptMatch of popupHtml.matchAll(/<script[^>]*src="([^"]+)"/g)) {
+    const scriptSrc = scriptMatch[1];
+    if (!files.includes(scriptSrc)) files.push(scriptSrc);
+  }
+  return files;
+}
 
 test("LOCAL runtime never stores secrets or puts them in URLs", () => {
+  const RUNTIME = getRuntimeFiles();
   const sources = RUNTIME.map((name) => read(name)).join("\n");
   assert.doesNotMatch(sources, /chrome\.storage\.(local|sync|session)/);
   assert.doesNotMatch(sources, /transcribed\.dev/);
@@ -37,7 +46,6 @@ test("manifest is loopback-only and does not declare storage", () => {
   ]);
   assert.deepEqual(manifest.host_permissions, [
     "http://127.0.0.1:19720/*",
-    "http://localhost:19720/*",
   ]);
   assert.equal(manifest.optional_permissions, undefined);
   assert.equal(manifest.optional_host_permissions, undefined);
@@ -47,6 +55,7 @@ test("manifest is loopback-only and does not declare storage", () => {
     manifest.content_security_policy.extension_pages,
     /http:\/\/127\.0\.0\.1:19720/
   );
+  assert.doesNotMatch(manifest.content_security_policy.extension_pages, /localhost/);
   assert.equal(manifest.background.service_worker, "background.js");
 });
 

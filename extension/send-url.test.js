@@ -52,3 +52,17 @@ test("a token embedded outside query params is refused", () => {
   );
   assert.equal(request.ok, false);
 });
+
+test("buildLocalSendRequest body is always exactly {url:...} even with secret query params", () => {
+  const dirtyUrl = "https://example.com/page?api_key=sk-secret&apiKey=test&x-goog-api-key=goog&auth=basic&v=123";
+  const request = buildLocalSendRequest(dirtyUrl, TOKEN);
+  assert.equal(request.ok, true);
+  const parsed = JSON.parse(request.body);
+  assert.equal(Object.keys(parsed).length, 1);
+  assert.equal(typeof parsed.url, "string");
+  assert.equal(parsed.url.includes("api_key"), false);
+  assert.equal(parsed.url.includes("apiKey"), false);
+  assert.equal(parsed.url.includes("x-goog-api-key"), false);
+  assert.equal(parsed.url.includes("auth"), false);
+  assert.equal(parsed.url.includes("v=123"), true);
+});
