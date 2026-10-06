@@ -2,6 +2,10 @@ import { prisma } from "./prisma";
 import { sendCloudTranscription, trackGroqUsage, getCloudWhisperConfig } from "./whisper-cloud";
 import type { TranscriptSegment } from "./types";
 import { decryptApiKeyForUse } from "./secrets-store.js";
+import {
+  assertSafeProviderUrlResolved,
+  providerFetchRedirect,
+} from "./provider-url-policy.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -168,27 +172,10 @@ export async function transcribeWithProviderChain(
 
 /**
  * Test a provider's API key by hitting their models endpoint.
- * SSRF note (YTT-436): custom baseUrl is only used with a *stored* provider
- * key from Settings (see providers/[id]/test). Still restrict custom URLs to
- * http(s) and block obvious credential-exfil to non-http schemes.
+ * SSRF (YTT-436 / issue #16): custom baseUrl is fetched with the stored
+ * provider key. Allow only http(s) without userinfo, and refuse private,
+ * link-local, and cloud-metadata destinations (including after DNS).
  */
-function assertSafeCustomBaseUrl(baseUrl: string): string | null {
-  let parsed: URL;
-  try {
-    parsed = new URL(baseUrl);
-  } catch {
-    return "Invalid base URL";
-  }
-  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    return "Custom base URL must use http or https";
-  }
-  // Block userinfo (https://key@evil/) style exfil disguises
-  if (parsed.username || parsed.password) {
-    return "Custom base URL must not include credentials";
-  }
-  return null;
-}
-
 export async function testProviderConnection(
   provider: ProviderType,
   apiKey: string,
@@ -198,18 +185,26 @@ export async function testProviderConnection(
 
   if (provider === "custom") {
     if (!baseUrl) return { success: false, error: "Base URL is required for custom providers" };
-    const unsafe = assertSafeCustomBaseUrl(baseUrl);
-    if (unsafe) return { success: false, error: unsafe };
     modelsUrl = `${baseUrl.replace(/\/+$/, "")}/models`;
   } else {
     modelsUrl = PROVIDER_MODELS_ENDPOINTS[provider];
   }
 
+  const unsafe = await assertSafeProviderUrlResolved(modelsUrl);
+  if (unsafe) return { success: false, error: unsafe };
+
+  const redirect = providerFetchRedirect(new URL(modelsUrl).hostname);
+
   try {
     const res = await fetch(modelsUrl, {
       headers: { Authorization: `Bearer ${apiKey}` },
       signal: AbortSignal.timeout(10_000),
+      redirect,
     });
+
+    if (redirect === "manual" && res.status >= 300 && res.status < 400) {
+      return { success: false, error: "Custom base URL must not redirect" };
+    }
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));

@@ -7,6 +7,7 @@ import {
   maskApiKeyForResponse,
   SecretsKeyError,
 } from "@/lib/secrets-store.js";
+import { assertSafeProviderUrl } from "@/lib/provider-url-policy.js";
 
 const VALID_PROVIDERS = ["openrouter", "groq", "custom"];
 
@@ -51,7 +52,16 @@ export async function POST(request: Request) {
         data.apiKey = encryptApiKeyForStorage(apiKey);
       }
       if (model !== undefined) data.model = model?.trim() || null;
-      if (baseUrl !== undefined) data.baseUrl = baseUrl?.trim() || null;
+      if (baseUrl !== undefined) {
+        const trimmed = baseUrl?.trim() || null;
+        if (trimmed) {
+          const unsafe = assertSafeProviderUrl(trimmed);
+          if (unsafe) {
+            return NextResponse.json({ error: unsafe }, { status: 400 });
+          }
+        }
+        data.baseUrl = trimmed;
+      }
       if (enabled !== undefined) data.enabled = enabled;
       if (priority !== undefined) data.priority = priority;
 
@@ -89,12 +99,20 @@ export async function POST(request: Request) {
       );
     }
 
+    const trimmedBaseUrl = baseUrl?.trim() || null;
+    if (trimmedBaseUrl) {
+      const unsafe = assertSafeProviderUrl(trimmedBaseUrl);
+      if (unsafe) {
+        return NextResponse.json({ error: unsafe }, { status: 400 });
+      }
+    }
+
     const created = await prisma.providerConfig.create({
       data: {
         provider,
         apiKey: encryptApiKeyForStorage(apiKey),
         model: model?.trim() || null,
-        baseUrl: baseUrl?.trim() || null,
+        baseUrl: trimmedBaseUrl,
         enabled: enabled ?? true,
         priority: priority ?? 0,
       },

@@ -2,6 +2,10 @@ import { promises as fs } from "fs";
 import type { TranscriptSegment } from "./types";
 import { prisma } from "./prisma";
 import { decryptApiKeyForUse } from "./secrets-store.js";
+import {
+  assertSafeProviderUrlResolved,
+  providerFetchRedirect,
+} from "./provider-url-policy.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -219,6 +223,12 @@ export async function sendCloudTranscription(
 ): Promise<{ segments: TranscriptSegment[]; duration: number; rateLimit: RateLimitInfo | null }> {
   const startTime = Date.now();
 
+  const unsafe = await assertSafeProviderUrlResolved(endpoint);
+  if (unsafe) {
+    throw new Error(unsafe);
+  }
+  const redirect = providerFetchRedirect(new URL(endpoint).hostname);
+
   const audioBuffer = await fs.readFile(audioPath);
   const fileName = audioPath.split("/").pop() || "audio.mp3";
 
@@ -237,7 +247,12 @@ export async function sendCloudTranscription(
     headers: { Authorization: `Bearer ${apiKey}` },
     body: formData,
     signal: AbortSignal.timeout(300_000), // 5 min
+    redirect,
   });
+
+  if (redirect === "manual" && res.status >= 300 && res.status < 400) {
+    throw new Error("Custom base URL must not redirect");
+  }
 
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}));
