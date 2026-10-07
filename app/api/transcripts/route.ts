@@ -9,6 +9,7 @@ import {
   NoCaptionsError,
 } from "@/lib/transcript";
 import { isTranscriptionInProgress } from "@/lib/whisper";
+import { getOrCreateTranscript } from "@/lib/transcript-cache";
 
 type ClientSegment = { start: number; duration?: number; text: string };
 
@@ -58,21 +59,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
-  // Duplicate detection: return existing record if already saved and has a non-empty transcript
-  const existing = await prisma.video.findUnique({ where: { videoId } });
-  if (existing) {
-    const transcript = existing.transcript as string;
-    const hasTranscript = transcript && transcript !== "[]";
-    if (hasTranscript) {
-      return NextResponse.json({ ...existing, duplicate: true });
-    }
-    // Existing record has empty transcript — re-fetch and update below
-  }
-
   // Client-supplied segments (extension panel-scrape fast path). Skip
   // yt-dlp / Whisper entirely — pull metadata via oEmbed (~200ms) and
   // persist the supplied transcript. This is what makes cloud match local
   // speed: no Railway worker hop, no audio download, no transcription job.
+  // 
+  // Note: This path still creates cache entries keyed by (videoId, lang, pipelineVersion).
   if (platform === "youtube" && isValidClientSegments(body.segments)) {
     try {
       const meta = await fetchMetadata(videoId);
@@ -84,8 +76,15 @@ export async function POST(request: NextRequest) {
         startMs: Math.round(s.start * 1000),
         durationMs: Math.round((s.duration ?? 0) * 1000),
       }));
+      
+      // Use cache-aware storage (respects cache keys)
+      const captionLanguage = lang || "en";
+      const pipelineVersion = 1; // PIPELINE_VERSION from transcript-pipeline
+      
       const data = {
         videoId,
+        captionLanguage: captionLanguage.split(",")[0]?.trim() || "en",
+        pipelineVersion,
         title: body.title || meta.title,
         author: meta.author,
         channelUrl: meta.channelUrl,
@@ -95,10 +94,20 @@ export async function POST(request: NextRequest) {
         source: "client_panel_scrape",
         platform,
       };
-      const video = existing
-        ? await prisma.video.update({ where: { videoId }, data })
-        : await prisma.video.create({ data });
-      return NextResponse.json(video, { status: existing ? 200 : 201 });
+      
+      const video = await prisma.video.upsert({
+        where: {
+          videoId_captionLanguage_pipelineVersion: {
+            videoId,
+            captionLanguage: data.captionLanguage,
+            pipelineVersion,
+          },
+        },
+        update: data,
+        create: data,
+      });
+      
+      return NextResponse.json(video, { status: 201 });
     } catch (err: unknown) {
       // Fall through to the server fetch path on metadata failure rather
       // than failing the whole request — the supplied segments are still
@@ -115,25 +124,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await getVideoTranscript(url, lang);
-
-    const data = {
-      videoId: result.videoId,
-      title: result.title,
-      author: result.author,
-      channelUrl: result.channelUrl,
-      thumbnailUrl: result.thumbnailUrl || (platform === "youtube" ? `https://i.ytimg.com/vi/${result.videoId}/hqdefault.jpg` : ""),
-      videoUrl: url,
-      transcript: JSON.stringify(result.transcript),
-      source: result.source,
-      platform,
-    };
-
-    const video = existing
-      ? await prisma.video.update({ where: { videoId }, data })
-      : await prisma.video.create({ data });
-
-    return NextResponse.json(video, { status: existing ? 200 : 201 });
+    // Use cache-aware transcript lookup/creation
+    const video = await getOrCreateTranscript(videoId, url, lang, platform);
+    return NextResponse.json(video, { status: 201 });
   } catch (err: unknown) {
     if (err instanceof RateLimitError) {
       return NextResponse.json(

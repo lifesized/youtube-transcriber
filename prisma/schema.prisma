@@ -43,16 +43,22 @@ model WaitlistSignup {
 }
 
 model Video {
-  id           String   @id @default(cuid())
-  videoId      String   @unique
-  title        String
-  author       String
-  channelUrl   String?
-  thumbnailUrl String?
-  videoUrl     String
-  transcript   String   // JSON stringified transcript array
-  source       String   @default("youtube_captions")  // "youtube_captions", "whisper_cloud_groq", "whisper_cloud_openai", "whisper_local", or "spotify_transcript"
-  platform     String   @default("youtube")  // "youtube" | "spotify"
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  videoId            String
+  captionLanguage    String   @default("en")        // Language code (normalized first preference)
+  pipelineVersion    Int      @default(1)           // Bumped when caption/transcription logic changes
+  title              String
+  author             String
+  channelUrl         String?
+  thumbnailUrl       String?
+  videoUrl           String
+  transcript         String                          // JSON stringified transcript array
+  source             String   @default("youtube_captions")  // "youtube_captions", "whisper_cloud_groq", "whisper_cloud_openai", "whisper_local", or "spotify_transcript"
+  platform           String   @default("youtube")   // "youtube" | "spotify"
+  baseSummary        String?                         // Cached base summary (generated without user prompt)
+  summaryPromptVersion Int?                          // Version of the summary prompt used for baseSummary
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([videoId, captionLanguage, pipelineVersion])
 }
