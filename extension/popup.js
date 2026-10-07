@@ -2631,6 +2631,17 @@ async function doTranscribe() {
     videoId: pageInfo.videoId || null,
   });
 
+  // Request YouTube permissions on user gesture (YTT-458 security requirement)
+  if (pageInfo.videoId) {
+    try {
+      await chrome.permissions.request({
+        origins: ["https://www.youtube.com/*", "https://m.youtube.com/*"],
+      });
+    } catch (err) {
+      console.warn("[ytt-popup] YouTube permissions request failed", err);
+    }
+  }
+
   isTranscribing = true;
   el.transcribingTitle.textContent = pageInfo.title || "Transcribing...";
   showState("Transcribing");

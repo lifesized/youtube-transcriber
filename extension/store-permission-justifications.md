@@ -55,4 +55,4 @@ Not declared: `cookies`, `webRequest`, `identity`, `notifications`, `<all_urls>`
 | Location | No | |
 | Web history | No | Only the single page URL the user chooses to send is posted to local Transcriber. General history is not read. |
 | User activity | No | |
-| Website content | No | The extension sends the page URL, not page contents. Transcription happens in the local app. |
+| Website content | Yes | Optionally reads YouTube caption/transcript panel text when you transcribe a YouTube page (sent only to local Transcriber). Optionally places the summarize instruction plus the full transcript into Claude or ChatGPT when you use Summarize. Does not read other page content or browsing history. |

@@ -18,7 +18,7 @@ When you click **Send this page**, the extension sends that page URL to your loc
 
 **YouTube caption extraction (optional):** If you transcribe a YouTube video with captions, the extension may read those captions directly from YouTube's native transcript panel DOM and send the extracted segments to the local API (`127.0.0.1:19720`) instead of downloading audio. Content script is read-only — no cookies, no credentials, no external fetch.
 
-**Summarize (optional):** If you pick Claude or ChatGPT, the extension may open that site and place a prepared prompt (summarize instruction + full transcript) into the composer (content script on those hosts only, only during a handoff). Without your Summarize action, that script does nothing. Prompt text stays on your machine / in that provider tab — the extension does not upload it elsewhere.
+**Summarize (optional):** If you pick Claude or ChatGPT, the extension may open that site and place a prepared prompt (summarize instruction plus the full transcript) into the composer (content script on those hosts only, only during a handoff). Without your Summarize action, that script does nothing. Prompt text stays on your machine / in that provider tab — the extension does not upload it elsewhere.
 
 No data is sent to a remote Transcriber host. The extension does not contact `transcribed.dev`.
 
@@ -40,7 +40,7 @@ The page URL is shown in the side panel only while that panel is open.
 ### Optional host permissions (requested only when used)
 
 - **`https://www.youtube.com/*` and `https://m.youtube.com/*`** — requested only when you transcribe a YouTube video. Content script reads YouTube's native transcript panel DOM (if captions exist) to extract segments locally. Read-only — no cookies, no credentials, no external fetch.
-- **`https://claude.ai/*` and `https://chatgpt.com/*`** — requested only when you use **Summarize** with Claude or ChatGPT. Opens that site and places the summarize instruction + full transcript into the chat composer. Does not read your Claude/ChatGPT history or store credentials.
+- **`https://claude.ai/*` and `https://chatgpt.com/*`** — requested only when you use **Summarize** with Claude or ChatGPT. Opens that site and places the summarize instruction plus the full transcript into the chat composer. Does not read your Claude/ChatGPT history or store credentials.
 
 ## What we don't do
 
