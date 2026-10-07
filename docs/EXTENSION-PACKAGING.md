@@ -2,7 +2,7 @@
 
 Two Chromium extension builds with separate IDs, artifacts, and deployment models.
 
-**Status:** Documentation only (YTT-447). The ENTERPRISE build is not yet implemented.
+**Status:** Implemented (YTT-447). Both LOCAL and ENTERPRISE builds are available.
 
 ---
 
@@ -53,7 +53,7 @@ The `--dev` flag only changes the display name to "Transcriber for YouTube (dev)
 
 ---
 
-## ENTERPRISE Build (Not Yet Implemented)
+## ENTERPRISE Build
 
 **What it does:** One-tap send to a configured org-hosted Transcriber instance (e.g. `https://transcriber.corp.example.com`).
 
@@ -79,13 +79,13 @@ The `--dev` flag only changes the display name to "Transcriber for YouTube (dev)
 
 Choice depends on org IT requirements. No decision made yet.
 
-### Build Target (Proposed)
+### Build Command
 
 ```bash
 npm run build:ext:enterprise -- --base-url https://transcriber.corp.example.com
 ```
 
-Or:
+Or use the environment variable:
 
 ```bash
 ENTERPRISE_BASE_URL=https://transcriber.corp.example.com npm run build:ext:enterprise
@@ -116,22 +116,19 @@ Output: `extension/dist-enterprise/` with:
 
 ---
 
-## Implementation Checklist (Out of Scope for YTT-447)
+## Implementation Checklist
 
-This doc is **design only**. Implementation tracked separately. When building ENTERPRISE:
-
-- [ ] Add `build:ext:enterprise` npm script
-- [ ] Create `extension/build-enterprise.js` or extend `extension/build.js` with target flag
-- [ ] Template `manifest.json` → `name`, `host_permissions`, `permissions` vary by target
-- [ ] Create `send-url-enterprise.js` or make `send-url.js` accept endpoint override at build time
-- [ ] Remove native host logic from ENTERPRISE build
-- [ ] Add OAuth or policy-based auth (implementation TBD based on org requirements)
+- [x] Add `build:ext:enterprise` npm script
+- [x] Create `extension/build-enterprise.js` build script
+- [x] Two static manifests: `manifests/local.json` + `manifests/enterprise.json`
+- [x] Create `send-url-enterprise.js` with placeholder auth
+- [x] Remove native host logic from ENTERPRISE build
+- [x] Add packaging/build-target tests
+- [ ] Add OAuth or policy-based auth (full implementation TBD based on org requirements)
 - [ ] Update `.github/workflows/` (if CI exists) to produce both artifacts
 - [ ] Document MDM policy JSON for force-install (example for IT admins)
 - [ ] Register second Chrome Web Store listing or document private CWS workflow
-- [ ] Update [README.md](../README.md) Chrome Extension section with LOCAL vs ENTERPRISE split
-
-**Do not implement dual-mode in the public listing.** Keep them as separate artifacts.
+- [x] Update [README.md](../README.md) Chrome Extension section with LOCAL vs ENTERPRISE split
 
 ---
 
@@ -157,53 +154,34 @@ When ENTERPRISE is built:
 
 ---
 
-## Current Build System
+## Build System
 
-`extension/build.js` uses a simple copy approach:
+Both builds use a simple copy approach with Option A (two static manifests):
 
-```javascript
-const COPY_FILES = [
-  "manifest.json",
-  "local-auth-headers.js",
-  "send-url.js",
-  "background.js",
-  "popup.html",
-  "popup.js",
-  "popup.css",
-  "icons/icon16.png",
-  "icons/icon48.png",
-  "icons/icon128.png",
-];
-```
-
-No templating. To support ENTERPRISE:
-
-**Option A: Two static manifests**
-- `manifest.local.json` + `manifest.enterprise.json`
-- Build script picks one, renames to `manifest.json` in `dist/`
-
-**Option B: Template manifest at build time**
-- `manifest.template.json` with placeholders
-- Build script replaces `{{NAME}}`, `{{HOST_PERMISSIONS}}`, etc.
-
-**Option C: Programmatic manifest generation**
-- `build.js` constructs manifest object, serializes to JSON
-
-Recommend **Option A** (two static manifests) for clarity and diff-ability. Templating is overkill for two targets.
-
-**Example structure (if implementing):**
+**Structure:**
 
 ```
 extension/
 ├── manifests/
-│   ├── local.json
-│   └── enterprise.json
-├── build.js
-├── build-enterprise.js  (or build.js --target enterprise)
-├── send-url.js          (or split into send-url-local.js + send-url-enterprise.js)
-└── dist/                (LOCAL output)
-└── dist-enterprise/     (ENTERPRISE output)
+│   ├── local.json          (loopback-only, nativeMessaging)
+│   └── enterprise.json     (org URL placeholder, no nativeMessaging)
+├── build.js                (LOCAL build → dist/)
+├── build-enterprise.js     (ENTERPRISE build → dist-enterprise/)
+├── send-url.js             (LOCAL: loopback + native host auth)
+├── send-url-enterprise.js  (ENTERPRISE: org URL + SSO placeholder)
+└── manifest.json           (symlink → manifests/local.json for dev)
 ```
+
+**LOCAL build:**
+- Copies `manifests/local.json` → `dist/manifest.json`
+- Includes `local-auth-headers.js` and native messaging logic
+- Output: `extension/dist/`
+
+**ENTERPRISE build:**
+- Injects `{{ENTERPRISE_BASE_URL}}` placeholders in `manifests/enterprise.json`
+- Renames `send-url-enterprise.js` → `send-url.js` with endpoint injection
+- Excludes `local-auth-headers.js` and native messaging files
+- Output: `extension/dist-enterprise/`
 
 ---
 

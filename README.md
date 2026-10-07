@@ -34,25 +34,68 @@ Open [http://localhost:19720](http://localhost:19720) — paste a YouTube or Spo
 https://github.com/user-attachments/assets/081c8d90-a6e1-4b4d-b6cd-bc8787bc0a3b
 
 
-Send the page you are on to Transcriber running on this computer. The extension opens a side panel with one action: **Send this page**. Transcription stays in the local app at `http://127.0.0.1:19720`.
+Send the page you are on to Transcriber. Two variants:
 
-**Supported send path:** The extension authenticates via the native host and sends the page URL directly to `http://127.0.0.1:19720/api/transcripts`. The extension does not store API keys or the local auth token, and it does not put secrets in URLs.
+- **LOCAL** — sends to `http://127.0.0.1:19720` on this computer (self-hosted)
+- **ENTERPRISE** — sends to your organization's hosted Transcriber instance
 
-### Install from Chrome Web Store
+The extension opens a side panel with one action: **Send this page**. It does not store API keys or auth tokens, and it does not put secrets in URLs.
 
-> **Note:** The extension is not yet on the Chrome Web Store. Install it manually in a few steps while we go through the review process.
+### LOCAL (Self-Hosted)
 
-### Install from source (for self-hosted or development)
+**Install from Chrome Web Store:**
 
-1. Make sure the local service is running (`npm run dev`)
-2. Open Chrome and go to `chrome://extensions`
-3. Enable **Developer mode** (toggle, top right)
-4. Click **Load unpacked**
-5. Select the `extension/` folder inside this repo
+> **Note:** The extension is not yet on the Chrome Web Store. Install it manually while we go through the review process.
+
+**Install from source:**
+
+1. Build the LOCAL extension:
+   ```bash
+   npm run build:ext
+   ```
+
+2. Make sure the local service is running (`npm run dev`)
+
+3. Open Chrome and go to `chrome://extensions`
+
+4. Enable **Developer mode** (toggle, top right)
+
+5. Click **Load unpacked** and select `extension/dist/`
+
 6. Click the Transcriber icon in your toolbar to open the side panel
+
 7. On a video or podcast page, click **Send this page**
 
-The panel asks the native host for the loopback token and sends `POST /api/transcripts` with that token in the `Authorization` header. Install the native host (`npm run install-native-host`) so the send can authenticate. Open `http://127.0.0.1:19720` to read the transcript.
+The panel authenticates via the native host and sends the page URL to `http://127.0.0.1:19720/api/transcripts`. Install the native host first:
+
+```bash
+npm run install-native-host
+```
+
+Open `http://127.0.0.1:19720` to read the transcript.
+
+### ENTERPRISE (Org-Hosted)
+
+**For IT Admins:**
+
+Build the ENTERPRISE extension with your organization's Transcriber base URL:
+
+```bash
+npm run build:ext:enterprise -- --base-url https://transcriber.corp.example.com
+```
+
+Or use the environment variable:
+
+```bash
+ENTERPRISE_BASE_URL=https://transcriber.corp.example.com npm run build:ext:enterprise
+```
+
+This produces `extension/dist-enterprise/` with:
+- No native messaging or loopback logic
+- Hard-coded org URL in `host_permissions` and send endpoint
+- SSO/cookie-based auth (placeholder — integrate with your org IdP)
+
+Deploy via MDM force-install or private Chrome Web Store listing. See [docs/EXTENSION-PACKAGING.md](./docs/EXTENSION-PACKAGING.md) for packaging details.
 
 ---
 

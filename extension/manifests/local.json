@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Transcriber for YouTube",
+  "version": "1.6.28",
+  "description": "Send the current page URL to Transcriber on this computer.",
+  "content_security_policy": {
+    "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:19720; object-src 'none'; base-uri 'none'; form-action 'none'"
+  },
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "sidePanel",
+    "nativeMessaging"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:19720/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "popup.html"
+  },
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

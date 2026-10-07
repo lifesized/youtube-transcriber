@@ -27,7 +27,6 @@ const DEV_KEY_PATH = path.join(SRC, "dev-key.pem");
 
 // Files to copy as-is (relative to extension/)
 const COPY_FILES = [
-  "manifest.json",
   "local-auth-headers.js",
   "send-url.js",
   "background.js",
@@ -53,6 +52,10 @@ function copyFile(src, dest) {
 // Build away from Chrome's loaded directory. Replacing the dist root can
 // unregister a running unpacked extension and leave its side panel blank.
 withTemporaryBuildDirectory((buildDir) => {
+  // Copy LOCAL manifest from manifests/local.json
+  const localManifestPath = path.join(SRC, "manifests", "local.json");
+  copyFile(localManifestPath, path.join(buildDir, "manifest.json"));
+
   for (const file of COPY_FILES) {
     const src = path.join(SRC, file);
     if (!fs.existsSync(src)) {
