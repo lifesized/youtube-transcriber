@@ -16,20 +16,54 @@ const { checkIfTranslocated } = require("./utils.js");
 
 const HOST_NAME = "com.transcribed.host";
 
-// Extension IDs that are allowed to connect
-// These come from the existing extension builds
-const ALLOWED_EXTENSION_IDS = [
-  "gkfnbcjjpkhoohpgdkmefjmmadcjbljb",  // Placeholder - replace with actual IDs
-];
-
 class NativeHostInstaller {
   constructor() {
     this.browsers = this._detectBrowsers();
+    this.extensionIds = this._loadExtensionIds();
+  }
+  
+  /**
+   * Load extension IDs from config file in app data directory.
+   * Falls back to empty array if config doesn't exist.
+   * 
+   * Users can add their unpacked dev extension IDs by creating:
+   * ~/Library/Application Support/Transcriber/extension-ids.json
+   * 
+   * Example:
+   * ["abcdefghijklmnopqrstuvwxyz123456", "anotherextensionid32chars"]
+   */
+  _loadExtensionIds() {
+    const home = os.homedir();
+    const configPath = path.join(
+      home,
+      "Library",
+      "Application Support",
+      "Transcriber",
+      "extension-ids.json"
+    );
+    
+    try {
+      if (fs.existsSync(configPath)) {
+        const data = JSON.parse(fs.readFileSync(configPath, "utf8"));
+        if (Array.isArray(data) && data.every((id) => typeof id === "string")) {
+          console.log(`Loaded ${data.length} extension ID(s) from ${configPath}`);
+          return data;
+        }
+      }
+    } catch (error) {
+      console.warn(`Failed to load extension IDs from ${configPath}:`, error.message);
+    }
+    
+    // No config or invalid format
+    console.log("No extension IDs configured. Users must add their extension ID to:");
+    console.log(`  ${configPath}`);
+    console.log('Example: ["abcdefghijklmnopqrstuvwxyz123456"]');
+    return [];
   }
   
   /**
    * Install native host manifests for all detected browsers.
-   * Returns { success: boolean, browsers: string[], error?: string }
+   * Returns { success: boolean, browsers: string[], error?: string, extensionIds: string[] }
    */
   async install() {
     // Check for translocation on macOS
@@ -41,9 +75,20 @@ class NativeHostInstaller {
         return {
           success: false,
           browsers: [],
+          extensionIds: this.extensionIds,
           error: "App is running from a translocated path. Move to /Applications and reopen.",
         };
       }
+    }
+    
+    // Check if we have any extension IDs
+    if (this.extensionIds.length === 0) {
+      return {
+        success: false,
+        browsers: [],
+        extensionIds: [],
+        error: "No extension IDs configured. Add your extension ID to:\n~/Library/Application Support/Transcriber/extension-ids.json",
+      };
     }
     
     const results = [];
@@ -63,6 +108,7 @@ class NativeHostInstaller {
       return {
         success: false,
         browsers: [],
+        extensionIds: this.extensionIds,
         error: errors.join("; "),
       };
     }
@@ -70,6 +116,7 @@ class NativeHostInstaller {
     return {
       success: true,
       browsers: results,
+      extensionIds: this.extensionIds,
       error: errors.length > 0 ? errors.join("; ") : undefined,
     };
   }
@@ -189,11 +236,12 @@ exec "${electronBinary}" "${hostScript}" "$@"
       description: "Transcriber for YouTube — local server controller",
       path: wrapperPath,
       type: "stdio",
-      allowed_origins: ALLOWED_EXTENSION_IDS.map((id) => `chrome-extension://${id}/`),
+      allowed_origins: this.extensionIds.map((id) => `chrome-extension://${id}/`),
     };
     
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
     console.log("Wrote manifest:", manifestPath);
+    console.log("  Allowed extension IDs:", this.extensionIds.join(", "));
   }
 }
 

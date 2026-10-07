@@ -1,0 +1,55 @@
+# Icon Assets TODO
+
+The following icon files are required but not yet created:
+
+## Tray Icon (Menu Bar)
+
+- **`tray-icon-Template.png`** (16x16px, monochrome)
+- **`tray-icon-Template@2x.png`** (32x32px, monochrome)
+
+**Requirements**:
+- Monochrome (black on transparent)
+- Template rendering mode (macOS auto-inverts for dark mode)
+- Simple, recognizable shape (T letter, document icon, etc.)
+- PNG format
+
+**Current status**: Using Electron default (visible but generic)
+
+## App Icon
+
+- **`icon.icns`** (1024x1024 base, multiple resolutions)
+
+**Requirements**:
+- Full color
+- Square aspect ratio
+- ICNS format with multiple resolutions (512, 256, 128, 64, 32, 16)
+- Recognizable app identity
+
+**Current status**: Using Electron default
+
+## How to Generate
+
+### Tray Icon (Simple)
+```bash
+# Using ImageMagick (if available)
+convert -size 16x16 xc:transparent \
+  -fill black -draw "circle 8,8 8,4" \
+  tray-icon-Template.png
+
+convert -size 32x32 xc:transparent \
+  -fill black -draw "circle 16,16 16,8" \
+  tray-icon-Template@2x.png
+```
+
+### App Icon
+```bash
+# Create a 1024x1024 PNG first, then convert to ICNS
+sips -s format icns icon-1024.png --out icon.icns
+```
+
+Or use an online tool like https://cloudconvert.com/png-to-icns
+
+## Priority
+
+**For beta launch**: Low priority — defaults work fine for testing
+**For production**: High priority — professional appearance matters

@@ -30,12 +30,20 @@ jobs:
       - name: Download ffmpeg (arm64)
         run: |
           mkdir -p electron/resources/bin
-          # Download static ffmpeg build for macOS arm64
-          # Using evermeet.cx/ffmpeg or similar
-          curl -L -o electron/resources/bin/ffmpeg.7z https://evermeet.cx/ffmpeg/getrelease/ffmpeg/7z
-          7z x electron/resources/bin/ffmpeg.7z -oelectron/resources/bin/
-          rm electron/resources/bin/ffmpeg.7z
+          # Install ffmpeg via Homebrew (guarantees correct architecture)
+          brew install ffmpeg
+          # Copy the binary to our resources
+          cp "$(which ffmpeg)" electron/resources/bin/ffmpeg
           chmod +x electron/resources/bin/ffmpeg
+          
+          # Verify architecture (must be arm64)
+          file electron/resources/bin/ffmpeg | tee /dev/stderr | grep -q "arm64" || {
+            echo "ERROR: ffmpeg is not arm64!"
+            lipo -info electron/resources/bin/ffmpeg || true
+            file electron/resources/bin/ffmpeg
+            exit 1
+          }
+          echo "✓ ffmpeg architecture verified: arm64"
       
       - name: Download yt-dlp
         run: |
@@ -48,6 +56,39 @@ jobs:
         env:
           # Don't sign - we're doing ad-hoc signing only
           CSC_IDENTITY_AUTO_DISCOVERY: false
+      
+      - name: Test packaged app (smoke test)
+        run: |
+          set -e
+          APP_PATH="dist-electron/mac-arm64/Transcriber.app/Contents/MacOS/Transcriber"
+          SERVER_PATH="dist-electron/mac-arm64/Transcriber.app/Contents/Resources/app.asar.unpacked/.next/standalone/server.js"
+          
+          echo "Testing Electron binary with ELECTRON_RUN_AS_NODE=1..."
+          
+          # Create temp database
+          export DATABASE_URL="file:/tmp/test-transcriber.db"
+          export TRANSCRIBER_LOCAL_TOKEN="test-token-$(date +%s)"
+          
+          # Run server via Electron's Node with ELECTRON_RUN_AS_NODE=1
+          ELECTRON_RUN_AS_NODE=1 "$APP_PATH" "$SERVER_PATH" -p 19721 --hostname 127.0.0.1 &
+          SERVER_PID=$!
+          
+          echo "Server started (PID: $SERVER_PID), waiting for health check..."
+          
+          # Wait for server to be ready
+          for i in {1..30}; do
+            if curl -f http://127.0.0.1:19721/api/health 2>/dev/null; then
+              echo "✓ Server responded successfully!"
+              kill $SERVER_PID 2>/dev/null || true
+              exit 0
+            fi
+            echo "  Attempt $i/30..."
+            sleep 1
+          done
+          
+          echo "ERROR: Server failed to respond"
+          kill $SERVER_PID 2>/dev/null || true
+          exit 1
       
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4

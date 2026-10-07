@@ -2,8 +2,10 @@
  * electron-builder afterPack hook.
  * 
  * Responsibilities:
- * - Rebuild better-sqlite3 for Electron's ABI
  * - Ad-hoc codesign bundled binaries (ffmpeg, yt-dlp) for macOS
+ * 
+ * Note: electron-builder already rebuilds better-sqlite3 before this hook,
+ * so we don't need to do it again.
  */
 
 const { execSync } = require("child_process");
@@ -18,39 +20,9 @@ module.exports = async function(context) {
   console.log("  Output dir:", appOutDir);
   
   if (electronPlatformName === "darwin") {
-    await rebuildNativeModules(context);
     await adHocCodesign(context);
   }
 };
-
-async function rebuildNativeModules(context) {
-  const { appOutDir } = context;
-  
-  console.log("Rebuilding native modules for Electron...");
-  
-  try {
-    // Find the app bundle
-    const appName = "Transcriber.app";
-    const appPath = path.join(appOutDir, appName);
-    const resourcesPath = path.join(appPath, "Contents", "Resources");
-    
-    // Use electron-rebuild to rebuild better-sqlite3
-    const electronVersion = require("electron/package.json").version;
-    
-    execSync(
-      `npx electron-rebuild --version=${electronVersion} --force --types=prod,optional --module-dir="${resourcesPath}/app.asar.unpacked"`,
-      {
-        cwd: process.cwd(),
-        stdio: "inherit",
-      }
-    );
-    
-    console.log("Native modules rebuilt successfully");
-  } catch (error) {
-    console.error("Failed to rebuild native modules:", error);
-    throw error;
-  }
-}
 
 async function adHocCodesign(context) {
   const { appOutDir } = context;

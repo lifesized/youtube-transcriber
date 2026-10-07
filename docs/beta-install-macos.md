@@ -83,15 +83,18 @@ Click the icon to see the menu:
 
 ---
 
-## First Transcription (Python Setup)
+## First Transcription
 
-The first time you transcribe a video, Transcriber sets up a Python virtual environment in `~/Library/Application Support/Transcriber/.venv/` and installs Whisper.
+This beta prioritizes **YouTube captions** (fast, accurate). Videos without captions show an error.
 
-This takes **~2 minutes** on fast internet, **~5 minutes** on slower connections.
+**Audio transcription (Whisper)** is available if you already have Python + Whisper installed, but it's **not** required for the beta. Most YouTube videos have auto-generated captions.
 
-You'll see a progress indicator. After this one-time setup, transcriptions are instant (aside from the actual transcription time).
+If you want audio transcription for videos without captions:
+1. Install Python 3.8+ (from python.org or Homebrew)
+2. Install Whisper: `pip3 install openai-whisper`
+3. Transcriber will auto-detect and use it
 
-**Whisper models** (~150 MB for base, ~3 GB for large) download on first use and are cached in `~/.cache/whisper/`.
+**Don't** expect automatic Python setup on first transcription — the beta won't install it for you.
 
 ---
 

@@ -53,8 +53,15 @@ async function main() {
     let skipped = 0;
 
     for (const video of data) {
+      // With new cache key schema, check if entry exists for default lang/version
       const exists = await prisma.video.findUnique({
-        where: { videoId: video.videoId },
+        where: {
+          videoId_captionLanguage_pipelineVersion: {
+            videoId: video.videoId,
+            captionLanguage: video.captionLanguage ?? 'en',
+            pipelineVersion: video.pipelineVersion ?? 1,
+          },
+        },
       });
 
       if (exists) {
@@ -65,6 +72,8 @@ async function main() {
       await prisma.video.create({
         data: {
           videoId: video.videoId,
+          captionLanguage: video.captionLanguage ?? 'en',
+          pipelineVersion: video.pipelineVersion ?? 1,
           title: video.title,
           author: video.author,
           channelUrl: video.channelUrl ?? null,
@@ -72,6 +81,7 @@ async function main() {
           videoUrl: video.videoUrl,
           transcript: video.transcript,
           source: video.source ?? 'youtube_captions',
+          platform: video.platform ?? 'youtube',
           createdAt: new Date(video.createdAt),
         },
       });

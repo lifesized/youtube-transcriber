@@ -889,8 +889,24 @@ async function fetchTranscript(
     return await Promise.any(attempts);
   } catch {
     console.log(
-      `[transcript] All caption methods failed for ${videoId}, falling back to audio transcription...`
+      `[transcript] All caption methods failed for ${videoId}, checking if audio transcription is available...`
     );
+    
+    // Check if any transcription services are enabled
+    const [whisperEnabled, providers] = await Promise.all([
+      isWhisperEnabled(),
+      getEnabledProviders(),
+    ]);
+    
+    const hasAnyService = whisperEnabled || providers.length > 0;
+    
+    if (!hasAnyService) {
+      // No captions AND no Whisper/cloud providers configured
+      throw new NoCaptionsError(
+        "This video has no captions. Audio transcription isn't available in this beta yet — install Python/Whisper or configure a cloud provider in Settings to enable it."
+      );
+    }
+    
     return await transcribeAudioFallback(videoId);
   }
 }
