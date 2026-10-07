@@ -69,15 +69,6 @@
     }
   }
 
-  function escapeForHtml(text) {
-    return String(text)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-  }
-
   function findBy(selectors) {
     for (const sel of selectors) {
       const el = document.querySelector(sel);
@@ -123,13 +114,19 @@
   }
 
   function injectPrompt(editor, prompt) {
-    // ProseMirror rebuilds its internal doc from the DOM on focus/input, so
-    // setting innerHTML + dispatching an input event is enough to seed the
-    // editor with text. Plain textarea fallback uses .value.
+    // ProseMirror rebuilds its internal doc from the DOM on focus/input.
+    // Use textContent (not innerHTML) so the host page never HTML-parses
+    // the transcript — splits newlines into text nodes for multi-paragraph.
     if (editor.tagName.toLowerCase() === "textarea") {
       editor.value = prompt;
     } else {
-      editor.innerHTML = `<p>${escapeForHtml(prompt)}</p>`;
+      editor.textContent = "";
+      const lines = String(prompt).split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        const p = document.createElement("p");
+        p.textContent = lines[i] || "\u200B";
+        editor.appendChild(p);
+      }
     }
     editor.focus();
     editor.dispatchEvent(new Event("input", { bubbles: true }));
