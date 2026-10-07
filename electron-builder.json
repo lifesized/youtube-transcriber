@@ -1,6 +1,7 @@
 {
   "appId": "com.transcribed.app",
   "productName": "Transcriber",
+  "publish": null,
   "asar": true,
   "asarUnpack": [
     "node_modules/better-sqlite3/**/*",
