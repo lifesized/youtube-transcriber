@@ -1,0 +1,10 @@
+videoId,category,url,method,success,errorType,errorMessage,latencyMs,segmentCount,timestamp
+dQw4w9WgXcQ,"popular","https://www.youtube.com/watch?v=dQw4w9WgXcQ","yt-dlp",true,"","",1872,61,"2026-10-07T20:42:00.703Z"
+kJQP7kiw5Fk,"popular","https://www.youtube.com/watch?v=kJQP7kiw5Fk","web_scrape",false,"bot_detection","bot_detection",683,,"2026-10-07T20:42:18.842Z"
+9bZkp7q19f0,"popular","https://www.youtube.com/watch?v=9bZkp7q19f0","web_scrape",false,"bot_detection","bot_detection",426,,"2026-10-07T20:42:40.962Z"
+JGwWNGJdvx8,"popular","https://www.youtube.com/watch?v=JGwWNGJdvx8","web_scrape",false,"bot_detection","bot_detection",957,,"2026-10-07T20:42:55.622Z"
+CevxZvSJLk8,"popular","https://www.youtube.com/watch?v=CevxZvSJLk8","web_scrape",false,"bot_detection","bot_detection",828,,"2026-10-07T20:43:15.028Z"
+QH2-TGUlwu4,"tech","https://www.youtube.com/watch?v=QH2-TGUlwu4","none",false,"Command failed: /home/ubuntu/.local/bin/yt-dlp --w","WEB: no_captions, yt-dlp: Command failed: /home/ubuntu/.local/bin/yt-dlp --w",732,,"2026-10-07T20:43:41.271Z"
+l3hfbPEEdzk,"tech","https://www.youtube.com/watch?v=l3hfbPEEdzk","none",false,"Command failed: /home/ubuntu/.local/bin/yt-dlp --w","WEB: no_captions, yt-dlp: Command failed: /home/ubuntu/.local/bin/yt-dlp --w",873,,"2026-10-07T20:44:04.005Z"
+cPLXTrqlXhE,"tech","https://www.youtube.com/watch?v=cPLXTrqlXhE","none",false,"Command failed: /home/ubuntu/.local/bin/yt-dlp --w","WEB: no_captions, yt-dlp: Command failed: /home/ubuntu/.local/bin/yt-dlp --w",664,,"2026-10-07T20:44:41.766Z"
+p_di4Zn4wz4,"tech","https://www.youtube.com/watch?v=p_di4Zn4wz4","web_scrape",false,"bot_detection","bot_detection",473,,"2026-10-07T20:45:02.320Z"
