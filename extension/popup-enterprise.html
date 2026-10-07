@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Transcriber</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="panel">
+    <h1 class="title">Transcriber</h1>
+    <p class="lead">Send this page to your organization's Transcriber.</p>
+    <p id="pageUrl" class="page-url is-pending">
+      <span class="page-url-skeleton" aria-hidden="true"></span>
+      <span id="pageUrlText" class="page-url-text">Checking this page…</span>
+    </p>
+    <button id="btnSend" class="btn-send" type="button" disabled>Send this page</button>
+    <p id="status" class="status" role="status"></p>
+    <button id="deepLink" class="btn-deep-link" type="button" hidden>Open in Transcriber</button>
+  </main>
+  <script defer src="send-url.js"></script>
+  <script defer src="popup.js"></script>
+</body>
+</html>

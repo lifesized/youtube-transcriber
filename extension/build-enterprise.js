@@ -77,15 +77,15 @@ console.log(`Building ENTERPRISE extension for: ${enterpriseBaseUrl}`);
 
 // Files to copy as-is (NO native messaging, NO local-auth-headers)
 const COPY_FILES = [
-  "popup.html",
   "popup.css",
   "icons/icon16.png",
   "icons/icon48.png",
   "icons/icon128.png",
 ];
 
-// Files that need org origin injection
+// Files that need org origin injection (or ENTERPRISE variant rename)
 const INJECT_FILES = [
+  { src: "popup-enterprise.html", dest: "popup.html" },
   { src: "send-url-enterprise.js", dest: "send-url.js" },
   { src: "background-enterprise.js", dest: "background.js" },
   { src: "popup-enterprise.js", dest: "popup.js" },
