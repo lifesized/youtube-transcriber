@@ -1,23 +1,232 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
   <meta charset="utf-8">
-  <title>Transcriber</title>
+  <script defer src="panel-diagnostics.js"></script>
   <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="setup-link.css">
+  <script defer src="popup.js"></script>
 </head>
 <body>
-  <main class="panel">
-    <h1 class="title">Transcriber</h1>
-    <p class="lead">Send this page to the app on this computer.</p>
-    <p id="pageUrl" class="page-url is-pending">
-      <span class="page-url-skeleton" aria-hidden="true"></span>
-      <span id="pageUrlText" class="page-url-text">Checking this page…</span>
-    </p>
-    <button id="btnSend" class="btn-send" type="button" disabled>Send this page</button>
-    <p id="status" class="status" role="status"></p>
-    <button id="deepLink" class="btn-deep-link" type="button" hidden>Open in Transcriber</button>
-  </main>
-  <script defer src="send-url.js"></script>
-  <script defer src="popup.js"></script>
+  <div class="popup">
+    <!-- Static loading feedback, independent of popup.js. Chrome still owns
+         document activation and first paint. -->
+    <div id="startupShell" class="startup-shell" role="status" aria-live="polite">
+      <div class="startup-shell-heading">Loading Transcriber…</div>
+      <div class="startup-shell-action"></div>
+      <div class="startup-shell-divider"></div>
+      <div class="startup-shell-label">Recent</div>
+      <div class="startup-shell-row"><span></span><span></span></div>
+      <div class="startup-shell-row"><span></span><span></span></div>
+      <div class="startup-shell-row"><span></span><span></span></div>
+    </div>
+
+    <!-- No Service -->
+    <div id="stateNoService" class="state state-offline" hidden>
+      <!-- Local mode offline -->
+      <div id="offlineLocalMsg">
+        <div id="offlineLocalAuthError" hidden>
+          <p class="offline-heading">Local API needs auth</p>
+          <p class="offline-sub" id="offlineLocalAuthErrorMsg">Local API needs auth — restart the Transcriber host</p>
+          <p class="offline-error" style="margin-top:8px">The side panel could not get a loopback token from the native host. Restart Transcriber (or re-run install-native-host), then reload this panel.</p>
+        </div>
+        <div id="offlineLocalSetup">
+        <p class="offline-heading" id="offlineHeading">One-time setup</p>
+        <p class="offline-sub" id="offlineSub">Run this in your terminal to get going</p>
+        <p class="offline-path" id="offlinePath" hidden></p>
+
+        <!-- Primary path: one-click start via native messaging host -->
+        <div id="offlineStartWrap" hidden>
+          <button class="btn-transcribe" id="btnStartTranscriber">
+            <span class="start-label">Start Transcriber</span>
+            <span class="start-spinner" hidden></span>
+          </button>
+          <p class="offline-error" id="offlineStartError" hidden></p>
+        </div>
+
+        <!-- First-time setup: install the native messaging host so the
+             extension can start the local server with one click forever after.
+             Single canonical path — no manual `npm run dev` alternative,
+             which forced a confusing two-options layout. README still
+             documents `npm run dev` for power users running the server in
+             a terminal session. -->
+        <div id="offlineCopyWrap" hidden>
+          <div class="setup-instructions">
+            <p class="setup-step">1. Open Terminal in the project folder</p>
+            <p class="setup-step">2. Run:</p>
+            <div class="offline-copybox">
+              <code class="offline-copybox-code" id="setupCommand">npm run install-native-host -- --ext-id=YOUR_ID</code>
+              <button class="offline-copybox-btn" id="btnCopySetup" title="Copy to clipboard">
+                <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                </svg>
+                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </button>
+            </div>
+            <p class="setup-hint">3. Reload the side panel</p>
+          </div>
+        </div>
+        </div><!-- /offlineLocalSetup -->
+      </div>
+
+
+      <button class="btn-check-again" id="btnCheckAgain">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"/>
+          <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+        </svg>
+        Check again
+      </button>
+    </div>
+
+    <!-- Not a supported page -->
+    <div id="stateNotYoutube" class="state" hidden>
+      <p class="message">Navigate to a video or podcast</p>
+      <p class="submessage">Open a supported video or podcast to transcribe it</p>
+    </div>
+
+    <!-- Ready (not yet transcribed, or already transcribed) -->
+    <div id="stateReady" class="state" hidden>
+      <h1 class="panel-title" id="videoTitle"></h1>
+      <button class="btn-transcribe" id="btnTranscribe"><span class="btn-transcribe-label" id="btnTranscribeLabel">Transcribe &amp; Summarize</span></button>
+      <div class="live-notice" id="liveNotice" hidden>
+        <span class="live-badge">LIVE</span>
+        <span class="live-text">Live streams can't be transcribed yet</span>
+      </div>
+      <a class="already-transcribed" id="btnAlreadyTranscribed" href="#" hidden>
+        <span class="already-transcribed-text">Already transcribed</span>
+        <svg class="already-transcribed-arrow" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4l6 6-6 6"/></svg>
+      </a>
+    </div>
+
+    <!-- Transcribing -->
+    <div id="stateTranscribing" class="state" hidden>
+      <!-- Currently transcribing item -->
+      <div class="queue-card">
+        <div class="queue-card-row">
+          <span class="status-dot processing"></span>
+          <div class="queue-card-content">
+            <div class="queue-card-title" id="transcribingTitle"></div>
+            <div class="queue-card-status" id="progressText">Sending to transcriber...</div>
+          </div>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progressBar"></div>
+        </div>
+      </div>
+
+      <button class="btn-cancel" id="btnCancel">Cancel</button>
+
+      <!-- Queue current video while another is transcribing -->
+      <div id="queuePrompt" class="queue-card queue-card-prompt" hidden>
+        <div class="queue-card-row">
+          <span class="status-dot pending"></span>
+          <div class="queue-card-content">
+            <div class="queue-card-title" id="queueVideoTitle"></div>
+          </div>
+          <button class="btn-queue" id="btnQueue">Queue</button>
+        </div>
+      </div>
+
+      <!-- Queued items -->
+      <div id="queueList" class="queue-list" hidden></div>
+    </div>
+
+    <!-- Error -->
+    <div id="stateError" class="state" hidden>
+      <p class="error-message" id="errorMessage"></p>
+      <button class="btn-retry" id="btnRetry">Retry</button>
+    </div>
+
+    <!-- Recent Transcripts -->
+    <div id="recentSection" class="recent-section" hidden>
+      <div class="section-label">Recent</div>
+      <div id="recentList" class="recent-list"></div>
+    </div>
+
+    <!-- Settings Panel (exclusive view — hides all other content when open) -->
+    <div id="settingsPanel" class="settings-panel" hidden>
+      <div class="section-label">Settings</div>
+      <div id="serverSection" class="settings-server" hidden>
+        <div class="section-label section-label-subsection">Server</div>
+        <p class="settings-server-status" id="serverStatus" hidden></p>
+        <button class="btn-transcribe" id="btnStartServer" hidden>
+          <span class="start-server-label">Start</span>
+          <span class="start-spinner" hidden></span>
+        </button>
+        <button class="btn-transcribe" id="btnStopServer" hidden>
+          <span class="stop-label">Stop</span>
+          <span class="start-spinner" hidden></span>
+        </button>
+        <p class="settings-server-hint" id="stopServerHint" hidden></p>
+      </div>
+      <div id="actionSection" class="settings-action">
+        <div class="section-label section-label-subsection">Button action</div>
+        <label class="settings-radio">
+          <input type="radio" name="transcribeMode" value="transcribe" id="modeTranscribe" />
+          <span class="settings-radio-dot"></span>
+          <span class="settings-radio-text">
+            <span class="settings-radio-title">Transcribe</span>
+            <span class="settings-radio-desc">Get the transcript only</span>
+          </span>
+        </label>
+        <label class="settings-radio">
+          <input type="radio" name="transcribeMode" value="transcribe-and-summarize" id="modeTranscribeSummarize" />
+          <span class="settings-radio-dot"></span>
+          <span class="settings-radio-text">
+            <span class="settings-radio-title">Transcribe &amp; Summarize</span>
+            <span class="settings-radio-desc">Transcribe then open in your AI</span>
+          </span>
+        </label>
+        <label class="settings-radio">
+          <input type="radio" name="transcribeMode" value="summarize" id="modeSummarize" />
+          <span class="settings-radio-dot"></span>
+          <span class="settings-radio-text">
+            <span class="settings-radio-title">Summarize</span>
+            <span class="settings-radio-desc">Summary only — transcript happens in the background</span>
+          </span>
+        </label>
+        <div id="summarizeProviderRow" class="settings-action-provider" hidden>
+          <span class="settings-action-provider-label">Open in</span>
+          <div class="provider-picker">
+            <button type="button" class="provider-picker-trigger" id="providerPickerTrigger">
+              <span class="provider-picker-icon" id="providerPickerIcon"></span>
+              <span class="provider-picker-name" id="providerPickerName">Claude</span>
+              <span class="provider-picker-chevron"></span>
+            </button>
+            <div class="provider-picker-menu" id="providerPickerMenu" hidden></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer nav — view switcher + GitHub -->
+    <div class="panel-footer">
+      <div class="footer-nav">
+        <button class="footer-nav-btn active" id="btnNavLibrary" title="Library">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+            <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+        </button>
+        <button class="footer-nav-btn" id="btnNavSettings" title="Settings">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+          </svg>
+        </button>
+      </div>
+      <a class="github-link" id="githubLink" href="https://github.com/lifesized/youtube-transcriber" target="_blank" title="View on GitHub" hidden>
+        <svg class="github-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+          <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+        </svg>
+      </a>
+    </div>
+    <div id="popupToast" class="popup-toast" hidden></div>
+  </div>
+
 </body>
 </html>
