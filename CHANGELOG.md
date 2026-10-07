@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-07
+
+### Fixed
+- **Extension side panel opens faster (YTT-456)** — The initial `chrome.tabs.query()` call is deferred with `requestIdleCallback` so the panel paints its skeleton loader immediately instead of blocking on service-worker wake (which can take hundreds of ms on cold start). The panel shows the loading state, then updates asynchronously when tab info arrives. Applies to both LOCAL and ENTERPRISE builds.
+
 ## 2026-10-06
 
 ### Changed
