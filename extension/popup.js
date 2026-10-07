@@ -596,9 +596,21 @@ async function launchWithProvider(provider, transcriptId, videoTitle) {
     return;
   }
 
-  // LOCAL mode: open transcript in local app. User clicks Summarize there.
-  // No LLM host permissions, no token-in-query handoff.
-  await sendMsg({ type: "OPEN_TRANSCRIPT", id: transcriptId });
+  const instruction = llmPromptTemplate.replace(/\{title\}/g, videoTitle);
+  const prompt = `${instruction}\n\nTranscript:\n\n${transcriptText}`;
+
+  // LOCAL mode: clipboard + open provider tab (send-to-app pattern).
+  // Copy transcript to clipboard then open the provider's site so user can paste.
+  try {
+    await navigator.clipboard.writeText(prompt);
+  } catch (err) {
+    console.warn("Clipboard write failed:", err);
+    // Clipboard blocked — still open the provider tab
+  }
+  
+  if (provider.openUrl) {
+    await openNextToCurrentTab(provider.openUrl);
+  }
 }
 
 // Open a new tab immediately to the right of the currently active tab,
@@ -3161,16 +3173,12 @@ async function stopServerClicked() {
 
 el.btnStopServer.addEventListener("click", stopServerClicked);
 
-// Footer right-side link — cloud elements null in LOCAL build
+// Footer right-side link: GitHub repo visible in LOCAL mode.
 async function applyFooterLink(modeOverride) {
-  let mode = modeOverride || "local";
-  if (!mode) {
-    const stored = await chrome.storage.sync.get(["mode"]);
-    mode = stored.mode || "local";
+  // LOCAL mode only — GitHub link always visible
+  if (el.githubLink) {
+    el.githubLink.hidden = false;
   }
-  const isCloud = mode === "cloud";
-  if (el.cloudLink) el.cloudLink.hidden = !isCloud;
-  if (el.githubLink) el.githubLink.hidden = isCloud;
 }
 
 // Obsidian vault name — saved on every keystroke (debounced) to
