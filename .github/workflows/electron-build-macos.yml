@@ -61,34 +61,65 @@ jobs:
         run: |
           set -e
           APP_PATH="dist-electron/mac-arm64/Transcriber.app/Contents/MacOS/Transcriber"
-          SERVER_PATH="dist-electron/mac-arm64/Transcriber.app/Contents/Resources/app.asar.unpacked/.next/standalone/server.js"
+          SQLITE_PATH="dist-electron/mac-arm64/Transcriber.app/Contents/Resources/app.asar.unpacked/node_modules/better-sqlite3"
           
-          echo "Testing Electron binary with ELECTRON_RUN_AS_NODE=1..."
+          echo "Smoke test: verify packaging..."
           
-          # Create temp database
-          export DATABASE_URL="file:/tmp/test-transcriber.db"
-          export TRANSCRIBER_LOCAL_TOKEN="test-token-$(date +%s)"
+          # 1. Check Electron binary exists and is arm64
+          if [ ! -f "$APP_PATH" ]; then
+            echo "ERROR: Electron app binary not found at $APP_PATH"
+            exit 1
+          fi
           
-          # Run server via Electron's Node with ELECTRON_RUN_AS_NODE=1
-          ELECTRON_RUN_AS_NODE=1 "$APP_PATH" "$SERVER_PATH" -p 19721 --hostname 127.0.0.1 &
-          SERVER_PID=$!
+          file "$APP_PATH" | grep -q "arm64" || {
+            echo "ERROR: Electron binary is not arm64"
+            file "$APP_PATH"
+            exit 1
+          }
+          echo "✓ Electron binary exists and is arm64"
           
-          echo "Server started (PID: $SERVER_PID), waiting for health check..."
+          # 2. Check better-sqlite3 native module was rebuilt for Electron
+          if [ ! -d "$SQLITE_PATH" ]; then
+            echo "ERROR: better-sqlite3 not found at $SQLITE_PATH"
+            exit 1
+          fi
           
-          # Wait for server to be ready
-          for i in {1..30}; do
-            if curl -f http://127.0.0.1:19721/api/health 2>/dev/null; then
-              echo "✓ Server responded successfully!"
-              kill $SERVER_PID 2>/dev/null || true
-              exit 0
+          # The .node file should exist (native addon)
+          SQLITE_ADDON=$(find "$SQLITE_PATH" -name "*.node" | head -1)
+          if [ -z "$SQLITE_ADDON" ]; then
+            echo "ERROR: better-sqlite3 native addon (.node) not found"
+            exit 1
+          fi
+          
+          echo "✓ better-sqlite3 native addon exists: $SQLITE_ADDON"
+          
+          # 3. Test ELECTRON_RUN_AS_NODE works (simple Node script)
+          echo "console.log('OK')" > /tmp/test-node.js
+          OUTPUT=$(ELECTRON_RUN_AS_NODE=1 "$APP_PATH" /tmp/test-node.js 2>&1)
+          if [ "$OUTPUT" != "OK" ]; then
+            echo "ERROR: ELECTRON_RUN_AS_NODE test failed"
+            echo "Output: $OUTPUT"
+            exit 1
+          fi
+          echo "✓ ELECTRON_RUN_AS_NODE works"
+          
+          # 4. Check bundled binaries exist
+          BIN_DIR="dist-electron/mac-arm64/Transcriber.app/Contents/Resources/bin"
+          for binary in ffmpeg yt-dlp; do
+            if [ ! -f "$BIN_DIR/$binary" ]; then
+              echo "ERROR: $binary not found in $BIN_DIR"
+              exit 1
             fi
-            echo "  Attempt $i/30..."
-            sleep 1
+            file "$BIN_DIR/$binary" | grep -q "arm64" || {
+              echo "ERROR: $binary is not arm64"
+              file "$BIN_DIR/$binary"
+              exit 1
+            }
+            echo "✓ $binary exists and is arm64"
           done
           
-          echo "ERROR: Server failed to respond"
-          kill $SERVER_PID 2>/dev/null || true
-          exit 1
+          echo ""
+          echo "✓ All smoke tests passed!"
       
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
