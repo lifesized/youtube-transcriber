@@ -41,7 +41,6 @@
       "arch": ["arm64"]
     },
     "category": "public.app-category.productivity",
-    "icon": "electron/resources/icon.icns",
     "entitlements": "electron/entitlements.mac.plist",
     "entitlementsInherit": "electron/entitlements.mac.plist",
     "hardenedRuntime": false,
@@ -52,7 +51,6 @@
   },
   "dmg": {
     "title": "Transcriber",
-    "icon": "electron/resources/icon.icns",
     "backgroundColor": "#ffffff",
     "window": {
       "width": 540,
