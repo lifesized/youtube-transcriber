@@ -55,6 +55,22 @@ test("ENTERPRISE build succeeds with valid HTTPS base URL", () => {
   assert.match(sendUrl, /https:\/\/transcriber\.example\.com\/api\/transcripts/);
   assert.ok(!fs.existsSync(path.join(distPath, "local-auth-headers.js")));
   
+  // YTT-454: ENTERPRISE background must not reference LOCAL-only code
+  const background = fs.readFileSync(path.join(distPath, "background.js"), "utf8");
+  assert.doesNotMatch(background, /connectNative|local-auth-headers|buildLocalSendRequest/);
+  assert.match(background, /buildEnterpriseSendRequest/);
+  assert.match(background, /credentials:\s*["']include["']/); // SSO cookie placeholder
+  
+  // YTT-454: ENTERPRISE popup must have design-locked strings and org origin deep-link
+  const popup = fs.readFileSync(path.join(distPath, "popup.js"), "utf8");
+  assert.match(popup, /Can't reach Transcriber\./);
+  assert.match(popup, /Sign in to Transcriber, then try again\./);
+  assert.match(popup, /Couldn't send this URL\./);
+  assert.match(popup, /Open in Transcriber/);
+  assert.match(popup, /ENTERPRISE_ORIGIN = "https:\/\/transcriber\.example\.com"/);
+  assert.match(popup, /\$\{ENTERPRISE_ORIGIN\}\/\?id=/);
+  assert.doesNotMatch(popup, /127\.0\.0\.1|localhost/);
+  
   // Clean up
   fs.rmSync(distPath, { recursive: true });
 });
@@ -81,6 +97,16 @@ test("LOCAL build still works and produces loopback-only artifact", () => {
   const sendUrl = fs.readFileSync(path.join(distPath, "send-url.js"), "utf8");
   assert.match(sendUrl, /http:\/\/127\.0\.0\.1:19720\/api\/transcripts/);
   assert.ok(fs.existsSync(path.join(distPath, "local-auth-headers.js")));
+  
+  // YTT-454: LOCAL background must use native messaging
+  const background = fs.readFileSync(path.join(distPath, "background.js"), "utf8");
+  assert.match(background, /connectNative|local-auth-headers|buildLocalSendRequest/);
+  
+  // YTT-454: LOCAL popup must keep design-locked LOCAL strings (unchanged)
+  const popup = fs.readFileSync(path.join(distPath, "popup.js"), "utf8");
+  assert.match(popup, /Start the Transcriber app\./);
+  assert.match(popup, /Token missing or out of date — restart Transcriber\./);
+  assert.match(popup, /http:\/\/127\.0\.0\.1:19720\/\?id=/);
 });
 
 test("send-url-enterprise.js does not reference native messaging or loopback", () => {

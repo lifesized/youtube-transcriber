@@ -57,26 +57,38 @@ if (parsedUrl.protocol !== "https:") {
   process.exit(1);
 }
 
-if (parsedUrl.pathname !== "/" && parsedUrl.pathname !== "") {
-  console.warn(`WARNING: Base URL has path component: ${parsedUrl.pathname}`);
-}
-
-// Normalize to origin only for consistency
+// Normalize base URL and compute endpoint
 const enterpriseOrigin = parsedUrl.origin;
-const enterpriseBaseUrl = baseUrl.replace(/\/$/, ""); // Strip trailing slash
+let enterpriseBaseUrl = baseUrl.replace(/\/$/, "");
+let enterpriseSendEndpoint;
+
+// If base URL already ends with /api/transcripts, use it as-is
+if (enterpriseBaseUrl.endsWith("/api/transcripts")) {
+  enterpriseSendEndpoint = enterpriseBaseUrl;
+  console.log(`Base URL already includes /api/transcripts endpoint`);
+} else {
+  enterpriseSendEndpoint = `${enterpriseBaseUrl}/api/transcripts`;
+  if (parsedUrl.pathname !== "/" && parsedUrl.pathname !== "") {
+    console.warn(`WARNING: Base URL has path component: ${parsedUrl.pathname}`);
+  }
+}
 
 console.log(`Building ENTERPRISE extension for: ${enterpriseBaseUrl}`);
 
 // Files to copy as-is (NO native messaging, NO local-auth-headers)
 const COPY_FILES = [
-  "send-url-enterprise.js",
-  "background.js",
   "popup.html",
-  "popup.js",
   "popup.css",
   "icons/icon16.png",
   "icons/icon48.png",
   "icons/icon128.png",
+];
+
+// Files that need org origin injection
+const INJECT_FILES = [
+  { src: "send-url-enterprise.js", dest: "send-url.js" },
+  { src: "background-enterprise.js", dest: "background.js" },
+  { src: "popup-enterprise.js", dest: "popup.js" },
 ];
 
 function ensureDir(dir) {
@@ -89,7 +101,7 @@ function copyFile(src, dest) {
 }
 
 withTemporaryBuildDirectory((buildDir) => {
-  // Copy enterprise manifest template and inject base URL
+  // Copy enterprise manifest template and inject base URL and origin
   const manifestTemplatePath = path.join(SRC, "manifests", "enterprise.json");
   const manifestTemplate = fs.readFileSync(manifestTemplatePath, "utf8");
   const manifest = manifestTemplate
@@ -97,7 +109,7 @@ withTemporaryBuildDirectory((buildDir) => {
     .replace(/\{\{ENTERPRISE_ORIGIN\}\}/g, enterpriseOrigin);
   fs.writeFileSync(path.join(buildDir, "manifest.json"), manifest);
 
-  // Copy files and inject base URL into send-url-enterprise.js
+  // Copy static files as-is
   for (const file of COPY_FILES) {
     const src = path.join(SRC, file);
     const dest = path.join(buildDir, file);
@@ -106,19 +118,30 @@ withTemporaryBuildDirectory((buildDir) => {
       console.warn(`Warning: ${file} not found, skipping`);
       continue;
     }
+    copyFile(src, dest);
+  }
 
-    if (file === "send-url-enterprise.js") {
-      // Inject base URL and rename to send-url.js
-      let content = fs.readFileSync(src, "utf8");
-      content = content.replace(/\{\{ENTERPRISE_BASE_URL\}\}/g, enterpriseBaseUrl);
-      fs.writeFileSync(path.join(buildDir, "send-url.js"), content);
-    } else {
-      copyFile(src, dest);
+  // Inject org origin and endpoint into ENTERPRISE-specific files
+  for (const { src: srcFile, dest: destFile } of INJECT_FILES) {
+    const src = path.join(SRC, srcFile);
+    const dest = path.join(buildDir, destFile);
+    
+    if (!fs.existsSync(src)) {
+      console.warn(`Warning: ${srcFile} not found, skipping`);
+      continue;
     }
+
+    let content = fs.readFileSync(src, "utf8");
+    content = content
+      .replace(/\{\{ENTERPRISE_BASE_URL\}\}/g, enterpriseBaseUrl)
+      .replace(/\{\{ENTERPRISE_ORIGIN\}\}/g, enterpriseOrigin)
+      .replace(/\{\{ENTERPRISE_SEND_ENDPOINT\}\}/g, enterpriseSendEndpoint);
+    fs.writeFileSync(dest, content);
   }
 
   syncDirectoryPreservingRoot(buildDir, DIST);
 });
 
 console.log(`Built ENTERPRISE extension → ${path.relative(process.cwd(), DIST)}`);
-console.log(`Target: ${enterpriseBaseUrl}`);
+console.log(`Origin: ${enterpriseOrigin}`);
+console.log(`Endpoint: ${enterpriseSendEndpoint}`);

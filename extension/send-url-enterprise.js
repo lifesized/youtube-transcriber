@@ -6,7 +6,7 @@
  * Auth is handled via org SSO/cookies (placeholder for full implementation).
  */
 
-const ENTERPRISE_SEND_ENDPOINT = "{{ENTERPRISE_BASE_URL}}/api/transcripts";
+const ENTERPRISE_SEND_ENDPOINT = "{{ENTERPRISE_SEND_ENDPOINT}}";
 
 function isSecretQueryKey(key) {
   const str = String(key || "");
@@ -111,7 +111,7 @@ function buildEnterpriseSendRequest(pageUrl) {
     return { ok: false };
   }
   if (!endpoint.origin.startsWith("https://")) return { ok: false };
-  if (endpoint.pathname !== "/api/transcripts") return { ok: false };
+  if (!endpoint.pathname.endsWith("/api/transcripts")) return { ok: false };
 
   const headers = {
     "Content-Type": "application/json",
