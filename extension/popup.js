@@ -2960,9 +2960,8 @@ function applyTranscribeActionUI() {
   el.modeTranscribe.checked = transcribeMode === "transcribe";
   el.modeTranscribeSummarize.checked = transcribeMode === "transcribe-and-summarize";
   el.modeSummarize.checked = transcribeMode === "summarize";
-  // LOCAL mode: always hide provider picker (no ChatGPT/Claude branding)
-  // In LOCAL, all modes open transcript in the app
-  el.summarizeProviderRow.hidden = true;
+  // Provider picker only visible when summarize is in play
+  el.summarizeProviderRow.hidden = transcribeMode === "transcribe";
   applyProviderPickerTrigger();
   // Primary button label morphs to match the mode
   updateTranscribeButtonLabel();
