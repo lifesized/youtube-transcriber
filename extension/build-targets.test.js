@@ -71,6 +71,11 @@ test("ENTERPRISE build succeeds with valid HTTPS base URL", () => {
   assert.match(popup, /\$\{ENTERPRISE_ORIGIN\}\/\?id=/);
   assert.doesNotMatch(popup, /127\.0\.0\.1|localhost/);
   
+  // YTT-455: ENTERPRISE popup.html must have ENTERPRISE lead copy
+  const popupHtml = fs.readFileSync(path.join(distPath, "popup.html"), "utf8");
+  assert.match(popupHtml, /Send this page to your organization's Transcriber\./);
+  assert.doesNotMatch(popupHtml, /app on this computer/);
+  
   // Clean up
   fs.rmSync(distPath, { recursive: true });
 });
@@ -107,6 +112,10 @@ test("LOCAL build still works and produces loopback-only artifact", () => {
   assert.match(popup, /Start the Transcriber app\./);
   assert.match(popup, /Token missing or out of date — restart Transcriber\./);
   assert.match(popup, /http:\/\/127\.0\.0\.1:19720\/\?id=/);
+  
+  // YTT-455: LOCAL popup.html must keep LOCAL lead copy
+  const popupHtml = fs.readFileSync(path.join(distPath, "popup.html"), "utf8");
+  assert.match(popupHtml, /Send this page to the app on this computer\./);
 });
 
 test("send-url-enterprise.js does not reference native messaging or loopback", () => {
