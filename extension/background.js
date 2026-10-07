@@ -132,15 +132,247 @@ async function sendPageUrl(pageUrl) {
   return { ok: true, transcriptId: data.id };
 }
 
+// ---------------------------------------------------------------------------
+// Persistent state — survives popup close and service worker restart
+// ---------------------------------------------------------------------------
+
+async function getState() {
+  const { _txState } = await chrome.storage.session.get("_txState");
+  return _txState || null;
+}
+
+async function setState(state) {
+  await chrome.storage.session.set({ _txState: state });
+}
+
+async function clearState() {
+  await chrome.storage.session.remove("_txState");
+}
+
+async function getQueue() {
+  const { _txQueue } = await chrome.storage.session.get("_txQueue");
+  return _txQueue || [];
+}
+
+async function setQueue(queue) {
+  await chrome.storage.session.set({ _txQueue: queue });
+}
+
+// ---------------------------------------------------------------------------
+// Badge — visual indicator on extension icon
+// ---------------------------------------------------------------------------
+
+function setBadge(text, color) {
+  chrome.action.setBadgeText({ text });
+  if (color) chrome.action.setBadgeBackgroundColor({ color });
+}
+
+// ---------------------------------------------------------------------------
+// API helpers for LOCAL mode
+// ---------------------------------------------------------------------------
+
+const API_BASE = "http://localhost:19720";
+
+async function checkService() {
+  try {
+    const res = await fetch(`${API_BASE}/api/health`, {
+      method: "GET",
+      signal: AbortSignal.timeout(3000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.projectPath) {
+        chrome.storage.local.set({ projectPath: data.projectPath });
+      }
+    }
+    return { online: res.ok || res.status === 503 };
+  } catch {
+    return { online: false };
+  }
+}
+
+async function getRecent() {
+  const res = await fetch(`${API_BASE}/api/transcripts`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const all = await res.json();
+  return all.slice(0, 5);
+}
+
+async function checkExisting(videoId) {
+  const res = await fetch(`${API_BASE}/api/transcripts`);
+  if (!res.ok) return null;
+  const all = await res.json();
+  return all.find((t) => t.videoId === videoId) || null;
+}
+
+// ---------------------------------------------------------------------------
+// Core transcribe via hardened send-url path
+// ---------------------------------------------------------------------------
+
+async function doTranscribe(url, title) {
+  const state = {
+    url,
+    title: title || "",
+    status: "transcribing",
+    result: null,
+    error: null,
+    startedAt: Date.now(),
+  };
+  await setState(state);
+  setBadge("...", "#a58959");
+
+  const result = await sendPageUrl(url);
+  
+  if (result.ok) {
+    state.status = "done";
+    state.result = { id: result.transcriptId, title: result.title || title };
+    await setState(state);
+    setBadge("✓", "#22c55e");
+    setTimeout(() => {
+      getState().then((s) => {
+        if (s?.status === "done" || !s) setBadge("");
+      });
+    }, 5000);
+    await processNextInQueue();
+    return state.result;
+  } else {
+    state.status = "error";
+    state.error = result.error || "Transcription failed";
+    await setState(state);
+    setBadge("!", "#ef4444");
+    throw new Error(state.error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Queue processing
+// ---------------------------------------------------------------------------
+
+async function processNextInQueue() {
+  const queue = await getQueue();
+  const current = await getState();
+
+  if (!queue.length || current?.status === "transcribing") {
+    return { processing: false };
+  }
+
+  const next = queue.shift();
+  await setQueue(queue);
+
+  doTranscribe(next.url, next.title).catch(() => {});
+
+  return { processing: true, title: next.title, url: next.url };
+}
+
+// ---------------------------------------------------------------------------
+// Message handler
+// ---------------------------------------------------------------------------
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message?.type !== "SEND_PAGE_URL") return;
   if (sender?.id !== chrome.runtime.id) {
-    sendResponse({ ok: false });
+    sendResponse({ success: false, error: "Invalid sender" });
     return;
   }
-  sendPageUrl(message.url)
-    .then((result) => sendResponse(result))
-    .catch(() => sendResponse({ ok: false }));
+
+  const handle = async () => {
+    switch (message.type) {
+      case "SEND_PAGE_URL":
+        return await sendPageUrl(message.url);
+
+      case "CHECK_SERVICE":
+        return await checkService();
+
+      case "TRANSCRIBE":
+        return await doTranscribe(message.url, message.title);
+
+      case "GET_TRANSCRIPTION_STATUS":
+        return await getState();
+
+      case "CLEAR_TRANSCRIPTION":
+        await clearState();
+        setBadge("");
+        return { ok: true };
+
+      case "GET_RECENT":
+        return await getRecent();
+
+      case "CHECK_EXISTING":
+        return await checkExisting(message.videoId);
+
+      case "QUEUE_ADD": {
+        const queue = await getQueue();
+        const already = queue.some((q) => q.url === message.url);
+        if (!already) {
+          queue.push({ url: message.url, title: message.title || "" });
+          await setQueue(queue);
+        }
+        return { ok: true, queue };
+      }
+
+      case "GET_QUEUE":
+        return await getQueue();
+
+      case "CLEAR_QUEUE":
+        await setQueue([]);
+        return { ok: true };
+
+      case "PROCESS_QUEUE":
+        return await processNextInQueue();
+
+      case "OPEN_TRANSCRIPT": {
+        const transcriptId = message.id;
+        const fullUrl = `${API_BASE}/?layout=list&id=${transcriptId}&t=${Date.now()}`;
+        const allTabs = await chrome.tabs.query({});
+        const appTab = allTabs.find((t) => t.url && t.url.includes("localhost:19720"));
+
+        if (appTab) {
+          await chrome.tabs.update(appTab.id, { url: fullUrl, active: true });
+          await chrome.windows.update(appTab.windowId, { focused: true });
+        } else {
+          await chrome.tabs.create({ url: fullUrl, active: true });
+        }
+        return { ok: true };
+      }
+
+      case "SAVE_SETTINGS": {
+        if (message.mode) {
+          await chrome.storage.sync.set({ mode: message.mode });
+        }
+        return { ok: true };
+      }
+
+      case "GET_TRANSCRIPT": {
+        const transcriptId = message.id;
+        const res = await fetch(`${API_BASE}/api/transcripts/${transcriptId}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        return { transcript: data.transcript, title: data.title };
+      }
+
+      case "CALL_NATIVE_HOST": {
+        try {
+          const result = await callNativeHostCmd(message.cmd, message.payload, message.timeoutMs || 5000);
+          return { ok: true, result };
+        } catch (err) {
+          return { ok: false, error: err.message };
+        }
+      }
+
+      default:
+        return { error: "Unknown message type" };
+    }
+  };
+
+  handle()
+    .then((result) => {
+      if (result?.ok !== undefined || result?.online !== undefined || result?.error) {
+        sendResponse({ success: true, data: result });
+      } else {
+        sendResponse({ success: true, data: result });
+      }
+    })
+    .catch((err) => sendResponse({ success: false, error: err.message }));
+
   return true;
 });
 

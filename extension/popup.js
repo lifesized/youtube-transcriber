@@ -4,7 +4,6 @@ const HAS_EXTENSION_APIS =
   typeof chrome !== "undefined" &&
   chrome.runtime &&
   typeof chrome.runtime.connect === "function";
-const PRICING_URL = "https://www.transcribed.dev/pricing";
 
 if (!HAS_EXTENSION_APIS) {
   window.addEventListener("DOMContentLoaded", () => {
@@ -47,7 +46,7 @@ if (!HAS_EXTENSION_APIS) {
         <div class="recent-item">
           <div class="recent-main">
             <div class="recent-title">Example transcript</div>
-            <div class="recent-meta">transcribed.dev · just now</div>
+            <div class="recent-meta">localhost · just now</div>
           </div>
         </div>
       `;
@@ -597,38 +596,9 @@ async function launchWithProvider(provider, transcriptId, videoTitle) {
     return;
   }
 
-  const instruction = llmPromptTemplate.replace(/\{title\}/g, videoTitle);
-  const prompt = `${instruction}\n\nTranscript:\n\n${transcriptText}`;
-
-  // Primary path for every provider: content-script handoff so the prompt
-  // lands in the composer AND the send button fires automatically.
-  if (provider.handoffOrigins && provider.handoffUrl) {
-    const launched = await tryLlmHandoff(provider, prompt);
-    if (launched) return;
-  }
-
-  // Fallback 1: URL prefill template. Providers should avoid this for full
-  // transcripts because browser/site request limits can reject long URLs.
-  if (provider.urlTemplate) {
-    const encoded = encodeURIComponent(prompt);
-    const maxLen = 6000;
-    const safe = encoded.length > maxLen ? encoded.slice(0, maxLen) : encoded;
-    const url = provider.urlTemplate.replace("{prompt}", safe);
-    await openNextToCurrentTab(url);
-    return;
-  }
-
-  // Fallback 2: clipboard + open provider homepage (Claude without host
-  // perm). User pastes with ⌘V.
-  try {
-    await navigator.clipboard.writeText(prompt);
-  } catch {
-    // Clipboard blocked — still open the provider; user can re-summarize
-    // from the web app transcript page if needed.
-  }
-  if (provider.openUrl) {
-    await openNextToCurrentTab(provider.openUrl);
-  }
+  // LOCAL mode: open transcript in local app. User clicks Summarize there.
+  // No LLM host permissions, no token-in-query handoff.
+  await sendMsg({ type: "OPEN_TRANSCRIPT", id: transcriptId });
 }
 
 // Open a new tab immediately to the right of the currently active tab,
@@ -679,48 +649,11 @@ function showErrorState(message) {
 }
 
 async function handleErrorAction() {
-  if (errorAction === "upgrade") {
-    await openNextToCurrentTab(PRICING_URL);
-    return;
-  }
+  // LOCAL mode: no pricing links
   doTranscribe();
 }
 
-// Neither Claude nor ChatGPT expose a public URL path that both fills the
-// composer AND auto-submits. Content-script injection is the only way to
-// match that expectation, so we ask for the optional host permission on
-// first use and register a content script that injects + sends. Returns
-// true if the handoff launched successfully (prompt stashed + tab opened),
-// false if we should fall back to url-template / clipboard paths.
-async function tryLlmHandoff(provider, prompt) {
-  const perm = { origins: provider.handoffOrigins };
-  let granted = false;
-  try {
-    granted = await chrome.permissions.contains(perm);
-  } catch {
-    granted = false;
-  }
-  if (!granted) {
-    try {
-      granted = await chrome.permissions.request(perm);
-    } catch {
-      granted = false;
-    }
-  }
-  if (!granted) return false;
-
-  const stash = await sendMsg({ type: "STASH_LLM_PROMPT", prompt });
-  const token = stash?.success ? stash.data?.token : null;
-  if (!token) return false;
-
-  const url = `${provider.handoffUrl}?${LLM_HANDOFF_PARAM}=${encodeURIComponent(token)}`;
-  try {
-    await openNextToCurrentTab(url);
-  } catch {
-    return false;
-  }
-  return true;
-}
+// tryLlmHandoff removed — LOCAL mode uses send-to-app only (no LLM host permissions)
 
 // ---------------------------------------------------------------------------
 // Destinations (YTT-205 §2) — cloud-hosted adapter registry per YTT-211.
@@ -914,6 +847,7 @@ function connectedDestinations() {
 }
 
 function renderDestinationsSkeleton(rows = 2) {
+  if (!el.destinationsList) return;
   el.destinationsList.innerHTML = "";
   for (let i = 0; i < rows; i++) {
     const row = document.createElement("div");
@@ -944,6 +878,7 @@ function destinationsSignature(payload) {
 }
 
 function paintDestinationsList(payload) {
+  if (!el.destinationsList || !el.destinationsEmpty) return;
   el.destinationsList.innerHTML = "";
   el.destinationsEmpty.hidden = true;
   const list = payload.destinations || [];
@@ -962,35 +897,22 @@ function paintDestinationsList(payload) {
 }
 
 async function renderDestinationsSettings() {
-  // Destinations always visible — Obsidian works in any mode (client-side
-  // URL scheme), and cloud-only adapters render as "Sign in" teasers when
-  // not reachable. The only state where the section is empty is if we
-  // somehow have zero adapters total, which shouldn't happen.
+  if (!el.destinationsSection || !el.destinationsEmpty) return;
+  
   el.destinationsSection.hidden = false;
   el.destinationsEmpty.hidden = true;
 
-  // Paint skeleton synchronously when there's no in-memory cache. The
-  // persisted-cache read below is async (chrome.storage roundtrip) — without
-  // this sync paint, the section header is visible for one microtask + the
-  // storage read with an empty list underneath. Particularly noticeable after
-  // a mode switch (cache cleared) or when the persisted TTL has expired.
   if (!destinationsCache) {
     renderDestinationsSkeleton();
   }
 
-  // Stale-while-revalidate: paint cached destinations from the previous popup
-  // session so the user sees real rows immediately. Network refresh happens
-  // below; rows are replaced only if the fresh result differs.
   const cached = destinationsCache || (await readPersistedDestinations(currentMode));
   if (cached && cached.destinations?.length) {
     paintDestinationsList(cached);
   }
-  // else: skeleton already showing from the sync paint above.
 
   const res = await fetchDestinations();
 
-  // Re-paint only if the fresh result differs from what we already painted
-  // from cache. Avoids DOM thrash on the common "nothing changed" case.
   const sameAsCached =
     cached &&
     cached.destinations?.length &&
@@ -999,13 +921,13 @@ async function renderDestinationsSettings() {
     paintDestinationsList(res);
   }
 
-  // Obsidian inputs always visible since Obsidian is always in the list.
-  el.obsidianVaultRow.hidden = false;
-  el.obsidianAdvUriRow.hidden = false;
+  // Obsidian inputs — null in LOCAL build
+  if (el.obsidianVaultRow) el.obsidianVaultRow.hidden = false;
+  if (el.obsidianAdvUriRow) el.obsidianAdvUriRow.hidden = false;
   const { obsidianVaultName, obsidianUseAdvancedUri } =
     await chrome.storage.sync.get(["obsidianVaultName", "obsidianUseAdvancedUri"]);
-  el.obsidianVaultInput.value = obsidianVaultName || "";
-  el.obsidianAdvUriInput.checked = !!obsidianUseAdvancedUri;
+  if (el.obsidianVaultInput) el.obsidianVaultInput.value = obsidianVaultName || "";
+  if (el.obsidianAdvUriInput) el.obsidianAdvUriInput.checked = !!obsidianUseAdvancedUri;
 }
 
 function buildDestinationRow(d, ctx) {
@@ -1071,14 +993,11 @@ function buildDestinationRow(d, ctx) {
       (d.requiresTier
         ? d.requiresTier.charAt(0).toUpperCase() + d.requiresTier.slice(1)
         : "paid plans");
-    actionEl = document.createElement("a");
-    actionEl.href = d.upgradeUrl
-      ? `https://www.transcribed.dev${d.upgradeUrl}`
-      : "https://www.transcribed.dev/pricing";
-    actionEl.target = "_blank";
-    actionEl.rel = "noopener noreferrer";
+    // LOCAL mode: no pricing links
+    actionEl = document.createElement("button");
     actionEl.className = "destinations-row-action destinations-row-upgrade";
     actionEl.textContent = "Upgrade";
+    actionEl.disabled = true;
   } else if (d.clientSide) {
     // Client-side adapter (Obsidian). "Connected" = local config saved.
     // Connect focuses the vault-name input below; Disconnect clears it.
@@ -1120,13 +1039,13 @@ function buildDestinationRow(d, ctx) {
     } else if (cloudReason === "local") {
       status.textContent = "Switch to Cloud mode to use";
     } else {
-      status.textContent = "Sign in to transcribed.dev to use";
+      status.textContent = "Sign in required";
     }
-    actionEl = document.createElement("a");
-    actionEl.href = "https://www.transcribed.dev/auth/login";
-    actionEl.target = "_blank";
+    // LOCAL mode: no auth URLs
+    actionEl = document.createElement("button");
     actionEl.className = "destinations-row-action";
     actionEl.textContent = "Sign in";
+    actionEl.disabled = true;
   } else {
     // Cloud adapter, cloud is reachable. Standard Connect/Disconnect flow.
     if (d.connected && d.needsReauth) {
@@ -1351,17 +1270,9 @@ async function toggleRowActionsMenu(wrapper, transcriptId, videoTitle) {
                 ? errData.requiresTier.charAt(0).toUpperCase() +
                   errData.requiresTier.slice(1)
                 : "a paid plan";
-              const url = errData.upgradeUrl
-                ? `https://www.transcribed.dev${errData.upgradeUrl}`
-                : "https://www.transcribed.dev/pricing";
-              try {
-                chrome.tabs.create({ url, active: true });
-              } catch {
-                // tabs.create may be denied in some contexts — toast still
-                // tells the user what to do.
-              }
+              // LOCAL mode: no pricing tabs
               showPopupToast(
-                `${destName} requires ${tier} — opened pricing`,
+                `${destName} requires ${tier}`,
                 "error"
               );
             } else {
@@ -1512,13 +1423,8 @@ async function copyTranscriptText(transcriptId) {
 }
 
 async function downloadTranscriptMarkdown(transcriptId) {
-  const cfgRes = await sendMsg({ type: "GET_SETTINGS" });
-  const mode = cfgRes?.data?.mode || "cloud";
-  const base = mode === "cloud"
-    ? "https://www.transcribed.dev"
-    : "http://localhost:19720";
-  // The download route sets Content-Disposition: attachment, so a plain
-  // anchor click triggers a file save rather than navigating the popup.
+  // LOCAL mode always uses localhost
+  const base = "http://localhost:19720";
   const a = document.createElement("a");
   a.href = `${base}/api/transcripts/${encodeURIComponent(transcriptId)}/download`;
   a.rel = "noopener";
@@ -2351,7 +2257,8 @@ async function init() {
   } catch { /* ignore */ }
   if (thisInit !== initVersion) return;
 
-  const mode = syncStash?.mode || "cloud";
+  // LOCAL build is always local mode
+  const mode = "local";
   currentMode = mode;
   // Hydrate the YTT-259 transcribe-mode setting alongside `mode` so the
   // primary button label is correct on first paint.
@@ -2485,37 +2392,28 @@ async function init() {
     const authError = serviceRes?.data?.authError;
 
     if (cfgMode === "cloud") {
-      // Confirmed signed-out — kill cached optimism so next open doesn't
-      // flash the list before the sign-in card.
+      // Cloud mode — dead path in LOCAL build (mode is always "local")
       if (authError) await setCachedAuth(false);
       el.offlineLocalMsg.hidden = true;
-      el.offlineCloudMsg.hidden = false;
-      el.cloudNudge.hidden = true;
-      el.localDetectedBanner.hidden = true;
+      if (el.offlineCloudMsg) el.offlineCloudMsg.hidden = false;
+      if (el.cloudNudge) el.cloudNudge.hidden = true;
+      if (el.localDetectedBanner) el.localDetectedBanner.hidden = true;
 
       const firstTime = !!serviceRes?.data?.firstTime;
       if (authError && !firstTime) {
-        // Returning user whose session expired
-        el.cloudOnboarding.hidden = true;
-        el.cloudAuthError.hidden = false;
+        if (el.cloudOnboarding) el.cloudOnboarding.hidden = true;
+        if (el.cloudAuthError) el.cloudAuthError.hidden = false;
       } else {
-        // First-time install OR service reachable but no auth — show onboarding
-        el.cloudOnboarding.hidden = false;
-        el.cloudAuthError.hidden = true;
+        if (el.cloudOnboarding) el.cloudOnboarding.hidden = false;
+        if (el.cloudAuthError) el.cloudAuthError.hidden = true;
       }
-      // Reset the in-panel sign-in card so it's ready for the next attempt
-      // (or keep the "check your email" confirmation visible if we just sent).
-      if (!el.cloudAuthSent.hidden) {
-        el.cloudAuthCard.hidden = true;
+      if (el.cloudAuthSent && !el.cloudAuthSent.hidden) {
+        if (el.cloudAuthCard) el.cloudAuthCard.hidden = true;
       } else {
-        el.cloudAuthCard.hidden = false;
-        el.cloudAuthErrorMsg.hidden = true;
+        if (el.cloudAuthCard) el.cloudAuthCard.hidden = false;
+        if (el.cloudAuthErrorMsg) el.cloudAuthErrorMsg.hidden = true;
       }
 
-      // Auto-detect local instance and show banner — unless user dismissed it.
-      // Dismissal is sticky (chrome.storage.sync.localBannerDismissed) so a
-      // casual cloud user with an unrelated localhost server isn't repeatedly
-      // nudged toward self-hosted.
       const { localBannerDismissed } = await chrome.storage.sync.get([
         "localBannerDismissed",
       ]);
@@ -2523,14 +2421,14 @@ async function init() {
         const localRes = await sendMsg({ type: "DETECT_LOCAL" });
         if (thisInit !== initVersion) return;
         if (localRes?.success && localRes.data?.available) {
-          el.localDetectedBanner.hidden = false;
+          if (el.localDetectedBanner) el.localDetectedBanner.hidden = false;
         }
       }
     } else {
       el.offlineLocalMsg.hidden = false;
-      el.offlineCloudMsg.hidden = true;
-      el.cloudNudge.hidden = false;
-      el.localDetectedBanner.hidden = true;
+      if (el.offlineCloudMsg) el.offlineCloudMsg.hidden = true;
+      if (el.cloudNudge) el.cloudNudge.hidden = false;
+      if (el.localDetectedBanner) el.localDetectedBanner.hidden = true;
       const localAuthError = !!authError;
       const authMsg =
         serviceRes?.data?.authErrorMessage ||
@@ -2781,6 +2679,8 @@ el.btnCheckAgain.addEventListener("click", init);
 let lastAuthEmail = "";
 
 async function sendMagicLink(email) {
+  if (!el.cloudAuthSubmit || !el.cloudAuthResend || !el.cloudAuthErrorMsg) return;
+  
   el.cloudAuthSubmit.disabled = true;
   el.cloudAuthResend.disabled = true;
   el.cloudAuthErrorMsg.hidden = true;
@@ -2793,11 +2693,11 @@ async function sendMagicLink(email) {
 
   if (res?.success) {
     lastAuthEmail = email;
-    el.cloudAuthSentEmail.textContent = email;
-    el.cloudOnboarding.hidden = true;
-    el.cloudAuthError.hidden = true;
-    el.cloudAuthCard.hidden = true;
-    el.cloudAuthSent.hidden = false;
+    if (el.cloudAuthSentEmail) el.cloudAuthSentEmail.textContent = email;
+    if (el.cloudOnboarding) el.cloudOnboarding.hidden = true;
+    if (el.cloudAuthError) el.cloudAuthError.hidden = true;
+    if (el.cloudAuthCard) el.cloudAuthCard.hidden = true;
+    if (el.cloudAuthSent) el.cloudAuthSent.hidden = false;
     return;
   }
   el.cloudAuthErrorMsg.textContent =
@@ -2805,38 +2705,42 @@ async function sendMagicLink(email) {
   el.cloudAuthErrorMsg.hidden = false;
 }
 
-el.cloudAuthForm.addEventListener("submit", (e) => {
-  e.preventDefault();
-  const email = el.cloudAuthEmail.value.trim();
-  if (!email) return;
-  sendMagicLink(email);
-});
+// Cloud-only auth listeners — null in LOCAL build
+if (el.cloudAuthForm) {
+  el.cloudAuthForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const email = el.cloudAuthEmail.value.trim();
+    if (!email) return;
+    sendMagicLink(email);
+  });
+}
 
-el.cloudAuthResend.addEventListener("click", () => {
-  if (!lastAuthEmail) return;
-  sendMagicLink(lastAuthEmail);
-});
+if (el.cloudAuthResend) {
+  el.cloudAuthResend.addEventListener("click", () => {
+    if (!lastAuthEmail) return;
+    sendMagicLink(lastAuthEmail);
+  });
+}
 
-// Google OAuth: open /auth/login?provider=google in a small popup window
-// so the YouTube tab stays focused. The login page auto-triggers the
-// Supabase Google flow; the callback redirects to /auth/extension-bridge
-// which closes the popup.
-el.cloudAuthGoogle.addEventListener("click", async () => {
-  el.cloudAuthGoogle.disabled = true;
-  const res = await sendMsg({ type: "OPEN_GOOGLE_SIGNIN" });
-  el.cloudAuthGoogle.disabled = false;
-  if (!res?.success) {
-    el.cloudAuthErrorMsg.textContent =
-      res?.error || "Couldn't open the Google sign-in window.";
-    el.cloudAuthErrorMsg.hidden = false;
-  }
-});
+if (el.cloudAuthGoogle) {
+  el.cloudAuthGoogle.addEventListener("click", async () => {
+    el.cloudAuthGoogle.disabled = true;
+    const res = await sendMsg({ type: "OPEN_GOOGLE_SIGNIN" });
+    el.cloudAuthGoogle.disabled = false;
+    if (!res?.success) {
+      el.cloudAuthErrorMsg.textContent =
+        res?.error || "Couldn't open the Google sign-in window.";
+      el.cloudAuthErrorMsg.hidden = false;
+    }
+  });
+}
 
-// "Switch to self-hosted" — auto-switch to local mode
-el.btnUseLocal.addEventListener("click", async () => {
-  await sendMsg({ type: "SAVE_SETTINGS", mode: "local" });
-  init();
-});
+if (el.btnUseLocal) {
+  el.btnUseLocal.addEventListener("click", async () => {
+    await sendMsg({ type: "SAVE_SETTINGS", mode: "local" });
+    init();
+  });
+}
 
 el.btnStartTranscriber.addEventListener("click", startTranscriberClicked);
 
@@ -3141,16 +3045,11 @@ el.modeSummarize.addEventListener("change", () => {
 
 function setModeUI(mode) {
   currentSettingsMode = mode;
-  el.btnModeLocal.classList.toggle("active", mode === "local");
-  el.btnModeCloud.classList.toggle("active", mode === "cloud");
-  el.cloudAccountSection.hidden = mode !== "cloud";
+  if (el.btnModeLocal) el.btnModeLocal.classList.toggle("active", mode === "local");
+  if (el.btnModeCloud) el.btnModeCloud.classList.toggle("active", mode === "cloud");
+  if (el.cloudAccountSection) el.cloudAccountSection.hidden = mode !== "cloud";
   applyFooterLink(mode);
-  // Server stop control: only useful in self-hosted mode AND when the native
-  // host is installed (otherwise we have no way to stop). detectNativeHost
-  // sets nativeHostAvailable; if it hasn't run yet, fire-and-forget.
   refreshServerSection(mode);
-  // Destinations always render. Obsidian is client-side (works in any mode);
-  // cloud-only adapters show as teasers with a Sign in CTA in local mode.
   renderDestinationsSettings();
 }
 
@@ -3250,36 +3149,35 @@ async function stopServerClicked() {
 
 el.btnStopServer.addEventListener("click", stopServerClicked);
 
-// Footer right-side link swaps with mode: GitHub repo for local devs,
-// transcribed.dev wordmark for cloud users (CTA toward the web app).
+// Footer right-side link — cloud elements null in LOCAL build
 async function applyFooterLink(modeOverride) {
-  let mode = modeOverride;
+  let mode = modeOverride || "local";
   if (!mode) {
     const stored = await chrome.storage.sync.get(["mode"]);
-    mode = stored.mode || "cloud";
+    mode = stored.mode || "local";
   }
   const isCloud = mode === "cloud";
-  el.cloudLink.hidden = !isCloud;
-  el.githubLink.hidden = isCloud;
+  if (el.cloudLink) el.cloudLink.hidden = !isCloud;
+  if (el.githubLink) el.githubLink.hidden = isCloud;
 }
 
 // Obsidian vault name — saved on every keystroke (debounced) to
 // chrome.storage.sync. Used when sending to Obsidian.
 let obsidianVaultSaveTimer = null;
 function saveObsidianVaultName() {
+  if (!el.obsidianVaultInput) return;
   const value = el.obsidianVaultInput.value.trim();
   if (obsidianVaultSaveTimer) clearTimeout(obsidianVaultSaveTimer);
   obsidianVaultSaveTimer = setTimeout(async () => {
     await chrome.storage.sync.set({ obsidianVaultName: value });
-    el.obsidianVaultSaved.hidden = false;
-    el.obsidianVaultSaved.classList.add("show");
-    setTimeout(() => {
-      el.obsidianVaultSaved.classList.remove("show");
-      setTimeout(() => { el.obsidianVaultSaved.hidden = true; }, 300);
-    }, 1200);
-    // Connection state for Obsidian is derived from whether a vault name is
-    // saved. When the value flips empty↔non-empty, re-render so the toggle
-    // reflects the new state instead of getting stuck off after a disconnect.
+    if (el.obsidianVaultSaved) {
+      el.obsidianVaultSaved.hidden = false;
+      el.obsidianVaultSaved.classList.add("show");
+      setTimeout(() => {
+        el.obsidianVaultSaved.classList.remove("show");
+        setTimeout(() => { el.obsidianVaultSaved.hidden = true; }, 300);
+      }, 1200);
+    }
     const cached = (destinationsCache?.destinations || []).find(
       (d) => d.adapterId === "obsidian-scheme"
     );
@@ -3290,20 +3188,24 @@ function saveObsidianVaultName() {
     }
   }, 350);
 }
-el.obsidianVaultInput.addEventListener("input", saveObsidianVaultName);
-el.obsidianVaultInput.addEventListener("blur", () => {
-  if (obsidianVaultSaveTimer) {
-    clearTimeout(obsidianVaultSaveTimer);
-    obsidianVaultSaveTimer = null;
-  }
-  saveObsidianVaultName();
-});
-
-el.obsidianAdvUriInput.addEventListener("change", async () => {
-  await chrome.storage.sync.set({
-    obsidianUseAdvancedUri: !!el.obsidianAdvUriInput.checked,
+if (el.obsidianVaultInput) {
+  el.obsidianVaultInput.addEventListener("input", saveObsidianVaultName);
+  el.obsidianVaultInput.addEventListener("blur", () => {
+    if (obsidianVaultSaveTimer) {
+      clearTimeout(obsidianVaultSaveTimer);
+      obsidianVaultSaveTimer = null;
+    }
+    saveObsidianVaultName();
   });
-});
+}
+
+if (el.obsidianAdvUriInput) {
+  el.obsidianAdvUriInput.addEventListener("change", async () => {
+    await chrome.storage.sync.set({
+      obsidianUseAdvancedUri: !!el.obsidianAdvUriInput.checked,
+    });
+  });
+}
 
 async function switchMode(newMode) {
   destinationsCache = null;
@@ -3356,49 +3258,58 @@ async function markSelfHostedSetupCompleted() {
 }
 
 function showSetupWall() {
-  el.setupWallModal.hidden = false;
+  if (el.setupWallModal) el.setupWallModal.hidden = false;
 }
 
 function hideSetupWall() {
-  el.setupWallModal.hidden = true;
+  if (el.setupWallModal) el.setupWallModal.hidden = true;
 }
 
-el.setupWallStay.addEventListener("click", () => {
-  hideSetupWall();
-  // Toggle visually reverts — UI state is driven by currentMode (still "cloud").
-  setModeUI(currentMode);
-});
+// Cloud-only setup wall and mode toggle listeners — null in LOCAL build
+if (el.setupWallStay) {
+  el.setupWallStay.addEventListener("click", () => {
+    hideSetupWall();
+    setModeUI(currentMode);
+  });
+}
 
-el.setupWallContinue.addEventListener("click", async () => {
-  hideSetupWall();
-  await markSelfHostedSetupCompleted();
-  chrome.tabs.create({ url: SETUP_GUIDE_URL });
-  await switchMode("local");
-});
+if (el.setupWallContinue) {
+  el.setupWallContinue.addEventListener("click", async () => {
+    hideSetupWall();
+    await markSelfHostedSetupCompleted();
+    chrome.tabs.create({ url: SETUP_GUIDE_URL });
+    await switchMode("local");
+  });
+}
 
-el.btnModeLocal.addEventListener("click", async () => {
-  if (currentMode === "local") return;
-  if (await isSelfHostedSetupCompleted()) {
-    switchMode("local");
-    return;
-  }
-  showSetupWall();
-});
-el.btnModeCloud.addEventListener("click", () => switchMode("cloud"));
+if (el.btnModeLocal) {
+  el.btnModeLocal.addEventListener("click", async () => {
+    if (currentMode === "local") return;
+    if (await isSelfHostedSetupCompleted()) {
+      switchMode("local");
+      return;
+    }
+    showSetupWall();
+  });
+}
 
-// Auto-detect path: server already running, so by definition setup is done.
-// Mark graduated immediately so subsequent toggles skip the wall. The original
-// btnUseLocal handler (above) still runs and flips mode — both run on click.
-el.btnUseLocal.addEventListener("click", () => {
-  markSelfHostedSetupCompleted();
-});
+if (el.btnModeCloud) {
+  el.btnModeCloud.addEventListener("click", () => switchMode("cloud"));
+}
 
-// Local-detected banner dismiss — stops the nudge for users who don't want
-// to switch but happen to have a server running on localhost (other tools).
-el.btnDismissBanner.addEventListener("click", async () => {
-  el.localDetectedBanner.hidden = true;
-  await chrome.storage.sync.set({ localBannerDismissed: true });
-});
+// Auto-detect path (second btnUseLocal handler) — null in LOCAL build
+if (el.btnUseLocal) {
+  el.btnUseLocal.addEventListener("click", () => {
+    markSelfHostedSetupCompleted();
+  });
+}
+
+if (el.btnDismissBanner) {
+  el.btnDismissBanner.addEventListener("click", async () => {
+    el.localDetectedBanner.hidden = true;
+    await chrome.storage.sync.set({ localBannerDismissed: true });
+  });
+}
 
 // Existing self-hosted users: retroactively mark setup completed and show
 // a one-time toast that the toggle moved into Advanced. Runs once per install.

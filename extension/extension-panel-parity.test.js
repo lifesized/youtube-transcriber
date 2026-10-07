@@ -10,166 +10,135 @@
  * 6. Start Transcriber offline button (YTT-456)
  * 7. Stop Transcriber in Settings when server up
  * 8. States: offline → ready → transcribing → error + Recent when online
+ * 
+ * Static checks only (no browser required) — verify dist/ matches Security requirements.
  */
 
-const { test, expect, chromium } = require('@playwright/test');
+const { test } = require('node:test');
+const assert = require('node:assert');
+const fs = require('fs');
 const path = require('path');
 
 const EXTENSION_PATH = path.join(__dirname, 'dist');
-const TEST_TIMEOUT = 30000;
 
-test.describe('LOCAL Extension Panel Parity', () => {
-  let browser;
-  let context;
-  let page;
-
-  test.beforeAll(async () => {
-    // Launch browser with extension loaded
-    browser = await chromium.launchPersistentContext('', {
-      headless: false,
-      args: [
-        `--disable-extensions-except=${EXTENSION_PATH}`,
-        `--load-extension=${EXTENSION_PATH}`,
-        '--no-sandbox',
-      ],
-    });
-  });
-
-  test.afterAll(async () => {
-    await browser?.close();
-  });
-
-  test('should have panel-diagnostics.js', async () => {
-    const fs = require('fs');
-    const diagnosticsPath = path.join(__dirname, 'dist', 'panel-diagnostics.js');
-    expect(fs.existsSync(diagnosticsPath)).toBe(true);
-  });
-
-  test('should have setup-link.css', async () => {
-    const fs = require('fs');
-    const setupLinkPath = path.join(__dirname, 'dist', 'setup-link.css');
-    expect(fs.existsSync(setupLinkPath)).toBe(true);
-  });
-
-  test('popup.html should reference required stylesheets', async () => {
-    const fs = require('fs');
-    const popupHtml = fs.readFileSync(path.join(__dirname, 'dist', 'popup.html'), 'utf8');
-    
-    expect(popupHtml).toContain('panel-diagnostics.js');
-    expect(popupHtml).toContain('popup.css');
-    expect(popupHtml).toContain('setup-link.css');
-    expect(popupHtml).toContain('popup.js');
-  });
-
-  test('popup.html should have required elements', async () => {
-    const fs = require('fs');
-    const popupHtml = fs.readFileSync(path.join(__dirname, 'dist', 'popup.html'), 'utf8');
-    
-    // Startup shell
-    expect(popupHtml).toContain('id="startupShell"');
-    
-    // Offline/setup state
-    expect(popupHtml).toContain('id="stateNoService"');
-    expect(popupHtml).toContain('id="btnStartTranscriber"');
-    expect(popupHtml).toContain('Start Transcriber');
-    
-    // Ready state
-    expect(popupHtml).toContain('id="stateReady"');
-    expect(popupHtml).toContain('id="btnTranscribe"');
-    expect(popupHtml).toContain('Transcribe');
-    
-    // Transcribing state
-    expect(popupHtml).toContain('id="stateTranscribing"');
-    
-    // Error state
-    expect(popupHtml).toContain('id="stateError"');
-    
-    // Recent section
-    expect(popupHtml).toContain('id="recentSection"');
-    expect(popupHtml).toContain('id="recentList"');
-    
-    // Settings panel
-    expect(popupHtml).toContain('id="settingsPanel"');
-    expect(popupHtml).toContain('id="serverSection"');
-    expect(popupHtml).toContain('id="btnStartServer"');
-    expect(popupHtml).toContain('id="btnStopServer"');
-    
-    // Footer nav
-    expect(popupHtml).toContain('id="btnNavLibrary"');
-    expect(popupHtml).toContain('id="btnNavSettings"');
-    expect(popupHtml).toContain('id="githubLink"');
-  });
-
-  test('popup.html should NOT have cloud-only elements', async () => {
-    const fs = require('fs');
-    const popupHtml = fs.readFileSync(path.join(__dirname, 'dist', 'popup.html'), 'utf8');
-    
-    // Should not have cloud auth
-    expect(popupHtml).not.toContain('id="cloudAuthCard"');
-    expect(popupHtml).not.toContain('id="cloudAuthGoogle"');
-    expect(popupHtml).not.toContain('id="cloudAuthForm"');
-    expect(popupHtml).not.toContain('cloudOnboarding');
-    
-    // Should not have cloud account section
-    expect(popupHtml).not.toContain('id="cloudAccountSection"');
-    
-    // Should not have destinations/connectors
-    expect(popupHtml).not.toContain('id="destinationsSection"');
-    expect(popupHtml).not.toContain('id="obsidianVaultRow"');
-    
-    // Should not have mode toggle
-    expect(popupHtml).not.toContain('id="btnModeCloud"');
-    expect(popupHtml).not.toContain('Self-hosted mode');
-    
-    // Should not have setup wall
-    expect(popupHtml).not.toContain('id="setupWallModal"');
-    
-    // Should not have cloud link in footer
-    expect(popupHtml).not.toContain('id="cloudLink"');
-    expect(popupHtml).not.toContain('transcribed.dev');
-  });
-
-  test('popup.js should have latency fix', async () => {
-    const fs = require('fs');
-    const popupJs = fs.readFileSync(path.join(__dirname, 'dist', 'popup.js'), 'utf8');
-    
-    expect(popupJs).toContain('requestIdleCallback');
-    expect(popupJs).toContain('YTT-456');
-  });
-
-  test('popup.js should be in local mode', async () => {
-    const fs = require('fs');
-    const popupJs = fs.readFileSync(path.join(__dirname, 'dist', 'popup.js'), 'utf8');
-    
-    expect(popupJs).toContain('let currentMode = "local"');
-  });
-
-  test('manifest should have correct version', async () => {
-    const fs = require('fs');
-    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'dist', 'manifest.json'), 'utf8'));
-    
-    expect(manifest.version).toBe('1.6.31');
-  });
-
-  test('manifest should have LOCAL permissions', async () => {
-    const fs = require('fs');
-    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'dist', 'manifest.json'), 'utf8'));
-    
-    expect(manifest.permissions).toContain('storage');
-    expect(manifest.permissions).toContain('nativeMessaging');
-    expect(manifest.permissions).toContain('sidePanel');
-  });
-
-  test('manifest should have LOCAL host permissions', async () => {
-    const fs = require('fs');
-    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'dist', 'manifest.json'), 'utf8'));
-    
-    expect(manifest.host_permissions).toContain('http://127.0.0.1:19720/*');
-    
-    // Should NOT have cloud hosts
-    const hostPerms = manifest.host_permissions.join(',');
-    expect(hostPerms).not.toContain('transcribed.dev');
-  });
+test('should have panel-diagnostics.js', () => {
+  const diagnosticsPath = path.join(__dirname, 'dist', 'panel-diagnostics.js');
+  assert.ok(fs.existsSync(diagnosticsPath), 'panel-diagnostics.js must exist');
 });
 
-console.log('✓ Extension panel parity test suite ready');
+test('should have setup-link.css', () => {
+  const setupLinkPath = path.join(__dirname, 'dist', 'setup-link.css');
+  assert.ok(fs.existsSync(setupLinkPath), 'setup-link.css must exist');
+});
+
+test('popup.html should reference required stylesheets', () => {
+  const popupHtml = fs.readFileSync(path.join(__dirname, 'dist', 'popup.html'), 'utf8');
+  
+  assert.ok(popupHtml.includes('panel-diagnostics.js'), 'popup.html must include panel-diagnostics.js');
+  assert.ok(popupHtml.includes('popup.css'), 'popup.html must include popup.css');
+  assert.ok(popupHtml.includes('setup-link.css'), 'popup.html must include setup-link.css');
+  assert.ok(popupHtml.includes('popup.js'), 'popup.html must include popup.js');
+});
+
+test('popup.html should have required elements', () => {
+  const popupHtml = fs.readFileSync(path.join(__dirname, 'dist', 'popup.html'), 'utf8');
+  
+  assert.ok(popupHtml.includes('id="startupShell"'), 'must have startupShell');
+  assert.ok(popupHtml.includes('id="stateNoService"'), 'must have stateNoService');
+  assert.ok(popupHtml.includes('id="btnStartTranscriber"'), 'must have btnStartTranscriber');
+  assert.ok(popupHtml.includes('Start Transcriber'), 'must have "Start Transcriber" text');
+  assert.ok(popupHtml.includes('id="stateReady"'), 'must have stateReady');
+  assert.ok(popupHtml.includes('id="btnTranscribe"'), 'must have btnTranscribe');
+  assert.ok(popupHtml.includes('Transcribe'), 'must have "Transcribe" text');
+  assert.ok(popupHtml.includes('id="stateTranscribing"'), 'must have stateTranscribing');
+  assert.ok(popupHtml.includes('id="stateError"'), 'must have stateError');
+  assert.ok(popupHtml.includes('id="recentSection"'), 'must have recentSection');
+  assert.ok(popupHtml.includes('id="recentList"'), 'must have recentList');
+  assert.ok(popupHtml.includes('id="settingsPanel"'), 'must have settingsPanel');
+  assert.ok(popupHtml.includes('id="serverSection"'), 'must have serverSection');
+  assert.ok(popupHtml.includes('id="btnStartServer"'), 'must have btnStartServer');
+  assert.ok(popupHtml.includes('id="btnStopServer"'), 'must have btnStopServer');
+  assert.ok(popupHtml.includes('id="btnNavLibrary"'), 'must have btnNavLibrary');
+  assert.ok(popupHtml.includes('id="btnNavSettings"'), 'must have btnNavSettings');
+  assert.ok(popupHtml.includes('id="githubLink"'), 'must have githubLink');
+});
+
+test('popup.html should NOT have cloud-only elements', () => {
+  const popupHtml = fs.readFileSync(path.join(__dirname, 'dist', 'popup.html'), 'utf8');
+  
+  assert.ok(!popupHtml.includes('id="cloudAuthCard"'), 'must not have cloudAuthCard');
+  assert.ok(!popupHtml.includes('id="cloudAuthGoogle"'), 'must not have cloudAuthGoogle');
+  assert.ok(!popupHtml.includes('id="cloudAuthForm"'), 'must not have cloudAuthForm');
+  assert.ok(!popupHtml.includes('cloudOnboarding'), 'must not have cloudOnboarding');
+  assert.ok(!popupHtml.includes('id="cloudAccountSection"'), 'must not have cloudAccountSection');
+  assert.ok(!popupHtml.includes('id="destinationsSection"'), 'must not have destinationsSection');
+  assert.ok(!popupHtml.includes('id="obsidianVaultRow"'), 'must not have obsidianVaultRow');
+  assert.ok(!popupHtml.includes('id="btnModeCloud"'), 'must not have btnModeCloud');
+  assert.ok(!popupHtml.includes('Self-hosted mode'), 'must not have "Self-hosted mode" text');
+  assert.ok(!popupHtml.includes('id="setupWallModal"'), 'must not have setupWallModal');
+  assert.ok(!popupHtml.includes('id="cloudLink"'), 'must not have cloudLink');
+  assert.ok(!popupHtml.includes('transcribed.dev'), 'must not have transcribed.dev');
+});
+
+test('popup.js should have latency fix', () => {
+  const popupJs = fs.readFileSync(path.join(__dirname, 'dist', 'popup.js'), 'utf8');
+  
+  assert.ok(popupJs.includes('requestIdleCallback'), 'must have requestIdleCallback');
+  assert.ok(popupJs.includes('YTT-456'), 'must reference YTT-456');
+});
+
+test('popup.js should be in local mode', () => {
+  const popupJs = fs.readFileSync(path.join(__dirname, 'dist', 'popup.js'), 'utf8');
+  
+  assert.ok(popupJs.includes('let currentMode = "local"'), 'currentMode must default to "local"');
+  assert.ok(popupJs.includes('const mode = "local"'), 'init() must always use local mode');
+});
+
+test('popup.js should null-guard cloud element listeners', () => {
+  const popupJs = fs.readFileSync(path.join(__dirname, 'dist', 'popup.js'), 'utf8');
+  
+  assert.ok(popupJs.includes('if (el.cloudAuthForm)'), 'cloudAuthForm listener must be null-guarded');
+  assert.ok(popupJs.includes('if (el.btnModeLocal)'), 'btnModeLocal listener must be null-guarded');
+  assert.ok(popupJs.includes('if (el.setupWallStay)'), 'setupWallStay listener must be null-guarded');
+});
+
+test('popup.js should not have tryLlmHandoff', () => {
+  const popupJs = fs.readFileSync(path.join(__dirname, 'dist', 'popup.js'), 'utf8');
+  
+  assert.ok(!popupJs.includes('async function tryLlmHandoff'), 'must not have tryLlmHandoff function');
+  assert.ok(!popupJs.includes('chrome.permissions.request'), 'must not request optional host permissions');
+});
+
+test('background.js should handle LOCAL messages', () => {
+  const backgroundJs = fs.readFileSync(path.join(__dirname, 'dist', 'background.js'), 'utf8');
+  
+  assert.ok(backgroundJs.includes('case "CHECK_SERVICE"'), 'must handle CHECK_SERVICE');
+  assert.ok(backgroundJs.includes('case "TRANSCRIBE"'), 'must handle TRANSCRIBE');
+  assert.ok(backgroundJs.includes('case "GET_RECENT"'), 'must handle GET_RECENT');
+  assert.ok(backgroundJs.includes('case "OPEN_TRANSCRIPT"'), 'must handle OPEN_TRANSCRIPT');
+});
+
+test('manifest should have correct version', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'dist', 'manifest.json'), 'utf8'));
+  
+  assert.strictEqual(manifest.version, '1.6.31', 'version must be 1.6.31');
+});
+
+test('manifest should have LOCAL permissions', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'dist', 'manifest.json'), 'utf8'));
+  
+  assert.ok(manifest.permissions.includes('storage'), 'must have storage permission');
+  assert.ok(manifest.permissions.includes('nativeMessaging'), 'must have nativeMessaging permission');
+  assert.ok(manifest.permissions.includes('sidePanel'), 'must have sidePanel permission');
+});
+
+test('manifest should have LOCAL host permissions', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'dist', 'manifest.json'), 'utf8'));
+  
+  assert.ok(manifest.host_permissions.includes('http://127.0.0.1:19720/*'), 'must have localhost:19720 host permission');
+  
+  const hostPerms = manifest.host_permissions.join(',');
+  assert.ok(!hostPerms.includes('transcribed.dev'), 'must not have transcribed.dev host permission');
+  assert.ok(!hostPerms.includes('chatgpt.com'), 'must not have chatgpt.com host permission');
+  assert.ok(!hostPerms.includes('claude.ai'), 'must not have claude.ai host permission');
+});
