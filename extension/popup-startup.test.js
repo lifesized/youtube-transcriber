@@ -20,3 +20,17 @@ test("the panel sends the page URL and does not touch storage", () => {
   assert.match(popup, /normalizePageUrl\(raw\)/);
   assert.doesNotMatch(popup, /chrome\.storage|fetch\(|yttx|apiKey|token/);
 });
+
+test("initial refresh is deferred to allow panel to paint first (YTT-456)", () => {
+  // The initial refresh() must be wrapped in requestIdleCallback or setTimeout
+  // to prevent blocking the panel paint on chrome.tabs.query service-worker wake.
+  // The fix for cold service worker latency: panel shows skeleton immediately,
+  // then updates asynchronously when tab info arrives.
+  assert.match(popup, /requestIdleCallback.*refresh.*timeout.*300/);
+  assert.match(popup, /setTimeout.*refresh.*0/);
+  // Event listeners calling refresh() are fine (they're in callbacks).
+  // The blocking pattern is a bare `refresh();` at the end of the file,
+  // outside any function or listener callback.
+  const lastLine = popup.trim().split("\n").pop().trim();
+  assert.notStrictEqual(lastLine, "refresh();", "popup.js must not end with a synchronous refresh() call");
+});

@@ -107,4 +107,8 @@ chrome.tabs.onUpdated.addListener(() => {
   refresh();
 });
 
-refresh();
+if (typeof requestIdleCallback === "function") {
+  requestIdleCallback(() => refresh(), { timeout: 300 });
+} else {
+  setTimeout(() => refresh(), 0);
+}
