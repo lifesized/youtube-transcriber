@@ -268,6 +268,54 @@ async function processNextInQueue() {
 // Message handler
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// LLM prompt handoff — popup stashes the built prompt here, content script
+// on the provider (claude.ai, chatgpt.com) pulls it after the page loads and
+// injects into the composer. Uses chrome.storage.session so the prompt
+// survives a service-worker restart but never persists to disk. A short TTL
+// guards against orphaned prompts if the user closes the provider tab before
+// the content script claims.
+// ---------------------------------------------------------------------------
+
+const HANDOFF_KEY_PREFIX = "llmHandoff_";
+const HANDOFF_TTL_MS = 60 * 1000;
+
+function randomHandoffToken() {
+  // 22-char URL-safe token — collision resistant enough for a 60s TTL.
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+async function stashHandoffPrompt(prompt) {
+  const token = randomHandoffToken();
+  const key = HANDOFF_KEY_PREFIX + token;
+  await chrome.storage.session.set({
+    [key]: { prompt, expiresAt: Date.now() + HANDOFF_TTL_MS },
+  });
+  setTimeout(() => {
+    chrome.storage.session.remove(key).catch(() => {});
+  }, HANDOFF_TTL_MS);
+  return token;
+}
+
+async function claimHandoffPrompt(token) {
+  if (typeof token !== "string" || !/^[A-Za-z0-9_-]{10,64}$/.test(token)) {
+    return null;
+  }
+  const key = HANDOFF_KEY_PREFIX + token;
+  const stored = await chrome.storage.session.get(key);
+  const entry = stored[key];
+  if (!entry) return null;
+  await chrome.storage.session.remove(key);
+  if (entry.expiresAt && entry.expiresAt < Date.now()) return null;
+  return entry.prompt || null;
+}
+
+// ---------------------------------------------------------------------------
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender?.id !== chrome.runtime.id) {
     sendResponse({ success: false, error: "Invalid sender" });
@@ -366,6 +414,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         } catch (err) {
           return { ok: false, error: err.message };
         }
+      }
+
+      case "STASH_LLM_PROMPT": {
+        if (typeof message.prompt !== "string" || !message.prompt.trim()) {
+          throw new Error("Invalid prompt");
+        }
+        const token = await stashHandoffPrompt(message.prompt);
+        return { token };
+      }
+
+      case "CLAIM_LLM_PROMPT": {
+        const prompt = await claimHandoffPrompt(message.token);
+        return { prompt };
       }
 
       default:

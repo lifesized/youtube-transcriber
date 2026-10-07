@@ -572,6 +572,42 @@ function flattenSegments(segments) {
     .join(" ");
 }
 
+// Neither Claude nor ChatGPT expose a public URL path that both fills the
+// composer AND auto-submits. Content-script injection is the only way to
+// match that expectation, so we ask for the optional host permission on
+// first use and register a content script that injects + sends. Returns
+// true if the handoff launched successfully (prompt stashed + tab opened),
+// false if we should fall back to clipboard path.
+async function tryLlmHandoff(provider, prompt) {
+  const perm = { origins: provider.handoffOrigins };
+  let granted = false;
+  try {
+    granted = await chrome.permissions.contains(perm);
+  } catch {
+    granted = false;
+  }
+  if (!granted) {
+    try {
+      granted = await chrome.permissions.request(perm);
+    } catch {
+      granted = false;
+    }
+  }
+  if (!granted) return false;
+
+  const stash = await sendMsg({ type: "STASH_LLM_PROMPT", prompt });
+  const token = stash?.success ? stash.data?.token : null;
+  if (!token) return false;
+
+  const url = `${provider.handoffUrl}?${LLM_HANDOFF_PARAM}=${encodeURIComponent(token)}`;
+  try {
+    await openNextToCurrentTab(url);
+  } catch {
+    return false;
+  }
+  return true;
+}
+
 async function launchWithProvider(provider, transcriptId, videoTitle) {
   try {
     await chrome.storage.local.set({ [LLM_STORAGE_KEY]: provider.id });
@@ -599,8 +635,15 @@ async function launchWithProvider(provider, transcriptId, videoTitle) {
   const instruction = llmPromptTemplate.replace(/\{title\}/g, videoTitle);
   const prompt = `${instruction}\n\nTranscript:\n\n${transcriptText}`;
 
-  // LOCAL mode: clipboard + open provider tab (send-to-app pattern).
-  // Copy transcript to clipboard then open the provider's site so user can paste.
+  // Primary path: content-script handoff so the prompt lands in the composer
+  // AND the send button fires automatically.
+  if (provider.handoffOrigins && provider.handoffUrl) {
+    const launched = await tryLlmHandoff(provider, prompt);
+    if (launched) return;
+  }
+
+  // Fallback: clipboard + open provider homepage when user declines the host
+  // permission or handoff fails.
   try {
     await navigator.clipboard.writeText(prompt);
   } catch (err) {

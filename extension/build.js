@@ -30,6 +30,7 @@ const COPY_FILES = [
   "local-auth-headers.js",
   "send-url.js",
   "background.js",
+  "content-llm-handoff.js",
   "popup.html",
   "popup.js",
   "popup.css",
