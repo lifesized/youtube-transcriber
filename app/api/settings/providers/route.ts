@@ -5,8 +5,8 @@ import {
   encryptApiKeyForStorage,
   isMaskedPlaceholder,
   maskApiKeyForResponse,
-  SecretsKeyError,
 } from "@/lib/secrets-store.js";
+import { SecretsKeyError } from "@/lib/secrets-crypto.js";
 import { assertSafeProviderUrl } from "@/lib/provider-url-policy.js";
 
 const VALID_PROVIDERS = ["openrouter", "groq", "custom"];
@@ -17,7 +17,7 @@ export async function GET() {
       orderBy: { priority: "asc" },
     });
 
-    const masked = providers.map((p) => ({
+    const masked = providers.map((p: { apiKey: string; [key: string]: unknown }) => ({
       ...p,
       apiKey: maskApiKeyForResponse(p.apiKey),
     }));

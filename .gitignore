@@ -5,6 +5,7 @@ node_modules/
 # Build outputs
 dist/
 dist-enterprise/
+dist-electron/
 build/
 out/
 .next/

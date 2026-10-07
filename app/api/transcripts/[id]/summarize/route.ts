@@ -6,7 +6,7 @@ import {
   rejectClientApiKey,
   requestLocalSummary,
 } from "@/lib/local-summary";
-import { SecretsKeyError } from "@/lib/secrets-store.js";
+import { SecretsKeyError } from "@/lib/secrets-crypto.js";
 import type { TranscriptSegment } from "@/lib/types";
 
 /**

@@ -35,7 +35,7 @@ export async function GET() {
     orderBy: { date: "asc" },
   });
 
-  const days = rows.map((r) => {
+  const days = rows.map((r: { date: string; provider: string; seconds: number }) => {
     const overage = Math.max(0, r.seconds - DAILY_LIMIT);
     const rate = COST_PER_SECOND[r.provider] ?? 0;
     return {
@@ -47,8 +47,8 @@ export async function GET() {
     };
   });
 
-  const totalCost = days.reduce((sum, d) => sum + d.cost, 0);
-  const totalSeconds = days.reduce((sum, d) => sum + d.seconds, 0);
+  const totalCost = days.reduce((sum: number, d: { cost: number }) => sum + d.cost, 0);
+  const totalSeconds = days.reduce((sum: number, d: { seconds: number }) => sum + d.seconds, 0);
 
   return NextResponse.json({ month: monthPrefix, totalCost, totalSeconds, days });
 }

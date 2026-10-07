@@ -1,0 +1,76 @@
+/**
+ * Basic smoke tests for Electron setup.
+ * 
+ * These tests verify the structure and basic functionality
+ * without actually launching Electron (which requires a display).
+ */
+
+import { test } from "node:test";
+import assert from "node:assert";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.resolve(__dirname, "..");
+
+test("electron main file exists", () => {
+  const mainPath = path.join(projectRoot, "electron", "main.js");
+  assert.ok(fs.existsSync(mainPath), "electron/main.js should exist");
+});
+
+test("electron-builder config exists", () => {
+  const configPath = path.join(projectRoot, "electron-builder.json");
+  assert.ok(fs.existsSync(configPath), "electron-builder.json should exist");
+});
+
+test("package.json has electron main entry", () => {
+  const pkgPath = path.join(projectRoot, "package.json");
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+  assert.strictEqual(pkg.main, "electron/main.js", "main field should point to electron/main.js");
+});
+
+test("package.json has electron scripts", () => {
+  const pkgPath = path.join(projectRoot, "package.json");
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+  assert.ok(pkg.scripts["electron:dev"], "electron:dev script should exist");
+  assert.ok(pkg.scripts["electron:build"], "electron:build script should exist");
+});
+
+test("entitlements file exists", () => {
+  const entPath = path.join(projectRoot, "electron", "entitlements.mac.plist");
+  assert.ok(fs.existsSync(entPath), "entitlements.mac.plist should exist");
+});
+
+test("ServerManager module loads", async () => {
+  const ServerManager = (await import(path.join(projectRoot, "electron", "server-manager.js"))).default;
+  assert.ok(typeof ServerManager === "function", "ServerManager should be a constructor");
+});
+
+test("NativeHostInstaller module loads", async () => {
+  const NativeHostInstaller = (await import(path.join(projectRoot, "electron", "native-host-installer.js"))).default;
+  assert.ok(typeof NativeHostInstaller === "function", "NativeHostInstaller should be a constructor");
+});
+
+test("utils module loads", async () => {
+  const utils = await import(path.join(projectRoot, "electron", "utils.js"));
+  assert.ok(typeof utils.checkIfTranslocated === "function", "checkIfTranslocated should be exported");
+  assert.ok(typeof utils.isInApplications === "function", "isInApplications should be exported");
+});
+
+test("GitHub Actions workflow exists", () => {
+  const workflowPath = path.join(projectRoot, ".github", "workflows", "electron-build-macos.yml");
+  assert.ok(fs.existsSync(workflowPath), "electron-build-macos.yml workflow should exist");
+});
+
+test("beta install docs exist", () => {
+  const docsPath = path.join(projectRoot, "docs", "beta-install-macos.md");
+  assert.ok(fs.existsSync(docsPath), "beta-install-macos.md should exist");
+});
+
+test("Next.js config has standalone output", () => {
+  // We need to check the TS file
+  const configPath = path.join(projectRoot, "next.config.ts");
+  const content = fs.readFileSync(configPath, "utf8");
+  assert.ok(content.includes('output: "standalone"'), "next.config.ts should have standalone output");
+});

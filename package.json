@@ -2,6 +2,7 @@
   "name": "youtube-transcriber",
   "version": "0.1.0",
   "private": true,
+  "main": "electron/main.js",
   "engines": {
     "node": "^20.19 || ^22.12 || >=24.0"
   },
@@ -36,7 +37,11 @@
     "test:secrets": "node --test tests/secrets-at-rest.test.mjs",
     "test:provider-url": "node --test tests/provider-url-policy.test.mjs",
     "migrate:secrets": "tsx scripts/migrate-secrets.ts",
-    "test:mcp-auth": "node --test tests/mcp-local-auth.test.mjs"
+    "test:mcp-auth": "node --test tests/mcp-local-auth.test.mjs",
+    "test:electron": "node --test tests/electron-smoke.test.mjs",
+    "electron:dev": "NODE_ENV=development electron .",
+    "electron:build": "npm run build && electron-builder --mac --arm64",
+    "electron:rebuild": "electron-rebuild --force"
   },
   "keywords": [],
   "author": "",
@@ -53,11 +58,14 @@
     "react-dom": "^19.2.4"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.2.1",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4.1.18",
     "@types/node": "^25.2.3",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^9.39.2",
     "eslint-config-next": "^16.1.6",
     "playwright": "^1.63.0",

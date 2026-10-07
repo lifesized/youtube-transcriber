@@ -4,8 +4,8 @@ import {
   encryptApiKeyForStorage,
   isMaskedPlaceholder,
   maskApiKeyForResponse,
-  SecretsKeyError,
 } from "@/lib/secrets-store.js";
+import { SecretsKeyError } from "@/lib/secrets-crypto.js";
 
 const ALLOWED_KEYS = [
   "groq_api_key",

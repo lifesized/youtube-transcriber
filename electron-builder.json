@@ -1,0 +1,77 @@
+{
+  "appId": "com.transcribed.app",
+  "productName": "Transcriber",
+  "asar": true,
+  "asarUnpack": [
+    "node_modules/better-sqlite3/**/*",
+    "node_modules/@prisma/**/*",
+    ".next/standalone/**/*",
+    ".next/static/**/*",
+    "public/**/*",
+    "tools/**/*",
+    "lib/**/*",
+    "prisma/**/*"
+  ],
+  "files": [
+    "electron/**/*",
+    ".next/standalone/**/*",
+    ".next/static/**/*",
+    "public/**/*",
+    "tools/**/*",
+    "lib/**/*",
+    "prisma/**/*",
+    "node_modules/better-sqlite3/**/*",
+    "node_modules/@prisma/**/*",
+    "package.json"
+  ],
+  "directories": {
+    "buildResources": "electron/resources",
+    "output": "dist-electron"
+  },
+  "extraResources": [
+    {
+      "from": "electron/resources/bin",
+      "to": "bin",
+      "filter": ["**/*"]
+    }
+  ],
+  "mac": {
+    "target": {
+      "target": "dmg",
+      "arch": ["arm64"]
+    },
+    "category": "public.app-category.productivity",
+    "icon": "electron/resources/icon.icns",
+    "entitlements": "electron/entitlements.mac.plist",
+    "entitlementsInherit": "electron/entitlements.mac.plist",
+    "hardenedRuntime": false,
+    "gatekeeperAssess": false,
+    "identity": null,
+    "type": "distribution",
+    "extraFiles": []
+  },
+  "dmg": {
+    "title": "Transcriber",
+    "icon": "electron/resources/icon.icns",
+    "backgroundColor": "#ffffff",
+    "window": {
+      "width": 540,
+      "height": 380
+    },
+    "contents": [
+      {
+        "x": 140,
+        "y": 180,
+        "type": "file"
+      },
+      {
+        "x": 400,
+        "y": 180,
+        "type": "link",
+        "path": "/Applications"
+      }
+    ]
+  },
+  "afterPack": "./electron/after-pack.js",
+  "afterSign": "./electron/after-sign.js"
+}

@@ -1,0 +1,70 @@
+name: Build Electron macOS DMG
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - beta/electron-menubar
+
+jobs:
+  build:
+    name: Build macOS DMG (arm64)
+    runs-on: macos-14  # macOS arm64 runner
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build Next.js
+        run: npm run build
+      
+      - name: Download ffmpeg (arm64)
+        run: |
+          mkdir -p electron/resources/bin
+          # Download static ffmpeg build for macOS arm64
+          # Using evermeet.cx/ffmpeg or similar
+          curl -L -o electron/resources/bin/ffmpeg.7z https://evermeet.cx/ffmpeg/getrelease/ffmpeg/7z
+          7z x electron/resources/bin/ffmpeg.7z -oelectron/resources/bin/
+          rm electron/resources/bin/ffmpeg.7z
+          chmod +x electron/resources/bin/ffmpeg
+      
+      - name: Download yt-dlp
+        run: |
+          mkdir -p electron/resources/bin
+          curl -L -o electron/resources/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos
+          chmod +x electron/resources/bin/yt-dlp
+      
+      - name: Build Electron app
+        run: npm run electron:build
+        env:
+          # Don't sign - we're doing ad-hoc signing only
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Transcriber-macOS-arm64
+          path: dist-electron/*.dmg
+          retention-days: 30
+      
+      - name: Upload build info
+        run: |
+          echo "Build completed at $(date)" > dist-electron/build-info.txt
+          echo "Branch: ${{ github.ref_name }}" >> dist-electron/build-info.txt
+          echo "Commit: ${{ github.sha }}" >> dist-electron/build-info.txt
+      
+      - name: Upload build info artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-info
+          path: dist-electron/build-info.txt
+          retention-days: 30

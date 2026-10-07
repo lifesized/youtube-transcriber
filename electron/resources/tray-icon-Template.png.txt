@@ -1,0 +1,3 @@
+This is a placeholder for the tray icon.
+In a real build, this should be a 16x16 or 32x32 PNG with transparency.
+The filename should end with "Template.png" for macOS to apply the right rendering.

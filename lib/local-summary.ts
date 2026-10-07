@@ -5,10 +5,8 @@ import {
   rejectClientApiKey,
   requestLocalSummary,
 } from "./local-summary-core.js";
-import {
-  decryptApiKeyForUse,
-  SecretsKeyError,
-} from "./secrets-store.js";
+import { decryptApiKeyForUse } from "./secrets-store.js";
+import { SecretsKeyError } from "./secrets-crypto.js";
 
 export {
   LOCAL_SUMMARY_MODEL,

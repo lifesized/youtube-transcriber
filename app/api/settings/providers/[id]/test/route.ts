@@ -2,10 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { testProviderConnection } from "@/lib/providers";
 import type { ProviderType } from "@/lib/providers";
-import {
-  decryptApiKeyForUse,
-  SecretsKeyError,
-} from "@/lib/secrets-store.js";
+import { decryptApiKeyForUse } from "@/lib/secrets-store.js";
+import { SecretsKeyError } from "@/lib/secrets-crypto.js";
 
 export async function POST(
   _request: Request,
