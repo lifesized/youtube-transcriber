@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Transcriber for YouTube",
-  "version": "1.6.31",
+  "version": "1.6.35",
   "description": "Send the current page URL to Transcriber on this computer.",
   "content_security_policy": {
     "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:19720; object-src 'none'; base-uri 'none'; form-action 'none'"
@@ -11,10 +11,25 @@
     "tabs",
     "storage",
     "sidePanel",
-    "nativeMessaging"
+    "nativeMessaging",
+    "scripting"
   ],
   "host_permissions": [
     "http://127.0.0.1:19720/*"
+  ],
+  "optional_host_permissions": [
+    "https://www.youtube.com/*",
+    "https://m.youtube.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://m.youtube.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
   ],
   "background": {
     "service_worker": "background.js"
