@@ -61,18 +61,22 @@ function manifestDir() {
 }
 
 function makeWrapperIfNeeded() {
-  // On macOS / Linux we point Chrome directly at a node shebang script. If
-  // node isn't on the PATH that Chrome inherits (common when node lives in a
-  // version manager like nvm), we fall back to a small shell wrapper that
-  // resolves node explicitly.
+  // On macOS / Linux we install the wrapper to Application Support with an
+  // absolute Node path resolved at install time, so Chrome can launch it even
+  // when Node isn't on Chrome's PATH (common with Homebrew or version managers).
   if (process.platform === "win32") return HOST_SCRIPT;
 
   const nodeBin = process.execPath;
-  const wrapperPath = path.join(path.dirname(HOST_SCRIPT), "transcriber-host.sh");
+  const dir = manifestDir();
+  const installedWrapper = path.join(dir, "transcriber-host.sh");
+  
+  // Write wrapper with absolute node and host script paths
   const wrapper = `#!/bin/sh\nexec "${nodeBin}" "${HOST_SCRIPT}" "$@"\n`;
-  fs.writeFileSync(wrapperPath, wrapper, { mode: 0o755 });
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(installedWrapper, wrapper, { mode: 0o755 });
   fs.chmodSync(HOST_SCRIPT, 0o755);
-  return wrapperPath;
+  
+  return installedWrapper;
 }
 
 // Replace the long absolute home path with ~ for readable output.
@@ -159,6 +163,9 @@ function writeManifest({ ids, remove, replace }) {
   console.log("  1. Reload the extension at chrome://extensions");
   console.log("  2. Open the side panel on a YouTube tab");
   console.log("  3. When the server is offline, click 'Start Transcriber'");
+  console.log("");
+  console.log("Important: Re-run this command after a fresh checkout or rebuild");
+  console.log("to update the absolute Node path.");
   console.log("");
   console.log("To remove later: npm run uninstall-native-host");
   console.log("");

@@ -66,11 +66,13 @@ The extension opens a side panel with one action: **Send this page**. It does no
 
 7. On a video or podcast page, click **Send this page**
 
-The panel authenticates via the native host and sends the page URL to `http://127.0.0.1:19720/api/transcripts`. Install the native host first:
+The panel authenticates via the native host and sends the page URL to `http://127.0.0.1:19720/api/transcripts`. **After building the extension or on a fresh checkout**, install the native host:
 
 ```bash
-npm run install-native-host
+npm run install-native-host -- --ext-id=YOUR_EXTENSION_ID
 ```
+
+Find your extension ID at `chrome://extensions` (32-character string under the extension name when Developer mode is enabled).
 
 Open `http://127.0.0.1:19720` to read the transcript.
 

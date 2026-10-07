@@ -343,7 +343,22 @@ async function doTranscribe(url, title) {
     return state.result;
   } else {
     state.status = "error";
-    state.error = result.error || "Transcription failed";
+    
+    // Map result.reason to clear user-facing error messages
+    let errorMessage;
+    if (result.error) {
+      errorMessage = result.error;
+    } else if (result.reason === "unreachable") {
+      errorMessage = "Transcriber not reachable. Make sure the app is running and try: npm run install-native-host";
+    } else if (result.reason === "unauthorized") {
+      errorMessage = "Not authorized. Please restart the Transcriber app.";
+    } else if (result.reason === "other") {
+      errorMessage = "Transcription failed. Please try again.";
+    } else {
+      errorMessage = "Transcription failed";
+    }
+    
+    state.error = errorMessage;
     await setState(state);
     setBadge("!", "#ef4444");
     throw new Error(state.error);
@@ -496,6 +511,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           await chrome.tabs.create({ url: fullUrl, active: true });
         }
         return { ok: true };
+      }
+
+      case "GET_SETTINGS": {
+        const { mode } = await chrome.storage.sync.get("mode");
+        return { mode: mode || "local" };
       }
 
       case "SAVE_SETTINGS": {
