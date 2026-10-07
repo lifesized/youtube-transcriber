@@ -15,7 +15,7 @@ test("local headers empty when token missing", () => {
 
 test("token must not be placed in query strings", () => {
   const token = "a".repeat(64);
-  const url = new URL("http://localhost:19720/api/health");
+  const url = new URL("http://127.0.0.1:19720/api/health");
   assert.equal(url.searchParams.has("token"), false);
   assert.equal(url.searchParams.has("access_token"), false);
   const headers = localAuthHeadersFromToken(token);

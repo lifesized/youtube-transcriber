@@ -1423,8 +1423,8 @@ async function copyTranscriptText(transcriptId) {
 }
 
 async function downloadTranscriptMarkdown(transcriptId) {
-  // LOCAL mode always uses localhost
-  const base = "http://localhost:19720";
+  // LOCAL mode always uses 127.0.0.1 (CSP allows only this, not localhost)
+  const base = "http://127.0.0.1:19720";
   const a = document.createElement("a");
   a.href = `${base}/api/transcripts/${encodeURIComponent(transcriptId)}/download`;
   a.rel = "noopener";
@@ -2879,7 +2879,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 let currentSettingsMode = "cloud";
 
-function showSettingsView() {
+async function showSettingsView() {
   closeLlmDropdown();
   closeRowActionsMenu();
   hideStartupShell();
@@ -2893,6 +2893,8 @@ function showSettingsView() {
   el.settingsPanel.hidden = false;
   el.btnNavSettings.classList.add("active");
   el.btnNavLibrary.classList.remove("active");
+  // Re-probe native host on Settings open so fresh installs are detected
+  await detectNativeHost();
   loadSettings();
 }
 
@@ -2946,8 +2948,9 @@ function applyTranscribeActionUI() {
   el.modeTranscribe.checked = transcribeMode === "transcribe";
   el.modeTranscribeSummarize.checked = transcribeMode === "transcribe-and-summarize";
   el.modeSummarize.checked = transcribeMode === "summarize";
-  // Provider picker only visible when summarize is in play
-  el.summarizeProviderRow.hidden = transcribeMode === "transcribe";
+  // LOCAL mode: always hide provider picker (no ChatGPT/Claude branding)
+  // In LOCAL, all modes open transcript in the app
+  el.summarizeProviderRow.hidden = true;
   applyProviderPickerTrigger();
   // Primary button label morphs to match the mode
   updateTranscribeButtonLabel();
@@ -3058,17 +3061,26 @@ async function refreshServerSection(mode) {
     el.serverSection.hidden = true;
     return;
   }
+  
+  // Always show Server section in LOCAL mode
+  el.serverSection.hidden = false;
+  
   // Need native host to actually start/stop. If we don't know yet, probe.
   if (nativeHostAvailable === undefined || nativeHostAvailable === null) {
     await detectNativeHost();
   }
-  // Without the native host there's nothing to do here — the offline state's
-  // setup disclosure remains the install path. Hide the whole section.
+  
+  // If native host missing, show install hint instead of hiding section
   if (!nativeHostAvailable) {
-    el.serverSection.hidden = true;
+    el.serverStatus.textContent = "Native host not installed";
+    el.serverStatus.hidden = false;
+    el.btnStartServer.hidden = true;
+    el.btnStopServer.hidden = true;
+    el.stopServerHint.textContent = "Run: npm run install-native-host -- --ext-id=" + chrome.runtime.id;
+    el.stopServerHint.hidden = false;
     return;
   }
-  el.serverSection.hidden = false;
+  
   el.stopServerHint.hidden = true;
 
   // Probe server state. Cheap — bg already polls and caches the result.
@@ -3110,7 +3122,7 @@ async function startServerClicked() {
     nativeStartInFlight = false;
     el.btnStartServer.disabled = false;
     el.btnStartServer.querySelector(".start-spinner").hidden = true;
-    el.btnStartServer.querySelector(".start-server-label").textContent = "Start";
+    el.btnStartServer.querySelector(".start-server-label").textContent = "Start Transcriber";
   }
 }
 
@@ -3141,7 +3153,7 @@ async function stopServerClicked() {
   } finally {
     el.btnStopServer.disabled = false;
     el.btnStopServer.querySelector(".start-spinner").hidden = true;
-    el.btnStopServer.querySelector(".stop-label").textContent = "Stop";
+    el.btnStopServer.querySelector(".stop-label").textContent = "Stop Transcriber";
     // Refresh the section so the button flips Stop → Start.
     refreshServerSection(currentSettingsMode);
   }

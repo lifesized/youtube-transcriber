@@ -171,7 +171,7 @@ function setBadge(text, color) {
 // API helpers for LOCAL mode
 // ---------------------------------------------------------------------------
 
-const API_BASE = "http://localhost:19720";
+const API_BASE = "http://127.0.0.1:19720";
 
 async function checkService() {
   try {
@@ -321,9 +321,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case "OPEN_TRANSCRIPT": {
         const transcriptId = message.id;
-        const fullUrl = `${API_BASE}/?layout=list&id=${transcriptId}&t=${Date.now()}`;
+        if (typeof transcriptId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(transcriptId)) {
+          throw new Error("Invalid transcript id");
+        }
+        const fullUrl = `${API_BASE}/?layout=list&id=${encodeURIComponent(transcriptId)}&t=${Date.now()}`;
         const allTabs = await chrome.tabs.query({});
-        const appTab = allTabs.find((t) => t.url && t.url.includes("localhost:19720"));
+        const appTab = allTabs.find((t) => {
+          try {
+            const url = new URL(t.url || "");
+            return url.hostname === "127.0.0.1" && url.port === "19720";
+          } catch {
+            return false;
+          }
+        });
 
         if (appTab) {
           await chrome.tabs.update(appTab.id, { url: fullUrl, active: true });
