@@ -9,10 +9,11 @@
 ### Changed
 - **Pinned ffmpeg 9.0.2** — CI downloads a specific Martin Riedl macOS arm64 zip (`electron/ffmpeg.lock.json`) and fails if the SHA-256 does not match. Packaged `ffmpeg -version` plus a 1-second sine encode, and `yt-dlp --version`, must exit 0. The lock records provenance: single-maintainer Martin Riedl build, re-signed ad-hoc in afterPack.
 - **Pinned yt-dlp 2026.08.19** — CI downloads `yt-dlp_macos` from that release (`electron/yt-dlp.lock.json`), checks SHA-256 against the lock and against yt-dlp's `SHA2-256SUMS`, and fails on mismatch. `curl --fail` with `set -o pipefail`.
-- **Pairing dialog** — Focuses the menu-bar app (`app.focus({ steal: true })`) before the confirm box, shows the extension ID in `detail`, and warns when the ID is not a known Chrome Web Store listing. A dialog timeout marks the request expired so a late Allow does not write the ID.
-- **Native-host PATH** — The Electron-installed wrapper no longer prepends `/opt/homebrew/bin` or `/usr/local/bin`. Those prefixes stay only for the dev/non-Electron host.
 
 ### Fixed
+- **Native-host wrapper path** — Packaged host script is `Contents/Resources/app.asar.unpacked/tools/...` (not `Resources/app/tools`). `start` in Electron mode launches the app with `open -b com.transcribed.app`. Spawned children have an `error` handler. CI `ls`s the wrapper target and sends a framed `ping`.
+- **Pairing dialog** — Focuses the menu-bar app (`app.focus({ steal: true })`) before the confirm box, shows the extension ID in `detail`, and warns when the ID is not a known Chrome Web Store listing. A dialog timeout marks the request expired so a late Allow does not write the ID.
+- **Native-host PATH** — The Electron-installed wrapper no longer prepends `/opt/homebrew/bin` or `/usr/local/bin`. Those prefixes stay only for the dev/non-Electron host.
 - **Packaged `@prisma/client`** — electron-builder extraResources skips a source-root `node_modules`, so afterPack now copies the staging standalone tree (including Prisma) into the `.app` before the payload check.
 - **CI packaged-server launch path** — the smoke test `cd`s into standalone, so `APP_PATH` is now absolute (`$PWD/...`) instead of `dist-electron/...`.
 - **Electron-ABI better-sqlite3** — Next standalone keeps a hashed Node-20 copy under `.next/node_modules/better-sqlite3-*`. afterPack now overlays the Electron-rebuilt `better_sqlite3.node` onto every copy in the packaged tree.

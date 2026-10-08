@@ -172,6 +172,50 @@ jobs:
             exit 1
           fi
           echo "✓ ELECTRON_RUN_AS_NODE works"
+
+          # 3b. Native-host wrapper target exists under app.asar.unpacked, then ping it
+          RESOURCES="$ROOT/dist-electron/mac-arm64/Transcriber.app/Contents/Resources"
+          HOST_JS="$RESOURCES/app.asar.unpacked/tools/native-host/transcriber-host.js"
+          echo "----- native host wrapper target -----"
+          ls -la "$HOST_JS"
+          if [ ! -f "$HOST_JS" ]; then
+            echo "ERROR: wrapper target missing: $HOST_JS"
+            echo "----- Resources listing -----"
+            ls -la "$RESOURCES" || true
+            find "$RESOURCES" -name 'transcriber-host.js' || true
+            exit 1
+          fi
+          echo "✓ native host script exists at wrapper target"
+
+          WRAPPER=/tmp/transcriber-host.sh
+          printf '#!/bin/sh\nexport ELECTRON_RUN_AS_NODE=1\nexec "%s" "%s" "$@"\n' \
+            "$APP_PATH" "$HOST_JS" > "$WRAPPER"
+          chmod +x "$WRAPPER"
+
+          echo "----- native-host ping -----"
+          NMH_HOME="$(mktemp -d /tmp/transcriber-nmh-XXXXXX)"
+          python3 - <<'PY' | HOME="$NMH_HOME" "$WRAPPER" > /tmp/nmh-pong.bin
+          import sys, struct, json
+          payload = json.dumps({"id": "ci-ping", "cmd": "ping"}).encode("utf-8")
+          sys.stdout.buffer.write(struct.pack("<I", len(payload)))
+          sys.stdout.buffer.write(payload)
+          sys.stdout.buffer.flush()
+          PY
+          python3 - <<'PY'
+          import json, struct, sys
+          data = open("/tmp/nmh-pong.bin", "rb").read()
+          print("native-host ping raw bytes:", len(data))
+          if len(data) < 4:
+              print("ERROR: native host produced no framed reply", file=sys.stderr)
+              sys.exit(1)
+          n = struct.unpack_from("<I", data, 0)[0]
+          msg = json.loads(data[4:4 + n])
+          print("native-host ping reply:", json.dumps(msg, sort_keys=True))
+          if msg.get("id") != "ci-ping" or not msg.get("ok") or not msg.get("pong"):
+              print("ERROR: unexpected ping reply", file=sys.stderr)
+              sys.exit(1)
+          print("✓ native host ping")
+          PY
           
           # 4. Check bundled binaries exist, are arm64, and are not Homebrew-linked
           for binary in ffmpeg yt-dlp; do

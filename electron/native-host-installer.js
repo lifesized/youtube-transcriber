@@ -17,6 +17,16 @@ const { filterValidExtensionIds } = require("../lib/native-host-pair.js");
 
 const HOST_NAME = "com.transcribed.host";
 
+function packagedNativeHostScriptPath(resourcesPath) {
+  return path.join(
+    resourcesPath,
+    "app.asar.unpacked",
+    "tools",
+    "native-host",
+    "transcriber-host.js"
+  );
+}
+
 class NativeHostInstaller {
   constructor() {
     this.browsers = this._detectBrowsers();
@@ -234,7 +244,7 @@ class NativeHostInstaller {
     const isDev = process.env.NODE_ENV === "development";
     const hostScript = isDev
       ? path.resolve(__dirname, "..", "tools", "native-host", "transcriber-host.js")
-      : path.join(process.resourcesPath, "app", "tools", "native-host", "transcriber-host.js");
+      : packagedNativeHostScriptPath(process.resourcesPath);
     
     const script = `#!/bin/sh
 # Transcriber native messaging host wrapper
@@ -270,3 +280,4 @@ exec "${electronBinary}" "${hostScript}" "$@"
 }
 
 module.exports = NativeHostInstaller;
+module.exports.packagedNativeHostScriptPath = packagedNativeHostScriptPath;

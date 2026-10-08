@@ -29,6 +29,7 @@ const {
 const PORT = 19720;
 const HEALTH_URL = `http://127.0.0.1:${PORT}/api/health`;
 const IDENTITY_HEADER = "x-transcriber-service";
+const ELECTRON_BUNDLE_ID = "com.transcribed.app";
 
 // Project root is two levels up from this file (tools/native-host/ → repo root).
 const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
@@ -140,6 +141,40 @@ async function probeWithRetry(attempts, intervalMs) {
   return { status: "down" };
 }
 
+function getStartLaunch(env = process.env, execPath = process.execPath) {
+  if (env.ELECTRON_RUN_AS_NODE) {
+    return {
+      command: "open",
+      args: ["-b", ELECTRON_BUNDLE_ID],
+      cwd: undefined,
+      extraBins: [],
+    };
+  }
+  // Chrome's inherited PATH is minimal (no Homebrew, no nvm), so we can't
+  // rely on `npm` being resolvable. Use the absolute path next to the node
+  // binary that's running this script, and extend PATH so nested children
+  // (next, prisma, ffmpeg) can also resolve.
+  const nodeBinDir = path.dirname(execPath);
+  const npmCmd =
+    process.platform === "win32"
+      ? path.join(nodeBinDir, "npm.cmd")
+      : path.join(nodeBinDir, "npm");
+  return {
+    command: npmCmd,
+    args: ["run", "dev"],
+    cwd: PROJECT_ROOT,
+    extraBins: [nodeBinDir, "/opt/homebrew/bin", "/usr/local/bin"],
+  };
+}
+
+function spawnDetached(command, args, options) {
+  const child = spawn(command, args, options);
+  child.on("error", (err) => {
+    log("spawn_error", { command, message: err && err.message });
+  });
+  return child;
+}
+
 async function startServer() {
   // First check if something is already on the port.
   const probe = await probeOnce(800);
@@ -150,24 +185,8 @@ async function startServer() {
     return { started: false, reason: "port_conflict" };
   }
 
-  // Launch detached so the server keeps running after the host exits.
-  // Chrome's inherited PATH is minimal (no Homebrew, no nvm), so we can't
-  // rely on `npm` being resolvable. Use the absolute path next to the node
-  // binary that's running this script, and extend PATH so nested children
-  // (next, prisma, ffmpeg) can also resolve.
-  const nodeBinDir = path.dirname(process.execPath);
-  const npmCmd =
-    process.platform === "win32"
-      ? path.join(nodeBinDir, "npm.cmd")
-      : path.join(nodeBinDir, "npm");
-  const extraBins = [nodeBinDir];
-  if (!process.env.ELECTRON_RUN_AS_NODE) {
-    // Dev / non-Electron native host only. Chrome's PATH has no Homebrew, so
-    // npm and user-installed ffmpeg/yt-dlp come from these prefixes.
-    // The Electron-installed wrapper (ELECTRON_RUN_AS_NODE=1) already ships
-    // ffmpeg/yt-dlp in Contents/Resources/bin and must not prefer Homebrew.
-    extraBins.push("/opt/homebrew/bin", "/usr/local/bin");
-  }
+  const launch = getStartLaunch(process.env, process.execPath);
+  const extraBins = launch.extraBins || [];
   const extendedPath = [
     ...extraBins,
     path.join(os.homedir(), ".local", "bin"), // Linux per-user binaries
@@ -189,8 +208,8 @@ async function startServer() {
     log("token_ensure_failed", { message: e && e.message });
   }
 
-  const child = spawn(npmCmd, ["run", "dev"], {
-    cwd: PROJECT_ROOT,
+  const child = spawnDetached(launch.command, launch.args, {
+    cwd: launch.cwd,
     detached: true,
     stdio: "ignore",
     env: { ...process.env, PATH: extendedPath, ...tokenEnv },
@@ -199,7 +218,7 @@ async function startServer() {
 
   const startedAt = Date.now();
   writeState({ pid: child.pid, startedAt, projectRoot: PROJECT_ROOT });
-  log("spawned dev server", { pid: child.pid, cwd: PROJECT_ROOT });
+  log("spawned", { pid: child.pid, command: launch.command, args: launch.args });
 
   return { started: true, pid: child.pid, startedAt };
 }
@@ -282,33 +301,46 @@ async function handleMessage(msg) {
   }
 }
 
-process.stdin.on("data", async (chunk) => {
-  inBuf = Buffer.concat([inBuf, chunk]);
-  while (inBuf.length >= 4) {
-    const len = inBuf.readUInt32LE(0);
-    if (inBuf.length < 4 + len) break;
-    const json = inBuf.slice(4, 4 + len).toString("utf8");
-    inBuf = inBuf.slice(4 + len);
-    let msg;
-    try {
-      msg = JSON.parse(json);
-    } catch (e) {
-      writeMessage({ ok: false, error: "bad_json" });
-      continue;
+function listen() {
+  process.stdin.on("data", async (chunk) => {
+    inBuf = Buffer.concat([inBuf, chunk]);
+    while (inBuf.length >= 4) {
+      const len = inBuf.readUInt32LE(0);
+      if (inBuf.length < 4 + len) break;
+      const json = inBuf.slice(4, 4 + len).toString("utf8");
+      inBuf = inBuf.slice(4 + len);
+      let msg;
+      try {
+        msg = JSON.parse(json);
+      } catch (e) {
+        writeMessage({ ok: false, error: "bad_json" });
+        continue;
+      }
+      const reply = await handleMessage(msg);
+      writeMessage(reply);
     }
-    const reply = await handleMessage(msg);
-    writeMessage(reply);
-  }
-});
+  });
 
-process.stdin.on("end", () => {
-  log("stdin closed, exiting");
-  process.exit(0);
-});
+  process.stdin.on("end", () => {
+    log("stdin closed, exiting");
+    process.exit(0);
+  });
 
-process.on("uncaughtException", (e) => {
-  log("uncaughtException", e.stack || e.message);
-  process.exit(1);
-});
+  process.on("uncaughtException", (e) => {
+    log("uncaughtException", e.stack || e.message);
+    process.exit(1);
+  });
 
-log("native host started", { node: process.version, root: PROJECT_ROOT });
+  log("native host started", { node: process.version, root: PROJECT_ROOT });
+}
+
+if (require.main === module) {
+  listen();
+}
+
+module.exports = {
+  ELECTRON_BUNDLE_ID,
+  getStartLaunch,
+  spawnDetached,
+  listen,
+};

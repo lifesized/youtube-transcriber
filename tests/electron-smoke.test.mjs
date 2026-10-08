@@ -267,7 +267,38 @@ test("Electron wrapper native host does not prepend Homebrew PATH", () => {
   const guardIdx = content.indexOf("ELECTRON_RUN_AS_NODE");
   assert.ok(brewIdx > 0, "Homebrew prefix still listed for the dev path");
   assert.ok(guardIdx > 0 && guardIdx < brewIdx, "Homebrew prefixes must sit behind ELECTRON_RUN_AS_NODE");
-  assert.ok(content.includes("!process.env.ELECTRON_RUN_AS_NODE"));
+});
+
+test("packaged native host script path is app.asar.unpacked", () => {
+  const { packagedNativeHostScriptPath } = require(path.join(
+    projectRoot,
+    "electron",
+    "native-host-installer.js"
+  ));
+  const resolved = packagedNativeHostScriptPath("/App/Contents/Resources");
+  assert.equal(
+    resolved,
+    "/App/Contents/Resources/app.asar.unpacked/tools/native-host/transcriber-host.js"
+  );
+  const installer = fs.readFileSync(
+    path.join(projectRoot, "electron", "native-host-installer.js"),
+    "utf8"
+  );
+  assert.ok(!installer.includes(', "app", "tools"'));
+  const builder = JSON.parse(
+    fs.readFileSync(path.join(projectRoot, "electron-builder.json"), "utf8")
+  );
+  assert.ok(builder.asarUnpack.includes("tools/**/*"));
+  assert.ok(builder.asarUnpack.includes("lib/**/*"));
+  assert.ok(builder.files.includes("lib/**/*"));
+});
+
+test("CI pings the packaged native host wrapper", () => {
+  const workflowPath = path.join(projectRoot, ".github", "workflows", "electron-build-macos.yml");
+  const content = fs.readFileSync(workflowPath, "utf8");
+  assert.ok(content.includes("app.asar.unpacked/tools/native-host/transcriber-host.js"));
+  assert.ok(content.includes("native-host ping"));
+  assert.ok(content.includes('"cmd": "ping"'));
 });
 
 test("LOCAL background pairs via /api/native-host/pair then retries", () => {
