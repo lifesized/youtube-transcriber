@@ -34,11 +34,7 @@ test("Install Transcriber.command exists and is executable", () => {
   assert.ok(text.includes("Print :CFBundleIdentifier"));
   assert.ok(text.includes("ps -axo pid=,args="));
   assert.doesNotMatch(text, /ps -axo pid=,comm=/);
-  assert.ok(
-    text.includes(
-      '{pid=$1; $1=""; sub(/^ +/,""); if ($0==exe || index($0, exe " ")==1) print pid}'
-    )
-  );
+  assert.doesNotMatch(text, /\$1\s*=\s*""/, "assigning a field collapses double spaces");
   assert.doesNotMatch(text, /python/i);
   assert.ok(text.includes('basename "$p"') || text.includes("Transcriber.app"));
   assert.ok(text.includes("Only run this from the DMG James sent"));
@@ -347,15 +343,55 @@ test("helper treats a non-integer QUIT_WAIT as the default", () => {
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-test("install helper awk matches executable paths that contain spaces", () => {
-  const awk =
-    '{pid=$1; $1=""; sub(/^ +/,""); if ($0==exe || index($0, exe " ")==1) print pid}';
-  const exe = "/tmp/My App/Transcriber.app/Contents/MacOS/Transcriber";
-  const input = ` 4242 ${exe}\n  99 ${exe} --helper\n   7 /usr/bin/other\n`;
-  const result = spawnSync("awk", ["-v", `exe=${exe}`, awk], {
-    input,
-    encoding: "utf8",
-  });
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stdout.trim(), "4242\n99");
+function pidsMatchingExe(exe, psOutput) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dmg-install-pids-"));
+  const bin = path.join(tmp, "bin");
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(tmp, "ps.txt"), psOutput);
+  fs.writeFileSync(path.join(bin, "ps"), `#!/bin/bash\ncat "${path.join(tmp, "ps.txt")}"\n`);
+  fs.chmodSync(path.join(bin, "ps"), 0o755);
+  const result = spawnSync(
+    "bash",
+    ["-c", 'source "$1"; pids_matching_exe "$2"', "_", commandPath, exe],
+    {
+      env: {
+        PATH: `${bin}:/usr/bin:/bin`,
+        TRANSCRIBER_INSTALL_DEST: path.join(tmp, "Applications", "Transcriber.app"),
+        TRANSCRIBER_INSTALL_NONINTERACTIVE: "1",
+        TRANSCRIBER_INSTALL_SKIP_OPEN: "1",
+      },
+      encoding: "utf8",
+    }
+  );
+  fs.rmSync(tmp, { recursive: true, force: true });
+  return result;
+}
+
+test("the helper's pids_matching_exe keeps spaces, including double spaces", () => {
+  const exe = "/tmp/My  App/Transcriber.app/Contents/MacOS/Transcriber";
+  const single = "/tmp/My App/Transcriber.app/Contents/MacOS/Transcriber";
+  const ps = [
+    ` 4242 ${exe}`,
+    `   99 ${exe} --type=renderer`,
+    `    7 ${single}`,
+    `    8 ${exe}Helper`,
+    `    9 /usr/bin/other`,
+    "",
+  ].join("\n");
+  const result = pidsMatchingExe(exe, ps);
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  assert.equal(result.stdout, "4242\n99\n", "sourcing must not run the installer");
+  assert.equal(pidsMatchingExe(single, ps).stdout, "7\n");
+});
+
+test("CI calls the helper's own pids_matching_exe, not an inlined awk copy", () => {
+  const workflow = fs.readFileSync(
+    path.join(projectRoot, ".github", "workflows", "electron-build-macos.yml"),
+    "utf8"
+  );
+  assert.match(
+    workflow,
+    /source "\$1"; pids_matching_exe "\$2"' _ "electron\/dmg\/Install Transcriber\.command" "\$APP_PATH"/
+  );
+  assert.doesNotMatch(workflow, /index\(\$0, exe " "\)/);
 });
