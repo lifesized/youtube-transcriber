@@ -134,6 +134,45 @@ test("CI mounts the DMG and checks for the helper", () => {
   assert.ok(workflow.includes("Install Transcriber.command"));
 });
 
+test("helper icon is one replaceable icns and CI stamps it into the DMG", () => {
+  const icns = path.join(projectRoot, "electron", "dmg", "helper-icon.icns");
+  assert.ok(fs.existsSync(icns), "electron/dmg/helper-icon.icns is the file Design replaces");
+  const buf = fs.readFileSync(icns);
+  assert.equal(buf.slice(0, 4).toString("ascii"), "icns");
+  assert.ok(buf.length > 1000);
+
+  const setIcon = fs.readFileSync(
+    path.join(projectRoot, "electron", "dmg", "set-custom-icon.sh"),
+    "utf8"
+  );
+  const stamp = fs.readFileSync(
+    path.join(projectRoot, "electron", "dmg", "stamp-dmg-helper-icon.sh"),
+    "utf8"
+  );
+  assert.match(setIcon, /HELPER_ICON="\$HERE\/helper-icon\.icns"/);
+  assert.doesNotMatch(setIcon, /resources\/icon\.icns/);
+  assert.match(stamp, /set-custom-icon\.sh/);
+  assert.match(stamp, /hdiutil convert/);
+  assert.match(stamp, /UDRW/);
+  assert.match(stamp, /UDZO/);
+  assert.doesNotMatch(stamp, /osascript -e 'tell application/);
+
+  const workflow = fs.readFileSync(
+    path.join(projectRoot, ".github", "workflows", "electron-build-macos.yml"),
+    "utf8"
+  );
+  const stampAt = workflow.indexOf("stamp-dmg-helper-icon.sh");
+  const assertAt = workflow.indexOf("Assert DMG contains Install Transcriber.command");
+  const shaAt = workflow.indexOf("- name: DMG sha256");
+  assert.ok(stampAt > 0 && stampAt < assertAt, "stamp must run after build and before the helper assert");
+  assert.ok(assertAt < shaAt, "helper assert must run before sha256");
+  assert.match(workflow, /namedfork\/rsrc/);
+  assert.match(workflow, /GetFileInfo -a/);
+  assert.match(workflow, /kHasCustomIcon|custom-icon flag/);
+  assert.match(workflow, /name: dmg-window/);
+  assert.match(workflow, /screencapture/);
+});
+
 test("helper copies the app, clears quarantine, and does not sudo on success", () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dmg-install-"));
   const volume = path.join(tmp, "Transcriber");

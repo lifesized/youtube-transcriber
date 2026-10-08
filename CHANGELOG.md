@@ -18,6 +18,7 @@
 - **Gold Save hover** — Settings → Summaries Save no longer uses `hover:bg-white/[0.04]`, which wiped the accent fill.
 
 ### Added
+- **Install Transcriber.command Finder icon** — the DMG helper uses a custom Finder icon. Until Design's art lands, `electron/dmg/helper-icon.icns` is a copy of the app icon (replace that one file). CI stamps the icns into the helper's resource fork after electron-builder, then checks the custom-icon flag and a non-empty resource fork on the final DMG.
 - **Friends-beta P0 visuals** — Design's Oct 8 review: friendly extension first screens, Transcriber app icon, hidden Dock (`LSUIElement` + `app.dock.hide()`), per-state tray template icons, a light-warm DMG background with an arrow to Applications, and human tray status copy (`Transcriber is running` / `Starting…` / `Port {port} is in use` / `Transcriber stopped unexpectedly`) with **Try Again** / **Restart Transcriber**. Raw exceptions go to the app log, not the menu. CI checks Info.plist `LSUIElement`, the packaged icon, and all six tray template PNGs.
 - **Flip-ready product defaults** — `electron/product-defaults.js` holds one constant each for: no auto-save after Transcribe, Obsidian writes Markdown into the vault, re-save updates the same note, port conflict names the holder and does not offer to quit it, the dark app icon, and Import Existing Library… only when a checkout library is detected.
 

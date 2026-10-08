@@ -129,6 +129,12 @@ jobs:
           # Don't sign - we're doing ad-hoc signing only
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
+      - name: Stamp Finder icon onto Install Transcriber.command
+        run: |
+          set -euo pipefail
+          DMG=$(ls dist-electron/*.dmg | head -1)
+          electron/dmg/stamp-dmg-helper-icon.sh "$DMG"
+
       - name: Assert DMG contains Install Transcriber.command
         run: |
           set -euo pipefail
@@ -147,7 +153,94 @@ jobs:
           test -f "$MOUNT/Install Transcriber.command"
           test -x "$MOUNT/Install Transcriber.command"
           echo "✓ DMG contains Transcriber.app and Install Transcriber.command"
+
+          HELPER="$MOUNT/Install Transcriber.command"
+          RF_SIZE=$(stat -f%z "$HELPER/..namedfork/rsrc" 2>/dev/null || echo 0)
+          echo "helper resource fork: $RF_SIZE bytes"
+          if [ "${RF_SIZE:-0}" -lt 100 ]; then
+            echo "ERROR: Install Transcriber.command has no custom-icon resource fork"
+            xattr -l "$HELPER" || true
+            exit 1
+          fi
+          echo "✓ helper resource fork is non-empty"
+
+          if command -v GetFileInfo >/dev/null 2>&1; then
+            ATTRS=$(GetFileInfo -a "$HELPER" || true)
+            HAS_C=$(GetFileInfo -aC "$HELPER" || true)
+            echo "GetFileInfo -a: $ATTRS"
+            echo "GetFileInfo -aC: $HAS_C"
+            if [ "$HAS_C" = "1" ] || case "$ATTRS" in *C*) true;; *) false;; esac; then
+              echo "✓ GetFileInfo custom-icon flag (C) is set"
+            else
+              echo "ERROR: GetFileInfo does not show the custom-icon flag"
+              xattr -l "$HELPER" || true
+              exit 1
+            fi
+          else
+            python3 - "$HELPER" <<'PY'
+import os, sys
+path = sys.argv[1]
+try:
+    data = os.getxattr(path, "com.apple.FinderInfo", follow_symlinks=True)
+except OSError as e:
+    print("ERROR: com.apple.FinderInfo missing:", e)
+    sys.exit(1)
+if len(data) < 10:
+    print("ERROR: FinderInfo too short", len(data))
+    sys.exit(1)
+flags = (data[8] << 8) | data[9]
+print(f"FinderInfo flags=0x{flags:04x}")
+if not (flags & 0x0400):
+    print("ERROR: kHasCustomIcon (0x0400) not set")
+    sys.exit(1)
+print("✓ FinderInfo custom-icon bit is set")
+PY
+          fi
+
+          # Best-effort screenshot of the mounted DMG window. Do not fail the job.
+          python3 - "$MOUNT" dist-electron/dmg-window.png <<'PY' || true
+import subprocess, sys, time
+mount, out = sys.argv[1], sys.argv[2]
+try:
+    subprocess.run(["open", mount], check=False, timeout=10)
+    time.sleep(2)
+    as_path = mount.replace("\\", "\\\\").replace('"', '\\"')
+    script = f'''
+tell application "Finder"
+  activate
+  try
+    open POSIX file "{as_path}"
+  end try
+  delay 1
+  set w to window 1
+  set toolbar visible of w to false
+  set sidebar width of w to 0
+  set current view of w to icon view
+  set bounds of w to {{80, 80, 700, 520}}
+end tell
+'''
+    subprocess.run(["osascript", "-e", script], check=False, timeout=20)
+    time.sleep(1)
+    subprocess.run(
+        ["screencapture", "-x", "-R80,80,620,440", out],
+        check=False,
+        timeout=15,
+    )
+    print("screenshot wrote", out)
+except Exception as e:
+    print("screenshot skipped:", e)
+PY
+
           hdiutil detach "$MOUNT"
+
+      - name: Upload DMG window screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmg-window
+          path: dist-electron/dmg-window.png
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Assert asar contains every main-process require
         run: |
