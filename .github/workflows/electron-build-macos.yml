@@ -46,6 +46,9 @@ jobs:
       - name: Notion save tests
         run: npm run test:notion
       
+      - name: LinkedIn capture tests
+        run: npm run test:linkedin
+      
       - name: Build Next.js
         run: npm run build
       

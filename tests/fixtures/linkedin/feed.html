@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<!-- Logged-in LinkedIn feed with a text post, two progressive-mp4 video posts
+     and one MediaSource (blob:) video post. Trimmed; URLs and signatures are fake.
+     data-fixture-top places each video vertically for the test viewport. -->
+<html>
+<head><title>(3) Feed | LinkedIn</title></head>
+<body>
+  <main data-testid="mainFeed">
+    <div class="feed-shared-update-v2" data-urn="urn:li:activity:7300000000000000111" role="article">
+      <div class="update-components-actor__title"><span aria-hidden="true">Text Only Poster</span></div>
+      <div class="update-components-text">Just a text update with no video at all, nothing to transcribe.</div>
+      <a href="https://www.linkedin.com/feed/update/urn:li:activity:7300000000000000111/">2h</a>
+    </div>
+
+    <div class="feed-shared-update-v2" data-urn="urn:li:activity:7300000000000000222" role="article">
+      <div class="update-components-actor__title"><span aria-hidden="true">Ana Paused</span></div>
+      <div class="update-components-text">Our team demo from last week, recorded in one take.</div>
+      <div class="update-components-linkedin-video" data-fixture-top="120">
+        <video class="vjs-tech" src="https://dms.licdn.com/playlist/vid/v2/D4E05AQ_POST222/mp4-720p-30fp-crf28/B4EZ_POST222/0/1759000000222?e=1760000000&amp;v=beta&amp;t=FAKE_222_SIG"></video>
+      </div>
+      <a href="https://www.linkedin.com/feed/update/urn:li:activity:7300000000000000222/">5h</a>
+    </div>
+
+    <div class="feed-shared-update-v2" data-urn="urn:li:activity:7300000000000000333" role="article">
+      <div class="update-components-actor__title"><span aria-hidden="true">Ben Playing</span></div>
+      <div class="update-components-text">How we cut our build time in half with three small changes.</div>
+      <div class="update-components-linkedin-video" data-fixture-top="560">
+        <video class="vjs-tech" data-fixture-playing="true" src="https://dms.licdn.com/playlist/vid/v2/D4E05AQ_POST333/mp4-720p-30fp-crf28/B4EZ_POST333/0/1759000000333?e=1760000000&amp;v=beta&amp;t=FAKE_333_SIG"></video>
+      </div>
+      <a href="https://www.linkedin.com/feed/update/urn:li:activity:7300000000000000333/">1d</a>
+    </div>
+
+    <div class="feed-shared-update-v2" data-urn="urn:li:activity:7300000000000000444" role="article">
+      <div class="update-components-actor__title"><span aria-hidden="true">Cy Streams</span></div>
+      <div class="update-components-text">Adaptive-streamed video, played through MediaSource.</div>
+      <div class="update-components-linkedin-video" data-fixture-top="1400">
+        <video class="vjs-tech" src="blob:https://www.linkedin.com/9a8b7c6d-post444"></video>
+      </div>
+      <a href="https://www.linkedin.com/feed/update/urn:li:activity:7300000000000000444/">2d</a>
+    </div>
+  </main>
+</body>
+</html>
