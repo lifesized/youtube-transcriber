@@ -21,7 +21,7 @@ setup() {
   echo "skipped" > "$STATUS_PATH"
 
   if [ -z "${MACOS_CERT_P12_BASE64:-}" ]; then
-    echo "signing: MACOS_CERT_P12_BASE64 is empty; skip keychain setup"
+    echo "signing: certificate secret is empty; skip keychain setup"
     return 0
   fi
   if [ -z "${MACOS_CERT_PASSWORD:-}" ] || [ -z "${APPLE_TEAM_ID:-}" ]; then

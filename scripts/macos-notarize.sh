@@ -33,17 +33,18 @@ have_apple_id() {
   [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" ]
 }
 
-notary_auth_args() {
+NOTARY_ARGS=()
+prepare_notary_auth() {
   if have_api_key; then
     umask 077
     printf '%s' "$APPLE_API_KEY_P8_BASE64" | base64 --decode > "$P8_PATH"
     chmod 600 "$P8_PATH"
-    echo --key "$P8_PATH" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID"
+    NOTARY_ARGS=(--key "$P8_PATH" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID")
     return
   fi
   if have_apple_id; then
     [ -n "${APPLE_TEAM_ID:-}" ] || { echo "notary: APPLE_TEAM_ID required for Apple ID auth"; exit 1; }
-    echo --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID"
+    NOTARY_ARGS=(--apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID")
     return
   fi
   echo "notary: neither API key nor Apple ID credentials are complete"
@@ -57,9 +58,9 @@ submit() {
   echo "notary: submit $name"
   # Capture submission id without printing the auth flags.
   local out rc
+  prepare_notary_auth
   set +e
-  # shellcheck disable=SC2046
-  out="$(xcrun notarytool submit "$file" --wait --output-format json $(notary_auth_args) 2>"$WORK/submit.err")"
+  out="$(xcrun notarytool submit "$file" --wait --output-format json "${NOTARY_ARGS[@]}" 2>"$WORK/submit.err")"
   rc=$?
   set -e
   if [ -s "$WORK/submit.err" ]; then
@@ -93,9 +94,9 @@ except Exception:
     echo "notary: submit failed for $name"
     if [ -n "$sid" ]; then
       echo "notary: log for $sid"
+      prepare_notary_auth
       set +e
-      # shellcheck disable=SC2046
-      xcrun notarytool log "$sid" $(notary_auth_args) || true
+      xcrun notarytool log "$sid" "${NOTARY_ARGS[@]}" || true
       set -e
     fi
     exit 1

@@ -2,9 +2,16 @@ name: Build Electron macOS DMG
 
 on:
   workflow_dispatch:
+    inputs:
+      publish_github_release:
+        description: Publish a GitHub prerelease (only if this run signed and notarized)
+        type: boolean
+        default: false
   push:
     branches:
       - beta/electron-menubar
+    tags:
+      - "beta-v*"
   pull_request:
     branches:
       - beta/electron-menubar
@@ -17,9 +24,12 @@ jobs:
   build:
     name: Build macOS DMG (arm64)
     runs-on: macos-14  # macOS arm64 runner
-    timeout-minutes: 25
+    timeout-minutes: 50
     permissions:
       contents: read
+    outputs:
+      signed: ${{ steps.signing.outputs.sign }}
+      notarized: ${{ steps.notarize_dmg.outputs.notarized }}
     
     steps:
       - name: Checkout code
@@ -251,7 +261,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dmg-window
-          path: dist-electron/dmg-window.png
+          path: |
+            dist-electron/dmg-window.png
+            dist-electron/signed/dmg-window.png
           if-no-files-found: warn
           retention-days: 14
 
@@ -1173,6 +1185,7 @@ jobs:
           path: |
             dist-electron/screenshots/
             dist-electron/dmg-window.png
+            dist-electron/signed/dmg-window.png
           if-no-files-found: warn
           retention-days: 14
 
@@ -1232,3 +1245,172 @@ jobs:
           name: build-info
           path: dist-electron/build-info.txt
           retention-days: 30
+
+      # Everything below is a no-op when secrets are absent. The unsigned
+      # steps, checks, and Transcriber-macOS-arm64 artifact stay as today.
+      - name: Detect signing secrets
+        id: signing
+        env:
+          MACOS_CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${MACOS_CERT_P12_BASE64}" ]; then
+            echo "sign=true" >> "$GITHUB_OUTPUT"
+            echo "Signing secret is present"
+          else
+            echo "sign=false" >> "$GITHUB_OUTPUT"
+            echo "Signing secret is absent; unsigned path only"
+          fi
+          if { [ -n "${APPLE_API_KEY_ID}" ] && [ -n "${APPLE_API_ISSUER_ID}" ] && [ -n "${APPLE_API_KEY_P8_BASE64}" ]; } \
+            || { [ -n "${APPLE_ID}" ] && [ -n "${APPLE_APP_SPECIFIC_PASSWORD}" ]; }; then
+            echo "notary=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "notary=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Import Developer ID into a temporary keychain
+        if: steps.signing.outputs.sign == 'true'
+        env:
+          MACOS_CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash scripts/macos-signing-keychain.sh setup
+
+      - name: Developer ID sign Transcriber.app
+        if: steps.signing.outputs.sign == 'true'
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash scripts/macos-codesign-app.sh
+
+      - name: Notarize and staple the app
+        if: steps.signing.outputs.sign == 'true' && steps.signing.outputs.notary == 'true'
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash scripts/macos-notarize.sh app
+
+      - name: Build signed drag-to-Applications DMG
+        if: steps.signing.outputs.sign == 'true' && steps.signing.outputs.notary == 'true'
+        run: bash electron/dmg/build-signed-dmg.sh
+
+      - name: Sign the signed DMG
+        if: steps.signing.outputs.sign == 'true' && steps.signing.outputs.notary == 'true'
+        run: bash scripts/macos-codesign-dmg.sh dist-electron/signed/Transcriber-signed.dmg
+
+      - name: Notarize and staple the DMG
+        id: notarize_dmg
+        if: steps.signing.outputs.sign == 'true' && steps.signing.outputs.notary == 'true'
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          bash scripts/macos-notarize.sh dmg dist-electron/signed/Transcriber-signed.dmg
+          echo "notarized=true" >> "$GITHUB_OUTPUT"
+
+      - name: Write updater artifacts
+        if: steps.notarize_dmg.outputs.notarized == 'true'
+        run: bash scripts/macos-update-artifacts.sh
+
+      - name: Screenshot signed DMG window
+        if: steps.notarize_dmg.outputs.notarized == 'true'
+        run: |
+          set -euo pipefail
+          DMG=dist-electron/signed/Transcriber-signed.dmg
+          ATTACH=$(hdiutil attach -nobrowse -readonly "$DMG")
+          echo "$ATTACH"
+          MOUNT=$(printf '%s\n' "$ATTACH" | awk '/\/Volumes\// { print $NF; exit }')
+          test -n "$MOUNT"
+          test -d "$MOUNT/Transcriber.app"
+          test -L "$MOUNT/Applications"
+          test ! -e "$MOUNT/Install Transcriber.command"
+          test ! -e "$MOUNT/.payload"
+          python3 electron/dmg/screenshot-dmg-window.py "$MOUNT" dist-electron/signed/dmg-window.png || true
+          hdiutil detach "$MOUNT"
+
+      - name: Upload signed artifacts
+        if: steps.notarize_dmg.outputs.notarized == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Transcriber-macOS-arm64-signed
+          path: dist-electron/signed/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+      - name: Delete signing keychain
+        if: always()
+        run: bash scripts/macos-signing-keychain.sh teardown
+
+  unsigned-path-contract:
+    name: Unsigned path contract
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Unsigned-path and updater contract tests
+        run: node --test tests/signing-ci.test.mjs tests/dmg-install.test.mjs tests/electron-lows.test.mjs tests/updater-gate.test.mjs tests/updater-menu.test.mjs tests/tray-menu.test.mjs
+      - name: Lint workflows with actionlint
+        run: bash scripts/run-actionlint.sh
+
+  release:
+    name: Publish GitHub prerelease
+    needs: build
+    if: >
+      needs.build.outputs.notarized == 'true' &&
+      (startsWith(github.ref, 'refs/tags/beta-v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish_github_release))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Download signed artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: Transcriber-macOS-arm64-signed
+          path: signed
+      - name: Publish prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/beta-v* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="$(node -p "require('./package.json').version")"
+            TAG="beta-v${VERSION}-${GITHUB_SHA::7}"
+          fi
+          echo "Publishing $TAG"
+          shopt -s nullglob
+          FILES=(signed/*.dmg signed/*.zip signed/*.blockmap signed/latest-mac.yml signed/SHA256SUMS)
+          test "${#FILES[@]}" -ge 4
+          gh release create "$TAG" \
+            --repo lifesized/youtube-transcriber \
+            --prerelease \
+            --title "$TAG" \
+            --notes "Signed and notarized Transcriber macOS build ${GITHUB_SHA}." \
+            "${FILES[@]}"
