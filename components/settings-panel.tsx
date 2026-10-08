@@ -275,6 +275,11 @@ export function SettingsPanel() {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [completionAlertsEnabled, setCompletionAlertsEnabled] = useState(true);
+  const [llmProvider, setLlmProvider] = useState<"anthropic" | "openai">("anthropic");
+  const [llmKey, setLlmKey] = useState("");
+  const [llmHasKey, setLlmHasKey] = useState(false);
+  const [llmSaving, setLlmSaving] = useState(false);
+  const [llmError, setLlmError] = useState("");
 
   // Drag state
   const [dragId, setDragId] = useState<string | null>(null);
@@ -282,10 +287,11 @@ export function SettingsPanel() {
 
   const loadSettings = useCallback(async () => {
     try {
-      const [settingsRes, providersRes, usageRes] = await Promise.all([
+      const [settingsRes, providersRes, usageRes, llmRes] = await Promise.all([
         fetch("/api/settings"),
         fetch("/api/settings/providers"),
         fetch("/api/usage"),
+        fetch("/api/settings/llm"),
       ]);
 
       if (settingsRes.ok) {
@@ -331,6 +337,15 @@ export function SettingsPanel() {
         setMonthlyCost(data.totalCost);
         setMonthLabel(data.month);
         setMonthlyDays(data.days);
+      }
+
+      if (llmRes.ok) {
+        const data = await llmRes.json();
+        if (data.provider === "anthropic" || data.provider === "openai") {
+          setLlmProvider(data.provider);
+        }
+        setLlmHasKey(!!data.hasKey);
+        setLlmKey(data.keyMasked || "");
       }
     } catch {
       // Settings may not exist yet
@@ -501,8 +516,73 @@ export function SettingsPanel() {
     return <div className="py-4 text-sm text-white/40">Loading settings...</div>;
   }
 
+  async function handleSaveLlm() {
+    setLlmSaving(true);
+    setLlmError("");
+    try {
+      const res = await fetch("/api/settings/llm", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: llmProvider,
+          apiKey: llmKey,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setLlmError(data.error || "Could not save");
+        return;
+      }
+      setLlmHasKey(!!data.hasLlmKey || llmHasKey || Boolean(llmKey && !llmKey.includes("•")));
+      if (data.llmKeyMasked) setLlmKey(data.llmKeyMasked);
+    } catch {
+      setLlmError("Could not save");
+    } finally {
+      setLlmSaving(false);
+    }
+  }
+
   return (
     <div className="space-y-8">
+      <div className="space-y-3">
+        <h2 className="text-sm font-semibold text-white/80">Summaries</h2>
+        <p className="text-sm text-white/40">
+          Choose Anthropic or OpenAI. The key is stored in the macOS Keychain via the Transcriber app — never in plaintext on disk.
+        </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <select
+            value={llmProvider}
+            onChange={(e) => setLlmProvider(e.target.value as "anthropic" | "openai")}
+            className="h-11 rounded-md bg-[hsl(var(--panel-2))] px-3 py-3 text-sm text-white/90 shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)]"
+          >
+            <option value="anthropic">Anthropic</option>
+            <option value="openai">OpenAI</option>
+          </select>
+          <input
+            type="password"
+            value={llmKey}
+            onChange={(e) => setLlmKey(e.target.value)}
+            placeholder={llmHasKey ? "Key saved" : "API key"}
+            autoComplete="off"
+            className="h-11 min-w-0 flex-1 rounded-md bg-[hsl(var(--panel-2))] px-3 py-3 text-sm text-white/90 placeholder:text-[hsl(var(--muted-2))] shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)]"
+          />
+          <button
+            type="button"
+            onClick={() => void handleSaveLlm()}
+            disabled={llmSaving}
+            aria-busy={llmSaving}
+            className="h-11 rounded-md bg-[hsl(var(--accent))] px-4 py-3 text-sm font-semibold text-black shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] disabled:cursor-not-allowed disabled:text-[hsl(var(--muted-2))] disabled:hover:bg-[hsl(var(--accent))]"
+          >
+            {llmSaving ? "Saving…" : "Save"}
+          </button>
+        </div>
+        {llmError ? (
+          <p className="text-sm text-red-400">{llmError}</p>
+        ) : llmHasKey ? (
+          <p className="text-sm text-white/30">A key is saved in the app Keychain.</p>
+        ) : null}
+      </div>
+
       {/* Fallback order summary */}
       <p className="text-sm text-white/40">
         <span className="font-medium text-white/75">Transcription fallback order:</span>{" "}

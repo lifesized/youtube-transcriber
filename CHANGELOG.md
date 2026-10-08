@@ -3,6 +3,7 @@
 ## 2026-10-07
 
 ### Added
+- **LLM provider setting** — Settings → Summaries chooses Anthropic or OpenAI. Keys are stored with Electron `safeStorage` (Keychain) and passed to the server child via IPC or env at spawn, never plaintext on disk. `summarize(transcript, promptVersion)` writes cached `baseSummary`.
 - **Transcript cache integration test** — Temp SQLite DB starts at the pre-cache schema, `prisma migrate deploy` keeps old rows with `captionLanguage=en` / `pipelineVersion=1`, and `getOrCreateTranscript` with a mocked fetcher hits once unless lang or pipeline version changes.
 - **Extension pairing without Terminal** — `POST /api/native-host/pair` reads the extension ID only from `Origin: chrome-extension://<32 a-p>`. The Electron app shows a native Allow / Don't allow dialog; Allow appends the ID to `extension-ids.json` and rewrites browser manifests. The LOCAL extension calls this once when the native host is missing, then retries.
 

@@ -30,6 +30,9 @@ jobs:
       - name: Transcript cache integration test
         run: npm run test:cache
       
+      - name: LLM summarize tests
+        run: npm run test:llm
+      
       - name: Build Next.js
         run: npm run build
       

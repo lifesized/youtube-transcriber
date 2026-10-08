@@ -10,11 +10,12 @@
  * - Native messaging host installation
  */
 
-const { app, powerSaveBlocker } = require("electron");
+const { app, powerSaveBlocker, safeStorage } = require("electron");
 const path = require("path");
 const ServerManager = require("./server-manager.js");
 const TrayManager = require("./tray-manager.js");
 const PairingBridge = require("./pairing-bridge.js");
+const { SecretsStore, attachSecretsIpc } = require("./secrets-store.js");
 const { checkIfTranslocated } = require("./utils.js");
 
 const IS_DEV = process.env.NODE_ENV === "development";
@@ -23,6 +24,7 @@ const PORT = 19720;
 let serverManager = null;
 let trayManager = null;
 let pairingBridge = null;
+let secretsStore = null;
 let powerSaveId = null;
 
 // Single-instance lock
@@ -85,6 +87,13 @@ app.whenReady().then(async () => {
     ? path.join(path.resolve(__dirname, ".."), "electron", "resources")
     : process.resourcesPath;
   
+  secretsStore = new SecretsStore({
+    safeStorage,
+    onChange: (env) => {
+      if (serverManager) serverManager.secretEnv = env;
+    },
+  });
+
   // Initialize managers
   serverManager = new ServerManager({
     port: PORT,
@@ -92,6 +101,7 @@ app.whenReady().then(async () => {
     standaloneServer,
     extraResources,
     isDev: IS_DEV,
+    secretEnv: secretsStore.envForSpawn(),
   });
   
   trayManager = new TrayManager({
@@ -103,7 +113,10 @@ app.whenReady().then(async () => {
   pairingBridge = new PairingBridge({
     installer: trayManager.nativeHostInstaller,
   });
-  serverManager.on("spawned", (child) => pairingBridge.attach(child));
+  serverManager.on("spawned", (child) => {
+    pairingBridge.attach(child);
+    attachSecretsIpc(child, secretsStore);
+  });
   
   // Start power save blocker
   if (powerSaveBlocker.isStarted(powerSaveId)) {

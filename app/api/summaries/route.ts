@@ -10,11 +10,19 @@ import {
 } from "@/lib/local-summary";
 import { SecretsKeyError } from "@/lib/secrets-crypto.js";
 import type { TranscriptSegment } from "@/lib/types";
+import { summarize } from "@/lib/summarize";
+import { SUMMARY_PROMPT_VERSION } from "@/lib/transcript-pipeline";
+import { getSecretsFromMainOrEnv } from "@/lib/electron-ipc.js";
 
 export async function GET() {
   try {
+    const secrets = await getSecretsFromMainOrEnv();
+    const llmReady = Boolean(
+      (secrets.llmProvider === "anthropic" || secrets.llmProvider === "openai") &&
+        secrets.llmApiKey
+    );
     return NextResponse.json({
-      available: !!(await getOpenRouterKey()),
+      available: llmReady || !!(await getOpenRouterKey()),
       model: LOCAL_SUMMARY_MODEL,
     });
   } catch (e) {
@@ -50,6 +58,37 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const video = await prisma.video.findUnique({ where: { id: transcriptId } });
+  if (!video) {
+    return NextResponse.json({ error: "Transcript not found" }, { status: 404 });
+  }
+
+  try {
+    const summary = await summarize(
+      {
+        videoId: video.videoId,
+        title: video.title,
+        transcript: video.transcript,
+        captionLanguage: video.captionLanguage || "en",
+      },
+      SUMMARY_PROMPT_VERSION
+    );
+    return NextResponse.json({
+      summary_md: summary,
+      model: "app-llm",
+      cached: true,
+    });
+  } catch (llmError) {
+    const llmMessage =
+      llmError instanceof Error ? llmError.message : "Summarization failed";
+    if (
+      !llmMessage.includes("Choose Anthropic or OpenAI") &&
+      !llmMessage.includes("Add an API key")
+    ) {
+      return NextResponse.json({ error: llmMessage }, { status: 502 });
+    }
+  }
+
   let apiKey: string | null;
   try {
     apiKey = await getOpenRouterKey();
@@ -63,15 +102,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "Add an OpenRouter key in Settings (or set OPENROUTER_API_KEY) to enable summaries.",
+          "Choose Anthropic or OpenAI in Settings and add an API key, or set an OpenRouter key.",
       },
       { status: 503 }
     );
-  }
-
-  const video = await prisma.video.findUnique({ where: { id: transcriptId } });
-  if (!video) {
-    return NextResponse.json({ error: "Transcript not found" }, { status: 404 });
   }
 
   let segments: TranscriptSegment[];

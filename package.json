@@ -40,6 +40,7 @@
     "test:mcp-auth": "node --test tests/mcp-local-auth.test.mjs",
     "test:electron": "node --test tests/electron-smoke.test.mjs tests/apply-migrations.test.mjs tests/native-host-pair.test.mjs",
     "test:cache": "tsx --test tests/transcript-cache-db.test.mjs",
+    "test:llm": "tsx --test tests/summarize-llm.test.mjs && tsx --test tests/summarize-cache.test.mjs",
     "electron:dev": "NODE_ENV=development electron .",
     "electron:prepare": "node scripts/prepare-electron-standalone.js",
     "electron:build": "npm run build && npm run electron:prepare && electron-builder --mac --arm64",
