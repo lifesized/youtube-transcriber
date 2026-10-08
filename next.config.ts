@@ -9,6 +9,15 @@ const nextConfig: NextConfig = {
     root: projectRoot,
   },
   outputFileTracingRoot: projectRoot,
+  outputFileTracingIncludes: {
+    "/*": [
+      "./node_modules/.prisma/**/*",
+      "./node_modules/@prisma/client/**/*",
+      "./node_modules/@prisma/adapter-better-sqlite3/**/*",
+      "./node_modules/better-sqlite3/**/*",
+      "./prisma/**/*",
+    ],
+  },
 };
 
 export default nextConfig;

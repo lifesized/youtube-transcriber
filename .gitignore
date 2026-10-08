@@ -9,6 +9,8 @@ dist-electron/
 build/
 out/
 .next/
+electron/resources/standalone/
+electron/resources/bin/
 mcp-server/dist/
 
 # Database

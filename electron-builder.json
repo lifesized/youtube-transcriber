@@ -6,21 +6,13 @@
   "asarUnpack": [
     "node_modules/better-sqlite3/**/*",
     "node_modules/@prisma/**/*",
-    ".next/standalone/**/*",
-    ".next/static/**/*",
-    "public/**/*",
-    "tools/**/*",
-    "lib/**/*",
-    "prisma/**/*"
+    "tools/**/*"
   ],
   "files": [
     "electron/**/*",
-    ".next/standalone/**/*",
-    ".next/static/**/*",
-    "public/**/*",
+    "!electron/resources/standalone/**",
+    "!electron/resources/bin/**",
     "tools/**/*",
-    "lib/**/*",
-    "prisma/**/*",
     "node_modules/better-sqlite3/**/*",
     "node_modules/@prisma/**/*",
     "package.json"
@@ -33,6 +25,11 @@
     {
       "from": "electron/resources/bin",
       "to": "bin",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "electron/resources/standalone",
+      "to": "standalone",
       "filter": ["**/*"]
     }
   ],

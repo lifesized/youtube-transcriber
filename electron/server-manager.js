@@ -155,9 +155,13 @@ class ServerManager extends EventEmitter {
       env.YTDLP_PATH = path.join(binPath, "yt-dlp");
     }
     
-    // Set database path
+    // Set database path and Prisma migrations (packaged next to server.js)
     const dbPath = path.join(getStateDir(), "transcriber.db");
     env.DATABASE_URL = `file:${dbPath}`;
+    const migrationsDir = path.join(this.appRoot, "prisma", "migrations");
+    if (fs.existsSync(migrationsDir)) {
+      env.PRISMA_MIGRATIONS_DIR = migrationsDir;
+    }
     
     console.log("Spawning server...");
     console.log("  Node:", process.execPath);
@@ -253,9 +257,13 @@ class ServerManager extends EventEmitter {
   
   async _checkHealth() {
     return new Promise((resolve) => {
+      const token = process.env.TRANSCRIBER_LOCAL_TOKEN;
+      const headers = token
+        ? { Authorization: `Bearer ${token}` }
+        : {};
       const req = http.get(
         `http://127.0.0.1:${this.port}/api/health`,
-        { timeout: HEALTH_CHECK_TIMEOUT },
+        { timeout: HEALTH_CHECK_TIMEOUT, headers },
         (res) => {
           res.on("data", () => {});
           res.on("end", () => {

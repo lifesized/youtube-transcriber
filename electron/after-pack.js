@@ -1,11 +1,12 @@
 /**
  * electron-builder afterPack hook.
- * 
+ *
  * Responsibilities:
+ * - Copy Electron-ABI better-sqlite3 into the extraResources standalone tree
+ * - Verify the packaged server payload (standalone, static, prisma, engines)
  * - Ad-hoc codesign bundled binaries (ffmpeg, yt-dlp) for macOS
- * 
- * Note: electron-builder already rebuilds better-sqlite3 before this hook,
- * so we don't need to do it again.
+ *
+ * Note: electron-builder already rebuilds better-sqlite3 before this hook.
  */
 
 const { execSync } = require("child_process");
@@ -13,16 +14,70 @@ const path = require("path");
 const fs = require("fs");
 
 module.exports = async function(context) {
-  const { appOutDir, packager, electronPlatformName } = context;
+  const { appOutDir, electronPlatformName } = context;
   
   console.log("Running afterPack hook...");
   console.log("  Platform:", electronPlatformName);
   console.log("  Output dir:", appOutDir);
   
   if (electronPlatformName === "darwin") {
+    copyRebuiltSqliteIntoStandalone(context);
+    assertStandalonePayload(context);
     await adHocCodesign(context);
   }
 };
+
+function copyRebuiltSqliteIntoStandalone(context) {
+  const { appOutDir } = context;
+  const appPath = path.join(appOutDir, "Transcriber.app");
+  const rebuilt = path.join(
+    appPath,
+    "Contents",
+    "Resources",
+    "app.asar.unpacked",
+    "node_modules",
+    "better-sqlite3"
+  );
+  const dest = path.join(
+    appPath,
+    "Contents",
+    "Resources",
+    "standalone",
+    "node_modules",
+    "better-sqlite3"
+  );
+  if (!fs.existsSync(rebuilt)) {
+    console.warn("  rebuilt better-sqlite3 not found at", rebuilt);
+    return;
+  }
+  fs.cpSync(rebuilt, dest, { recursive: true });
+  console.log("  copied Electron-ABI better-sqlite3 into standalone");
+}
+
+function assertStandalonePayload(context) {
+  const { appOutDir } = context;
+  const standalone = path.join(
+    appOutDir,
+    "Transcriber.app",
+    "Contents",
+    "Resources",
+    "standalone"
+  );
+  const required = [
+    path.join(standalone, "server.js"),
+    path.join(standalone, "node_modules"),
+    path.join(standalone, ".next", "static"),
+    path.join(standalone, "public"),
+    path.join(standalone, "prisma", "migrations"),
+    path.join(standalone, "node_modules", "@prisma", "client"),
+  ];
+  for (const file of required) {
+    if (!fs.existsSync(file)) {
+      throw new Error(`Packaged standalone payload missing: ${file}`);
+    }
+  }
+  console.log("  standalone payload verified");
+}
 
 async function adHocCodesign(context) {
   const { appOutDir } = context;

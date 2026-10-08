@@ -38,9 +38,10 @@
     "test:provider-url": "node --test tests/provider-url-policy.test.mjs",
     "migrate:secrets": "tsx scripts/migrate-secrets.ts",
     "test:mcp-auth": "node --test tests/mcp-local-auth.test.mjs",
-    "test:electron": "node --test tests/electron-smoke.test.mjs",
+    "test:electron": "node --test tests/electron-smoke.test.mjs tests/apply-migrations.test.mjs",
     "electron:dev": "NODE_ENV=development electron .",
-    "electron:build": "npm run build && electron-builder --mac --arm64",
+    "electron:prepare": "node scripts/prepare-electron-standalone.js",
+    "electron:build": "npm run build && npm run electron:prepare && electron-builder --mac --arm64",
     "electron:rebuild": "electron-rebuild --force"
   },
   "keywords": [],

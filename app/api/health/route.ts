@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { access, constants } from "fs/promises";
+import { access, constants, mkdir } from "fs/promises";
 import path from "path";
 
 const execFileAsync = promisify(execFile);
@@ -14,6 +14,20 @@ interface Check {
 }
 
 async function checkBinary(name: string): Promise<Check> {
+  const envPath =
+    name === "ffmpeg"
+      ? process.env.FFMPEG_PATH
+      : name === "yt-dlp"
+        ? process.env.YTDLP_PATH
+        : undefined;
+  if (envPath) {
+    try {
+      await access(envPath, constants.X_OK);
+      return { name, status: "pass", detail: envPath };
+    } catch {
+      // Fall through to PATH lookup
+    }
+  }
   try {
     const { stdout } = await execFileAsync("which", [name]);
     return { name, status: "pass", detail: stdout.trim() };
@@ -45,10 +59,11 @@ async function checkPython(): Promise<Check> {
     const { stdout } = await execFileAsync(pythonBin, ["--version"]);
     return { name: "python", status: "pass", detail: stdout.trim() };
   } catch {
+    // Captions-first Electron beta does not bundle Python/Whisper.
     return {
       name: "python",
-      status: "fail",
-      detail: `Cannot execute ${pythonBin}`,
+      status: "warn",
+      detail: `Cannot execute ${pythonBin} (audio transcription optional)`,
     };
   }
 }
@@ -70,6 +85,7 @@ async function checkWhisper(): Promise<Check> {
 async function checkTmpDir(): Promise<Check> {
   const tmpDir = path.join(process.cwd(), "tmp");
   try {
+    await mkdir(tmpDir, { recursive: true });
     await access(tmpDir, constants.W_OK);
     return { name: "tmp_writable", status: "pass", detail: tmpDir };
   } catch {

@@ -24,6 +24,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
+      - name: Unit tests (packaging + migrations)
+        run: npm run test:electron
+      
       - name: Build Next.js
         run: npm run build
       
@@ -59,9 +62,12 @@ jobs:
       
       - name: Test packaged app (smoke test)
         run: |
-          set -e
+          set -euo pipefail
           APP_PATH="dist-electron/mac-arm64/Transcriber.app/Contents/MacOS/Transcriber"
           SQLITE_PATH="dist-electron/mac-arm64/Transcriber.app/Contents/Resources/app.asar.unpacked/node_modules/better-sqlite3"
+          STANDALONE="dist-electron/mac-arm64/Transcriber.app/Contents/Resources/standalone"
+          SERVER_PATH="$STANDALONE/server.js"
+          BIN_DIR="dist-electron/mac-arm64/Transcriber.app/Contents/Resources/bin"
           
           echo "Smoke test: verify packaging..."
           
@@ -84,7 +90,6 @@ jobs:
             exit 1
           fi
           
-          # The .node file should exist (native addon)
           SQLITE_ADDON=$(find "$SQLITE_PATH" -name "*.node" | head -1)
           if [ -z "$SQLITE_ADDON" ]; then
             echo "ERROR: better-sqlite3 native addon (.node) not found"
@@ -104,7 +109,6 @@ jobs:
           echo "✓ ELECTRON_RUN_AS_NODE works"
           
           # 4. Check bundled binaries exist
-          BIN_DIR="dist-electron/mac-arm64/Transcriber.app/Contents/Resources/bin"
           for binary in ffmpeg yt-dlp; do
             if [ ! -f "$BIN_DIR/$binary" ]; then
               echo "ERROR: $binary not found in $BIN_DIR"
@@ -117,6 +121,121 @@ jobs:
             }
             echo "✓ $binary exists and is arm64"
           done
+          
+          # 5. Standalone payload (outside asar) — server, node_modules, static, public, prisma
+          for required in \
+            "$SERVER_PATH" \
+            "$STANDALONE/node_modules" \
+            "$STANDALONE/.next/static" \
+            "$STANDALONE/public" \
+            "$STANDALONE/prisma/migrations" \
+            "$STANDALONE/node_modules/@prisma/client" \
+            "$STANDALONE/node_modules/better-sqlite3"
+          do
+            if [ ! -e "$required" ]; then
+              echo "ERROR: packaged payload missing $required"
+              exit 1
+            fi
+            echo "✓ present: $required"
+          done
+          
+          ENGINE_HIT=$(find "$STANDALONE/node_modules/.prisma" "$STANDALONE/node_modules/@prisma" \
+            \( -name '*darwin-arm64*' -o -name '*darwin_arm64*' \) 2>/dev/null | head -1)
+          if [ -z "$ENGINE_HIT" ]; then
+            echo "ERROR: no darwin-arm64 Prisma engine in standalone payload"
+            exit 1
+          fi
+          echo "✓ Prisma darwin-arm64 engine: $ENGINE_HIT"
+          
+          echo ""
+          echo "✓ Packaging checks passed — launching packaged server..."
+          
+          # 6. Launch packaged server with ELECTRON_RUN_AS_NODE on a temp data dir
+          DATA_DIR="$(mktemp -d /tmp/transcriber-ci-XXXXXX)"
+          mkdir -p "$DATA_DIR/Library/Application Support/Transcriber"
+          mkdir -p "$STANDALONE/tmp"
+          TOKEN="$(openssl rand -hex 32)"
+          DB_PATH="$DATA_DIR/Library/Application Support/Transcriber/transcriber.db"
+          LOG_FILE="$DATA_DIR/server.log"
+          PORT=19721
+          
+          cleanup() {
+            if [ -n "${SERVER_PID:-}" ]; then
+              kill "$SERVER_PID" 2>/dev/null || true
+              wait "$SERVER_PID" 2>/dev/null || true
+            fi
+          }
+          trap cleanup EXIT
+          
+          (
+            cd "$STANDALONE"
+            HOME="$DATA_DIR" \
+            ELECTRON_RUN_AS_NODE=1 \
+            NODE_ENV=production \
+            PORT="$PORT" \
+            HOSTNAME=127.0.0.1 \
+            DATABASE_URL="file:${DB_PATH}" \
+            PRISMA_MIGRATIONS_DIR="$STANDALONE/prisma/migrations" \
+            TRANSCRIBER_LOCAL_TOKEN="$TOKEN" \
+            PATH="$BIN_DIR:$PATH" \
+            FFMPEG_PATH="$BIN_DIR/ffmpeg" \
+            YTDLP_PATH="$BIN_DIR/yt-dlp" \
+            "$APP_PATH" "$SERVER_PATH" -p "$PORT" --hostname 127.0.0.1
+          ) > "$LOG_FILE" 2>&1 &
+          SERVER_PID=$!
+          
+          echo "Server PID $SERVER_PID — waiting for /api/health 200..."
+          HEALTH_BODY=""
+          for i in $(seq 1 60); do
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+              echo "ERROR: packaged server process exited during startup"
+              echo "----- server log -----"
+              cat "$LOG_FILE" || true
+              exit 1
+            fi
+            set +e
+            HEALTH_BODY=$(curl -sS -w "\n%{http_code}" \
+              -H "Authorization: Bearer ${TOKEN}" \
+              "http://127.0.0.1:${PORT}/api/health")
+            CURL_OK=$?
+            set -e
+            if [ "$CURL_OK" -eq 0 ]; then
+              HEALTH_CODE=$(printf '%s' "$HEALTH_BODY" | tail -n 1)
+              HEALTH_JSON=$(printf '%s' "$HEALTH_BODY" | sed '$d')
+              if [ "$HEALTH_CODE" = "200" ]; then
+                echo "✓ Health endpoint returned 200 on attempt $i"
+                echo "----- health body -----"
+                echo "$HEALTH_JSON"
+                echo "----- end health body -----"
+                break
+              fi
+            fi
+            echo "  Attempt $i/60 (http=${HEALTH_CODE:-curl-fail})..."
+            HEALTH_CODE=""
+            sleep 1
+            if [ "$i" -eq 60 ]; then
+              echo "ERROR: health endpoint did not return 200"
+              echo "----- server log -----"
+              cat "$LOG_FILE" || true
+              exit 1
+            fi
+          done
+          
+          echo "DB-touching API call: GET /api/transcripts"
+          TRANSCRIPTS_BODY=$(curl -sS -w "\n%{http_code}" \
+            -H "Authorization: Bearer ${TOKEN}" \
+            "http://127.0.0.1:${PORT}/api/transcripts")
+          TRANSCRIPTS_CODE=$(printf '%s' "$TRANSCRIPTS_BODY" | tail -n 1)
+          TRANSCRIPTS_JSON=$(printf '%s' "$TRANSCRIPTS_BODY" | sed '$d')
+          if [ "$TRANSCRIPTS_CODE" != "200" ]; then
+            echo "ERROR: GET /api/transcripts returned $TRANSCRIPTS_CODE"
+            echo "$TRANSCRIPTS_JSON"
+            echo "----- server log -----"
+            cat "$LOG_FILE" || true
+            exit 1
+          fi
+          echo "✓ GET /api/transcripts returned 200"
+          echo "$TRANSCRIPTS_JSON"
           
           echo ""
           echo "✓ All smoke tests passed!"

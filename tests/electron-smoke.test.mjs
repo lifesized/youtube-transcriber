@@ -74,3 +74,24 @@ test("Next.js config has standalone output", () => {
   const content = fs.readFileSync(configPath, "utf8");
   assert.ok(content.includes('output: "standalone"'), "next.config.ts should have standalone output");
 });
+
+test("electron-builder copies standalone outside asar", () => {
+  const configPath = path.join(projectRoot, "electron-builder.json");
+  const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+  const extras = config.extraResources || [];
+  const standalone = extras.find((entry) => entry.to === "standalone");
+  assert.ok(standalone, "extraResources should include standalone payload");
+  assert.equal(standalone.from, "electron/resources/standalone");
+});
+
+test("prepare-electron-standalone script exists", () => {
+  const scriptPath = path.join(projectRoot, "scripts", "prepare-electron-standalone.js");
+  assert.ok(fs.existsSync(scriptPath), "prepare-electron-standalone.js should exist");
+});
+
+test("packaged server path is extraResources/standalone", () => {
+  const mainPath = path.join(projectRoot, "electron", "main.js");
+  const content = fs.readFileSync(mainPath, "utf8");
+  assert.ok(content.includes('path.join(process.resourcesPath, "standalone")'));
+  assert.ok(content.includes('path.join(appRoot, "server.js")'));
+});

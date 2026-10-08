@@ -69,17 +69,18 @@ app.whenReady().then(async () => {
     }
   }
   
-  // Determine paths
+  // Determine paths. Packaged server lives in extraResources (outside asar)
+  // because ELECTRON_RUN_AS_NODE cannot read asar archives.
   const appRoot = IS_DEV
     ? path.resolve(__dirname, "..")
-    : path.join(process.resourcesPath, "app");
+    : path.join(process.resourcesPath, "standalone");
   
   const standaloneServer = IS_DEV
     ? null  // In dev, use npm run dev
-    : path.join(appRoot, ".next", "standalone", "server.js");
+    : path.join(appRoot, "server.js");
   
   const extraResources = IS_DEV
-    ? path.join(appRoot, "electron", "resources")
+    ? path.join(path.resolve(__dirname, ".."), "electron", "resources")
     : process.resourcesPath;
   
   // Initialize managers
