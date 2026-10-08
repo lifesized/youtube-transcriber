@@ -22,6 +22,7 @@ const {
   createUpdater,
   evaluateFromDisk,
   readDarwinSignature,
+  readDarwinSignatureAsync,
   CODESIGN_BIN,
   configureAutoUpdater,
   isBetaPrereleaseVersion,
@@ -385,6 +386,33 @@ test("codesign verify --strict runs on /usr/bin/codesign before Team ID and fail
   assert.equal(calls[1][0], "/usr/bin/codesign");
   assert.deepEqual(calls[1].slice(1, 3), ["--verify", "--strict"]);
   assert.deepEqual(calls[2].slice(1, 3), ["-dv", "--verbose=4"]);
+  assert.equal(signed.developerId, true);
+  assert.equal(signed.teamId, TEAM);
+});
+
+test("async codesign verify --strict fails closed without blocking", async () => {
+  const calls = [];
+  const unsigned = await readDarwinSignatureAsync("/tmp/Transcriber.app", async (bin, args) => {
+    calls.push([bin, ...args]);
+    return { status: 1, stdout: "", stderr: "code object is not signed at all" };
+  });
+  assert.deepEqual(calls[0], [
+    "/usr/bin/codesign",
+    "--verify",
+    "--strict",
+    "/tmp/Transcriber.app",
+  ]);
+  assert.equal(unsigned.notSigned, true);
+  const dv = [
+    "Identifier=com.transcribed.app",
+    `Authority=Developer ID Application: LifeSized (${TEAM})`,
+    `TeamIdentifier=${TEAM}`,
+  ].join("\n");
+  const signed = await readDarwinSignatureAsync("/Applications/Transcriber.app", async (bin, args) => {
+    calls.push([bin, ...args]);
+    if (args[0] === "--verify") return { status: 0, stdout: "", stderr: "" };
+    return { status: 0, stdout: "", stderr: dv };
+  });
   assert.equal(signed.developerId, true);
   assert.equal(signed.teamId, TEAM);
 });

@@ -8,7 +8,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { spawnSync } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 const {
   evaluateUpdaterGate,
   readExpectedTeamId,
@@ -35,6 +35,29 @@ function loadSigningIdentity(resourcesPath) {
 
 const CODESIGN_BIN = "/usr/bin/codesign";
 
+function spawnCodesign(bin, args) {
+  return new Promise((resolve) => {
+    const child = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", () => resolve({ status: 1, stdout, stderr }));
+    child.on("close", (status) => resolve({ status: status ?? 1, stdout, stderr }));
+  });
+}
+
+function signatureFromCodesignResult(verify, detail) {
+  if (!verify || verify.status !== 0) {
+    return parseCodesignVerbose("code object is not signed at all");
+  }
+  return parseCodesignVerbose(`${(detail && detail.stderr) || ""}\n${(detail && detail.stdout) || ""}`);
+}
+
 function readDarwinSignature(bundlePath, run = spawnSync) {
   if (!bundlePath) {
     return parseCodesignVerbose("code object is not signed at all");
@@ -49,7 +72,19 @@ function readDarwinSignature(bundlePath, run = spawnSync) {
   const result = run(CODESIGN_BIN, ["-dv", "--verbose=4", bundlePath], {
     encoding: "utf8",
   });
-  return parseCodesignVerbose(`${result.stderr || ""}\n${result.stdout || ""}`);
+  return signatureFromCodesignResult(verify, result);
+}
+
+async function readDarwinSignatureAsync(bundlePath, runAsync = spawnCodesign) {
+  if (!bundlePath) {
+    return parseCodesignVerbose("code object is not signed at all");
+  }
+  const verify = await runAsync(CODESIGN_BIN, ["--verify", "--strict", bundlePath]);
+  if (!verify || verify.status !== 0) {
+    return parseCodesignVerbose("code object is not signed at all");
+  }
+  const result = await runAsync(CODESIGN_BIN, ["-dv", "--verbose=4", bundlePath]);
+  return signatureFromCodesignResult(verify, result);
 }
 
 function updaterModuleDir(resourcesPath) {
@@ -293,6 +328,7 @@ module.exports = {
   loadSigningIdentity,
   loadElectronUpdater,
   readDarwinSignature,
+  readDarwinSignatureAsync,
   CODESIGN_BIN,
   configureAutoUpdater,
   isBetaPrereleaseVersion,

@@ -219,6 +219,11 @@ test("main wires the updater gate and stops Next before quitAndInstall", () => {
   const main = fs.readFileSync(path.join(root, "electron", "main.js"), "utf8");
   assert.ok(main.includes('require("./updater.js")'));
   assert.ok(main.includes("createUpdater"));
+  assert.ok(main.includes("readDarwinSignatureAsync"));
+  assert.ok(main.includes("attachUpdaterAfterTray"));
+  const ready = main.slice(main.indexOf("app.whenReady()"));
+  assert.ok(ready.indexOf("new TrayManager") < ready.indexOf("attachUpdaterAfterTray"));
+  assert.ok(ready.indexOf("attachUpdaterAfterTray") < ready.indexOf("checkIfTranslocated"));
   assert.ok(main.includes("installingUpdate"));
   assert.ok(main.includes("listExtensionIds"));
   assert.ok(main.includes("shouldRepointNativeHost"));

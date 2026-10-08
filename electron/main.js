@@ -23,8 +23,8 @@ const { createTuskManager } = require("./tusk/manager.js");
 const { confirmTuskSensitiveChange } = require("./tusk/confirm.js");
 const { checkIfTranslocated, shouldRepointNativeHost } = require("./utils.js");
 const { launchedByNativeHost, shouldRevealOnLaunch } = require("../lib/launch-source.js");
-const { createUpdater } = require("./updater.js");
-const { appBundleFromExecPath } = require("./code-signature.js");
+const { createUpdater, readDarwinSignatureAsync } = require("./updater.js");
+const { appBundleFromExecPath, parseCodesignVerbose } = require("./code-signature.js");
 
 const IS_DEV = process.env.NODE_ENV === "development";
 const PORT = config.port;
@@ -52,6 +52,43 @@ let updater = null;
 let powerSaveId = null;
 let pendingReveal = false;
 let installingUpdate = false;
+
+async function attachUpdaterAfterTray({ extraResources, serverManager }) {
+  let signature;
+  try {
+    signature = await readDarwinSignatureAsync(
+      appBundleFromExecPath(process.execPath) || process.execPath
+    );
+  } catch (error) {
+    console.warn("updater: codesign failed:", error && error.message);
+    signature = parseCodesignVerbose("code object is not signed at all");
+  }
+  updater = createUpdater({
+    isPackaged: app.isPackaged,
+    isDev: IS_DEV,
+    resourcesPath: extraResources,
+    execPath: process.execPath,
+    signature,
+    serverManager,
+    onState: (state) => {
+      if (trayManager) trayManager.setUpdaterState(state);
+    },
+    onBeforeQuitAndInstall: () => {
+      installingUpdate = true;
+    },
+  });
+  if (trayManager) {
+    trayManager.updater = updater;
+    trayManager.setUpdaterState({
+      enabled: updater.enabled,
+      status: "idle",
+      percent: 0,
+    });
+  }
+  if (updater.enabled) {
+    updater.startBackgroundChecks();
+  }
+}
 
 function revealRunningApp(reason) {
   console.log(`${reason}: revealing tray`);
@@ -150,36 +187,18 @@ app.whenReady().then(async () => {
     installer: nativeHostInstaller,
   });
 
-  updater = createUpdater({
-    isPackaged: app.isPackaged,
-    isDev: IS_DEV,
-    resourcesPath: extraResources,
-    execPath: process.execPath,
-    serverManager,
-    onState: (state) => {
-      if (trayManager) trayManager.setUpdaterState(state);
-    },
-    onBeforeQuitAndInstall: () => {
-      installingUpdate = true;
-    },
-  });
-
   trayManager = new TrayManager({
     port: PORT,
     serverManager,
     isDev: IS_DEV,
     nativeHostInstaller,
     pairingBridge,
-    updater,
+    updater: null,
   });
-  trayManager.setUpdaterState({
-    enabled: updater.enabled,
-    status: "idle",
-    percent: 0,
-  });
-  if (updater.enabled) {
-    updater.startBackgroundChecks();
-  }
+
+  // codesign --verify --strict is async and only after the tray exists
+  // so a slow seal check cannot block the menu bar.
+  void attachUpdaterAfterTray({ extraResources, serverManager });
 
   tuskManager = createTuskManager({
     store: secretsStore,
