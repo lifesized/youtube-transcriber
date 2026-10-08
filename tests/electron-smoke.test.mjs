@@ -90,6 +90,13 @@ test("utils module loads", async () => {
   const utils = await import(path.join(projectRoot, "electron", "utils.js"));
   assert.ok(typeof utils.checkIfTranslocated === "function", "checkIfTranslocated should be exported");
   assert.ok(typeof utils.isInApplications === "function", "isInApplications should be exported");
+  assert.ok(typeof utils.findPortHolder === "function");
+  assert.ok(typeof utils.parseLsofListen === "function");
+  assert.deepEqual(utils.parseLsofListen("p4242\ncnode\n"), {
+    process: "node",
+    pid: "4242",
+  });
+  assert.equal(utils.parseLsofListen(""), null);
 });
 
 test("GitHub Actions workflow exists", () => {
@@ -351,7 +358,15 @@ test("afterPack copies lib/*.js into app.asar.unpacked", () => {
 });
 
 test("tray template PNGs exist and are non-empty", () => {
-  for (const name of ["trayTemplate.png", "trayTemplate@2x.png"]) {
+  const names = [
+    "trayTemplate.png",
+    "trayTemplate@2x.png",
+    "trayStartingTemplate.png",
+    "trayStartingTemplate@2x.png",
+    "trayAlertTemplate.png",
+    "trayAlertTemplate@2x.png",
+  ];
+  for (const name of names) {
     const pngPath = path.join(projectRoot, "electron", "resources", name);
     assert.ok(fs.existsSync(pngPath), `${name} should exist`);
     const buf = fs.readFileSync(pngPath);
@@ -362,18 +377,71 @@ test("tray template PNGs exist and are non-empty", () => {
       `${name} should be a PNG`
     );
   }
+  const one = fs.readFileSync(path.join(projectRoot, "electron", "resources", "trayTemplate.png"));
+  assert.equal(one.readUInt32BE(16), 18);
+  assert.equal(one.readUInt32BE(20), 18);
+  const two = fs.readFileSync(path.join(projectRoot, "electron", "resources", "trayTemplate@2x.png"));
+  assert.equal(two.readUInt32BE(16), 36);
+  assert.equal(two.readUInt32BE(20), 36);
 });
 
-test("tray manager falls back to title T", () => {
+test("app icon files exist for electron-builder and dialogs", () => {
+  const icns = path.join(projectRoot, "electron", "resources", "icon.icns");
+  const png = path.join(projectRoot, "electron", "resources", "icon.png");
+  assert.ok(fs.existsSync(icns), "icon.icns should exist");
+  assert.ok(fs.statSync(icns).size > 1000);
+  assert.ok(fs.existsSync(png), "icon.png should exist");
+  const buf = fs.readFileSync(png);
+  assert.deepEqual([...buf.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  assert.equal(buf.readUInt32BE(16), 1024);
+});
+
+test("electron-builder sets mac.icon, LSUIElement, and unpacks tray templates", () => {
+  const builder = JSON.parse(
+    fs.readFileSync(path.join(projectRoot, "electron-builder.json"), "utf8")
+  );
+  assert.equal(builder.mac.icon, "electron/resources/icon.icns");
+  assert.equal(builder.mac.extendInfo.LSUIElement, true);
+  for (const name of [
+    "electron/resources/trayTemplate.png",
+    "electron/resources/trayTemplate@2x.png",
+    "electron/resources/trayStartingTemplate.png",
+    "electron/resources/trayStartingTemplate@2x.png",
+    "electron/resources/trayAlertTemplate.png",
+    "electron/resources/trayAlertTemplate@2x.png",
+  ]) {
+    assert.ok(builder.asarUnpack.includes(name), name);
+  }
+  assert.equal(builder.dmg.iconSize, 80);
+  assert.equal(builder.dmg.iconTextSize, 13);
+});
+
+test("tray manager uses template images and human status copy, not setTitle T", () => {
   const trayPath = path.join(projectRoot, "electron", "tray-manager.js");
   const content = fs.readFileSync(trayPath, "utf8");
-  assert.ok(content.includes("trayTemplate.png"));
-  assert.ok(content.includes('setTitle("T")'));
+  const main = fs.readFileSync(path.join(projectRoot, "electron", "main.js"), "utf8");
+  const copySrc = fs.readFileSync(
+    path.join(projectRoot, "electron", "tray-copy.js"),
+    "utf8"
+  );
+  assert.ok(content.includes("tray-copy.js"));
+  assert.ok(copySrc.includes("trayTemplate.png"));
+  assert.ok(copySrc.includes("trayStartingTemplate.png"));
+  assert.ok(copySrc.includes("trayAlertTemplate.png"));
+  assert.ok(content.includes("setTemplateImage(true)"));
+  assert.equal(content.includes("setTitle("), false);
+  assert.ok(copySrc.includes("Try Again"));
+  assert.ok(copySrc.includes("Restart Transcriber"));
+  assert.ok(content.includes("TRY_AGAIN"));
+  assert.ok(content.includes("RESTART"));
   assert.ok(content.includes("Connect browser extension…"));
   assert.ok(content.includes("_openPairingWindow"));
   assert.ok(content.includes("Paired extensions…"));
   assert.ok(content.includes("Import existing library…"));
   assert.ok(content.includes("_showPairedExtensions"));
+  assert.ok(content.includes("_logError"));
+  assert.ok(main.includes("app.dock.hide()"));
+  assert.match(main, /process\.platform === ["']darwin["']/);
 });
 
 test("installer validates extension IDs when loading extension-ids.json", () => {
@@ -449,6 +517,10 @@ test("CI launches the packaged Transcriber.app and checks asar requires", () => 
   assert.ok(content.includes("POST /api/transcripts"));
   assert.ok(content.includes("asar.unpacked has no Next/Prisma/sharp tree"));
   assert.ok(content.includes("no native Prisma query/schema engine"));
+  assert.ok(content.includes("trayStartingTemplate.png"));
+  assert.ok(content.includes("trayAlertTemplate.png"));
+  assert.ok(content.includes("Print :LSUIElement"));
+  assert.ok(content.includes("Print :CFBundleIconFile"));
 });
 
 test("CI fails outbound app symlinks and non-Electron sqlite addons", () => {

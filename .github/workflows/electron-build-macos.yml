@@ -586,7 +586,7 @@ jobs:
           
           # Tray template PNGs must be packaged and non-empty (macOS menu bar)
           TRAY_DIR="$ROOT/dist-electron/mac-arm64/Transcriber.app/Contents/Resources/app.asar.unpacked/electron/resources"
-          for png in trayTemplate.png trayTemplate@2x.png; do
+          for png in trayTemplate.png trayTemplate@2x.png trayStartingTemplate.png trayStartingTemplate@2x.png trayAlertTemplate.png trayAlertTemplate@2x.png; do
             PNG_PATH="$TRAY_DIR/$png"
             if [ ! -f "$PNG_PATH" ]; then
               echo "ERROR: packaged tray icon missing $PNG_PATH"
@@ -604,6 +604,41 @@ jobs:
             }
             echo "✓ packaged $png ($PNG_SIZE bytes)"
           done
+
+          # Menu-bar app: LSUIElement hides the Dock; CFBundleIconFile must ship.
+          PLIST="$ROOT/dist-electron/mac-arm64/Transcriber.app/Contents/Info.plist"
+          LSUI=$(/usr/libexec/PlistBuddy -c 'Print :LSUIElement' "$PLIST" 2>/dev/null || true)
+          echo "LSUIElement=$LSUI"
+          case "$LSUI" in
+            true|1|YES) ;;
+            *)
+              echo "ERROR: Info.plist LSUIElement must be true (got '$LSUI')"
+              exit 1
+              ;;
+          esac
+          echo "✓ Info.plist LSUIElement is set"
+          ICON_FILE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$PLIST" 2>/dev/null || true)
+          echo "CFBundleIconFile=$ICON_FILE"
+          if [ -z "$ICON_FILE" ]; then
+            echo "ERROR: Info.plist CFBundleIconFile is missing"
+            exit 1
+          fi
+          RES_DIR="$ROOT/dist-electron/mac-arm64/Transcriber.app/Contents/Resources"
+          ICON_PATH="$RES_DIR/$ICON_FILE"
+          if [ ! -f "$ICON_PATH" ] && [ -f "$ICON_PATH.icns" ]; then
+            ICON_PATH="$ICON_PATH.icns"
+          fi
+          if [ ! -f "$ICON_PATH" ]; then
+            echo "ERROR: packaged icon missing: $RES_DIR/$ICON_FILE"
+            ls "$RES_DIR" | head
+            exit 1
+          fi
+          ICON_SIZE=$(wc -c < "$ICON_PATH" | tr -d ' ')
+          if [ "$ICON_SIZE" -lt 1000 ]; then
+            echo "ERROR: packaged icon too small ($ICON_SIZE bytes)"
+            exit 1
+          fi
+          echo "✓ packaged app icon $ICON_PATH ($ICON_SIZE bytes)"
           
           echo ""
           echo "✓ Packaging checks passed — launching packaged server..."

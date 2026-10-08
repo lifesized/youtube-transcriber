@@ -1,8 +1,8 @@
 /**
  * Manages the system tray icon and menu.
- * 
+ *
  * Menu items:
- * - Status line (Running / Starting / Error)
+ * - Status line (human sentences from Design spec §8.5)
  * - Open Transcriber (opens in browser)
  * - Start at Login (toggle)
  * - Connect browser extension… (2-minute pairing window)
@@ -13,6 +13,7 @@
  */
 
 const { app, Tray, Menu, shell, nativeImage, Notification, dialog } = require("electron");
+const fs = require("fs");
 const path = require("path");
 const NativeHostInstaller = require("./native-host-installer.js");
 const {
@@ -23,6 +24,10 @@ const { PAIRING_WINDOW_MS } = require("../lib/native-host-pair.js");
 const { rotateLocalApiToken, getStateDir } = require("../lib/local-api-token.js");
 const { importLibrary, inspectSourceDatabase } = require("../lib/import-library.js");
 const { resolveMigrationsDir } = require("../lib/apply-migrations.js");
+const { findPortHolder } = require("./utils.js");
+const config = require("./config.js");
+const productDefaults = require("./product-defaults.js");
+const trayCopy = require("./tray-copy.js");
 
 async function unpairExtension(id, deps) {
   const rotate = deps.rotate || rotateLocalApiToken;
@@ -37,6 +42,28 @@ async function unpairExtension(id, deps) {
   }
 }
 
+function supportsMenuSublabel() {
+  if (process.platform !== "darwin") return false;
+  const version =
+    typeof process.getSystemVersion === "function"
+      ? process.getSystemVersion()
+      : "";
+  const parts = String(version)
+    .split(".")
+    .map((n) => parseInt(n, 10) || 0);
+  return parts[0] > 14 || (parts[0] === 14 && parts[1] >= 4);
+}
+
+function checkoutLibraryDetected() {
+  try {
+    const db = config.checkoutStatePaths().db;
+    const st = fs.statSync(db);
+    return st.isFile() && st.size > 100;
+  } catch {
+    return false;
+  }
+}
+
 class TrayManager {
   constructor(options) {
     this.port = options.port;
@@ -44,79 +71,143 @@ class TrayManager {
     this.isDev = options.isDev;
     this.nativeHostInstaller = options.nativeHostInstaller || new NativeHostInstaller();
     this.pairingBridge = options.pairingBridge || null;
-    
+
     this.tray = null;
     this.status = "stopped";
-    
+    this.errorMessage = "";
+    this.portHolder = null;
+    this._restarting = false;
+
     this._createTray();
     this._updateMenu();
   }
-  
+
   showRunning() {
     this.status = "running";
     this._updateMenu();
   }
-  
+
   showStarting() {
     this.status = "starting";
     this._updateMenu();
   }
-  
+
   showStopped() {
     this.status = "stopped";
     this._updateMenu();
   }
-  
+
   showError(message) {
+    this._logError(message);
     this.status = "error";
     this.errorMessage = message;
     this._updateMenu();
   }
-  
+
   showPortConflict() {
     this.status = "port-conflict";
+    this.portHolder = findPortHolder(this.port);
     this._updateMenu();
   }
-  
-  // Private methods
-  
-  _createTray() {
-    let icon;
-    try {
-      const iconPath = path.join(__dirname, "resources", "trayTemplate.png");
-      icon = nativeImage.createFromPath(iconPath);
-      if (icon.isEmpty()) {
-        throw new Error("Icon is empty");
-      }
-      icon.setTemplateImage(true);
-    } catch (error) {
-      console.warn("Could not load tray icon, using title fallback:", error.message);
-      icon = nativeImage.createEmpty();
-    }
 
-    this.tray = new Tray(icon);
-    this.tray.setToolTip("Transcriber");
-    if (icon.isEmpty()) {
-      this.tray.setTitle("T");
+  // Private methods
+
+  _logError(message) {
+    const text = String(message || "Unknown error");
+    console.error("Transcriber error:", text);
+    try {
+      const logDir = app.getPath("logs");
+      fs.mkdirSync(logDir, { recursive: true });
+      fs.appendFileSync(
+        path.join(logDir, "main.log"),
+        `[${new Date().toISOString()}] ${text}\n`
+      );
+    } catch (error) {
+      console.error("Could not write app log:", error.message);
     }
+  }
+
+  _loadTrayImage(filename) {
+    const iconPath = path.join(__dirname, "resources", filename);
+    const icon = nativeImage.createFromPath(iconPath);
+    if (!icon.isEmpty()) {
+      icon.setTemplateImage(true);
+    }
+    return icon;
+  }
+
+  _applyTrayImage() {
+    if (!this.tray) return;
+    const icon = this._loadTrayImage(trayCopy.trayImageName(this.status));
+    if (!icon.isEmpty()) {
+      this.tray.setImage(icon);
+    }
+    this.tray.setToolTip(trayCopy.tooltipFor(this.status, this.port));
+  }
+
+  _createTray() {
+    const icon = this._loadTrayImage("trayTemplate.png");
+    this.tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
+    this.tray.setToolTip(trayCopy.tooltipFor(this.status, this.port));
 
     this.tray.on("click", () => {
       this._openTranscriber();
     });
   }
-  
+
+  _statusItem() {
+    const sub = supportsMenuSublabel();
+    switch (this.status) {
+      case "running":
+        return trayCopy.runningStatus(this.port, sub);
+      case "starting":
+        return trayCopy.startingStatus();
+      case "port-conflict":
+        return trayCopy.portInUseStatus(this.port, this.portHolder, sub);
+      default:
+        return trayCopy.stoppedStatus();
+    }
+  }
+
+  _shouldShowImport() {
+    if (!productDefaults.IMPORT_LIBRARY_ONLY_WHEN_DETECTED) return true;
+    return checkoutLibraryDetected();
+  }
+
   _updateMenu() {
+    this._applyTrayImage();
     const loginSettings = app.getLoginItemSettings();
     const openAtLogin = loginSettings.openAtLogin;
-    
-    const statusLabel = this._getStatusLabel();
+
+    const statusItem = this._statusItem();
     const canOpen = this.status === "running";
-    
+    const showImport = this._shouldShowImport();
+
     const template = [
       {
-        label: statusLabel,
+        label: statusItem.label,
+        sublabel: statusItem.sublabel,
         enabled: false,
       },
+    ];
+
+    if (this.status === "port-conflict") {
+      template.push({
+        label: trayCopy.TRY_AGAIN,
+        click: () => this._tryAgain(),
+      });
+    } else if (this.status === "error" || this.status === "stopped") {
+      template.push({
+        label: trayCopy.RESTART,
+        click: () => this._restartServer(),
+      });
+    }
+
+    if (productDefaults.PORT_CONFLICT_OFFER_QUIT) {
+      // Off for the friends beta. Flip the flag when James wants a quit action.
+    }
+
+    template.push(
       { type: "separator" },
       {
         label: "Open Transcriber",
@@ -141,50 +232,60 @@ class TrayManager {
       {
         label: "Reinstall Browser Connection",
         click: () => this._reinstallNativeHost(),
-      },
-      {
+      }
+    );
+
+    if (showImport) {
+      template.push({
         label: "Import existing library…",
         click: () => this._importExistingLibrary(),
-      },
+      });
+    }
+
+    template.push(
       { type: "separator" },
       {
         label: "Quit Transcriber",
         click: () => this._quit(),
-      },
-    ];
-    
+      }
+    );
+
     const menu = Menu.buildFromTemplate(template);
     this.tray.setContextMenu(menu);
   }
-  
-  _getStatusLabel() {
-    switch (this.status) {
-      case "running": {
-        const uptime = this.serverManager.getStatus().uptime;
-        const uptimeStr = this._formatUptime(uptime);
-        return `● Running ${uptimeStr}`;
-      }
-      case "starting":
-        return "● Starting...";
-      case "port-conflict":
-        return `✕ Port ${this.port} in use (dev server running?)`;
-      case "error":
-        return `✕ Error: ${this.errorMessage || "Unknown"}`;
-      default:
-        return "○ Stopped";
+
+  async _tryAgain() {
+    if (this._restarting) return;
+    this._restarting = true;
+    this.showStarting();
+    try {
+      await this.serverManager.start();
+      this.showRunning();
+    } catch (error) {
+      const status = this.serverManager.getStatus().status;
+      if (status === "port-conflict") this.showPortConflict();
+      else this.showError(error && error.message);
+    } finally {
+      this._restarting = false;
     }
   }
-  
-  _formatUptime(ms) {
-    if (!ms || ms < 0) return "";
-    const seconds = Math.floor(ms / 1000);
-    if (seconds < 60) return `(${seconds}s)`;
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `(${minutes}m)`;
-    const hours = Math.floor(minutes / 60);
-    return `(${hours}h)`;
+
+  async _restartServer() {
+    if (this._restarting) return;
+    this._restarting = true;
+    this.showStarting();
+    try {
+      await this.serverManager.restart();
+      this.showRunning();
+    } catch (error) {
+      const status = this.serverManager.getStatus().status;
+      if (status === "port-conflict") this.showPortConflict();
+      else this.showError(error && error.message);
+    } finally {
+      this._restarting = false;
+    }
   }
-  
+
   _openTranscriber() {
     shell.openExternal(`http://127.0.0.1:${this.port}`);
   }
@@ -238,7 +339,7 @@ class TrayManager {
       `Removed ${ids[result.response]}. Local API token rotated.`
     );
   }
-  
+
   _toggleLoginItem() {
     const current = app.getLoginItemSettings();
     app.setLoginItemSettings({
@@ -247,7 +348,7 @@ class TrayManager {
     });
     this._updateMenu();
   }
-  
+
   async _importExistingLibrary() {
     if (this._importing) return;
     this._importing = true;
@@ -342,7 +443,7 @@ class TrayManager {
       this._notify("Installation Failed", error.message);
     }
   }
-  
+
   _notify(title, body) {
     // displayBalloon is Windows-only. Prefer a native Notification on macOS;
     // fall back to a modal if notifications are unsupported.
@@ -376,3 +477,4 @@ class TrayManager {
 
 module.exports = TrayManager;
 module.exports.unpairExtension = unpairExtension;
+module.exports.checkoutLibraryDetected = checkoutLibraryDetected;

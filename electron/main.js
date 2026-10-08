@@ -78,6 +78,9 @@ app.on("before-quit", async (event) => {
 });
 
 app.whenReady().then(async () => {
+  if (process.platform === "darwin" && app.dock) {
+    app.dock.hide();
+  }
   console.log("Transcriber starting...");
   console.log("App path:", app.getAppPath());
   console.log("User data:", app.getPath("userData"));
@@ -150,7 +153,12 @@ app.whenReady().then(async () => {
     trayManager.showRunning();
   } catch (error) {
     console.error("Failed to start server:", error);
-    trayManager.showError(error.message);
+    const status = serverManager.getStatus().status;
+    if (status === "port-conflict") {
+      trayManager.showPortConflict();
+    } else {
+      trayManager.showError(error && error.message);
+    }
   }
   
   // Monitor server health

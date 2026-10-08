@@ -1,0 +1,55 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+const require = createRequire(import.meta.url);
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const copy = require(path.join(root, "electron", "tray-copy.js"));
+
+test("running uses a sentence and Port {port}, or a fallback without sublabel", () => {
+  assert.deepEqual(copy.runningStatus(19721, true), {
+    label: "Transcriber is running",
+    sublabel: "Port 19721",
+  });
+  assert.deepEqual(copy.runningStatus(19721, false), {
+    label: "Running on port 19721",
+  });
+});
+
+test("starting uses a real ellipsis and portInUse never embeds a raw exception", () => {
+  assert.equal(copy.startingStatus().label, "Starting…");
+  assert.ok(copy.startingStatus().label.includes("\u2026"));
+  assert.deepEqual(copy.portInUseStatus(19721, null, true), {
+    label: "Port 19721 is in use",
+    sublabel: "Quit the app using it, then try again.",
+  });
+  assert.deepEqual(
+    copy.portInUseStatus(19721, { process: "node", pid: "4242" }, true),
+    {
+      label: "Port 19721 is in use",
+      sublabel: "Used by node (PID 4242). Quit it, then try again.",
+    }
+  );
+  const stopped = copy.stoppedStatus().label;
+  assert.equal(stopped, "Transcriber stopped unexpectedly");
+  assert.doesNotMatch(stopped, /Error:|exception|timeout/i);
+});
+
+test("tooltips and template image names follow spec §4.3", () => {
+  assert.equal(copy.tooltipFor("running", 19721), "Transcriber — Running");
+  assert.equal(copy.tooltipFor("starting", 19721), "Transcriber — Starting…");
+  assert.equal(
+    copy.tooltipFor("port-conflict", 19721),
+    "Transcriber — Port 19721 is in use"
+  );
+  assert.equal(copy.tooltipFor("stopped", 19721), "Transcriber — Stopped");
+  assert.equal(copy.trayImageName("running"), "trayTemplate.png");
+  assert.equal(copy.trayImageName("starting"), "trayStartingTemplate.png");
+  assert.equal(copy.trayImageName("port-conflict"), "trayAlertTemplate.png");
+  assert.equal(copy.trayImageName("error"), "trayAlertTemplate.png");
+  assert.equal(copy.trayImageName("stopped"), "trayAlertTemplate.png");
+  assert.equal(copy.TRY_AGAIN, "Try Again");
+  assert.equal(copy.RESTART, "Restart Transcriber");
+});

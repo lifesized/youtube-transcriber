@@ -2,6 +2,7 @@
  * Utility functions for Electron app.
  */
 
+const { execFileSync } = require("child_process");
 const { writeFileAtomic } = require("../lib/write-file-atomic.js");
 
 /**
@@ -40,8 +41,41 @@ function isInApplications(appPath) {
   return appPath.startsWith("/Applications/");
 }
 
+/**
+ * Parse `lsof -Fpc` output into { process, pid } or null.
+ */
+function parseLsofListen(output) {
+  let pid = "";
+  let name = "";
+  for (const line of String(output || "").split(/\n/)) {
+    if (line.startsWith("p")) pid = line.slice(1).trim();
+    else if (line.startsWith("c")) name = line.slice(1).trim();
+  }
+  if (!pid || !name) return null;
+  return { process: name, pid };
+}
+
+/**
+ * Who is listening on TCP `port`. Never kills the process.
+ * Spec: lsof -nP -iTCP:<port> -sTCP:LISTEN -Fpc
+ */
+function findPortHolder(port, run = execFileSync) {
+  try {
+    const out = run(
+      "lsof",
+      ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-Fpc"],
+      { encoding: "utf8", timeout: 2000 }
+    );
+    return parseLsofListen(out);
+  } catch {
+    return null;
+  }
+}
+
 module.exports = {
   checkIfTranslocated,
   isInApplications,
   writeFileAtomic,
+  parseLsofListen,
+  findPortHolder,
 };

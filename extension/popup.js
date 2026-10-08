@@ -148,7 +148,11 @@ const el = {
   offlineStartWrap: document.getElementById("offlineStartWrap"),
   offlineCopyWrap: document.getElementById("offlineCopyWrap"),
   offlineStartError: document.getElementById("offlineStartError"),
+  offlineHeading: document.getElementById("offlineHeading"),
   offlineSub: document.getElementById("offlineSub"),
+  offlineConnectHint: document.getElementById("offlineConnectHint"),
+  offlineConnectTargetLabel: document.getElementById("offlineConnectTargetLabel"),
+  btnOfflineChangeTarget: document.getElementById("btnOfflineChangeTarget"),
   setupCommand: document.getElementById("setupCommand"),
   btnCopySetup: document.getElementById("btnCopySetup"),
   offlinePath: document.getElementById("offlinePath"),
@@ -1637,7 +1641,10 @@ function startOfflinePolling() {
     if (res?.success && res.data?.online) {
       stopOfflinePolling();
       init();
+      return;
     }
+    await detectNativeHost();
+    await refreshOfflineStartUI();
   }, 5000);
 }
 
@@ -1662,7 +1669,6 @@ function startHeartbeat() {
 
 function loadCachedPath() {
   el.offlinePath.hidden = true;
-  refreshOfflineStartUI();
 }
 
 // ---------------------------------------------------------------------------
@@ -1674,6 +1680,7 @@ function loadCachedPath() {
 // ---------------------------------------------------------------------------
 
 let nativeHostAvailable = null; // null = unknown, true/false after first probe
+let nativeHostState = "unknown"; // available | missing | pairing | unknown
 let nativeStartInFlight = false;
 let nativeHostPairAttempted = false;
 let connectTargetPainted = false;
@@ -1754,17 +1761,33 @@ async function setConnectTarget(id) {
   await refreshConnectTargetError();
 }
 
+function classifyNativeHostError(err) {
+  const msg = String((err && err.message) || err || "");
+  if (
+    msg === "native_host_unavailable" ||
+    /Specified native messaging host not found/i.test(msg)
+  ) {
+    return "missing";
+  }
+  if (/forbidden|Access to the specified native messaging host/i.test(msg)) {
+    return "pairing";
+  }
+  return "pairing";
+}
+
 async function requestNativeHostPairOnce() {
-  if (nativeHostPairAttempted) return;
+  if (nativeHostPairAttempted) return false;
   nativeHostPairAttempted = true;
   try {
     const T = connectTargetApi();
     const pairUrl = T
       ? T.getTarget(T.APP).pairUrl
       : "http://127.0.0.1:19721/api/native-host/pair";
-    await fetch(pairUrl, { method: "POST" });
+    const res = await fetch(pairUrl, { method: "POST" });
+    return !!(res && res.ok);
   } catch {
     // App may not be running yet.
+    return false;
   }
 }
 
@@ -1800,38 +1823,95 @@ async function callNativeHost(cmd, payload = {}, timeoutMs = 30000) {
   });
 }
 
-async function detectNativeHost() {
+async function tryNativeHostPing() {
   try {
     await callNativeHost("ping", {}, 2500);
-    nativeHostAvailable = true;
-  } catch {
-    await requestNativeHostPairOnce();
-    try {
-      await callNativeHost("ping", {}, 2500);
-      nativeHostAvailable = true;
-    } catch {
-      nativeHostAvailable = false;
-    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, kind: classifyNativeHostError(err) };
   }
-  return nativeHostAvailable;
 }
 
-function refreshOfflineStartUI() {
-  const haveHost = nativeHostAvailable === true;
-  el.offlineStartWrap.hidden = !haveHost;
-  el.offlineCopyWrap.hidden = haveHost;
-  if (!haveHost) {
-    // Bake the extension ID into the setup command so the user can copy + run.
-    const extId = chrome.runtime.id;
-    el.setupCommand.textContent = `npm run install-native-host -- --ext-id=${extId}`;
-    el.setupCommand.dataset.fullCmd = `npm run install-native-host -- --ext-id=${extId}`;
+async function detectNativeHost() {
+  const first = await tryNativeHostPing();
+  if (first.ok) {
+    nativeHostAvailable = true;
+    nativeHostState = "available";
+    return true;
   }
+  const pairOk = await requestNativeHostPairOnce();
+  const second = await tryNativeHostPing();
+  if (second.ok) {
+    nativeHostAvailable = true;
+    nativeHostState = "available";
+    return true;
+  }
+  nativeHostAvailable = false;
+  if (pairOk || first.kind === "pairing" || second.kind === "pairing") {
+    nativeHostState = "pairing";
+  } else {
+    nativeHostState = "missing";
+  }
+  return false;
+}
+
+async function refreshOfflineStartUI() {
+  const target = await currentConnectTarget();
+  const isDev = target.id === "dev";
+  const haveHost = nativeHostAvailable === true;
+  const pairing = nativeHostState === "pairing" && !isDev;
+
+  if (el.githubLink) el.githubLink.hidden = true;
+  if (el.offlineConnectTargetLabel) {
+    el.offlineConnectTargetLabel.textContent = target.label;
+  }
+
+  if (haveHost) {
+    if (el.offlineHeading) el.offlineHeading.textContent = "Transcriber isn't running";
+    if (el.offlineSub) el.offlineSub.textContent = "Start it to transcribe this video.";
+    el.offlineStartWrap.hidden = false;
+    el.offlineCopyWrap.hidden = true;
+    if (el.btnCheckAgain) el.btnCheckAgain.hidden = true;
+    return;
+  }
+
+  if (pairing) {
+    if (el.offlineHeading) el.offlineHeading.textContent = "Allow Transcriber to connect";
+    if (el.offlineSub) {
+      el.offlineSub.textContent = "Click Allow in the Transcriber dialog on your Mac.";
+    }
+    el.offlineStartWrap.hidden = true;
+    el.offlineCopyWrap.hidden = true;
+    if (el.btnCheckAgain) el.btnCheckAgain.hidden = false;
+    return;
+  }
+
+  if (isDev) {
+    if (el.offlineHeading) el.offlineHeading.textContent = "Dev server setup";
+    if (el.offlineSub) el.offlineSub.textContent = "Run this in your terminal to get going";
+    el.offlineStartWrap.hidden = true;
+    el.offlineCopyWrap.hidden = false;
+    const extId = chrome.runtime.id;
+    const cmd = `npm run install-native-host -- --ext-id=${extId}`;
+    el.setupCommand.textContent = cmd;
+    el.setupCommand.dataset.fullCmd = cmd;
+    if (el.btnCheckAgain) el.btnCheckAgain.hidden = false;
+    return;
+  }
+
+  if (el.offlineHeading) el.offlineHeading.textContent = "Transcriber isn't running";
+  if (el.offlineSub) {
+    el.offlineSub.textContent = "Open Transcriber from your Applications folder.";
+  }
+  el.offlineStartWrap.hidden = true;
+  el.offlineCopyWrap.hidden = true;
+  if (el.btnCheckAgain) el.btnCheckAgain.hidden = false;
 }
 
 async function ensureNativeHostDetected() {
   if (nativeHostAvailable !== null) return nativeHostAvailable;
   await detectNativeHost();
-  refreshOfflineStartUI();
+  await refreshOfflineStartUI();
   return nativeHostAvailable;
 }
 
@@ -1867,7 +1947,8 @@ async function startTranscriberClicked() {
     if (e.message === "native_host_unavailable" ||
         /Specified native messaging host not found/i.test(e.message)) {
       nativeHostAvailable = false;
-      refreshOfflineStartUI();
+      nativeHostState = "missing";
+      await refreshOfflineStartUI();
     } else {
       el.offlineStartError.textContent = `Start failed: ${e.message}`;
       el.offlineStartError.hidden = false;
@@ -2594,21 +2675,19 @@ async function init() {
       if (el.cloudNudge) el.cloudNudge.hidden = false;
       if (el.localDetectedBanner) el.localDetectedBanner.hidden = true;
       const localAuthError = !!authError;
-      const authMsg =
-        serviceRes?.data?.authErrorMessage ||
-        "Local API needs auth — restart the Transcriber host";
+      const authMsg = "Quit and reopen Transcriber, then click Check Again.";
       if (el.offlineLocalAuthError && el.offlineLocalSetup) {
         if (localAuthError) {
           el.offlineLocalAuthError.hidden = false;
+          const authHeading = el.offlineLocalAuthError.querySelector(".offline-heading");
+          if (authHeading) authHeading.textContent = "Reconnect to Transcriber";
           if (el.offlineLocalAuthErrorMsg) {
             el.offlineLocalAuthErrorMsg.textContent = authMsg;
           }
           el.offlineLocalSetup.hidden = true;
-          // Also surface on the start-error line when the start wrap is visible.
-          if (el.offlineStartError) {
-            el.offlineStartError.textContent = authMsg;
-            el.offlineStartError.hidden = false;
-          }
+          if (el.offlineStartError) el.offlineStartError.hidden = true;
+          if (el.btnCheckAgain) el.btnCheckAgain.hidden = false;
+          if (el.githubLink) el.githubLink.hidden = true;
           showState("NoService");
           startOfflinePolling();
           return;
@@ -2617,18 +2696,8 @@ async function init() {
         el.offlineLocalSetup.hidden = false;
       }
       loadCachedPath();
-      // Detect (or re-detect on each offline render) whether the native host
-      // is installed so the right primary action shows.
-      await ensureNativeHostDetected();
-      // Auto-route to Settings → Server when the host is installed. Server
-      // controls live there now; landing the user directly on the Start
-      // button feels more "embedded in the product" than the takeover
-      // offline screen. Polling continues from Settings.
-      if (nativeHostAvailable) {
-        startOfflinePolling();
-        showSettingsView();
-        return;
-      }
+      await detectNativeHost();
+      await refreshOfflineStartUI();
     }
 
     showState("NoService");
@@ -2843,7 +2912,16 @@ async function processQueue() {
 
 el.btnTranscribe.addEventListener("click", doTranscribe);
 el.btnRetry.addEventListener("click", handleErrorAction);
-el.btnCheckAgain.addEventListener("click", init);
+el.btnCheckAgain.addEventListener("click", () => {
+  nativeHostAvailable = null;
+  nativeHostState = "unknown";
+  init();
+});
+if (el.btnOfflineChangeTarget) {
+  el.btnOfflineChangeTarget.addEventListener("click", () => {
+    showSettingsView();
+  });
+}
 
 // In-panel sign-in. The user never leaves the YouTube tab:
 // — Google: a small popup window runs the OAuth flow and closes itself.
@@ -3354,11 +3432,11 @@ if (el.connectRetry) {
   });
 }
 
-// Footer right-side link: GitHub repo visible in LOCAL mode.
+// Friends build: hide the footer GitHub link. Settings is the place
+// for developer-facing links.
 async function applyFooterLink(modeOverride) {
-  // LOCAL mode only — GitHub link always visible
   if (el.githubLink) {
-    el.githubLink.hidden = false;
+    el.githubLink.hidden = true;
   }
 }
 

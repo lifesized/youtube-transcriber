@@ -7,7 +7,11 @@
     "node_modules/better-sqlite3/**/*",
     "tools/**/*",
     "electron/resources/trayTemplate.png",
-    "electron/resources/trayTemplate@2x.png"
+    "electron/resources/trayTemplate@2x.png",
+    "electron/resources/trayStartingTemplate.png",
+    "electron/resources/trayStartingTemplate@2x.png",
+    "electron/resources/trayAlertTemplate.png",
+    "electron/resources/trayAlertTemplate@2x.png"
   ],
   "files": [
     "electron/**/*",
@@ -39,6 +43,10 @@
     }
   ],
   "mac": {
+    "icon": "electron/resources/icon.icns",
+    "extendInfo": {
+      "LSUIElement": true
+    },
     "target": {
       "target": "dmg",
       "arch": ["arm64"]
@@ -56,8 +64,8 @@
   "dmg": {
     "title": "Transcriber",
     "background": "electron/dmg/background.png",
-    "iconSize": 72,
-    "iconTextSize": 12,
+    "iconSize": 80,
+    "iconTextSize": 13,
     "window": {
       "width": 620,
       "height": 440

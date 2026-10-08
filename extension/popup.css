@@ -368,6 +368,7 @@ body::-webkit-scrollbar-thumb:hover {
   text-align: center;
   padding: 24px 16px;
   gap: 0;
+  flex: 1;
 }
 .offline-orb {
   position: relative;
@@ -400,6 +401,18 @@ body::-webkit-scrollbar-thumb:hover {
 @keyframes dot-breathe {
   0%, 100% { opacity: 0.20; }
   50% { opacity: 0.50; }
+}
+#btnStartTranscriber {
+  background: var(--accent);
+  border-color: transparent;
+  color: #1a1a1a;
+  font-weight: 600;
+}
+#btnStartTranscriber:hover {
+  background: #cdb07a;
+}
+#btnStartTranscriber:active {
+  background: var(--accent);
 }
 .offline-heading {
   font-size: 14px;
@@ -877,6 +890,31 @@ body::-webkit-scrollbar-thumb:hover {
 }
 .btn-check-again:hover svg {
   transform: rotate(45deg);
+}
+.btn-check-again[hidden] {
+  display: none;
+}
+.offline-connect-hint {
+  margin-top: auto;
+  padding-top: 16px;
+  width: 100%;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  color: var(--muted-3);
+  line-height: 1.4;
+}
+.offline-connect-change {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.offline-connect-change:hover {
+  color: #cdb07a;
 }
 
 /* Error */

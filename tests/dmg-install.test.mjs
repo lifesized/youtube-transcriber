@@ -71,13 +71,41 @@ test("electron-builder packs the helper and background into the DMG, not asar", 
 
 test("DMG background PNG exists", () => {
   const pngPath = path.join(projectRoot, "electron", "dmg", "background.png");
+  const png2x = path.join(projectRoot, "electron", "dmg", "background@2x.png");
   assert.ok(fs.existsSync(pngPath));
+  assert.ok(fs.existsSync(png2x));
   const buf = fs.readFileSync(pngPath);
+  const buf2x = fs.readFileSync(png2x);
   assert.deepEqual(
     [...buf.subarray(0, 8)],
     [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
   );
   assert.ok(buf.length > 500);
+  assert.equal(buf.readUInt32BE(16), 620);
+  assert.equal(buf.readUInt32BE(20), 440);
+  assert.equal(buf2x.readUInt32BE(16), 1240);
+  assert.equal(buf2x.readUInt32BE(20), 880);
+  const gen = fs.readFileSync(
+    path.join(projectRoot, "electron", "dmg", "generate-background.py"),
+    "utf8"
+  );
+  assert.ok(gen.includes("#f4f1ea"));
+  assert.ok(gen.includes("#1a1a1a"));
+  assert.ok(gen.includes("215 * scale"));
+  assert.ok(gen.includes("405 * scale"));
+  assert.ok(gen.includes("Double-click Install Transcriber"));
+  assert.ok(gen.includes("right-click → Open (once)"));
+  assert.doesNotMatch(gen, /run this/);
+  const config = JSON.parse(
+    fs.readFileSync(path.join(projectRoot, "electron-builder.json"), "utf8")
+  );
+  const contents = config.dmg.contents || [];
+  const appEntry = contents.find((c) => c.type === "file" && !c.path);
+  const apps = contents.find((c) => c.type === "link" && c.path === "/Applications");
+  assert.equal(appEntry.x, 160);
+  assert.equal(appEntry.y, 312);
+  assert.equal(apps.x, 460);
+  assert.equal(apps.y, 312);
 });
 
 test("beta install docs lead with the helper and xattr fallback", () => {
