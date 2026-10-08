@@ -2,13 +2,31 @@
 
 James pastes the secrets himself. This file is the runbook, not a request to commit certificates.
 
-Unsigned / ad-hoc CI is unchanged: the `build` job still produces an ad-hoc-signed DMG with `Install Transcriber.command` and `.payload/Transcriber.app`, artifact name `Transcriber-macOS-arm64`. Signing, notarization, the drag-to-Applications DMG, and GitHub Releases publishing run only when the secrets below are present and complete.
+Unsigned / ad-hoc CI is unchanged: the `build` job still produces an ad-hoc-signed DMG with `Install Transcriber.command` and `.payload/Transcriber.app`, artifact name `Transcriber-macOS-arm64`. It never sees Apple secrets.
 
-## Where to add repo secrets
+Signing, notarization, and the drag-to-Applications DMG run in a **separate** `sign` job on a fresh runner. Publishing runs in a **separate** `release` job. Both jobs use the GitHub Environment named `release`.
 
-GitHub → `lifesized/youtube-transcriber` → **Settings › Secrets and variables › Actions › New repository secret**.
+## Why an Environment (not repo secrets)
 
-Use these names exactly:
+Fork pull requests do **not** receive repository secrets. **Same-repo** pull requests **do**. A `pull_request` run executes the PR's own workflow and `scripts/macos-*.sh` after `npm ci`, so a malicious same-repo PR can read `$RUNNER_TEMP` from a package lifecycle script and can upload a Developer ID-signed artifact of unreviewed code.
+
+That is why every Apple secret lives on the Environment `release`, **not** as repository secrets:
+
+- The `sign` and `release` jobs set `environment: release` and `if: github.event_name != 'pull_request'`.
+- The `sign` job does **not** run `npm ci` or any `package.json` lifecycle script. It downloads the unsigned app artifact and the signing scripts from the triggering ref (the Environment protection rules gate that ref).
+- PR runs never receive the secrets and never produce a signed artifact.
+
+## James: create Environment `release` (one-time)
+
+Do this in GitHub **before** the first signed build. Add the secrets as **Environment secrets** on `release`. Do **not** add them as repository secrets. If they already exist as repo secrets, delete those copies after the Environment ones are in place.
+
+1. Open `https://github.com/lifesized/youtube-transcriber/settings/environments`.
+2. **New environment**. Name it exactly `release`.
+3. **Required reviewers:** add yourself (James). Leave the reviewer count at 1.
+4. **Deployment branches and tags:** restrict to:
+   - Branch: `beta/electron-menubar` (needed for `workflow_dispatch` from that branch).
+   - Tag pattern: `v*-beta.*` (example: `v0.2.0-beta.1`).
+5. **Environment secrets** — **Add secret** for each name below. Same values you would have put on the repo.
 
 | Secret | What it is |
 |---|---|
@@ -23,7 +41,32 @@ Use these names exactly:
 
 Do not add a PAT. The release job uses the built-in `GITHUB_TOKEN` with `contents: write`.
 
-Fork pull requests do not receive these secrets. Those runs skip signing and look like today's ad-hoc job.
+## James: tag ruleset for `v*-beta.*` (one-time)
+
+Restrict who can create release tags so a random collaborator cannot fire the Environment:
+
+1. Open `https://github.com/lifesized/youtube-transcriber/settings/rules`.
+2. **New ruleset** → **Tag**.
+3. Name it `beta release tags`.
+4. Enforcement: **Active**.
+5. Target tags: include pattern `v*-beta.*`.
+6. Bypass: only James (or the repo admin role you want).
+7. Rules: **Restrict creations**, **Restrict updates**, **Restrict deletions**. Creator: James only.
+
+## Job graph
+
+```
+pull_request → build (unsigned only) + unsigned-path-contract
+               no Environment, no Apple secrets, no signed artifact
+
+push to beta/electron-menubar
+  or tag v*-beta.*
+  or workflow_dispatch on beta/electron-menubar
+               → build (unsigned DMG + unsigned .app + fuses helper)
+               → sign  [environment: release]  (fresh runner, no npm ci)
+               → release [environment: release]  (draft GitHub prerelease, only
+                  when notarized and the ref/tag gates pass)
+```
 
 ## Create the Developer ID certificate
 
@@ -58,25 +101,26 @@ The `.p8` is shown only at download time. If it is lost, revoke and make a new k
 
 Only needed if the API key set is missing. Create an [app-specific password](https://appleid.apple.com) named something like `Transcriber notarytool`. Store it as `APPLE_APP_SPECIFIC_PASSWORD` with `APPLE_ID`. Still set `APPLE_TEAM_ID`.
 
-## What each secret gates
+## Version and tag scheme
 
-| Gate | Secrets that must be non-empty | What runs |
-|---|---|---|
-| Sign | `MACOS_CERT_P12_BASE64` (plus `MACOS_CERT_PASSWORD` and `APPLE_TEAM_ID` to actually pick the identity) | Temporary keychain, inside-out Developer ID sign, hardened runtime |
-| Notarize | Sign ran, **and** either the API key triple **or** `APPLE_ID` + `APPLE_APP_SPECIFIC_PASSWORD` | `notarytool submit --wait` on the app zip, staple app, sign/notarize/staple DMG |
-| Release | Notarize succeeded, **and** a `beta-v*` tag (or `workflow_dispatch` with publish checked) | GitHub prerelease: signed DMG, zip, blockmap, `latest-mac.yml`, `SHA256SUMS` |
+Use a semver **prerelease** so a non-app GitHub Release in this repo cannot stall electron-updater:
 
-The unsigned job steps and `Transcriber-macOS-arm64` upload do not read these secrets.
+- `package.json` `version`: `0.2.0-beta.1` (pattern `X.Y.Z-beta.N`)
+- Git tag: `v0.2.0-beta.1` (always `v` + the exact `package.json` version)
+- electron-updater `channel`: `beta` (`allowPrerelease` is true)
+
+The workflow tag filter is `v*-beta.*`. The release job refuses to publish unless `v${package.json.version}` equals the tag (tag events) or the version matches `X.Y.Z-beta.N` (`workflow_dispatch`).
 
 ## Tag / release procedure
 
-1. Bump `package.json` `version` to the version users should see (this becomes `CFBundleShortVersionString` and `latest-mac.yml`).
+1. Bump `package.json` `version` to the next `X.Y.Z-beta.N`.
 2. Push that commit to `beta/electron-menubar`.
-3. Tag `beta-v<same-version>` (example: version `0.2.0` → `beta-v0.2.0`) and push the tag.
-4. The macOS workflow builds the ad-hoc DMG as today, then (secrets present) signs, notarizes, and the `release` job publishes a **prerelease** with `GITHUB_TOKEN`.
-5. Do **not** expect a GitHub Release on every push to `beta/electron-menubar`.
+3. Tag `v<same-version>` (example: version `0.2.0-beta.1` → `v0.2.0-beta.1`) and push the tag. Only James should be able to create that tag (ruleset above).
+4. Approve the Environment `release` deployments when GitHub asks.
+5. The `release` job creates a **draft** GitHub prerelease targeted at `$GITHUB_SHA`. James publishes it manually from the GitHub Releases UI when he is ready. Draft releases are not picked up by electron-updater.
+6. `workflow_dispatch` is allowed only on `beta/electron-menubar`. Check **Publish a GitHub prerelease** only when you intend to open a draft. The job still requires `$GITHUB_SHA` to be an ancestor of `origin/beta/electron-menubar` and the version to be `X.Y.Z-beta.N`.
 
-`workflow_dispatch` has a boolean input `publish_github_release` (default false). Turn it on only when the run is signed and notarized and you intend to publish.
+Do **not** expect a GitHub Release on every push to `beta/electron-menubar`.
 
 ## Local unsigned build (unchanged)
 
@@ -95,14 +139,16 @@ Signed builds use `electron/entitlements.mac.sign.plist`: `allow-jit` plus `allo
 The packaged app initializes `electron-updater` only when all of these hold:
 
 - `app.isPackaged` is true (not `electron:dev`)
+- `/usr/bin/codesign --verify --strict` succeeds, then Team ID is read
 - The running binary is **Developer ID Application** signed
 - `TeamIdentifier` matches `APPLE_TEAM_ID` written into `Contents/Resources/signing-identity.json` at signed-build time
 - That JSON is absent on ad-hoc builds, so those builds never load the updater
+- If `electron-updater` fails to load, the tray still starts (`reason: load-failed`)
 
-Feed is pinned to `lifesized/youtube-transcriber` on GitHub. There is no env or Settings override. `allowDowngrade` is false. macOS signature validation (Squirrel.Mac designated requirement) is left enabled.
+Feed is pinned to `lifesized/youtube-transcriber` on GitHub. There is no env or Settings override. `allowDowngrade` is false. Channel is `beta`. macOS signature validation (Squirrel.Mac designated requirement) is left enabled.
 
 When the updater is enabled it checks `releases.atom` and `latest-mac.yml` on GitHub Releases for this repo 30 seconds after launch and then every 6 hours. A found update zip downloads automatically; installing it needs a click on **Restart to Update**. Documented in `extension/privacy-policy.md`. Disabled builds make no GitHub calls.
 
 ## Native host after a signed install
 
-Drag-to-Applications lands at `/Applications/Transcriber.app`. That is already the app host Start fallback and the helper's destination. Pairing still writes `com.transcribed.app.host` manifests; a packaged launch with existing extension IDs rewrites the wrapper so `process.execPath` matches the installed bundle.
+Drag-to-Applications lands at `/Applications/Transcriber.app`. That is already the app host Start fallback and the helper's destination. Pairing still writes `com.transcribed.app.host` manifests. A packaged launch rewrites the wrapper only when the app is running from `/Applications` or from the already-recorded install path — never from `~/Downloads`, `/Volumes`, or App Translocation.

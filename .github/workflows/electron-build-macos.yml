@@ -11,7 +11,7 @@ on:
     branches:
       - beta/electron-menubar
     tags:
-      - "beta-v*"
+      - "v*-beta.*"
   pull_request:
     branches:
       - beta/electron-menubar
@@ -27,9 +27,6 @@ jobs:
     timeout-minutes: 50
     permissions:
       contents: read
-    outputs:
-      signed: ${{ steps.signing.outputs.sign }}
-      notarized: ${{ steps.notarize_dmg.outputs.notarized }}
     
     steps:
       - name: Checkout code
@@ -1246,35 +1243,100 @@ jobs:
           path: dist-electron/build-info.txt
           retention-days: 30
 
-      # Everything below is a no-op when secrets are absent. The unsigned
-      # steps, checks, and Transcriber-macOS-arm64 artifact stay as today.
-      - name: Detect signing secrets
-        id: signing
-        env:
-          MACOS_CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
-          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      # Non-PR only. The sign job (environment: release) downloads these.
+      # PR runs never upload them, never see Apple secrets, never sign.
+      - name: Package signing helpers
+        if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
-          if [ -n "${MACOS_CERT_P12_BASE64}" ]; then
-            echo "sign=true" >> "$GITHUB_OUTPUT"
-            echo "Signing secret is present"
-          else
-            echo "sign=false" >> "$GITHUB_OUTPUT"
-            echo "Signing secret is absent; unsigned path only"
+          mkdir -p /tmp/signing-helpers/node_modules
+          cp -R node_modules/@electron/fuses /tmp/signing-helpers/node_modules/@electron/fuses
+          if [ -d node_modules/app-builder-bin ]; then
+            cp -R node_modules/app-builder-bin /tmp/signing-helpers/node_modules/app-builder-bin
           fi
-          if { [ -n "${APPLE_API_KEY_ID}" ] && [ -n "${APPLE_API_ISSUER_ID}" ] && [ -n "${APPLE_API_KEY_P8_BASE64}" ]; } \
-            || { [ -n "${APPLE_ID}" ] && [ -n "${APPLE_APP_SPECIFIC_PASSWORD}" ]; }; then
-            echo "notary=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "notary=false" >> "$GITHUB_OUTPUT"
+          tar -C /tmp/signing-helpers -czf /tmp/signing-helpers.tgz node_modules
+
+      - name: Stage unsigned app for signing
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/unsigned-app-artifact
+          mkdir -p /tmp/unsigned-app-artifact
+          ditto dist-electron/mac-arm64/Transcriber.app /tmp/unsigned-app-artifact/Transcriber.app
+          test -d /tmp/unsigned-app-artifact/Transcriber.app/Contents
+
+      - name: Upload unsigned app for signing
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Transcriber-macOS-arm64-unsigned-app
+          path: /tmp/unsigned-app-artifact
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 5
+
+      - name: Upload signing helpers artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: signing-helpers
+          path: /tmp/signing-helpers.tgz
+          if-no-files-found: error
+          retention-days: 5
+
+  sign:
+    name: Sign and notarize
+    needs: build
+    if: github.event_name != 'pull_request'
+    environment: release
+    runs-on: macos-14
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    outputs:
+      notarized: ${{ steps.notarize_dmg.outputs.notarized }}
+    steps:
+      - name: Checkout signing scripts
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+
+      - name: Download unsigned app
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: Transcriber-macOS-arm64-unsigned-app
+          path: dist-electron/mac-arm64
+
+      - name: Place unsigned app
+        run: |
+          set -euo pipefail
+          if [ ! -d dist-electron/mac-arm64/Transcriber.app/Contents ] &&
+             [ -d dist-electron/mac-arm64/Transcriber.app/Transcriber.app/Contents ]; then
+            mv dist-electron/mac-arm64/Transcriber.app/Transcriber.app /tmp/Transcriber.app
+            rm -rf dist-electron/mac-arm64/Transcriber.app
+            mv /tmp/Transcriber.app dist-electron/mac-arm64/Transcriber.app
           fi
+          test -d dist-electron/mac-arm64/Transcriber.app/Contents
+
+      - name: Download signing helpers
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: signing-helpers
+          path: /tmp
+
+      - name: Extract signing helpers
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/signing-helpers"
+          tar -C "$RUNNER_TEMP/signing-helpers" -xzf /tmp/signing-helpers.tgz
+          test -f "$RUNNER_TEMP/signing-helpers/node_modules/@electron/fuses/dist/bin.js"
 
       - name: Import Developer ID into a temporary keychain
-        if: steps.signing.outputs.sign == 'true'
         env:
           MACOS_CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
@@ -1282,13 +1344,16 @@ jobs:
         run: bash scripts/macos-signing-keychain.sh setup
 
       - name: Developer ID sign Transcriber.app
-        if: steps.signing.outputs.sign == 'true'
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: bash scripts/macos-codesign-app.sh
 
+      - name: Read fuses on the signed app
+        env:
+          FUSES_MODULE: ${{ runner.temp }}/signing-helpers/node_modules/@electron/fuses
+        run: node scripts/assert-signed-fuses.js dist-electron/signed/Transcriber.app
+
       - name: Notarize and staple the app
-        if: steps.signing.outputs.sign == 'true' && steps.signing.outputs.notary == 'true'
         env:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
@@ -1299,16 +1364,13 @@ jobs:
         run: bash scripts/macos-notarize.sh app
 
       - name: Build signed drag-to-Applications DMG
-        if: steps.signing.outputs.sign == 'true' && steps.signing.outputs.notary == 'true'
         run: bash electron/dmg/build-signed-dmg.sh
 
       - name: Sign the signed DMG
-        if: steps.signing.outputs.sign == 'true' && steps.signing.outputs.notary == 'true'
         run: bash scripts/macos-codesign-dmg.sh dist-electron/signed/Transcriber-signed.dmg
 
       - name: Notarize and staple the DMG
         id: notarize_dmg
-        if: steps.signing.outputs.sign == 'true' && steps.signing.outputs.notary == 'true'
         env:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
@@ -1321,12 +1383,30 @@ jobs:
           bash scripts/macos-notarize.sh dmg dist-electron/signed/Transcriber-signed.dmg
           echo "notarized=true" >> "$GITHUB_OUTPUT"
 
+      - name: Read fuses on the app inside the signed DMG
+        env:
+          FUSES_MODULE: ${{ runner.temp }}/signing-helpers/node_modules/@electron/fuses
+        run: |
+          set -euo pipefail
+          DMG=dist-electron/signed/Transcriber-signed.dmg
+          ATTACH=$(hdiutil attach -nobrowse -readonly "$DMG")
+          echo "$ATTACH"
+          MOUNT=$(printf '%s\n' "$ATTACH" | awk '/\/Volumes\// { print $NF; exit }')
+          test -n "$MOUNT"
+          test -d "$MOUNT/Transcriber.app"
+          node scripts/assert-signed-fuses.js "$MOUNT/Transcriber.app"
+          hdiutil detach "$MOUNT"
+
       - name: Write updater artifacts
-        if: steps.notarize_dmg.outputs.notarized == 'true'
-        run: bash scripts/macos-update-artifacts.sh
+        run: |
+          set -euo pipefail
+          if [ -d "$RUNNER_TEMP/signing-helpers/node_modules/app-builder-bin" ]; then
+            mkdir -p node_modules
+            cp -R "$RUNNER_TEMP/signing-helpers/node_modules/app-builder-bin" node_modules/app-builder-bin
+          fi
+          bash scripts/macos-update-artifacts.sh
 
       - name: Screenshot signed DMG window
-        if: steps.notarize_dmg.outputs.notarized == 'true'
         run: |
           set -euo pipefail
           DMG=dist-electron/signed/Transcriber-signed.dmg
@@ -1342,8 +1422,7 @@ jobs:
           hdiutil detach "$MOUNT"
 
       - name: Upload signed artifacts
-        if: steps.notarize_dmg.outputs.notarized == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: Transcriber-macOS-arm64-signed
           path: dist-electron/signed/
@@ -1377,40 +1456,57 @@ jobs:
 
   release:
     name: Publish GitHub prerelease
-    needs: build
+    needs: sign
     if: >
-      needs.build.outputs.notarized == 'true' &&
-      (startsWith(github.ref, 'refs/tags/beta-v') ||
-      (github.event_name == 'workflow_dispatch' && inputs.publish_github_release))
+      needs.sign.outputs.notarized == 'true' &&
+      github.event_name != 'pull_request' &&
+      (
+        (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-beta.')) ||
+        (github.event_name == 'workflow_dispatch' && inputs.publish_github_release && github.ref == 'refs/heads/beta/electron-menubar')
+      )
+    environment: release
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
       - name: Download signed artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: Transcriber-macOS-arm64-signed
           path: signed
-      - name: Publish prerelease
+      - name: Create draft prerelease
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if [[ "${GITHUB_REF}" == refs/tags/beta-v* ]]; then
+          git -c "http.extraheader=AUTHORIZATION: bearer ${GH_TOKEN}" fetch origin beta/electron-menubar
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/beta/electron-menubar
+          VERSION="$(node -p "require('./package.json').version")"
+          echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$'
+          EXPECTED_TAG="v${VERSION}"
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
+            if [ "$TAG" != "$EXPECTED_TAG" ]; then
+              echo "release: tag $TAG does not match package.json version $VERSION (expected $EXPECTED_TAG)"
+              exit 1
+            fi
           else
-            VERSION="$(node -p "require('./package.json').version")"
-            TAG="beta-v${VERSION}-${GITHUB_SHA::7}"
+            TAG="$EXPECTED_TAG"
           fi
-          echo "Publishing $TAG"
+          echo "Creating draft $TAG at $GITHUB_SHA"
           shopt -s nullglob
           FILES=(signed/*.dmg signed/*.zip signed/*.blockmap signed/latest-mac.yml signed/SHA256SUMS)
           test "${#FILES[@]}" -ge 4
           gh release create "$TAG" \
             --repo lifesized/youtube-transcriber \
+            --draft \
             --prerelease \
+            --target "$GITHUB_SHA" \
             --title "$TAG" \
-            --notes "Signed and notarized Transcriber macOS build ${GITHUB_SHA}." \
+            --notes "Signed and notarized Transcriber macOS build ${GITHUB_SHA}. James: publish this draft from the GitHub Releases UI when ready. Drafts are not picked up by electron-updater." \
             "${FILES[@]}"

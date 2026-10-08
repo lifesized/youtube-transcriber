@@ -50,8 +50,11 @@ test("unsigned path step names stay in today's order before any signing step", (
   assert.ok(start >= 0, "Checkout code");
   const slice = names.slice(start, start + UNSIGNED_STEPS.length);
   assert.deepEqual(slice, UNSIGNED_STEPS);
-  const detect = names.indexOf("Detect signing secrets");
-  assert.ok(detect > names.indexOf("Upload build info artifact"));
+  const signJob = workflow.indexOf("\n  sign:");
+  assert.ok(signJob > 0);
+  const build = workflow.slice(0, signJob);
+  assert.doesNotMatch(build, /secrets\.(MACOS_|APPLE_)/);
+  assert.ok(names.indexOf("Upload unsigned app for signing") > names.indexOf("Upload build info artifact"));
 });
 
 test("unsigned artifact name and glob are unchanged", () => {
@@ -78,8 +81,12 @@ test("signing and notarization are gated on the exact secret names", () => {
   ]) {
     assert.ok(workflow.includes(`secrets.${name}`), name);
   }
-  assert.match(workflow, /steps\.signing\.outputs\.sign == 'true'/);
-  assert.match(workflow, /macos-signing-keychain\.sh setup/);
+  assert.match(workflow, /environment: release/);
+  assert.match(workflow, /github\.event_name != 'pull_request'/);
+  const sign = workflow.slice(workflow.indexOf("\n  sign:"), workflow.indexOf("\n  unsigned-path-contract:"));
+  assert.doesNotMatch(sign, /npm ci/);
+  assert.match(sign, /persist-credentials: false/);
+  assert.match(sign, /macos-signing-keychain\.sh setup/);
   assert.match(workflow, /if: always\(\)/);
   assert.match(workflow, /macos-signing-keychain\.sh teardown/);
   assert.match(workflow, /macos-codesign-app\.sh/);
@@ -87,6 +94,9 @@ test("signing and notarization are gated on the exact secret names", () => {
   assert.match(workflow, /macos-notarize\.sh dmg/);
   assert.match(workflow, /build-signed-dmg\.sh/);
   assert.match(workflow, /macos-update-artifacts\.sh/);
+  assert.match(workflow, /assert-signed-fuses\.js/);
+  assert.match(sign, /Read fuses on the signed app/);
+  assert.match(sign, /Read fuses on the app inside the signed DMG/);
   assert.match(workflow, /run-actionlint\.sh/);
   const actionlint = fs.readFileSync(path.join(root, "scripts", "run-actionlint.sh"), "utf8");
   assert.match(actionlint, /EXPECTED_SHA256=/);
@@ -94,9 +104,16 @@ test("signing and notarization are gated on the exact secret names", () => {
 });
 
 test("release job is tag or dispatch only, contents write, no PAT", () => {
-  assert.match(workflow, /tags:\n\s+- ["']beta-v\*["']/);
+  assert.match(workflow, /tags:\n\s+- ["']v\*-beta\.\*["']/);
+  assert.doesNotMatch(workflow, /beta-v\*/);
   assert.match(workflow, /publish_github_release/);
   const release = workflow.slice(workflow.indexOf("name: Publish GitHub prerelease"));
+  assert.match(release, /environment: release/);
+  assert.match(release, /persist-credentials: false/);
+  assert.match(release, /merge-base --is-ancestor/);
+  assert.match(release, /refs\/heads\/beta\/electron-menubar/);
+  assert.match(release, /--draft/);
+  assert.match(release, /--target "\$GITHUB_SHA"/);
   assert.match(release, /permissions:\s*\n\s+contents: write/);
   assert.match(release, /github\.token|GITHUB_TOKEN/);
   assert.doesNotMatch(release, /secrets\.[A-Z0-9_]*TOKEN/);
@@ -188,6 +205,10 @@ test("main wires the updater gate and stops Next before quitAndInstall", () => {
   const afterPack = fs.readFileSync(path.join(root, "electron", "after-pack.js"), "utf8");
   assert.ok(afterPack.includes("copyUpdaterModules"));
   assert.ok(afterPack.includes("electron-updater"));
+  const fuses = fs.readFileSync(path.join(root, "scripts", "assert-signed-fuses.js"), "utf8");
+  assert.match(fuses, /RunAsNode/);
+  assert.match(fuses, /EnableNodeOptionsEnvironmentVariable/);
+  assert.match(fuses, /EnableNodeCliInspectArguments/);
 });
 
 test("docs list every secret and the GitHub update call", () => {
@@ -204,8 +225,15 @@ test("docs list every secret and the GitHub update call", () => {
   ]) {
     assert.ok(docs.includes(name), name);
   }
-  assert.ok(docs.includes("Settings › Secrets and variables › Actions"));
+  assert.ok(docs.includes("Environment secrets"));
+  assert.ok(docs.includes("same-repo"));
+  assert.ok(docs.includes("v*-beta.*"));
+  assert.doesNotMatch(docs, /beta-v\*/);
+  assert.ok(docs.includes("environment: release"));
   const privacy = fs.readFileSync(path.join(root, "extension", "privacy-policy.md"), "utf8");
   assert.ok(privacy.includes("19721"));
   assert.ok(privacy.includes("lifesized/youtube-transcriber"));
+  assert.ok(privacy.includes("releases.atom"));
+  assert.ok(privacy.includes("latest-mac.yml"));
+  assert.ok(privacy.includes("6 hours"));
 });
