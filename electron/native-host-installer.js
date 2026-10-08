@@ -15,7 +15,7 @@ const os = require("os");
 const { execFileSync } = require("child_process");
 const { checkIfTranslocated, writeFileAtomic } = require("./utils.js");
 const { filterValidExtensionIds } = require("../lib/native-host-pair.js");
-const { getStateDir } = require("../lib/local-api-token.js");
+const { getStateDir, getLogDir } = require("../lib/local-api-token.js");
 const config = require("./config.js");
 
 function shSingleQuote(value) {
@@ -89,6 +89,7 @@ class NativeHostInstaller {
     this.hostName = options.hostName || HOST_NAME;
     this.port = options.port || config.port;
     this.stateDir = options.stateDir || getStateDir();
+    this.logDir = options.logDir || getLogDir(this.stateDir);
     this.browsers = options.browsers || this._detectBrowsers();
     this.idsFileCorrupt = false;
     try {
@@ -269,6 +270,7 @@ class NativeHostInstaller {
     for (const browser of this.browsers) {
       try {
         const manifestPath = this._getManifestPath(browser);
+        this._assertAppManifestPath(manifestPath);
         if (fs.existsSync(manifestPath)) {
           fs.unlinkSync(manifestPath);
         }
@@ -359,6 +361,7 @@ class NativeHostInstaller {
 export ELECTRON_RUN_AS_NODE=1
 export PORT=${shSingleQuote(String(this.port))}
 export TRANSCRIBER_STATE_DIR=${shSingleQuote(this.stateDir)}
+export TRANSCRIBER_LOG_DIR=${shSingleQuote(this.logDir)}
 exec ${shSingleQuote(electronBinary)} ${shSingleQuote(hostScript)} "$@"
 `;
     
@@ -370,10 +373,22 @@ exec ${shSingleQuote(electronBinary)} ${shSingleQuote(hostScript)} "$@"
   
   _getManifestPath(browser) {
     fs.mkdirSync(browser.manifestDir, { recursive: true });
-    return path.join(browser.manifestDir, `${this.hostName}.json`);
+    const manifestPath = path.join(browser.manifestDir, `${this.hostName}.json`);
+    this._assertAppManifestPath(manifestPath);
+    return manifestPath;
+  }
+
+  _assertAppManifestPath(manifestPath) {
+    const checkoutManifest = `${config.checkoutNativeHostName}.json`;
+    if (path.basename(manifestPath) === checkoutManifest) {
+      throw new Error(
+        `refusing to write or remove the checkout native-host manifest (${checkoutManifest})`
+      );
+    }
   }
   
   _writeManifest(manifestPath, wrapperPath) {
+    this._assertAppManifestPath(manifestPath);
     const manifest = {
       name: this.hostName,
       description: "Transcriber for YouTube — local server controller",

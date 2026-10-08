@@ -42,6 +42,9 @@ test("packaged app port and host come from electron/config.js", () => {
   assert.equal(config.nativeHostName, "com.transcribed.app.host");
   assert.ok(main.includes("config.port"));
   assert.ok(main.includes("TRANSCRIBER_STATE_DIR"));
+  assert.ok(main.includes("TRANSCRIBER_LOG_DIR"));
+  assert.ok(main.includes('app.setPath("logs"'));
+  assert.ok(main.includes("pinAppPaths"));
   assert.equal(main.includes("const PORT = 19720"), false);
   assert.ok(installer.includes("config.nativeHostName"));
   assert.ok(installer.includes("transcriber-app-host.sh"));

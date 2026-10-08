@@ -111,8 +111,10 @@ test("unauthorizedJson shape", () => {
 
 test("getStateDir honors TRANSCRIBER_STATE_DIR and defaults to Transcriber", () => {
   const prev = process.env.TRANSCRIBER_STATE_DIR;
+  const prevLog = process.env.TRANSCRIBER_LOG_DIR;
   try {
     delete process.env.TRANSCRIBER_STATE_DIR;
+    delete process.env.TRANSCRIBER_LOG_DIR;
     const def = tokenMod.getStateDir();
     if (process.platform === "darwin") {
       assert.ok(def.endsWith(`${path.sep}Transcriber`));
@@ -123,9 +125,17 @@ test("getStateDir honors TRANSCRIBER_STATE_DIR and defaults to Transcriber", () 
     process.env.TRANSCRIBER_STATE_DIR = "/tmp/ytt-app-state";
     assert.equal(tokenMod.getStateDir(), "/tmp/ytt-app-state");
     assert.equal(tokenMod.getLocalApiTokenPath(), path.join("/tmp/ytt-app-state", "local-api.token"));
+    assert.equal(
+      tokenMod.getLogDir(),
+      process.platform === "darwin"
+        ? path.join("/tmp/ytt-app-state", "logs")
+        : "/tmp/ytt-app-state"
+    );
   } finally {
     if (prev === undefined) delete process.env.TRANSCRIBER_STATE_DIR;
     else process.env.TRANSCRIBER_STATE_DIR = prev;
+    if (prevLog === undefined) delete process.env.TRANSCRIBER_LOG_DIR;
+    else process.env.TRANSCRIBER_LOG_DIR = prevLog;
   }
 });
 

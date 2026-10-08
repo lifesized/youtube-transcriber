@@ -94,13 +94,19 @@ Keeps bundle smaller, ensures ABI compatibility across all components.
 
 ## Data Directory
 
-**macOS**: `~/Library/Application Support/Transcriber/`
+Packaged app (macOS): `~/Library/Application Support/Transcriber App/`  
+Checkout `npm run dev`: `~/Library/Application Support/Transcriber/`
 
-Contents:
+App contents:
 - `transcriber.db` — SQLite database (Prisma)
 - `local-api.token` — Loopback Bearer token
-- `transcriber-host.sh` — Native messaging wrapper script
+- `transcriber-app-host.sh` — Native messaging wrapper script
 - `extension-ids.json` — User-configured extension IDs (optional)
+- `electron-secrets.json` — Encrypted LLM/Notion settings
+- `backups/` — Import library backups
+- `native-host-state.json` — Native-host runtime state
+
+Logs: `~/Library/Logs/Transcriber App/` (checkout host: `~/Library/Logs/Transcriber/`)
 
 ---
 
@@ -111,7 +117,7 @@ Contents:
 3. Open → Gatekeeper blocks → System Settings → Privacy & Security → "Open Anyway"
 4. App launches, tray icon appears
 5. Install extension (Chrome Web Store unlisted)
-6. Create `~/Library/Application Support/Transcriber/extension-ids.json` with extension ID
+6. Create `~/Library/Application Support/Transcriber App/extension-ids.json` with extension ID
 7. Tray menu → "Reinstall Browser Connection" → manifests written
 8. Extension connects, transcribe videos
 

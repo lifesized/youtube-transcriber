@@ -56,9 +56,9 @@ Quit Transcriber, delete `/Applications/Transcriber.app`. Optional:
 
 ```bash
 rm -rf ~/Library/Application\ Support/Transcriber\ App
-rm -rf ~/Library/Logs/Transcriber
+rm -rf ~/Library/Logs/Transcriber\ App
 ```
 
 ## Support
 
-Slack DM James, or james@transcribed.com. Include macOS version, Transcriber version, the error, and `~/Library/Logs/Transcriber/native-host.log`.
+Slack DM James, or james@transcribed.com. Include macOS version, Transcriber version, the error, and `~/Library/Logs/Transcriber App/native-host.log`.

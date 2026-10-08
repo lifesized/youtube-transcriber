@@ -18,6 +18,10 @@ test("default target is Transcriber app on 19721 with the app host name", () => 
   assert.equal(app.apiBase, "http://127.0.0.1:19721");
   assert.equal(app.nativeHostName, "com.transcribed.app.host");
   assert.equal(app.pairUrl, "http://127.0.0.1:19721/api/native-host/pair");
+  assert.equal(
+    app.nativeHostLogHint,
+    "~/Library/Logs/Transcriber App/native-host.log"
+  );
 });
 
 test("Dev server target uses 19720 and the checkout host name", () => {
@@ -26,6 +30,14 @@ test("Dev server target uses 19720 and the checkout host name", () => {
   assert.equal(dev.label, "Dev server");
   assert.equal(dev.apiBase, "http://127.0.0.1:19720");
   assert.equal(dev.nativeHostName, "com.transcribed.host");
+  assert.equal(
+    dev.nativeHostLogHint,
+    "~/Library/Logs/Transcriber/native-host.log"
+  );
+  assert.notEqual(
+    ConnectTarget.getTarget("app").nativeHostLogHint,
+    dev.nativeHostLogHint
+  );
 });
 
 test("switching targets never auto-picks the other when one is down", () => {

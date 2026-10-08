@@ -15,7 +15,7 @@ const http = require("http");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
-const { ensureInEnv, getStateDir } = require("../lib/local-api-token.js");
+const { ensureInEnv, getStateDir, getLogDir } = require("../lib/local-api-token.js");
 
 const HEALTH_CHECK_INTERVAL = 500;
 const HEALTH_CHECK_TIMEOUT = 1500;
@@ -146,6 +146,7 @@ class ServerManager extends EventEmitter {
       HOSTNAME: "127.0.0.1",
       TRANSCRIBER_LOCAL_TOKEN: process.env.TRANSCRIBER_LOCAL_TOKEN,
       TRANSCRIBER_STATE_DIR: process.env.TRANSCRIBER_STATE_DIR || getStateDir(),
+      TRANSCRIBER_LOG_DIR: process.env.TRANSCRIBER_LOG_DIR || getLogDir(),
     };
     
     // Add paths to bundled binaries (ffmpeg, yt-dlp)

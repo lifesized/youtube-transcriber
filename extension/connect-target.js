@@ -30,6 +30,7 @@
       port: "19721",
       nativeHostName: "com.transcribed.app.host",
       pairUrl: "http://127.0.0.1:19721/api/native-host/pair",
+      nativeHostLogHint: "~/Library/Logs/Transcriber App/native-host.log",
       unreachable: "Transcriber app isn't running.",
     },
     [DEV]: {
@@ -39,6 +40,7 @@
       port: "19720",
       nativeHostName: "com.transcribed.host",
       pairUrl: "http://127.0.0.1:19720/api/native-host/pair",
+      nativeHostLogHint: "~/Library/Logs/Transcriber/native-host.log",
       unreachable: "Can't reach your dev server. Start it, then try again.",
     },
   };

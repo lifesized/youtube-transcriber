@@ -1859,7 +1859,8 @@ async function startTranscriberClicked() {
       init();
     } else {
       el.offlineStartError.textContent =
-        res?.error || "Couldn't start the server. Check ~/Library/Logs/Transcriber/native-host.log";
+        res?.error ||
+        `Couldn't start the server. Check ${(await currentConnectTarget()).nativeHostLogHint}`;
       el.offlineStartError.hidden = false;
     }
   } catch (e) {
@@ -3287,7 +3288,8 @@ async function startServerClicked() {
       el.stopServerHint.hidden = false;
     } else {
       el.stopServerHint.textContent =
-        res?.error || "Couldn't start the server. Check ~/Library/Logs/Transcriber/native-host.log";
+        res?.error ||
+        `Couldn't start the server. Check ${(await currentConnectTarget()).nativeHostLogHint}`;
       el.stopServerHint.hidden = false;
     }
   } catch (e) {

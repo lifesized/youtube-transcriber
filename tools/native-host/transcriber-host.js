@@ -24,6 +24,7 @@ const {
   ensureInEnv,
   getLocalApiTokenPath,
   getStateDir,
+  getLogDir,
   ENV_NAME,
 } = require("../../lib/local-api-token.js");
 const {
@@ -51,10 +52,7 @@ function stateDir() {
 }
 
 function logDir() {
-  if (process.platform === "darwin") {
-    return path.join(os.homedir(), "Library", "Logs", "Transcriber");
-  }
-  return stateDir();
+  return getLogDir(stateDir());
 }
 
 function stateFile() {
@@ -454,4 +452,8 @@ module.exports = {
   listen,
   getPort,
   healthUrl,
+  stateDir,
+  logDir,
+  logFile,
+  stateFile,
 };

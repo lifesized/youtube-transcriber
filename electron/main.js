@@ -23,8 +23,18 @@ const { checkIfTranslocated } = require("./utils.js");
 const IS_DEV = process.env.NODE_ENV === "development";
 const PORT = config.port;
 const APP_STATE_DIR = config.resolveAppStateDir();
-app.setPath("userData", APP_STATE_DIR);
-process.env.TRANSCRIBER_STATE_DIR = APP_STATE_DIR;
+const APP_LOG_DIR = config.resolveAppLogDir();
+
+function pinAppPaths() {
+  app.setPath("userData", APP_STATE_DIR);
+  app.setPath("sessionData", APP_STATE_DIR);
+  app.setPath("logs", APP_LOG_DIR);
+  app.setPath("crashDumps", config.crashDumpsDir(APP_STATE_DIR));
+  process.env.TRANSCRIBER_STATE_DIR = APP_STATE_DIR;
+  process.env.TRANSCRIBER_LOG_DIR = APP_LOG_DIR;
+}
+
+pinAppPaths();
 
 let serverManager = null;
 let trayManager = null;
@@ -46,13 +56,13 @@ app.on("second-instance", () => {
   }
 });
 
-// Set app name for menu bar. Re-pin userData so setName does not
-// collide with the checkout's ~/Library/Application Support/Transcriber.
+// Set app name for menu bar. Re-pin paths so setName does not
+// collide with the checkout's ~/Library/Application Support/Transcriber
+// or ~/Library/Logs/Transcriber.
 if (process.platform === "darwin") {
   app.setName("Transcriber");
 }
-app.setPath("userData", APP_STATE_DIR);
-process.env.TRANSCRIBER_STATE_DIR = APP_STATE_DIR;
+pinAppPaths();
 
 // Quit when all windows are closed (but we don't use windows, just tray)
 app.on("window-all-closed", () => {

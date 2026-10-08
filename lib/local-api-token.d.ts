@@ -2,6 +2,7 @@ export const TOKEN_FILE_NAME: string;
 export const COOKIE_NAME: string;
 export const ENV_NAME: string;
 export function getStateDir(): string;
+export function getLogDir(state?: string): string;
 export function getLocalApiTokenPath(): string;
 export function tokensEqual(a: string, b: string): boolean;
 export function ensureLocalApiToken(opts?: { writeEnvToFile?: boolean }): string;

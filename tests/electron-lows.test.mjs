@@ -92,8 +92,13 @@ test("app native host wrapper sets PORT and TRANSCRIBER_STATE_DIR", () => {
     assert.match(script, /export ELECTRON_RUN_AS_NODE=1/);
     assert.match(script, new RegExp(`export PORT='${config.port}'`));
     assert.match(script, /export TRANSCRIBER_STATE_DIR=/);
+    assert.match(script, /export TRANSCRIBER_LOG_DIR=/);
     assert.ok(script.includes(dir));
     assert.equal(installer._getManifestPath({ manifestDir: dir }), path.join(dir, "com.transcribed.app.host.json"));
+    assert.notEqual(
+      path.basename(installer._getManifestPath({ manifestDir: dir })),
+      "com.transcribed.host.json"
+    );
     assert.ok(config.resolveAppStateDir("/Users/james", "darwin").endsWith("Transcriber App"));
     assert.equal(config.port, 19721);
   } finally {

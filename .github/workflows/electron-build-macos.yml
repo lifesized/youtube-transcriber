@@ -245,7 +245,10 @@ jobs:
           ROOT="$PWD"
           APP_PATH="$ROOT/dist-electron/mac-arm64/Transcriber.app/Contents/MacOS/Transcriber"
           DATA_DIR="$(mktemp -d /tmp/transcriber-launch-XXXXXX)"
-          mkdir -p "$DATA_DIR/Library/Application Support/Transcriber"
+          APP_STATE=$(HOME="$DATA_DIR" node -p "require('./electron/config.js').resolveAppStateDir()")
+          CHECKOUT_STATE=$(HOME="$DATA_DIR" node -p "require('./electron/config.js').resolveCheckoutStateDir()")
+          mkdir -p "$APP_STATE" "$CHECKOUT_STATE"
+          printf 'checkout-sentinel\n' > "$CHECKOUT_STATE/.keep"
           TOKEN="$(openssl rand -hex 32)"
           LOG="$DATA_DIR/main.log"
           PORT=$(node -p "require('./electron/config.js').port")
@@ -314,6 +317,37 @@ jobs:
                 exit 1
               fi
               echo "✓ install helper args match found PID $APP_PID"
+              echo "----- app vs checkout state dirs -----"
+              ls -la "$APP_STATE" || true
+              ls -la "$CHECKOUT_STATE" || true
+              if grep -q "User data:" "$LOG"; then
+                grep "User data:" "$LOG"
+                grep "User data:" "$LOG" | grep -q "Transcriber App" || {
+                  echo "ERROR: packaged app userData is not Transcriber App"
+                  exit 1
+                }
+              fi
+              for leaked in local-api.token extension-ids.json transcriber.db electron-secrets.json native-host-state.json native-host.json; do
+                if [ -e "$CHECKOUT_STATE/$leaked" ]; then
+                  echo "ERROR: packaged app wrote checkout path $leaked"
+                  exit 1
+                fi
+              done
+              if [ -d "$CHECKOUT_STATE/backups" ]; then
+                echo "ERROR: packaged app created checkout backups/"
+                exit 1
+              fi
+              CHECKOUT_LOG="$DATA_DIR/Library/Logs/Transcriber/native-host.log"
+              if [ -f "$CHECKOUT_LOG" ]; then
+                echo "ERROR: packaged app wrote $CHECKOUT_LOG"
+                exit 1
+              fi
+              if [ ! -f "$APP_STATE/local-api.token" ] && [ ! -f "$APP_STATE/transcriber.db" ]; then
+                echo "ERROR: packaged app did not write token or db under Transcriber App"
+                find "$DATA_DIR/Library" -maxdepth 4 -type f || true
+                exit 1
+              fi
+              echo "✓ packaged app state stayed out of checkout Transcriber/"
               break
             fi
             echo "  launch wait $i/60 (http=${HEALTH:-curl-fail})"
@@ -392,12 +426,20 @@ jobs:
           echo "✓ native host script exists at wrapper target"
 
           WRAPPER=/tmp/transcriber-host.sh
-          printf '#!/bin/sh\nexport ELECTRON_RUN_AS_NODE=1\nexec "%s" "%s" "$@"\n' \
-            "$APP_PATH" "$HOST_JS" > "$WRAPPER"
+          NMH_HOME="$(mktemp -d /tmp/transcriber-nmh-XXXXXX)"
+          NMH_PORT=$(node -p "require('./electron/config.js').port")
+          NMH_APP_STATE=$(HOME="$NMH_HOME" node -p "require('./electron/config.js').resolveAppStateDir()")
+          NMH_APP_LOG=$(HOME="$NMH_HOME" node -p "require('./electron/config.js').resolveAppLogDir()")
+          NMH_CHECKOUT_STATE=$(HOME="$NMH_HOME" node -p "require('./electron/config.js').resolveCheckoutStateDir()")
+          printf '#!/bin/sh\nexport ELECTRON_RUN_AS_NODE=1\nexport PORT=%s\nexport TRANSCRIBER_STATE_DIR=%s\nexport TRANSCRIBER_LOG_DIR=%s\nexec "%s" "%s" "$@"\n' \
+            "'${NMH_PORT}'" \
+            "'${NMH_APP_STATE}'" \
+            "'${NMH_APP_LOG}'" \
+            "$APP_PATH" \
+            "$HOST_JS" > "$WRAPPER"
           chmod +x "$WRAPPER"
 
           echo "----- native-host ping -----"
-          NMH_HOME="$(mktemp -d /tmp/transcriber-nmh-XXXXXX)"
           python3 - <<'PY' | HOME="$NMH_HOME" "$WRAPPER" > /tmp/nmh-pong.bin
           import sys, struct, json
           payload = json.dumps({"id": "ci-ping", "cmd": "ping"}).encode("utf-8")
@@ -423,12 +465,14 @@ jobs:
 
           echo "----- native-host getLocalToken -----"
           PAIR_ID="abcdefghijklmnopabcdefghijklmnop"
-          NMH_STATE="$NMH_HOME/Library/Application Support/Transcriber"
-          mkdir -p "$NMH_STATE"
-          printf '["%s"]\n' "$PAIR_ID" > "$NMH_STATE/extension-ids.json"
+          mkdir -p "$NMH_APP_STATE" "$NMH_CHECKOUT_STATE"
+          printf '["%s"]\n' "$PAIR_ID" > "$NMH_APP_STATE/extension-ids.json"
           EXPECTED_TOKEN="$(python3 -c 'print("ab" * 32)')"
-          printf '%s' "$EXPECTED_TOKEN" > "$NMH_STATE/local-api.token"
-          chmod 600 "$NMH_STATE/local-api.token"
+          printf '%s' "$EXPECTED_TOKEN" > "$NMH_APP_STATE/local-api.token"
+          chmod 600 "$NMH_APP_STATE/local-api.token"
+          printf '[]\n' > "$NMH_CHECKOUT_STATE/extension-ids.json"
+          printf '%s' "$(python3 -c 'print("cd" * 32)')" > "$NMH_CHECKOUT_STATE/local-api.token"
+          chmod 600 "$NMH_CHECKOUT_STATE/local-api.token"
           python3 - <<'PY' | HOME="$NMH_HOME" "$WRAPPER" "chrome-extension://${PAIR_ID}/" > /tmp/nmh-token.bin
           import sys, struct, json
           payload = json.dumps({"id": "ci-token", "cmd": "getLocalToken"}).encode("utf-8")
@@ -563,10 +607,11 @@ jobs:
           
           # 6. Launch packaged server with ELECTRON_RUN_AS_NODE on a temp data dir
           DATA_DIR="$(mktemp -d /tmp/transcriber-ci-XXXXXX)"
-          mkdir -p "$DATA_DIR/Library/Application Support/Transcriber"
+          APP_STATE=$(HOME="$DATA_DIR" node -p "require('./electron/config.js').resolveAppStateDir()")
+          mkdir -p "$APP_STATE"
           mkdir -p "$STANDALONE/tmp"
           TOKEN="$(openssl rand -hex 32)"
-          DB_PATH="$DATA_DIR/Library/Application Support/Transcriber/transcriber.db"
+          DB_PATH="$APP_STATE/transcriber.db"
           LOG_FILE="$DATA_DIR/server.log"
           PORT=$(node -p "require('./electron/config.js').port")
           
