@@ -440,7 +440,7 @@ test("tray manager uses template images and human status copy, not setTitle T", 
   assert.ok(content.includes("Never destroy()"));
   assert.ok(main.includes("first-launch"));
   assert.ok(copySrc.includes("Try Again"));
-  assert.ok(copySrc.includes("Restart Transcriber"));
+  assert.ok(copySrc.includes("Start Transcriber"));
   assert.ok(content.includes("TRY_AGAIN"));
   assert.ok(content.includes("RESTART"));
   assert.ok(content.includes("Connect Browser Extension…"));
