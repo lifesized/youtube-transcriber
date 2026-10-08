@@ -318,6 +318,21 @@ test("native host never calls the local API without a Bearer token", () => {
   });
 });
 
+test("rotation chmods a 0644 native-host.log so the .1 is 0600", () => {
+  withHostLogDir(() => {
+    const file = host.logFile();
+    const rotated = `${file}.1`;
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, "b".repeat(host.LOG_MAX_BYTES));
+    fs.chmodSync(file, 0o644);
+    assert.equal(logMode(file), 0o644, "source starts 0644");
+    host.log("after rotation");
+    assert.equal(logMode(rotated), 0o600, ".1 from a 0644 source");
+    assert.equal(logMode(file), 0o600);
+    assert.equal(fs.statSync(rotated).size, host.LOG_MAX_BYTES);
+  });
+});
+
 test("native-host.log rotates at about 5MB and keeps one .1", () => {
   assert.equal(host.LOG_MAX_BYTES, 5 * 1024 * 1024);
   withHostLogDir((_, logDir) => {
