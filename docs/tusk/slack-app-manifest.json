@@ -1,9 +1,9 @@
 {
   "display_information": {
     "name": "Tusk",
-    "description": "Drop a YouTube link, get an instant work-grade summary in thread.",
+    "description": "Local Slack bot in Transcriber. Paste a supported link for 👀; /tusk help and status.",
     "background_color": "#0a0a0a",
-    "long_description": "Tusk turns any YouTube link posted in Slack into a concise, action-oriented summary delivered in thread. Mention @Tusk on a message containing a YouTube URL and the bot replies with the key points, decisions, and action items distilled from the video. Built for engineering, sales, support, and leadership teams that need to triage long-form video without watching it end-to-end. Tusk runs locally inside the Transcriber menu-bar app on your Mac using Slack Socket Mode — no public URL, tunnel, or cloud worker."
+    "long_description": "Tusk is a Socket Mode Slack bot that runs locally inside the Transcriber menu-bar app on your Mac. No public URL, tunnel, or cloud worker. Milestone 1: invite @Tusk to a public channel, paste a YouTube, Spotify episode, or LinkedIn URL, and Tusk adds 👀. /tusk help and /tusk status report whether the Mac app is connected. Threaded summaries and @Tusk questions are not in this build. channels:history delivers every message in public channels Tusk has joined; Tusk ignores DMs, private channels, other workspaces, and Slack Connect externals."
   },
   "features": {
     "bot_user": {

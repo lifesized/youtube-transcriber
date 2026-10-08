@@ -2,11 +2,12 @@
 
 /**
  * Slack text → supported Transcriber URLs.
- * YouTube detection matches lib/tusk/youtube.ts. LinkedIn uses the LI-M1
- * rules from lib/url-parser.ts. Arbitrary / generic URLs are ignored.
+ * Parse Slack <target|label> structurally, use ONLY the target, decode
+ * HTML entities once (&amp; last), then rebuild a canonical URL from IDs.
  */
 
-const URL_REGEX = /https?:\/\/[^\s<>()]+/g;
+const BARE_URL_REGEX = /https?:\/\/[^\s<>()]+/g;
+const SLACK_MRKDWN_LINK = /<([^<>]+)>/g;
 const VIDEO_ID_REGEX = /^[a-zA-Z0-9_-]{11}$/;
 const SPOTIFY_EPISODE_REGEX = /^[a-zA-Z0-9]{22}$/;
 const LINKEDIN_EVENT_PATH = /^\/events\/[^/]*?(\d{19})(?:\/|$)/;
@@ -14,14 +15,51 @@ const LINKEDIN_ACTIVITY = /(activity|ugcPost|share)[-:]([0-9]+)/;
 const LINKEDIN_POST_PATH = /^\/(?:feed\/update|posts)\//;
 const LINKEDIN_HOSTS = ["www.linkedin.com", "linkedin.com"];
 
-function normalizeSlackUrl(rawUrl) {
-  const withoutWrapper = rawUrl.replace(/^</, "").split("|")[0]?.split(">")[0] ?? rawUrl;
-  return withoutWrapper.replace(/[.,;:!?)]$/g, "");
+function decodeHtmlEntitiesOnce(value) {
+  return String(value || "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/gi, "'")
+    .replace(/&amp;/g, "&");
+}
+
+function slackLinkTarget(inner) {
+  const raw = String(inner || "");
+  const pipe = raw.indexOf("|");
+  const target = pipe === -1 ? raw : raw.slice(0, pipe);
+  return decodeHtmlEntitiesOnce(target).trim();
+}
+
+function stripTrailingPunctuation(url) {
+  return String(url || "").replace(/[.,;:!?)]+$/g, "");
 }
 
 function extractRawUrls(text) {
-  const matches = String(text || "").match(URL_REGEX) ?? [];
-  return matches.map(normalizeSlackUrl);
+  const raw = String(text || "");
+  const urls = [];
+  const seen = new Set();
+
+  for (const match of raw.matchAll(SLACK_MRKDWN_LINK)) {
+    const target = stripTrailingPunctuation(slackLinkTarget(match[1]));
+    if (/^https?:\/\//i.test(target) && !seen.has(target)) {
+      seen.add(target);
+      urls.push(target);
+    }
+  }
+
+  const withoutWrapped = raw.replace(SLACK_MRKDWN_LINK, " ");
+  const decoded = decodeHtmlEntitiesOnce(withoutWrapped);
+  const bare = decoded.match(BARE_URL_REGEX) || [];
+  for (const url of bare) {
+    const cleaned = stripTrailingPunctuation(url);
+    if (!seen.has(cleaned)) {
+      seen.add(cleaned);
+      urls.push(cleaned);
+    }
+  }
+  return urls;
 }
 
 function extractYoutubeVideoId(url) {
@@ -74,22 +112,24 @@ function parseLinkedInPage(url) {
   }
   const event = path.match(LINKEDIN_EVENT_PATH);
   if (event) {
+    const canonicalUrl = `https://www.linkedin.com/events/${event[1]}/`;
     return {
       platform: "linkedin",
       contentId: `linkedin:event-${event[1]}`,
-      url,
-      canonicalUrl: `https://www.linkedin.com/events/${event[1]}/`,
+      url: canonicalUrl,
+      canonicalUrl,
     };
   }
   const activity =
     parsed.searchParams.get("highlightedUpdateUrn")?.match(LINKEDIN_ACTIVITY) ??
     (LINKEDIN_POST_PATH.test(path) ? path.match(LINKEDIN_ACTIVITY) : null);
   if (activity) {
+    const canonicalUrl = `https://www.linkedin.com/feed/update/urn:li:${activity[1]}:${activity[2]}/`;
     return {
       platform: "linkedin",
       contentId: `linkedin:${activity[2]}`,
-      url,
-      canonicalUrl: `https://www.linkedin.com/feed/update/urn:li:${activity[1]}:${activity[2]}/`,
+      url: canonicalUrl,
+      canonicalUrl,
     };
   }
   return null;
@@ -106,12 +146,20 @@ function parseSpotifyEpisode(url) {
   if (host !== "open.spotify.com" || !parsed.pathname.startsWith("/episode/")) return null;
   const episodeId = parsed.pathname.split("/episode/")[1]?.split("/")[0]?.split("?")[0];
   if (!episodeId || !SPOTIFY_EPISODE_REGEX.test(episodeId)) return null;
-  return { platform: "spotify", contentId: episodeId, url };
+  const canonicalUrl = `https://open.spotify.com/episode/${episodeId}`;
+  return { platform: "spotify", contentId: episodeId, url: canonicalUrl };
 }
 
 function classifySupportedUrl(url) {
   const videoId = extractYoutubeVideoId(url);
-  if (videoId) return { platform: "youtube", contentId: videoId, url, videoId };
+  if (videoId) {
+    return {
+      platform: "youtube",
+      contentId: videoId,
+      url: `https://www.youtube.com/watch?v=${videoId}`,
+      videoId,
+    };
+  }
   const spotify = parseSpotifyEpisode(url);
   if (spotify) return spotify;
   const linkedin = parseLinkedInPage(url);
@@ -126,7 +174,7 @@ function extractYouTubeUrlsFromSlackText(text) {
     const videoId = extractYoutubeVideoId(url);
     if (!videoId || seen.has(videoId)) continue;
     seen.add(videoId);
-    urls.push({ url, videoId });
+    urls.push({ url: `https://www.youtube.com/watch?v=${videoId}`, videoId });
   }
   return urls;
 }
@@ -146,7 +194,9 @@ function extractSupportedSlackUrls(text) {
 }
 
 module.exports = {
-  normalizeSlackUrl,
+  decodeHtmlEntitiesOnce,
+  slackLinkTarget,
+  extractRawUrls,
   extractYouTubeUrlsFromSlackText,
   extractSupportedSlackUrls,
   classifySupportedUrl,

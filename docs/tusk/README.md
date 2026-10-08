@@ -2,6 +2,8 @@
 
 Tusk is a Socket Mode Slack bot that runs inside the Transcriber Electron menu-bar app. No public request URL, tunnel, or cloud worker.
 
+What ships today (milestone 1): `/tusk help`, `/tusk status`, and a 👀 reaction on a supported YouTube, Spotify episode, or LinkedIn URL in a public channel Tusk is in. Threaded summaries and `@Tusk` Q&A are not in this build.
+
 - **Manifest:** [slack-app-manifest.yaml](./slack-app-manifest.yaml) (same content as [slack-app-manifest.json](./slack-app-manifest.json))
 - **Setup for James:** [setup.md](./setup.md)
 
@@ -12,13 +14,13 @@ Display copy is the old Transcriber Dev manifest, renamed to Tusk. Socket Mode i
 | Scope | Why |
 | --- | --- |
 | `app_mentions:read` | `@Tusk` in a channel (and later `@tusk <question>` in a thread). |
-| `channels:history` | Required for the `message.channels` event so a pasted link in #youtube-notes works without a mention. |
-| `chat:write` | `/tusk help`, `/tusk status`, and later threaded summaries. |
+| `channels:history` | Required for the `message.channels` event so a pasted link in #youtube-notes works without a mention. This delivers **every message** in public channels Tusk has joined, not only messages that contain a link. Tusk ignores bot messages, edits, other workspaces, Slack Connect externals, DMs, and private channels. |
+| `chat:write` | Post in channels Tusk is invited to. Slash-command replies use the Socket Mode ack payload and do not need this scope. Milestone 2 uses it for threaded summaries. |
 | `commands` | The `/tusk` slash command. |
 | `files:write` | Later: upload a transcript file. Unused in milestone 1. Included now so the Slack app is created once. |
 | `reactions:write` | Milestone 1: 👀 on a supported link. Later: progress reactions. |
 
-**Not requested:** `incoming-webhook`, OAuth redirect URLs, `chat:write.public` (Tusk must be invited), `groups:history` / `im:history` (public channels only for v0), `channels:read` (empty allowlist = every channel Slack already delivers, i.e. channels Tusk is in).
+**Not requested:** `incoming-webhook`, OAuth redirect URLs, `chat:write.public` (Tusk must be invited), `groups:history` / `im:history` (DMs, MPIMs, and private channels are denied unless the channel ID is on the explicit allowlist), `channels:read`. An empty allowlist is **not** allow-all: only public channels Tusk is a member of. Slash commands in any other conversation get an ephemeral hint.
 
 The **app-level token** (`xapp-…`) is created in the Slack UI after the app exists. It needs only `connections:write` so Socket Mode can open a websocket. That is not a bot OAuth scope.
 
@@ -38,6 +40,6 @@ Tusk does **not** add `@slack/bolt` or `@slack/socket-mode`.
 - Bolt pulls Express (and an HTTP Events API path). There is no public endpoint.
 - `@slack/socket-mode` plus `@slack/web-api` still pull axios, `ws`, and a retry stack. Those packages would have to be listed in `electron-builder.json` `files` (the asar allowlist is otherwise just `better-sqlite3`) and would show up in the size budget.
 - Electron 44 / Node 22 already have `fetch` and `WebSocket`.
-- REST calls reuse the vendored `lib/tusk/web-api.ts` (from the old bot, Inngest comments stripped). Socket Mode is a small first-party client in `electron/tusk/runtime.js` that is mocked in unit tests.
+- REST calls use the first-party client in `electron/tusk/slack-api.js` (`auth.test`, `reactions.add`, `apps.connections.open`). The vendored `lib/tusk/web-api.ts` is kept for milestone 2 thread posts and file uploads; it is not on the Socket Mode path. Socket Mode is a small first-party client in `electron/tusk/runtime.js` that is mocked in unit tests.
 
 Size delta from new npm dependencies: **0**.

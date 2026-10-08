@@ -11,27 +11,43 @@ const { parseContentUrl, extractLinkedInContentId } = await import("../lib/url-p
 const { extractYouTubeUrlsFromSlackText } = await import("../lib/tusk/youtube.ts");
 
 test("ported YouTube extractor matches the old Slack tests", () => {
+  const canonical = [{ url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", videoId: "dQw4w9WgXcQ" }];
   assert.deepEqual(
     extractYouTubeUrlsFromSlackText("watch this https://www.youtube.com/watch?v=dQw4w9WgXcQ please"),
-    [{ url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", videoId: "dQw4w9WgXcQ" }]
+    canonical
   );
   assert.deepEqual(
-    extractYouTubeUrlsFromSlackText("<https://youtu.be/dQw4w9WgXcQ|youtu.be/dQw4w9WgXcQ>"),
-    [{ url: "https://youtu.be/dQw4w9WgXcQ", videoId: "dQw4w9WgXcQ" }]
-  );
-  assert.deepEqual(
-    extractYouTubeUrlsFromSlackText(
-      "https://example.com https://youtu.be/dQw4w9WgXcQ https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-    ),
-    [{ url: "https://youtu.be/dQw4w9WgXcQ", videoId: "dQw4w9WgXcQ" }]
+    detect.extractYouTubeUrlsFromSlackText("<https://youtu.be/dQw4w9WgXcQ|youtu.be/dQw4w9WgXcQ>"),
+    canonical
   );
   assert.deepEqual(
     detect.extractYouTubeUrlsFromSlackText(
       "https://example.com https://youtu.be/dQw4w9WgXcQ https://www.youtube.com/watch?v=dQw4w9WgXcQ"
     ),
+    canonical
+  );
+  assert.deepEqual(
     extractYouTubeUrlsFromSlackText(
       "https://example.com https://youtu.be/dQw4w9WgXcQ https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-    )
+    ).map((u) => u.videoId),
+    ["dQw4w9WgXcQ"]
+  );
+});
+
+test("Slack mrkdwn uses only the target and decodes entities with &amp; last", () => {
+  assert.deepEqual(
+    detect.extractYouTubeUrlsFromSlackText("https://www.youtube.com/watch?share&amp;v=dQw4w9WgXcQ"),
+    [{ url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", videoId: "dQw4w9WgXcQ" }]
+  );
+  assert.deepEqual(
+    detect.extractSupportedSlackUrls("<https://evil.example|https://youtu.be/dQw4w9WgXcQ>"),
+    []
+  );
+  assert.deepEqual(
+    detect.extractSupportedSlackUrls("<https://youtu.be/dQw4w9WgXcQ|https://evil.example>").map(
+      (h) => h.url
+    ),
+    ["https://www.youtube.com/watch?v=dQw4w9WgXcQ"]
   );
 });
 

@@ -20,35 +20,81 @@ function envelope(event, extra = {}) {
   };
 }
 
-function helpers() {
-  return { dedupe: gates.createDedupe(), rateLimit: gates.createRateLimiter({ maxPerWindow: 2, windowMs: 60_000 }) };
+function helpers(overrides = {}) {
+  return {
+    dedupe: gates.createDedupe(),
+    rateLimit: gates.createRateLimiter({
+      maxPerWindow: 2,
+      maxPerChannel: 2,
+      maxPerUser: 8,
+      maxGlobal: 20,
+      windowMs: 60_000,
+      ...overrides,
+    }),
+  };
 }
 
 const userMessage = {
   type: "message",
   user: "Ujames",
   channel: "C01234567",
+  channel_type: "channel",
   ts: "1710000000.000100",
   text: "https://youtu.be/dQw4w9WgXcQ",
   client_msg_id: "client-1",
 };
 
-test("team gate records first team and ignores others", () => {
+test("empty team pin denies every event until auth.test sets it", () => {
   const h = helpers();
-  assert.equal(gates.gateEvent(envelope(userMessage), { teamId: "" }, h).ok, true);
+  assert.equal(gates.teamAllowed("THOME", ""), false);
+  assert.equal(gates.gateEvent(envelope(userMessage), { teamId: "" }, h).reason, "wrong_team");
+  assert.equal(gates.gateEvent(envelope(userMessage), { teamId: "THOME" }, h).ok, true);
   const other = envelope(userMessage, { team_id: "TOTHER", event_id: "Ev2" });
-  assert.equal(gates.gateEvent(other, { teamId: "THOME" }, h).reason, "wrong_team");
+  assert.equal(gates.gateEvent(other, { teamId: "THOME" }, helpers()).reason, "wrong_team");
 });
 
-test("channel allowlist empty means invited channels; set list is exclusive", () => {
+test("Slack Connect external members are ignored even in the pinned workspace", () => {
   const h = helpers();
+  const external = envelope({ ...userMessage, user_team: "TEXT", team: "TEXT" });
+  assert.equal(gates.gateEvent(external, { teamId: "THOME" }, h).reason, "slack_connect");
+});
+
+test("empty allowlist is public channels only; DMs MPIMs and private channels are denied", () => {
   assert.equal(gates.channelAllowed("C01234567", []), true);
+  assert.equal(gates.channelAllowed("C01234567", [], "channel"), true);
+  assert.equal(gates.channelAllowed("D01234567", []), false);
+  assert.equal(gates.channelAllowed("C01234567", [], "im"), false);
+  assert.equal(gates.channelAllowed("C01234567", [], "mpim"), false);
+  assert.equal(gates.channelAllowed("G01234567", []), false);
+  assert.equal(gates.channelAllowed("C01234567", [], "group"), false);
   assert.equal(gates.channelAllowed("C01234567", ["C01234567"]), true);
   assert.equal(gates.channelAllowed("C99999999", ["C01234567"]), false);
   assert.equal(
-    gates.gateEvent(envelope(userMessage), { teamId: "THOME", channelAllowlist: ["C99999999"] }, h).reason,
+    gates.gateEvent(envelope(userMessage), { teamId: "THOME", channelAllowlist: ["C99999999"] }, helpers())
+      .reason,
     "channel"
   );
+  const dm = envelope({ ...userMessage, channel: "D01234567", channel_type: "im" });
+  assert.equal(gates.gateEvent(dm, { teamId: "THOME" }, helpers()).reason, "channel");
+});
+
+test("slash commands outside allowed conversations get an ephemeral hint", () => {
+  const slash = {
+    type: "slash_commands",
+    payload: { team_id: "THOME", channel_id: "D01234567", text: "help", user_id: "Ujames" },
+  };
+  const denied = gates.gateSlashCommand(slash, { teamId: "THOME" }, helpers());
+  assert.equal(denied.ok, false);
+  assert.match(denied.hint, /public channels/);
+  const allowed = gates.gateSlashCommand(
+    {
+      type: "slash_commands",
+      payload: { team_id: "THOME", channel_id: "C01234567", text: "help", user_id: "Ujames" },
+    },
+    { teamId: "THOME" },
+    helpers()
+  );
+  assert.equal(allowed.ok, true);
 });
 
 test("ignores bots, self, and message subtypes", () => {
@@ -101,6 +147,39 @@ test("rate-limits a channel after the window fills", () => {
       envelope({ ...userMessage, client_msg_id: "c3" }, { event_id: "R3" }),
       state,
       h
+    ).reason,
+    "rate_limited"
+  );
+});
+
+test("rate-limits per user and globally, including slash commands", () => {
+  const perUser = helpers({ maxPerChannel: 20, maxPerUser: 1, maxGlobal: 20 });
+  const state = { teamId: "THOME" };
+  assert.equal(gates.gateEvent(envelope(userMessage, { event_id: "U1" }), state, perUser).ok, true);
+  assert.equal(
+    gates.gateEvent(
+      envelope({ ...userMessage, client_msg_id: "u2", channel: "C99999999" }, { event_id: "U2" }),
+      state,
+      perUser
+    ).reason,
+    "rate_limited"
+  );
+
+  const global = helpers({ maxPerChannel: 20, maxPerUser: 20, maxGlobal: 1 });
+  assert.equal(gates.gateEvent(envelope(userMessage, { event_id: "G1" }), state, global).ok, true);
+  assert.equal(
+    gates.gateSlashCommand(
+      {
+        type: "slash_commands",
+        payload: {
+          team_id: "THOME",
+          channel_id: "C01234567",
+          text: "help",
+          user_id: "Uother",
+        },
+      },
+      state,
+      global
     ).reason,
     "rate_limited"
   );

@@ -298,6 +298,7 @@ export function SettingsPanel() {
   const [tuskConnection, setTuskConnection] = useState("");
   const [tuskSaving, setTuskSaving] = useState(false);
   const [tuskError, setTuskError] = useState("");
+  const [tuskResetWorkspace, setTuskResetWorkspace] = useState(false);
 
   // Drag state
   const [dragId, setDragId] = useState<string | null>(null);
@@ -324,6 +325,7 @@ export function SettingsPanel() {
     setTuskAllowlist((data.channelAllowlist || []).join(", "));
     setTuskBotToken("");
     setTuskAppToken("");
+    setTuskResetWorkspace(false);
     const conn = data.connection?.state || "";
     const workspace = data.connection?.workspace || data.teamName || "";
     if (conn === "connected" && workspace) setTuskConnection(`connected to ${workspace}`);
@@ -759,7 +761,7 @@ export function SettingsPanel() {
           type="text"
           value={tuskAllowlist}
           onChange={(e) => setTuskAllowlist(e.target.value)}
-          placeholder="Channel IDs (C…), empty = every channel Tusk is invited to"
+          placeholder="Channel IDs (C…), empty = public channels Tusk is in"
           autoComplete="off"
           className="h-11 w-full rounded-md bg-[hsl(var(--panel-2))] px-3 py-3 text-sm text-white/90 placeholder:text-[hsl(var(--muted-2))] shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)]"
         />
@@ -777,6 +779,7 @@ export function SettingsPanel() {
                   appToken: tuskAppToken,
                   enabled: tuskEnabled || Boolean(tuskBotToken && tuskAppToken),
                   channelAllowlist: tuskAllowlist,
+                  resetWorkspace: tuskResetWorkspace,
                 }),
               });
               const data = await res.json().catch(() => ({}));
@@ -797,6 +800,20 @@ export function SettingsPanel() {
         >
           {tuskSaving ? "Saving…" : "Save Tusk"}
         </button>
+        {tuskTeamName ? (
+          <label className="flex items-start gap-2 text-sm text-white/40">
+            <input
+              type="checkbox"
+              checked={tuskResetWorkspace}
+              onChange={(e) => setTuskResetWorkspace(e.target.checked)}
+              className="mt-1 h-4 w-4 rounded-sm bg-[hsl(var(--panel-2))] accent-[hsl(var(--accent))] shadow-[var(--edge)]"
+            />
+            <span>
+              Reset workspace pin. Required before a token from a different Slack team will save.
+              Currently pinned to {tuskTeamName}.
+            </span>
+          </label>
+        ) : null}
         {tuskError ? (
           <p className="text-sm text-red-400">{tuskError}</p>
         ) : (
