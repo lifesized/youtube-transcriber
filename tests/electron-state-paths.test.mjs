@@ -286,3 +286,27 @@ test("app-log rotates main.log at about 5MB and keeps one .1", () => {
     );
   });
 });
+
+test("tray errors reach main.log once, through app-log's rotation", () => {
+  withAppLogHome((appLog, logDir) => {
+    const TrayManager = require(path.join(repoRoot, "electron/tray-manager.js"));
+    const echoed = [];
+    appLog.install({ ...quiet, error: (...args) => echoed.push(args) });
+    const file = path.join(logDir, "main.log");
+    writeFileSync(file, "x".repeat(appLog.MAX_BYTES));
+
+    TrayManager.prototype._logError.call({}, "port 19721 in use");
+
+    assert.equal(statSync(`${file}.1`).size, appLog.MAX_BYTES, "rotated before writing");
+    const lines = readFileSync(file, "utf8").split("\n").filter(Boolean);
+    assert.deepEqual(
+      lines.map((l) => l.replace(/^\[[^\]]+\] /, "")),
+      ["[error] Transcriber error: port 19721 in use"],
+      "one main.log line"
+    );
+    assert.deepEqual(echoed, [["Transcriber error:", "port 19721 in use"]], "one console line");
+    assert.equal(mode(file), 0o600);
+  });
+  const tray = readFileSync(path.join(repoRoot, "electron/tray-manager.js"), "utf8");
+  assert.doesNotMatch(tray, /appendFileSync|getPath\("logs"\)/);
+});
