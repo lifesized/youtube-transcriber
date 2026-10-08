@@ -204,6 +204,38 @@ test("LinkedIn loopback request carries page URL + media URL, never the token", 
   assert.equal(JSON.parse(tokenless.body).mediaUrl, media.mediaUrl);
 });
 
+test("LinkedIn page send prefers the token and goes tokenless only to the dev server", async () => {
+  const media = capture.parseLinkedInMedia({
+    ok: true,
+    pageUrl: EVENT_URL,
+    mediaUrl: "https://dms.licdn.com/playlist/vid/v2/X/mp4-360p-30fp-crf28/Y/0/1?e=1&v=beta&t=sig",
+  });
+  const postUrl = "https://www.linkedin.com/feed/update/urn:li:activity:7016901149999955968/";
+  globalThis.chrome = { tabs: { query: async () => [] } };
+  const builders = {
+    event: (token, apiBase) => capture.buildLinkedInSendRequest(media, token, apiBase),
+    "post without its tab": (token, apiBase) => capture.prepareLinkedInSend(postUrl, token, apiBase),
+  };
+  for (const [name, build] of Object.entries(builders)) {
+    for (const apiBase of ["http://127.0.0.1:19720", "http://127.0.0.1:19721"]) {
+      const withToken = await build(TOKEN, apiBase);
+      assert.equal(withToken.ok, true, `${name} ${apiBase}`);
+      assert.equal(withToken.url, `${apiBase}/api/transcripts`);
+      assert.equal(withToken.headers.Authorization, `Bearer ${TOKEN}`);
+      assert.equal("credentials" in withToken, false);
+    }
+    const dev = await build(undefined, "http://127.0.0.1:19720");
+    assert.equal(dev.ok, true, `${name}: dev without a token`);
+    assert.equal(dev.url, "http://127.0.0.1:19720/api/transcripts");
+    assert.equal(dev.headers.Authorization, undefined);
+    assert.equal("credentials" in dev, false);
+    for (const apiBase of ["http://127.0.0.1:19721", "https://cloud.example.com", undefined]) {
+      assert.deepEqual(await build(undefined, apiBase), { ok: false }, `${name}: no token for ${apiBase}`);
+      assert.deepEqual(await build(null, apiBase), { ok: false }, `${name}: null token for ${apiBase}`);
+    }
+  }
+});
+
 test("prepareLinkedInSend: asks the tab, injects the content script once if it isn't loaded", async () => {
   const sent = [];
   const injected = [];

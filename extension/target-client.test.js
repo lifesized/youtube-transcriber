@@ -668,6 +668,48 @@ test("background: a LinkedIn capture message reaches the panel, not the generic 
   assert.equal(bg.world.requests.filter((q) => q.url.endsWith("/api/transcripts")).length, 0);
 });
 
+test("background: a LinkedIn post on dev sends the host's token and never cookies", async () => {
+  const post = "https://www.linkedin.com/feed/update/urn:li:activity:7016901149999955968/";
+  const cases = [
+    { name: "protocol-2 host", host: currentHost(DEV, DEV_TOKEN), auth: `Bearer ${DEV_TOKEN}` },
+    { name: "stale host, no-auth dev server", host: staleHost(), auth: undefined },
+  ];
+  for (const k of cases) {
+    const posted = [];
+    const bg = loadBackground({
+      targetId: "dev",
+      hosts: { [DEV.nativeHostName]: k.host },
+      servers: {
+        [DEV.apiBase]: (url, init) => {
+          posted.push({ url, init });
+          return response(200, { id: "tx_li" });
+        },
+      },
+    });
+    const r = await bg.send({ type: "TRANSCRIBE", url: post, title: "Post" });
+    assert.equal(r.success, true, `${k.name}: ${r.error}`);
+    assert.equal(posted.length, 1, k.name);
+    assert.equal(posted[0].url, "http://127.0.0.1:19720/api/transcripts");
+    assert.equal(posted[0].init.headers.Authorization, k.auth, k.name);
+    assert.equal(posted[0].init.credentials, "omit", k.name);
+    assert.equal(JSON.parse(posted[0].init.body).url, post);
+  }
+});
+
+test("background: a LinkedIn post on the app with no token never posts", async () => {
+  const post = "https://www.linkedin.com/feed/update/urn:li:activity:7016901149999955968/";
+  for (const host of [staleHost(), { getLocalToken: { ok: false, error: "no_token" } }]) {
+    const bg = loadBackground({
+      targetId: "app",
+      hosts: { [APP.nativeHostName]: host },
+      servers: { [APP.apiBase]: () => response(200, { id: "tx_li" }) },
+    });
+    const r = await bg.send({ type: "TRANSCRIBE", url: post, title: "Post" });
+    assert.equal(r.success, false);
+    assert.equal(bg.world.requests.filter((q) => q.url.endsWith("/api/transcripts")).length, 0);
+  }
+});
+
 test("background: status checks and the Recent list send the token", async () => {
   const bg = loadBackground({
     targetId: "app",
