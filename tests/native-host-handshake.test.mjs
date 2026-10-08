@@ -159,6 +159,37 @@ test("the app Start allowlist is the recorded install plus /Applications only", 
   assert.equal(host.bundleFromExecPath("/opt/Transcriber/Contents/MacOS/Transcriber"), null);
 });
 
+test("signed-identity bundles must match the codesign Team ID", () => {
+  const bundle = makeBundle();
+  fs.mkdirSync(path.join(bundle, "Contents", "Resources"), { recursive: true });
+  fs.writeFileSync(
+    path.join(bundle, "Contents", "Resources", "signing-identity.json"),
+    JSON.stringify({ teamId: "ABCD123456" })
+  );
+  assert.equal(
+    host.isTranscriberBundle(bundle, () => ({
+      status: 1,
+      stdout: "",
+      stderr: "unsigned",
+    })),
+    false
+  );
+  assert.equal(
+    host.isTranscriberBundle(bundle, (_bin, args) => {
+      if (args[0] === "--verify") return { status: 0, stdout: "", stderr: "" };
+      return { status: 0, stdout: "", stderr: "TeamIdentifier=ABCD123456\n" };
+    }),
+    true
+  );
+  assert.equal(
+    host.isTranscriberBundle(bundle, (_bin, args) => {
+      if (args[0] === "--verify") return { status: 0, stdout: "", stderr: "" };
+      return { status: 0, stdout: "", stderr: "TeamIdentifier=ZZZZZZZZZZ\n" };
+    }),
+    false
+  );
+});
+
 test("a bundle with another CFBundleIdentifier is never launched", { skip: APPLICATIONS_HAS_APP }, () => {
   for (const id of ["com.evil.app", "com.transcribed.app.helper"]) {
     const bundle = makeBundle(id);

@@ -20,7 +20,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const http = require("http");
-const { spawn, execFileSync } = require("child_process");
+const { spawn, execFileSync, spawnSync } = require("child_process");
 const {
   ensureLocalApiToken,
   ensureInEnv,
@@ -228,9 +228,32 @@ const BUNDLE_ID_RE = new RegExp(
   `<key>CFBundleIdentifier</key>\\s*<string>${ELECTRON_BUNDLE_ID.replace(/\./g, "\\.")}</string>`
 );
 
-function isTranscriberBundle(bundle) {
+function teamIdFromCodesign(bundle, run = spawnSync) {
+  const verify = run("/usr/bin/codesign", ["--verify", "--strict", bundle], {
+    encoding: "utf8",
+  });
+  if (!verify || verify.status !== 0) return "";
+  const dv = run("/usr/bin/codesign", ["-dv", "--verbose=4", bundle], {
+    encoding: "utf8",
+  });
+  const text = `${(dv && dv.stderr) || ""}\n${(dv && dv.stdout) || ""}`;
+  const team = (text.match(/^TeamIdentifier=(.+)$/m) || [])[1] || "";
+  return team.trim() === "not set" ? "" : team.trim();
+}
+
+function isTranscriberBundle(bundle, run = spawnSync) {
   try {
-    return BUNDLE_ID_RE.test(readInfoPlist(bundle));
+    if (!BUNDLE_ID_RE.test(readInfoPlist(bundle))) return false;
+    const identityPath = path.join(bundle, "Contents", "Resources", "signing-identity.json");
+    let expectedTeam = "";
+    try {
+      const parsed = JSON.parse(fs.readFileSync(identityPath, "utf8"));
+      expectedTeam = typeof parsed.teamId === "string" ? parsed.teamId : "";
+    } catch {
+      return true;
+    }
+    if (!/^[A-Z0-9]{10}$/.test(expectedTeam)) return true;
+    return teamIdFromCodesign(bundle, run) === expectedTeam;
   } catch {
     return false;
   }
