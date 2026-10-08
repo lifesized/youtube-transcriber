@@ -261,6 +261,10 @@ class TrayManager {
 
   revealInMenuBar(reason = "second-instance") {
     this.ensureTray(reason);
+    // Where the icon landed: a notch-hidden icon shows up here as off-screen.
+    // CI also uses it to crop the tray-menu screenshot.
+    const b = this.tray && typeof this.tray.getBounds === "function" ? this.tray.getBounds() : null;
+    console.log(`tray reveal bounds: ${b ? [b.x, b.y, b.width, b.height].join(",") : "unknown"}`);
     // Notification only — a modal dialog would block the main process and
     // deadlock requestSingleInstanceLock (CI has no one to dismiss it).
     this._notify("Transcriber", trayCopy.RUNNING_IN_MENU_BAR, { modalFallback: false });

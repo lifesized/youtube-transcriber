@@ -1089,7 +1089,34 @@ jobs:
           fi
           sqlite3 "$OLD_DB" "SELECT migration_name FROM _prisma_migrations ORDER BY migration_name"
           echo "✓ old-bootstrap library healed on next launch and kept its rows"
-      
+
+      # Design review: the real tray menu (best effort, needs the runner's
+      # menu bar) and every Settings › Library state rendered by popup.js.
+      - name: Capture tray menu screenshot
+        timeout-minutes: 3
+        continue-on-error: true
+        run: |
+          mkdir -p dist-electron/screenshots
+          scripts/screenshot-tray-menu.sh \
+            "$PWD/dist-electron/mac-arm64/Transcriber.app" \
+            "$PWD/dist-electron/screenshots/tray-menu.png" \
+            "$(node -p "require('./electron/config.js').port")"
+
+      - name: Capture Settings › Library rows
+        timeout-minutes: 3
+        run: npx electron scripts/capture-library-rows.js dist-electron/screenshots
+
+      - name: Upload Design screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: design-screenshots
+          path: |
+            dist-electron/screenshots/
+            dist-electron/dmg-window.png
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Report packaged size
         run: |
           set -euo pipefail
