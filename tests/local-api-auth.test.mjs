@@ -77,6 +77,96 @@ test("unauthorizedJson shape", () => {
 /**
  * Middleware behavior unit-test without booting Next: same decision function.
  */
+test("rebinding Host is rejected with 421 on pages and /api/*", () => {
+  const prev = process.env.PORT;
+  try {
+    delete process.env.PORT;
+    assert.equal(auth.configuredPort(), 19720);
+    assert.equal(auth.isAllowedLoopbackHost("127.0.0.1:19720"), true);
+    assert.equal(auth.isAllowedLoopbackHost("localhost:19720"), true);
+    assert.equal(auth.isAllowedLoopbackHost("LOCALHOST:19720"), true);
+    assert.equal(auth.isAllowedLoopbackHost("evil.example:19720"), false);
+    assert.equal(auth.isAllowedLoopbackHost("127.0.0.1"), false);
+    assert.equal(auth.isAllowedLoopbackHost("attacker.com"), false);
+    assert.equal(auth.isAllowedLoopbackHost(""), false);
+    assert.equal(auth.isAllowedLoopbackHost(null), false);
+
+    function decide(host, pathname) {
+      if (!auth.isAllowedLoopbackHost(host)) return 421;
+      if (pathname === "/") return 200;
+      if (pathname.startsWith("/api/")) return 200;
+      return 200;
+    }
+    assert.equal(decide("evil.example:19720", "/"), 421);
+    assert.equal(decide("evil.example:19720", "/api/health"), 421);
+    assert.equal(decide("127.0.0.1:19720", "/"), 200);
+    assert.equal(decide("127.0.0.1:19720", "/api/transcripts"), 200);
+
+    process.env.PORT = "19721";
+    assert.equal(auth.isAllowedLoopbackHost("127.0.0.1:19721"), true);
+    assert.equal(auth.isAllowedLoopbackHost("127.0.0.1:19720"), false);
+  } finally {
+    if (prev === undefined) delete process.env.PORT;
+    else process.env.PORT = prev;
+  }
+});
+
+test("token cookie is minted only for none/same-origin navigations", () => {
+  assert.equal(auth.shouldMintTokenCookie("none"), true);
+  assert.equal(auth.shouldMintTokenCookie("same-origin"), true);
+  assert.equal(auth.shouldMintTokenCookie("cross-site"), false);
+  assert.equal(auth.shouldMintTokenCookie("same-site"), false);
+  assert.equal(auth.shouldMintTokenCookie(null), false);
+  assert.equal(auth.shouldMintTokenCookie(""), false);
+
+  const expected = "d".repeat(64);
+  function wouldSetCookie({ host, pathname, secFetchSite, hasCookie }) {
+    if (!auth.isAllowedLoopbackHost(host)) return { status: 421, setCookie: false };
+    if (pathname.startsWith("/api/")) return { status: 200, setCookie: false };
+    if (!auth.shouldMintTokenCookie(secFetchSite)) {
+      return { status: 200, setCookie: false };
+    }
+    return { status: 200, setCookie: !hasCookie };
+  }
+
+  assert.deepEqual(
+    wouldSetCookie({
+      host: "127.0.0.1:19720",
+      pathname: "/",
+      secFetchSite: "none",
+      hasCookie: false,
+    }),
+    { status: 200, setCookie: true }
+  );
+  assert.deepEqual(
+    wouldSetCookie({
+      host: "localhost:19720",
+      pathname: "/",
+      secFetchSite: "same-origin",
+      hasCookie: false,
+    }),
+    { status: 200, setCookie: true }
+  );
+  assert.deepEqual(
+    wouldSetCookie({
+      host: "127.0.0.1:19720",
+      pathname: "/",
+      secFetchSite: "cross-site",
+      hasCookie: false,
+    }),
+    { status: 200, setCookie: false }
+  );
+  assert.deepEqual(
+    wouldSetCookie({
+      host: "evil.example:19720",
+      pathname: "/",
+      secFetchSite: "none",
+      hasCookie: false,
+    }),
+    { status: 421, setCookie: false }
+  );
+});
+
 test("middleware decision: missing token → 401; good Bearer → allow", () => {
   const expected = "c".repeat(64);
   function decide(authorization) {

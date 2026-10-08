@@ -2,6 +2,9 @@
 
 ## 2026-10-08
 
+### Security
+- **Loopback Host pin** — Requests whose `Host` is not `127.0.0.1:<port>` or `localhost:<port>` (port from `PORT`, default 19720) return 421. The local-token cookie is minted only when `Sec-Fetch-Site` is `none` or `same-origin`.
+
 ### Changed
 - **Pinned ffmpeg 9.0.2** — CI downloads a specific Martin Riedl macOS arm64 zip (`electron/ffmpeg.lock.json`) and fails if the SHA-256 does not match. Packaged `ffmpeg -version` plus a 1-second sine encode, and `yt-dlp --version`, must exit 0.
 - **Pairing dialog** — Focuses the menu-bar app (`app.focus({ steal: true })`) before the confirm box, shows the extension ID in `detail`, and warns when the ID is not a known Chrome Web Store listing. A dialog timeout marks the request expired so a late Allow does not write the ID.

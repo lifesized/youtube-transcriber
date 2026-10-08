@@ -3,7 +3,9 @@ import type { NextRequest } from "next/server";
 import {
   COOKIE_NAME,
   ENV_NAME,
+  isAllowedLoopbackHost,
   isAuthorizedRequest,
+  shouldMintTokenCookie,
   tokensEqual,
   unauthorizedJson,
 } from "./lib/local-api-auth.js";
@@ -25,11 +27,14 @@ function setTokenCookie(res: NextResponse, token: string) {
 }
 
 export function middleware(request: NextRequest) {
+  const host = request.headers.get("host");
+  if (!isAllowedLoopbackHost(host)) {
+    return new NextResponse(null, { status: 421 });
+  }
+
   const expected = expectedToken();
   const { pathname } = request.nextUrl;
 
-  // Page navigations: mint/refresh httpOnly cookie so same-origin web UI
-  // fetches succeed without putting the token in JS, chrome.storage, or URLs.
   // Pairing authenticates via Origin: chrome-extension://<id>, not the
   // loopback token — the extension does not have a token until the native
   // host is installed.
@@ -37,12 +42,17 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Page navigations: mint/refresh httpOnly cookie only for top-level or
+  // same-origin loads so a cross-site fetch cannot collect Set-Cookie.
   if (!pathname.startsWith("/api/")) {
     if (!expected) return NextResponse.next();
     const res = NextResponse.next();
-    const existing = request.cookies.get(COOKIE_NAME)?.value;
-    if (!existing || !tokensEqual(existing, expected)) {
-      setTokenCookie(res, expected);
+    const site = request.headers.get("sec-fetch-site");
+    if (shouldMintTokenCookie(site)) {
+      const existing = request.cookies.get(COOKIE_NAME)?.value;
+      if (!existing || !tokensEqual(existing, expected)) {
+        setTokenCookie(res, expected);
+      }
     }
     return res;
   }
