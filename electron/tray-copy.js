@@ -68,7 +68,10 @@ const TRY_AGAIN = "Try Again";
 const RESTART = "Start Transcriber";
 const MOVE_TO_APPLICATIONS = "Move to Applications and Reopen";
 const RUNNING_IN_MENU_BAR = "Transcriber is running in the menu bar";
-const OPEN_LIBRARY_FOLDER = "Open Library Folder";
+const OPEN_TRANSCRIBER = "Open Transcriber";
+const OPEN_LIBRARY = "Open Library";
+const ADVANCED = "Advanced";
+const SHOW_DATA_IN_FINDER = "Show Data in Finder";
 
 module.exports = {
   runningStatus,
@@ -83,5 +86,8 @@ module.exports = {
   RESTART,
   MOVE_TO_APPLICATIONS,
   RUNNING_IN_MENU_BAR,
-  OPEN_LIBRARY_FOLDER,
+  OPEN_TRANSCRIBER,
+  OPEN_LIBRARY,
+  ADVANCED,
+  SHOW_DATA_IN_FINDER,
 };

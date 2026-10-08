@@ -426,7 +426,12 @@ test("tray manager uses template images and human status copy, not setTitle T", 
     path.join(projectRoot, "electron", "tray-copy.js"),
     "utf8"
   );
+  const menuSrc = fs.readFileSync(
+    path.join(projectRoot, "electron", "tray-menu.js"),
+    "utf8"
+  );
   assert.ok(content.includes("tray-copy.js"));
+  assert.ok(content.includes("tray-menu.js"));
   assert.ok(content.includes("tray-png.js"));
   assert.ok(copySrc.includes("trayTemplate.png"));
   assert.ok(copySrc.includes("trayStartingTemplate.png"));
@@ -441,15 +446,15 @@ test("tray manager uses template images and human status copy, not setTitle T", 
   assert.ok(main.includes("first-launch"));
   assert.ok(copySrc.includes("Try Again"));
   assert.ok(copySrc.includes("Start Transcriber"));
-  assert.ok(content.includes("TRY_AGAIN"));
-  assert.ok(content.includes("RESTART"));
-  assert.ok(content.includes("Connect Browser Extension…"));
+  assert.ok(menuSrc.includes("TRY_AGAIN"));
+  assert.ok(menuSrc.includes("RESTART"));
+  assert.ok(menuSrc.includes("Connect Browser Extension…"));
   assert.ok(content.includes("_openPairingWindow"));
-  assert.ok(content.includes("Paired Extensions…"));
-  assert.ok(content.includes("Import Existing Library…"));
+  assert.ok(menuSrc.includes("Paired Extensions…"));
+  assert.ok(menuSrc.includes("Import Existing Library…"));
   assert.ok(content.includes("_showPairedExtensions"));
   assert.ok(content.includes("_logError"));
-  assert.ok(content.includes("Command+Q"));
+  assert.ok(menuSrc.includes("Command+Q"));
   assert.ok(content.includes("showWrongLocation"));
   assert.ok(content.includes("moveToApplicationsFolder"));
   assert.ok(main.includes("app.dock.hide()"));
@@ -475,13 +480,13 @@ test("tray manager uses template images and human status copy, not setTitle T", 
   assert.ok(content.includes("RUNNING_IN_MENU_BAR"));
 });
 
-test("tray shows the served library read-only and opens the app's own folder", () => {
+test("tray shows the served library under the status line and opens the app's own folder", () => {
   const content = fs.readFileSync(path.join(projectRoot, "electron", "tray-manager.js"), "utf8");
-  assert.match(
-    content,
-    /if \(running\) \{\s*template\.push\(\{ label: trayCopy\.servingLabel\(this\.port\), enabled: false \}\);/
-  );
-  assert.ok(content.includes("label: trayCopy.OPEN_LIBRARY_FOLDER"));
+  const menuSrc = fs.readFileSync(path.join(projectRoot, "electron", "tray-menu.js"), "utf8");
+  assert.ok(menuSrc.includes("trayCopy.servingLabel(port)"));
+  assert.doesNotMatch(menuSrc, /label: trayCopy\.servingLabel/);
+  assert.ok(menuSrc.includes("label: trayCopy.SHOW_DATA_IN_FINDER"));
+  assert.ok(content.includes("shell.openExternal(libraryUrl(this.port))"));
   // The dev checkout library is a separate DB; the app must never open it.
   assert.ok(content.includes("shell.openPath(config.appStatePaths().stateDir)"));
   assert.doesNotMatch(content, /openPath\(config\.checkoutStatePaths/);

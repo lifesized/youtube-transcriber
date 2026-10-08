@@ -275,6 +275,10 @@ test("tray offers Import Existing Library…", () => {
     path.join(projectRoot, "electron", "tray-manager.js"),
     "utf8"
   );
-  assert.ok(tray.includes("Import Existing Library…"));
+  const menu = fs.readFileSync(
+    path.join(projectRoot, "electron", "tray-menu.js"),
+    "utf8"
+  );
+  assert.ok(menu.includes("Import Existing Library…"));
   assert.ok(tray.includes("importLibrary"));
 });

@@ -1,14 +1,14 @@
 /**
  * Manages the system tray icon and menu.
  *
- * Menu items:
+ * Menu items (template in tray-menu.js):
  * - Status line (human sentences from Design spec §8.5)
- * - Open Transcriber (opens in browser)
- * - Start at Login (toggle)
+ * - Open Transcriber / Open Library (open in browser)
  * - Connect Browser Extension… (2-minute pairing window)
  * - Paired Extensions… (list + remove, rotates local API token)
  * - Reinstall Browser Connection
- * - Import Existing Library… (backup-first merge from a .db)
+ * - Advanced ▸ Show Data in Finder, Import Existing Library… (backup-first merge from a .db)
+ * - Start at Login (toggle)
  * - Quit
  */
 
@@ -28,6 +28,7 @@ const { findPortHolder } = require("./utils.js");
 const config = require("./config.js");
 const productDefaults = require("./product-defaults.js");
 const trayCopy = require("./tray-copy.js");
+const { buildTrayMenuTemplate, transcriberUrl, libraryUrl } = require("./tray-menu.js");
 const trayPng = require("./tray-png.js");
 
 // Strong module-level pin. V8 can otherwise GC the Tray and the
@@ -336,22 +337,6 @@ class TrayManager {
     }
   }
 
-  _statusItem() {
-    const sub = supportsMenuSublabel();
-    switch (this.status) {
-      case "running":
-        return trayCopy.runningStatus(this.port, sub);
-      case "starting":
-        return trayCopy.startingStatus();
-      case "port-conflict":
-        return trayCopy.portInUseStatus(this.port, this.portHolder, sub);
-      case "wrong-location":
-        return trayCopy.wrongLocationStatus();
-      default:
-        return trayCopy.stoppedStatus();
-    }
-  }
-
   _shouldShowImport() {
     if (!productDefaults.IMPORT_LIBRARY_ONLY_WHEN_DETECTED) return true;
     return checkoutLibraryDetected();
@@ -359,98 +344,33 @@ class TrayManager {
 
   _updateMenu() {
     this._applyTrayImage();
-    const loginSettings = app.getLoginItemSettings();
-    const openAtLogin = loginSettings.openAtLogin;
-
-    const statusItem = this._statusItem();
-    const running = this.status === "running";
-    const wrongLocation = this.status === "wrong-location";
-    const showImport = this._shouldShowImport();
-
-    const template = [
-      {
-        label: statusItem.label,
-        sublabel: statusItem.sublabel,
-        enabled: false,
-      },
-    ];
-
-    if (running) {
-      template.push({ label: trayCopy.servingLabel(this.port), enabled: false });
-    }
-
-    if (this.status === "port-conflict") {
-      template.push({
-        label: trayCopy.TRY_AGAIN,
-        click: () => this._tryAgain(),
-      });
-    } else if (this.status === "error" || this.status === "stopped") {
-      template.push({
-        label: trayCopy.RESTART,
-        click: () => this._restartServer(),
-      });
-    } else if (wrongLocation) {
-      template.push({
-        label: trayCopy.MOVE_TO_APPLICATIONS,
-        click: () => this._moveToApplications(),
-      });
-    }
 
     if (productDefaults.PORT_CONFLICT_OFFER_QUIT) {
       // Off for the friends beta. Flip the flag when James wants a quit action.
     }
 
-    template.push(
-      { type: "separator" },
+    const template = buildTrayMenuTemplate(
       {
-        label: "Open Transcriber",
-        enabled: running,
-        click: () => this._openTranscriber(),
+        status: this.status,
+        port: this.port,
+        supportsSublabel: supportsMenuSublabel(),
+        portHolder: this.portHolder,
+        openAtLogin: app.getLoginItemSettings().openAtLogin,
+        showImport: this._shouldShowImport(),
       },
       {
-        label: trayCopy.OPEN_LIBRARY_FOLDER,
-        click: () => this._openLibraryFolder(),
-      },
-      { type: "separator" },
-      {
-        label: "Connect Browser Extension…",
-        enabled: running,
-        click: () => this._openPairingWindow(),
-      },
-      {
-        label: "Paired Extensions…",
-        enabled: running,
-        click: () => this._showPairedExtensions(),
-      },
-      {
-        label: "Reinstall Browser Connection",
-        enabled: !wrongLocation,
-        click: () => this._reinstallNativeHost(),
-      }
-    );
-
-    if (showImport) {
-      template.push({
-        label: "Import Existing Library…",
-        enabled: running,
-        click: () => this._importExistingLibrary(),
-      });
-    }
-
-    template.push(
-      { type: "separator" },
-      {
-        label: "Start at Login",
-        type: "checkbox",
-        checked: openAtLogin,
-        enabled: !wrongLocation,
-        click: () => this._toggleLoginItem(),
-      },
-      { type: "separator" },
-      {
-        label: "Quit Transcriber",
-        accelerator: "Command+Q",
-        click: () => this._quit(),
+        tryAgain: () => this._tryAgain(),
+        start: () => this._restartServer(),
+        moveToApplications: () => this._moveToApplications(),
+        openTranscriber: () => this._openTranscriber(),
+        openLibrary: () => this._openLibrary(),
+        openPairingWindow: () => this._openPairingWindow(),
+        showPairedExtensions: () => this._showPairedExtensions(),
+        reinstallNativeHost: () => this._reinstallNativeHost(),
+        showDataInFinder: () => this._showDataInFinder(),
+        importLibrary: () => this._importExistingLibrary(),
+        toggleLoginItem: () => this._toggleLoginItem(),
+        quit: () => this._quit(),
       }
     );
 
@@ -496,13 +416,17 @@ class TrayManager {
     }
   }
 
-  async _openLibraryFolder() {
+  async _showDataInFinder() {
     const error = await shell.openPath(config.appStatePaths().stateDir);
-    if (error) console.warn("open library folder failed:", error);
+    if (error) console.warn("show data in finder failed:", error);
   }
 
   _openTranscriber() {
-    shell.openExternal(`http://127.0.0.1:${this.port}`);
+    shell.openExternal(transcriberUrl(this.port));
+  }
+
+  _openLibrary() {
+    shell.openExternal(libraryUrl(this.port));
   }
 
   _openPairingWindow() {

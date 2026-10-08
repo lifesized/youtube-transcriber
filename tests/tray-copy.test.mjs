@@ -55,7 +55,11 @@ test("tooltips and template image names follow spec §4.3", () => {
   assert.equal(copy.RUNNING_IN_MENU_BAR, "Transcriber is running in the menu bar");
 });
 
-test("menu names the library it serves and offers its folder", () => {
+test("menu names the library it serves and offers its data folder under Advanced", () => {
   assert.equal(copy.servingLabel(19721), "App library · Port 19721");
-  assert.equal(copy.OPEN_LIBRARY_FOLDER, "Open Library Folder");
+  assert.equal(copy.OPEN_TRANSCRIBER, "Open Transcriber");
+  assert.equal(copy.OPEN_LIBRARY, "Open Library");
+  assert.equal(copy.ADVANCED, "Advanced");
+  assert.equal(copy.SHOW_DATA_IN_FINDER, "Show Data in Finder");
+  assert.equal(copy.OPEN_LIBRARY_FOLDER, undefined);
 });
