@@ -176,6 +176,28 @@ test("background rejects content-script replies it can't trust", () => {
   assert.equal(capture.parseLinkedInMedia(null).reason, "reload");
 });
 
+const NON_CANONICAL_MEDIA = [
+  "https://dms.licdn.com\\@127.0.0.1:8443/x.mp4",
+  "https://dms.licdn\u3002com/x.mp4",
+  "https://dms.\u217Cicdn.com/x.mp4",
+  " https://dms.licdn.com/x.mp4",
+  "https://dms.licdn.com/x.mp4 ",
+];
+
+test("background never sends a media URL that isn't already in URL-parser form", () => {
+  for (const mediaUrl of NON_CANONICAL_MEDIA) {
+    const label = JSON.stringify(mediaUrl);
+    assert.equal(capture.parseLinkedInMedia({ ok: true, pageUrl: EVENT_URL, mediaUrl }).reason, "reload", label);
+    assert.equal(capture.buildLinkedInSendRequest({ pageUrl: EVENT_URL, mediaUrl }, TOKEN, "http://127.0.0.1:19721").ok, false, label);
+  }
+  const request = capture.buildLinkedInSendRequest(
+    { pageUrl: EVENT_URL, mediaUrl: "https://dms.licdn.com/x.mp4" },
+    TOKEN,
+    "http://127.0.0.1:19721"
+  );
+  assert.equal(JSON.parse(request.body).mediaUrl, "https://dms.licdn.com/x.mp4");
+});
+
 test("LinkedIn loopback request carries page URL + media URL, never the token", () => {
   const media = capture.parseLinkedInMedia({
     ok: true,

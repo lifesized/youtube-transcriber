@@ -110,3 +110,16 @@ test("media CDN check accepts only https *.licdn.com", () => {
   assert.ok(!LinkedInUrl.isMediaCdnUrl("https://user:pass@dms.licdn.com/x.mp4"));
   assert.ok(!LinkedInUrl.isMediaCdnUrl("blob:https://www.linkedin.com/abc"));
 });
+
+test("media CDN check rejects URLs that aren't already in URL-parser form", () => {
+  for (const url of [
+    "https://dms.licdn.com\\@127.0.0.1:8443/x.mp4",
+    "https://dms.licdn\u3002com/x.mp4",
+    "https://dms.\u217Cicdn.com/x.mp4",
+    " https://dms.licdn.com/x.mp4",
+    "https://dms.licdn.com/x.mp4 ",
+  ]) {
+    assert.ok(!LinkedInUrl.isMediaCdnUrl(url), JSON.stringify(url));
+  }
+  assert.ok(LinkedInUrl.isMediaCdnUrl("https://dms.licdn.com/x.mp4"));
+});
