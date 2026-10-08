@@ -126,6 +126,26 @@ jobs:
           # Don't sign - we're doing ad-hoc signing only
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
+      - name: Assert DMG contains Install Transcriber.command
+        run: |
+          set -euo pipefail
+          DMG=$(ls dist-electron/*.dmg | head -1)
+          echo "Mounting $DMG"
+          ATTACH=$(hdiutil attach -nobrowse -readonly "$DMG")
+          echo "$ATTACH"
+          MOUNT=$(printf '%s\n' "$ATTACH" | awk '/\/Volumes\// { print $NF; exit }')
+          if [ -z "$MOUNT" ]; then
+            echo "ERROR: could not find DMG mount point"
+            exit 1
+          fi
+          echo "Mounted at $MOUNT"
+          ls -la "$MOUNT"
+          test -d "$MOUNT/Transcriber.app"
+          test -f "$MOUNT/Install Transcriber.command"
+          test -x "$MOUNT/Install Transcriber.command"
+          echo "✓ DMG contains Transcriber.app and Install Transcriber.command"
+          hdiutil detach "$MOUNT"
+
       - name: Assert asar contains every main-process require
         run: |
           set -euo pipefail

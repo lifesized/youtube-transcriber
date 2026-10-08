@@ -14,6 +14,7 @@
     "electron/**/*",
     "!electron/resources/standalone/**",
     "!electron/resources/bin/**",
+    "!electron/dmg/**",
     "tools/**/*",
     "lib/**/*.js",
     "node_modules/better-sqlite3/**/*",
@@ -52,20 +53,29 @@
   },
   "dmg": {
     "title": "Transcriber",
-    "backgroundColor": "#ffffff",
+    "background": "electron/dmg/background.png",
+    "iconSize": 72,
+    "iconTextSize": 12,
     "window": {
-      "width": 540,
-      "height": 380
+      "width": 620,
+      "height": 440
     },
     "contents": [
       {
-        "x": 140,
-        "y": 180,
+        "x": 310,
+        "y": 157,
+        "type": "file",
+        "path": "electron/dmg/Install Transcriber.command",
+        "name": "Install Transcriber.command"
+      },
+      {
+        "x": 160,
+        "y": 312,
         "type": "file"
       },
       {
-        "x": 400,
-        "y": 180,
+        "x": 460,
+        "y": 312,
         "type": "link",
         "path": "/Applications"
       }

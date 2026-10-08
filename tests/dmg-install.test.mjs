@@ -1,0 +1,142 @@
+/**
+ * DMG install helper: copies Transcriber.app, clears quarantine, opens it.
+ */
+
+import { test } from "node:test";
+import assert from "node:assert";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.resolve(__dirname, "..");
+const commandName = "Install Transcriber.command";
+const commandPath = path.join(projectRoot, "electron", "dmg", commandName);
+
+test("Install Transcriber.command exists and is executable", () => {
+  assert.ok(fs.existsSync(commandPath), `${commandName} should exist`);
+  const st = fs.statSync(commandPath);
+  assert.ok(st.mode & 0o111, `${commandName} must be executable`);
+  const text = fs.readFileSync(commandPath, "utf8");
+  assert.ok(text.startsWith("#!/bin/bash"));
+  assert.ok(text.includes("xattr -dr com.apple.quarantine"));
+  assert.ok(text.includes("/Applications/Transcriber.app"));
+  assert.ok(text.includes("tell application \"Transcriber\" to quit"));
+  assert.match(text, /right-click/i);
+  assert.match(text, /Open Anyway/);
+  const sudoLines = text.split("\n").filter((l) => /^\s*sudo\b/.test(l));
+  assert.ok(sudoLines.length > 0, "sudo is allowed as a fallback");
+  const sudoGuarded = text.includes("Need permission");
+  assert.ok(sudoGuarded, "sudo must be behind a permission-failed path");
+});
+
+test("electron-builder packs the helper and background into the DMG, not asar", () => {
+  const config = JSON.parse(
+    fs.readFileSync(path.join(projectRoot, "electron-builder.json"), "utf8")
+  );
+  assert.ok(config.files.includes("!electron/dmg/**"));
+  assert.equal(config.dmg.background, "electron/dmg/background.png");
+  assert.equal(config.dmg.backgroundColor, undefined);
+  const contents = config.dmg.contents || [];
+  const helper = contents.find(
+    (c) =>
+      c.path === "electron/dmg/Install Transcriber.command" ||
+      c.name === "Install Transcriber.command"
+  );
+  assert.ok(helper, "dmg.contents must include Install Transcriber.command");
+  assert.equal(helper.type, "file");
+  const appEntry = contents.find((c) => c.type === "file" && !c.path);
+  assert.ok(appEntry, "dmg.contents must still include Transcriber.app (file, no path)");
+  const apps = contents.find((c) => c.type === "link" && c.path === "/Applications");
+  assert.ok(apps, "dmg.contents must keep the Applications link as fallback");
+});
+
+test("DMG background PNG exists", () => {
+  const pngPath = path.join(projectRoot, "electron", "dmg", "background.png");
+  assert.ok(fs.existsSync(pngPath));
+  const buf = fs.readFileSync(pngPath);
+  assert.deepEqual(
+    [...buf.subarray(0, 8)],
+    [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+  );
+  assert.ok(buf.length > 500);
+});
+
+test("beta install docs lead with the helper and xattr fallback", () => {
+  const docs = fs.readFileSync(
+    path.join(projectRoot, "docs", "beta-install-macos.md"),
+    "utf8"
+  );
+  assert.ok(docs.includes("Install Transcriber.command"));
+  assert.ok(docs.includes("xattr -dr com.apple.quarantine /Applications/Transcriber.app"));
+  const helperIdx = docs.indexOf("Install Transcriber.command");
+  const xattrIdx = docs.indexOf("xattr -dr");
+  assert.ok(helperIdx > 0 && helperIdx < xattrIdx, "helper must be the primary path");
+  assert.ok(!/NEVER run `xattr/.test(docs));
+});
+
+test("CI mounts the DMG and checks for the helper", () => {
+  const workflow = fs.readFileSync(
+    path.join(projectRoot, ".github", "workflows", "electron-build-macos.yml"),
+    "utf8"
+  );
+  assert.ok(workflow.includes("hdiutil attach"));
+  assert.ok(workflow.includes("Install Transcriber.command"));
+});
+
+test("helper copies the app, clears quarantine, and does not sudo on success", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dmg-install-"));
+  const volume = path.join(tmp, "Transcriber");
+  const destDir = path.join(tmp, "Applications");
+  const dest = path.join(destDir, "Transcriber.app");
+  const bin = path.join(tmp, "bin");
+  const log = path.join(tmp, "calls.log");
+  fs.mkdirSync(path.join(volume, "Transcriber.app", "Contents"), { recursive: true });
+  fs.writeFileSync(path.join(volume, "Transcriber.app", "Contents", "marker"), "payload");
+  fs.copyFileSync(commandPath, path.join(volume, commandName));
+  fs.chmodSync(path.join(volume, commandName), 0o755);
+  fs.mkdirSync(bin, { recursive: true });
+
+  const stub = (name, body) => {
+    const p = path.join(bin, name);
+    fs.writeFileSync(p, `#!/bin/bash\n${body}\n`);
+    fs.chmodSync(p, 0o755);
+  };
+  stub(
+    "ditto",
+    `echo "ditto $*" >> "${log}"
+mkdir -p "$2"
+cp -R "$1"/. "$2"`
+  );
+  stub("xattr", `echo "xattr $*" >> "${log}"`);
+  stub("open", `echo "open $*" >> "${log}"`);
+  stub("osascript", `echo "osascript $*" >> "${log}"`);
+  stub("pgrep", "exit 1");
+  stub(
+    "sudo",
+    `echo "sudo $*" >> "${log}"
+echo "sudo must not run on a successful copy" >&2
+exit 1`
+  );
+
+  const result = spawnSync("bash", [path.join(volume, commandName)], {
+    env: {
+      ...process.env,
+      PATH: `${bin}:/usr/bin:/bin`,
+      TRANSCRIBER_INSTALL_DEST: dest,
+      TRANSCRIBER_INSTALL_NONINTERACTIVE: "1",
+      TRANSCRIBER_QUIT_WAIT_SECS: "1",
+    },
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  assert.ok(fs.existsSync(path.join(dest, "Contents", "marker")));
+  const calls = fs.readFileSync(log, "utf8");
+  assert.match(calls, /xattr -dr com\.apple\.quarantine /);
+  assert.match(calls, /open /);
+  assert.doesNotMatch(calls, /^sudo /m);
+  assert.match(result.stdout, /Done/);
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
