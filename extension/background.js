@@ -368,8 +368,9 @@ async function doTranscribe(url, title) {
     state.status = "error";
     
     // Host and auth problems get their own message; only "other" is generic.
+    // result.error is only ever a fixed string from this extension (YTT-448).
     const target = await resolveTarget();
-    state.error = ConnectTarget.errorMessage(result.reason || "other", target.id);
+    state.error = result.error || ConnectTarget.errorMessage(result.reason || "other", target.id);
     await setState(state);
     setBadge("!", "#ef4444");
     throw new Error(state.error);

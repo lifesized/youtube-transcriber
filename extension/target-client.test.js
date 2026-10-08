@@ -628,6 +628,19 @@ test("background: an unpaired dev extension gets the paired-with-dev message", a
   assert.equal(bg.world.requests.length, 0);
 });
 
+test("background: a LinkedIn capture message reaches the panel, not the generic failure", async () => {
+  const bg = loadBackground({
+    targetId: "app",
+    hosts: { [APP.nativeHostName]: currentHost(APP, APP_TOKEN) },
+    servers: { [APP.apiBase]: authedServer(APP_TOKEN) },
+  });
+  const event = "https://www.linkedin.com/events/7512647010907250689/";
+  const r = await bg.send({ type: "TRANSCRIBE", url: event, title: "Event" });
+  assert.equal(r.success, false);
+  assert.equal(r.error, "Reload the LinkedIn page, then press Transcribe again.");
+  assert.equal(bg.world.requests.filter((q) => q.url.endsWith("/api/transcripts")).length, 0);
+});
+
 test("background: status checks and the Recent list send the token", async () => {
   const bg = loadBackground({
     targetId: "app",
