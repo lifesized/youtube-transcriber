@@ -240,3 +240,23 @@ test("middleware decision: missing token → 401; good Bearer → allow", () => 
   assert.equal(decide("Bearer nope"), 401);
   assert.equal(decide(`Bearer ${expected}`), 200);
 });
+
+test("CI checks the packaged app's Library-tab cookie end to end", () => {
+  const workflow = readFileSync(
+    path.join(repoRoot, ".github/workflows/electron-build-macos.yml"),
+    "utf8"
+  );
+  const launch = workflow.slice(
+    workflow.indexOf("- name: Launch packaged Transcriber.app"),
+    workflow.indexOf("- name: Test packaged app (smoke test)")
+  );
+  assert.match(launch, /Sec-Fetch-Mode: navigate/);
+  assert.match(launch, /Sec-Fetch-Dest: document/);
+  assert.match(launch, /\?layout=list&id=/);
+  assert.match(launch, /transcriber_local_token_\$\{PORT\}/);
+  assert.match(launch, /transcriber_local_token_19720=/, "the Dev cookie name is refused");
+  for (const site of ["same-origin", "same-site", "cross-site"]) {
+    assert.match(launch, new RegExp(`cookie_api ${site} (200|401)`), site);
+  }
+  assert.doesNotMatch(launch, /cat "\$JAR"|cat \$JAR/, "never print the cookie jar");
+});
