@@ -5,12 +5,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-# Ignore pre-existing shellcheck nits in the unsigned job (ls, unquoted
-# expansions). Do not "fix" those steps — they must stay byte-identical.
+# Ignore pre-existing ls / unquoted-expansion nits in the unsigned job.
+# SC2097/SC2098 in the smoke test were fixed (export PORT, then -p "$PORT").
 IGNORE=(
   -ignore 'SC2012:'
-  -ignore 'SC2097:'
-  -ignore 'SC2098:'
   -ignore 'SC2086:'
 )
 

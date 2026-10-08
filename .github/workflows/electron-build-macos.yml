@@ -939,17 +939,17 @@ jobs:
           
           (
             cd "$STANDALONE"
-            HOME="$DATA_DIR" \
-            ELECTRON_RUN_AS_NODE=1 \
-            NODE_ENV=production \
-            PORT="$PORT" \
-            HOSTNAME=127.0.0.1 \
-            DATABASE_URL="file:${DB_PATH}" \
-            PRISMA_MIGRATIONS_DIR="$STANDALONE/prisma/migrations" \
-            TRANSCRIBER_LOCAL_TOKEN="$TOKEN" \
-            PATH="$BIN_DIR:$PATH" \
-            FFMPEG_PATH="$BIN_DIR/ffmpeg" \
-            YTDLP_PATH="$BIN_DIR/yt-dlp" \
+            export HOME="$DATA_DIR"
+            export ELECTRON_RUN_AS_NODE=1
+            export NODE_ENV=production
+            export PORT
+            export HOSTNAME=127.0.0.1
+            export DATABASE_URL="file:${DB_PATH}"
+            export PRISMA_MIGRATIONS_DIR="$STANDALONE/prisma/migrations"
+            export TRANSCRIBER_LOCAL_TOKEN="$TOKEN"
+            export PATH="$BIN_DIR:$PATH"
+            export FFMPEG_PATH="$BIN_DIR/ffmpeg"
+            export YTDLP_PATH="$BIN_DIR/yt-dlp"
             "$APP_PATH" "$SERVER_PATH" -p "$PORT" --hostname 127.0.0.1
           ) > "$LOG_FILE" 2>&1 &
           SERVER_PID=$!
