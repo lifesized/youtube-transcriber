@@ -2,6 +2,9 @@
 
 ## 2026-10-08
 
+### Changed
+- **Extension 1.6.39** — LOCAL and ENTERPRISE manifests (native-host configurable project root).
+
 ### Added
 - **Native host project root** — `npm run install-native-host -- --project-root <abs-path>` writes `native-host.json` in the Transcriber state directory so Start launches `npm run dev` from a configured checkout instead of whichever tree last installed the host. `--clear-project-root` removes it. The host refuses to spawn when `.env`/`.env.local` (with `DATABASE_URL`), the SQLite file for a `file:` URL, or `node_modules` is missing.
 
