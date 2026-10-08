@@ -490,6 +490,37 @@ test("stop or token change mid-connect never opens a socket with the old token",
   await third.stop();
 });
 
+test("disconnect reason link_disabled stops permanently instead of reconnecting", async () => {
+  const sockets = [];
+  const timers = createTimerQueue();
+  const runtime = createTuskRuntime({
+    botToken: BOT,
+    appToken: APP,
+    teamId: "THOME",
+    slackApi: mockApi(),
+    WebSocket: class extends FakeSocket {
+      constructor(url) {
+        super(url);
+        sockets.push(this);
+      }
+    },
+    timers: timers.api,
+    random: () => 0,
+  });
+  await runtime.start();
+  assert.equal(sockets.length, 1);
+  sockets[0].emit("message", {
+    data: JSON.stringify({ type: "disconnect", reason: "link_disabled" }),
+  });
+  assert.equal(runtime.isFatal(), true);
+  assert.equal(runtime.isStopped(), true);
+  assert.equal(runtime.getStatus().state, "error");
+  assert.equal(runtime.getStatus().fatal, true);
+  assert.equal(runtime.getStatus().error, "link_disabled");
+  assert.equal(timers.pending().length, 0, "link_disabled must not schedule reconnect");
+  await runtime.stop();
+});
+
 test("invalid_auth stops permanently and leaves the tray in error", async () => {
   const delays = [];
   const runtime = createTuskRuntime({

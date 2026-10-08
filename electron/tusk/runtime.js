@@ -141,6 +141,11 @@ function createTuskRuntime(options = {}) {
       return;
     }
     if (envelope.type === "disconnect") {
+      const reason = envelope.reason || (envelope.payload && envelope.payload.reason) || "";
+      if (reason === "link_disabled" || AUTH_FATAL_ERRORS.has(String(reason))) {
+        stopPermanently(String(reason || "link_disabled"));
+        return;
+      }
       if (ws && typeof ws.close === "function") {
         try {
           ws.close();
