@@ -58,10 +58,17 @@ export async function PUT(request: Request) {
       entries.map(([key, value]) => {
         let stored = value;
         if (key === "groq_api_key") {
-          if (isMaskedPlaceholder(value)) {
-            return Promise.resolve();
-          }
-          stored = encryptApiKeyForStorage(value);
+          return prisma.setting.findUnique({ where: { key } }).then((row) => {
+            const currentMasked = row ? maskApiKeyForResponse(row.value) : "";
+            if (isMaskedPlaceholder(value, currentMasked)) {
+              return Promise.resolve();
+            }
+            return prisma.setting.upsert({
+              where: { key },
+              update: { value: encryptApiKeyForStorage(value) },
+              create: { key, value: encryptApiKeyForStorage(value) },
+            });
+          });
         }
         return prisma.setting.upsert({
           where: { key },
@@ -72,9 +79,7 @@ export async function PUT(request: Request) {
     );
 
     return NextResponse.json({
-      saved: entries
-        .filter(([k, v]) => !(k === "groq_api_key" && isMaskedPlaceholder(v)))
-        .map(([k]) => k),
+      saved: entries.map(([k]) => k),
     });
   } catch (e) {
     const status = e instanceof SecretsKeyError ? 503 : 500;

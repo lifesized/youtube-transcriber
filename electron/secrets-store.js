@@ -6,6 +6,7 @@
 const fs = require("fs");
 const path = require("path");
 const { getStateDir } = require("../lib/local-api-token.js");
+const { writeFileAtomic } = require("./utils.js");
 
 const FILE_NAME = "electron-secrets.json";
 const VALID_LLM = new Set(["anthropic", "openai"]);
@@ -15,22 +16,28 @@ function secretsPath() {
 }
 
 function readFile() {
+  const filePath = secretsPath();
+  if (!fs.existsSync(filePath)) return {};
+  let parsed;
   try {
-    const raw = fs.readFileSync(secretsPath(), "utf8");
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
+    parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch (error) {
+    console.error("electron-secrets.json is corrupt; refusing to parse:", error.message);
+    const err = new Error("electron-secrets.json is corrupt");
+    err.code = "CORRUPT_SECRETS";
+    throw err;
   }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    console.error("electron-secrets.json is corrupt; refusing to parse");
+    const err = new Error("electron-secrets.json is corrupt");
+    err.code = "CORRUPT_SECRETS";
+    throw err;
+  }
+  return parsed;
 }
 
 function writeFile(data) {
-  const dir = getStateDir();
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(secretsPath(), JSON.stringify(data, null, 2) + "\n", {
-    encoding: "utf8",
-    mode: 0o600,
-  });
+  writeFileAtomic(secretsPath(), JSON.stringify(data, null, 2) + "\n", 0o600);
 }
 
 class SecretsStore {
@@ -106,14 +113,20 @@ class SecretsStore {
       }
       stored.llmProvider = patch.llmProvider || "";
     }
-    if (patch.llmApiKey !== undefined && !isMasked(patch.llmApiKey)) {
+    if (
+      patch.llmApiKey !== undefined &&
+      !isMasked(patch.llmApiKey, maskKey(current.llmApiKey))
+    ) {
       stored.llmApiKeyEnc = patch.llmApiKey
         ? this._encrypt(patch.llmApiKey)
         : "";
     } else if (!stored.llmApiKeyEnc && current.llmApiKey) {
       stored.llmApiKeyEnc = this._encrypt(current.llmApiKey);
     }
-    if (patch.notionToken !== undefined && !isMasked(patch.notionToken)) {
+    if (
+      patch.notionToken !== undefined &&
+      !isMasked(patch.notionToken, maskKey(current.notionToken))
+    ) {
       stored.notionTokenEnc = patch.notionToken
         ? this._encrypt(patch.notionToken)
         : "";
@@ -150,8 +163,13 @@ function maskKey(value) {
   return `••••${s.slice(-4)}`;
 }
 
-function isMasked(value) {
-  return typeof value === "string" && (value.includes("•") || value.includes("*"));
+function isMasked(value, maskedPlaceholder) {
+  return (
+    typeof value === "string" &&
+    typeof maskedPlaceholder === "string" &&
+    maskedPlaceholder.length > 0 &&
+    value === maskedPlaceholder
+  );
 }
 
 function attachSecretsIpc(child, store) {
@@ -187,5 +205,6 @@ module.exports = {
   SecretsStore,
   attachSecretsIpc,
   maskKey,
+  isMasked,
   VALID_LLM,
 };

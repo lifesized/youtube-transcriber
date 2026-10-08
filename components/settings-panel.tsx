@@ -546,7 +546,7 @@ export function SettingsPanel() {
         setLlmError(data.error || "Could not save");
         return;
       }
-      setLlmHasKey(!!data.hasLlmKey || llmHasKey || Boolean(llmKey && !llmKey.includes("•")));
+      setLlmHasKey(!!data.hasLlmKey || !!data.hasKey || llmHasKey);
       if (data.llmKeyMasked) setLlmKey(data.llmKeyMasked);
     } catch {
       setLlmError("Could not save");

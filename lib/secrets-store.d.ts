@@ -3,11 +3,15 @@ import type { SecretsKeyError } from "./secrets-crypto";
 export { SecretsKeyError };
 export declare const ENV_NAME: "TRANSCRIBER_SECRETS_KEY";
 
-export declare function encryptApiKeyForStorage(plaintext: string): string;
+export declare function encryptApiKeyForStorage(
+  plaintext: string,
+  currentMasked?: string
+): string;
 export declare function decryptApiKeyForUse(stored: string): string;
 export declare function maskApiKeyForResponse(stored: string): string;
 export declare function isMaskedPlaceholder(
-  value: string | undefined | null
+  value: string | undefined | null,
+  currentMasked?: string | undefined | null
 ): boolean;
 
 export declare function migratePlaintextSecrets(prisma: {

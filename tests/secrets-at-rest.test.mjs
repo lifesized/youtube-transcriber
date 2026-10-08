@@ -70,6 +70,18 @@ test("wrong master key fails closed", async () => {
   });
 });
 
+test("isMaskedPlaceholder is exact equality with the GET placeholder", async () => {
+  const keyHex = cryptoMod.generateSecretsKeyHex();
+  const plain = "sk-or-v1-abcdefghijklmnop";
+  const enc = await withKey(keyHex, () => cryptoMod.encryptSecret(plain));
+  const masked = await withKey(keyHex, () => cryptoMod.maskStoredSecret(enc));
+  assert.equal(cryptoMod.isMaskedPlaceholder(masked, masked), true);
+  assert.equal(cryptoMod.isMaskedPlaceholder(plain, masked), false);
+  assert.equal(cryptoMod.isMaskedPlaceholder("********", masked), false);
+  assert.equal(cryptoMod.isMaskedPlaceholder("••••abcd", masked), false);
+  assert.equal(cryptoMod.isMaskedPlaceholder(masked), false);
+});
+
 test("maskStoredSecret never returns plaintext", async () => {
   const keyHex = cryptoMod.generateSecretsKeyHex();
   const plain = "sk-or-v1-abcdefghijklmnop";

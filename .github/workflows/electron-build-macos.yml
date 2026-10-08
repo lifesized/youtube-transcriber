@@ -10,6 +10,8 @@ jobs:
   build:
     name: Build macOS DMG (arm64)
     runs-on: macos-14  # macOS arm64 runner
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout code
@@ -387,6 +389,19 @@ jobs:
           
           echo ""
           echo "✓ All smoke tests passed!"
+      
+      - name: DMG sha256
+        run: |
+          set -euo pipefail
+          DMG=$(ls dist-electron/*.dmg | head -1)
+          HASH=$(shasum -a 256 "$DMG" | awk '{print $1}')
+          echo "DMG $DMG"
+          echo "sha256 $HASH"
+          {
+            echo "## DMG"
+            echo ""
+            echo "\`$HASH\`  \`${DMG##*/}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
       
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4

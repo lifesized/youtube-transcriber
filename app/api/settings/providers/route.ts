@@ -48,8 +48,14 @@ export async function POST(request: Request) {
       // Partial update — only set fields that were provided
       const data: Record<string, unknown> = {};
       if (provider !== undefined) data.provider = provider;
-      if (apiKey && !isMaskedPlaceholder(apiKey)) {
-        data.apiKey = encryptApiKeyForStorage(apiKey);
+      if (apiKey) {
+        const existing = await prisma.providerConfig.findUnique({ where: { id } });
+        const currentMasked = existing
+          ? maskApiKeyForResponse(existing.apiKey)
+          : "";
+        if (!isMaskedPlaceholder(apiKey, currentMasked)) {
+          data.apiKey = encryptApiKeyForStorage(apiKey);
+        }
       }
       if (model !== undefined) data.model = model?.trim() || null;
       if (baseUrl !== undefined) {

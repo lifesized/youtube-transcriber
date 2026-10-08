@@ -6,6 +6,9 @@
 - **Loopback Host pin** — Requests whose `Host` is not `127.0.0.1:<port>` or `localhost:<port>` (port from `PORT`, default 19720) return 421. The local-token cookie is minted only when `Sec-Fetch-Site` is `none` or `same-origin`.
 - **Pairing opt-in** — Tray **Connect browser extension…** opens a 2-minute window. Outside it, `/api/native-host/pair` returns 403 and no dialog is shown. Origin must match `^chrome-extension://[a-p]{32}$`. Deny is a global cooldown; main never stacks a second dialog and caps about 3 dialogs per hour.
 - **Unpair** — Tray **Paired extensions…** lists paired IDs. Removing one rewrites native-host manifests, rotates the local API token, and restarts the server.
+- **Secrets over IPC** — The packaged server no longer inherits LLM/Notion keys via `secretEnv` at spawn. In Electron they are fetched from main over IPC, so a key cleared in Settings stops working immediately.
+- **Electron fuses** — afterPack turns off `EnableNodeOptionsEnvironmentVariable` and `EnableNodeCliInspectArguments`, keeps `RunAsNode` on.
+- **Native-host hardening** — Wrapper paths are single-quoted; Electron PATH is exactly Resources/bin, /usr/bin, /bin; stdin messages capped at 1 MiB. `extension-ids.json` and the secrets file are written atomically (mode 0600). Corrupt JSON is refused on append. Masked key detection is exact equality with the GET placeholder.
 
 ### Changed
 - **Pinned ffmpeg 9.0.2** — CI downloads a specific Martin Riedl macOS arm64 zip (`electron/ffmpeg.lock.json`) and fails if the SHA-256 does not match. Packaged `ffmpeg -version` plus a 1-second sine encode, and `yt-dlp --version`, must exit 0. The lock records provenance: single-maintainer Martin Riedl build, re-signed ad-hoc in afterPack.
@@ -13,6 +16,7 @@
 
 ### Fixed
 - **Native-host wrapper path** — Packaged host script is `Contents/Resources/app.asar.unpacked/tools/...` (not `Resources/app/tools`). `start` in Electron mode launches the app with `open -b com.transcribed.app`. Spawned children have an `error` handler. CI `ls`s the wrapper target and sends a framed `ping`.
+- **CI workflow** — Job uses `permissions: contents: read` and prints the DMG SHA-256 in the job summary.
 - **Pairing dialog** — Focuses the menu-bar app (`app.focus({ steal: true })`) before the confirm box, shows the extension ID in `detail`, and warns when the ID is not a known Chrome Web Store listing. A dialog timeout marks the request expired so a late Allow does not write the ID.
 - **Native-host PATH** — The Electron-installed wrapper no longer prepends `/opt/homebrew/bin` or `/usr/local/bin`. Those prefixes stay only for the dev/non-Electron host.
 - **Packaged `@prisma/client`** — electron-builder extraResources skips a source-root `node_modules`, so afterPack now copies the staging standalone tree (including Prisma) into the `.app` before the payload check.

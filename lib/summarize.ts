@@ -28,13 +28,7 @@ export async function resolveLlmConfig(overrides?: {
   if (provider !== "anthropic" && provider !== "openai") {
     throw new Error("Choose Anthropic or OpenAI in Settings to generate summaries.");
   }
-  const apiKey =
-    overrides?.apiKey ||
-    secrets.llmApiKey ||
-    (provider === "anthropic"
-      ? process.env.ANTHROPIC_API_KEY
-      : process.env.OPENAI_API_KEY) ||
-    "";
+  const apiKey = overrides?.apiKey || secrets.llmApiKey || "";
   if (!apiKey.trim()) {
     throw new Error("Add an API key in Settings for the selected summary provider.");
   }

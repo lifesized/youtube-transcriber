@@ -90,9 +90,6 @@ app.whenReady().then(async () => {
   
   secretsStore = new SecretsStore({
     safeStorage,
-    onChange: (env) => {
-      if (serverManager) serverManager.secretEnv = env;
-    },
   });
 
   // Initialize managers
@@ -102,7 +99,6 @@ app.whenReady().then(async () => {
     standaloneServer,
     extraResources,
     isDev: IS_DEV,
-    secretEnv: secretsStore.envForSpawn(),
   });
 
   const nativeHostInstaller = new NativeHostInstaller();

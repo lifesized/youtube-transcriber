@@ -30,6 +30,7 @@ const PORT = 19720;
 const HEALTH_URL = `http://127.0.0.1:${PORT}/api/health`;
 const IDENTITY_HEADER = "x-transcriber-service";
 const ELECTRON_BUNDLE_ID = "com.transcribed.app";
+const MAX_NATIVE_HOST_MESSAGE = 1024 * 1024;
 
 // Project root is two levels up from this file (tools/native-host/ → repo root).
 const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
@@ -141,6 +142,10 @@ async function probeWithRetry(attempts, intervalMs) {
   return { status: "down" };
 }
 
+function electronResourcesBin(execPath) {
+  return path.join(path.dirname(execPath), "..", "Resources", "bin");
+}
+
 function getStartLaunch(env = process.env, execPath = process.execPath) {
   if (env.ELECTRON_RUN_AS_NODE) {
     return {
@@ -148,6 +153,9 @@ function getStartLaunch(env = process.env, execPath = process.execPath) {
       args: ["-b", ELECTRON_BUNDLE_ID],
       cwd: undefined,
       extraBins: [],
+      path: [electronResourcesBin(execPath), "/usr/bin", "/bin"].join(
+        path.delimiter
+      ),
     };
   }
   // Chrome's inherited PATH is minimal (no Homebrew, no nvm), so we can't
@@ -187,17 +195,19 @@ async function startServer() {
 
   const launch = getStartLaunch(process.env, process.execPath);
   const extraBins = launch.extraBins || [];
-  const extendedPath = [
-    ...extraBins,
-    path.join(os.homedir(), ".local", "bin"), // Linux per-user binaries
-    path.join(os.homedir(), "bin"),           // BSD/Linux per-user binaries
-    "/snap/bin",                   // Linux Snap
-    "/usr/bin",
-    "/bin",
-    process.env.PATH || "",
-  ]
-    .filter(Boolean)
-    .join(path.delimiter);
+  const extendedPath =
+    launch.path ||
+    [
+      ...extraBins,
+      path.join(os.homedir(), ".local", "bin"), // Linux per-user binaries
+      path.join(os.homedir(), "bin"),           // BSD/Linux per-user binaries
+      "/snap/bin",                   // Linux Snap
+      "/usr/bin",
+      "/bin",
+      process.env.PATH || "",
+    ]
+      .filter(Boolean)
+      .join(path.delimiter);
 
   // Ensure loopback token exists and is passed to Next (middleware reads env).
   let tokenEnv = {};
@@ -304,8 +314,16 @@ async function handleMessage(msg) {
 function listen() {
   process.stdin.on("data", async (chunk) => {
     inBuf = Buffer.concat([inBuf, chunk]);
+    if (inBuf.length > 4 + MAX_NATIVE_HOST_MESSAGE) {
+      log("input_too_large", { length: inBuf.length });
+      process.exit(1);
+    }
     while (inBuf.length >= 4) {
       const len = inBuf.readUInt32LE(0);
+      if (len > MAX_NATIVE_HOST_MESSAGE) {
+        log("message_too_large", { len });
+        process.exit(1);
+      }
       if (inBuf.length < 4 + len) break;
       const json = inBuf.slice(4, 4 + len).toString("utf8");
       inBuf = inBuf.slice(4 + len);
@@ -340,6 +358,8 @@ if (require.main === module) {
 
 module.exports = {
   ELECTRON_BUNDLE_ID,
+  MAX_NATIVE_HOST_MESSAGE,
+  electronResourcesBin,
   getStartLaunch,
   spawnDetached,
   listen,

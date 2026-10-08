@@ -12,5 +12,8 @@ export declare function requireSecretsKey(): Buffer;
 export declare function encryptSecret(plaintext: string, key?: Buffer): string;
 export declare function decryptSecret(stored: string, key?: Buffer | null): string;
 export declare function maskStoredSecret(stored: string): string;
-export declare function isMaskedPlaceholder(value: string | undefined | null): boolean;
+export declare function isMaskedPlaceholder(
+  value: string | undefined | null,
+  currentMasked?: string | undefined | null
+): boolean;
 export declare function generateSecretsKeyHex(): string;

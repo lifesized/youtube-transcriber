@@ -7,10 +7,25 @@ const require = createRequire(import.meta.url);
 const host = require("../tools/native-host/transcriber-host.js");
 
 test("Electron mode start launches the app by bundle id", () => {
-  const launch = host.getStartLaunch({ ELECTRON_RUN_AS_NODE: "1" }, "/App/Transcriber");
+  const launch = host.getStartLaunch(
+    { ELECTRON_RUN_AS_NODE: "1" },
+    "/App/Contents/MacOS/Transcriber"
+  );
   assert.equal(launch.command, "open");
   assert.deepEqual(launch.args, ["-b", "com.transcribed.app"]);
   assert.equal(host.ELECTRON_BUNDLE_ID, "com.transcribed.app");
+  assert.equal(
+    launch.path,
+    [
+      path.join("/App/Contents/MacOS", "..", "Resources", "bin"),
+      "/usr/bin",
+      "/bin",
+    ].join(path.delimiter)
+  );
+});
+
+test("native host messages are capped at 1 MiB", () => {
+  assert.equal(host.MAX_NATIVE_HOST_MESSAGE, 1024 * 1024);
 });
 
 test("non-Electron start still uses npm run dev next to execPath", () => {

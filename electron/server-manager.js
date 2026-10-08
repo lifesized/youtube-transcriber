@@ -30,7 +30,6 @@ class ServerManager extends EventEmitter {
     this.standaloneServer = options.standaloneServer;
     this.extraResources = options.extraResources;
     this.isDev = options.isDev;
-    this.secretEnv = options.secretEnv || {};
     
     this.process = null;
     this.status = "stopped";
@@ -142,7 +141,6 @@ class ServerManager extends EventEmitter {
     // Build env vars
     const env = {
       ...process.env,
-      ...this.secretEnv,
       NODE_ENV: this.isDev ? "development" : "production",
       PORT: String(this.port),
       HOSTNAME: "127.0.0.1",

@@ -12,6 +12,7 @@
 const { execSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
+const { flipFuses, FuseV1Options, FuseVersion } = require("@electron/fuses");
 
 module.exports = async function(context) {
   const { appOutDir, electronPlatformName } = context;
@@ -30,6 +31,7 @@ module.exports = async function(context) {
     );
     copyRebuiltSqliteIntoStandalone(context);
     assertStandalonePayload(context);
+    await applyElectronFuses(context);
     await adHocCodesign(context);
   }
 };
@@ -143,6 +145,29 @@ function assertStandalonePayload(context) {
   console.log("  standalone payload verified");
 }
 
+async function applyElectronFuses(context) {
+  const { appOutDir } = context;
+  const electronBinary = path.join(
+    appOutDir,
+    "Transcriber.app",
+    "Contents",
+    "MacOS",
+    "Transcriber"
+  );
+  if (!fs.existsSync(electronBinary)) {
+    throw new Error(`Electron binary missing for fuses: ${electronBinary}`);
+  }
+  console.log("  flipping Electron fuses on", electronBinary);
+  await flipFuses(electronBinary, {
+    version: FuseVersion.V1,
+    resetAdHocDarwinSignature: true,
+    [FuseV1Options.RunAsNode]: true,
+    [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
+    [FuseV1Options.EnableNodeCliInspectArguments]: false,
+  });
+  console.log("  fuses: RunAsNode ON, NODE_OPTIONS OFF, inspect args OFF");
+}
+
 async function adHocCodesign(context) {
   const { appOutDir } = context;
   
@@ -184,3 +209,4 @@ async function adHocCodesign(context) {
 
 module.exports.syncStandaloneFromStaging = syncStandaloneFromStaging;
 module.exports.overlaySqliteNativeAddon = overlaySqliteNativeAddon;
+module.exports.applyElectronFuses = applyElectronFuses;

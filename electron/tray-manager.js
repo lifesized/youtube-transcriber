@@ -186,7 +186,16 @@ class TrayManager {
   }
 
   async _showPairedExtensions() {
-    const ids = this.nativeHostInstaller.listExtensionIds();
+    let ids;
+    try {
+      ids = this.nativeHostInstaller.listExtensionIds();
+    } catch (error) {
+      this._notify(
+        "Paired extensions",
+        error.message || "Could not read paired extensions."
+      );
+      return;
+    }
     if (ids.length === 0) {
       await dialog.showMessageBox({
         type: "info",
