@@ -12,6 +12,7 @@ const { app } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const { execFileSync } = require("child_process");
 const { checkIfTranslocated, writeFileAtomic } = require("./utils.js");
 const { filterValidExtensionIds } = require("../lib/native-host-pair.js");
 
@@ -29,6 +30,55 @@ function packagedNativeHostScriptPath(resourcesPath) {
     "native-host",
     "transcriber-host.js"
   );
+}
+
+function resolveHostScriptPath() {
+  if (process.env.NODE_ENV === "development") {
+    return path.resolve(__dirname, "..", "tools", "native-host", "transcriber-host.js");
+  }
+  if (process.resourcesPath) {
+    return packagedNativeHostScriptPath(process.resourcesPath);
+  }
+  return path.resolve(__dirname, "..", "tools", "native-host", "transcriber-host.js");
+}
+
+function commandLineMentionsPath(commandLine, hostScriptPath) {
+  if (!commandLine || !hostScriptPath) return false;
+  const escaped = String(hostScriptPath).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?:^|[\\s'"])${escaped}(?:[\\s'"]|$)`).test(commandLine);
+}
+
+function killNativeHostProcesses(hostScriptPath, options = {}) {
+  if (!hostScriptPath) return [];
+  const selfPid = options.selfPid || process.pid;
+  const killPid = options.kill || ((pid, signal) => process.kill(pid, signal));
+  let out = options.psOutput;
+  if (out == null) {
+    try {
+      const run = options.execFileSync || execFileSync;
+      out = run("ps", ["-ax", "-o", "pid=,command="], { encoding: "utf8" });
+    } catch {
+      return [];
+    }
+  }
+  const killed = [];
+  for (const line of String(out).split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const space = trimmed.search(/\s/);
+    if (space < 0) continue;
+    const pid = Number(trimmed.slice(0, space));
+    const cmd = trimmed.slice(space).trim();
+    if (!Number.isInteger(pid) || pid <= 0 || pid === selfPid) continue;
+    if (!commandLineMentionsPath(cmd, hostScriptPath)) continue;
+    try {
+      killPid(pid, "SIGTERM");
+      killed.push(pid);
+    } catch {
+      // process already gone
+    }
+  }
+  return killed;
 }
 
 class NativeHostInstaller {
@@ -340,4 +390,7 @@ exec ${shSingleQuote(electronBinary)} ${shSingleQuote(hostScript)} "$@"
 
 module.exports = NativeHostInstaller;
 module.exports.packagedNativeHostScriptPath = packagedNativeHostScriptPath;
+module.exports.resolveHostScriptPath = resolveHostScriptPath;
+module.exports.commandLineMentionsPath = commandLineMentionsPath;
+module.exports.killNativeHostProcesses = killNativeHostProcesses;
 module.exports.shSingleQuote = shSingleQuote;

@@ -23,8 +23,13 @@ const {
   ensureLocalApiToken,
   ensureInEnv,
   getLocalApiTokenPath,
+  getStateDir,
   ENV_NAME,
 } = require("../../lib/local-api-token.js");
+const {
+  filterValidExtensionIds,
+  KNOWN_STORE_EXTENSION_IDS,
+} = require("../../lib/native-host-pair.js");
 
 const PORT = 19720;
 const HEALTH_URL = `http://127.0.0.1:${PORT}/api/health`;
@@ -262,6 +267,49 @@ function getStatus() {
   };
 }
 
+function parseCallerExtensionId(originArg) {
+  if (typeof originArg !== "string") return null;
+  const trimmed = originArg.trim();
+  const match = trimmed.match(/^chrome-extension:\/\/([a-p]{32})\/?$/);
+  return match ? match[1] : null;
+}
+
+function loadAllowedExtensionIds(idsPath) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(idsPath, "utf8"));
+    return filterValidExtensionIds(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function authorizeNativeHostCaller(argv = process.argv, options = {}) {
+  const originArg = argv[1];
+  const extensionId = parseCallerExtensionId(originArg);
+  if (!extensionId) {
+    return { ok: false, error: "unauthorized_caller" };
+  }
+  const idsPath =
+    options.idsPath || path.join(getStateDir(), "extension-ids.json");
+  const allowed = loadAllowedExtensionIds(idsPath);
+  const known = options.knownIds || KNOWN_STORE_EXTENSION_IDS;
+  if (allowed.includes(extensionId) || known.includes(extensionId)) {
+    return { ok: true, extensionId };
+  }
+  return { ok: false, error: "unauthorized_caller" };
+}
+
+function replyGetLocalToken(id, argv = process.argv, options = {}) {
+  const auth = authorizeNativeHostCaller(argv, options);
+  if (!auth.ok) {
+    log("getLocalToken_denied");
+    return { id, ok: false, error: auth.error, _exit: true };
+  }
+  const token = ensureLocalApiToken();
+  log("getLocalToken", { path: getLocalApiTokenPath() });
+  return { id, ok: true, token };
+}
+
 // --- Native messaging framing ---------------------------------------------
 
 function writeMessage(obj) {
@@ -296,12 +344,8 @@ async function handleMessage(msg) {
         return { id, ok: true, ...stopServer() };
       case "status":
         return { id, ok: true, ...getStatus() };
-      case "getLocalToken": {
-        const token = ensureLocalApiToken();
-        // Do not log token. Path is ok for diagnostics.
-        log("getLocalToken", { path: getLocalApiTokenPath() });
-        return { id, ok: true, token };
-      }
+      case "getLocalToken":
+        return replyGetLocalToken(id);
       default:
         return { id, ok: false, error: "unknown_cmd", cmd };
     }
@@ -334,8 +378,14 @@ function listen() {
         writeMessage({ ok: false, error: "bad_json" });
         continue;
       }
-      const reply = await handleMessage(msg);
-      writeMessage(reply);
+      const reply = (await handleMessage(msg)) || {};
+      const exitAfter = reply._exit;
+      const wire = { ...reply };
+      delete wire._exit;
+      writeMessage(wire);
+      if (exitAfter) {
+        process.exit(1);
+      }
     }
   });
 
@@ -362,5 +412,9 @@ module.exports = {
   electronResourcesBin,
   getStartLaunch,
   spawnDetached,
+  parseCallerExtensionId,
+  loadAllowedExtensionIds,
+  authorizeNativeHostCaller,
+  replyGetLocalToken,
   listen,
 };

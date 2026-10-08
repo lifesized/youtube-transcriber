@@ -31,7 +31,7 @@ test("removeExtensionId drops the id and rewrites extension-ids.json", () => {
   }
 });
 
-test("unpair rewrites manifests, rotates the token, and restarts the server", async () => {
+test("unpair rewrites manifests, rotates the token, kills native hosts, and restarts the server", async () => {
   const calls = [];
   await unpairExtension(ID_A, {
     installer: {
@@ -50,11 +50,56 @@ test("unpair rewrites manifests, rotates the token, and restarts the server", as
     rotate() {
       calls.push(["rotate"]);
     },
+    hostScriptPath: "/App/Contents/Resources/app.asar.unpacked/tools/native-host/transcriber-host.js",
+    killNativeHosts(script) {
+      calls.push(["kill", script]);
+    },
   });
   assert.deepEqual(calls, [
     ["remove", ID_A],
     ["rewrite"],
     ["rotate"],
+    [
+      "kill",
+      "/App/Contents/Resources/app.asar.unpacked/tools/native-host/transcriber-host.js",
+    ],
     ["restart"],
   ]);
+});
+
+test("killNativeHostProcesses matches the exact host script path", () => {
+  const {
+    commandLineMentionsPath,
+    killNativeHostProcesses,
+  } = require(path.join(repoRoot, "electron/native-host-installer.js"));
+  const host =
+    "/Applications/Transcriber.app/Contents/Resources/app.asar.unpacked/tools/native-host/transcriber-host.js";
+  assert.equal(
+    commandLineMentionsPath(
+      `/App/Transcriber ${host}`,
+      host
+    ),
+    true
+  );
+  assert.equal(
+    commandLineMentionsPath(
+      `/App/Transcriber ${host}.bak`,
+      host
+    ),
+    false
+  );
+  const killed = [];
+  const pids = killNativeHostProcesses(host, {
+    selfPid: 1,
+    psOutput: [
+      `  11 /App/Transcriber ${host}`,
+      `  12 /App/Transcriber ${host}.bak`,
+      `  13 /usr/bin/python transcriber-host.js`,
+    ].join("\n"),
+    kill(pid) {
+      killed.push(pid);
+    },
+  });
+  assert.deepEqual(killed, [11]);
+  assert.deepEqual(pids, [11]);
 });

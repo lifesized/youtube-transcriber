@@ -15,6 +15,10 @@
 const { app, Tray, Menu, shell, nativeImage, Notification, dialog } = require("electron");
 const path = require("path");
 const NativeHostInstaller = require("./native-host-installer.js");
+const {
+  killNativeHostProcesses,
+  resolveHostScriptPath,
+} = NativeHostInstaller;
 const { PAIRING_WINDOW_MS } = require("../lib/native-host-pair.js");
 const { rotateLocalApiToken, getStateDir } = require("../lib/local-api-token.js");
 const { importLibrary, inspectSourceDatabase } = require("../lib/import-library.js");
@@ -25,6 +29,9 @@ async function unpairExtension(id, deps) {
   deps.installer.removeExtensionId(id);
   await deps.installer.rewriteManifests();
   rotate();
+  const hostScript = deps.hostScriptPath || resolveHostScriptPath();
+  const kill = deps.killNativeHosts || killNativeHostProcesses;
+  kill(hostScript);
   if (deps.serverManager && typeof deps.serverManager.restart === "function") {
     await deps.serverManager.restart();
   }
