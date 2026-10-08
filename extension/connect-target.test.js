@@ -192,19 +192,28 @@ test("Settings row: Needs permission, app offers Allow access for pairable reaso
   );
 });
 
-test("Settings row: Needs permission, dev shows the setup command or Open dev server", () => {
+test("Settings row: Needs permission, dev shows the setup command", () => {
   assert.deepEqual(row("dev", "needs_permission", "extension_not_allowed"), {
     action: { kind: "command", command: `npm run install-native-host -- --ext-id=${EXT}` },
     message:
       "This extension isn't paired with the dev server. Run the setup command in your Transcriber folder, then try again.",
     tone: "warn",
   });
+});
+
+test("Settings row: a dev 401 asks to update the helper, never to open the dev server", () => {
   assert.deepEqual(row("dev", "needs_permission", "unauthorized"), {
-    action: { kind: "openDevServer", label: "Open dev server", url: "http://127.0.0.1:19720" },
+    action: {
+      kind: "command",
+      heading: "Update helper",
+      command: `npm run install-native-host -- --ext-id=${EXT}`,
+    },
     message:
-      "The dev server didn't accept this browser. Open http://127.0.0.1:19720 once in this browser, then try again.",
+      "The dev server's browser helper needs an update. Copy the setup command from Settings › Library, run it in your Transcriber folder, then try again.",
     tone: "warn",
   });
+  assert.doesNotMatch(ConnectTarget.errorMessage("unauthorized", "dev"), /127\.0\.0\.1|once in this browser/);
+  assert.equal(ConnectTarget.STRINGS.action.openDevServer, undefined);
 });
 
 test("Settings row: Helper out of date names the tray item (app) or the command (dev)", () => {

@@ -40,6 +40,11 @@ const SCENARIOS = {
     app: RUNNING,
     dev: { status: "needs_permission", reason: "extension_not_allowed" },
   },
+  "dev-not-accepted": {
+    target: "dev",
+    app: RUNNING,
+    dev: { status: "needs_permission", reason: "unauthorized" },
+  },
   "dev-helper-outdated": {
     target: "dev",
     app: RUNNING,

@@ -71,7 +71,6 @@
     indicatorTitle: "Library: {label} · {port}, {status}. Click to change in Settings.",
     action: Object.freeze({
       allowAccess: "Allow access",
-      openDevServer: "Open dev server",
       updateHelper: "Update helper",
       copy: "Copy",
       copied: "Copied",
@@ -120,7 +119,7 @@
       },
       unauthorized: {
         [APP]: "Transcriber didn't accept this browser's access key. Quit and reopen Transcriber, then try again.",
-        [DEV]: "The dev server didn't accept this browser. Open http://127.0.0.1:{port} once in this browser, then try again.",
+        [DEV]: "The dev server's browser helper needs an update. Copy the setup command from Settings › Library, run it in your Transcriber folder, then try again.",
       },
       unreachable: {
         [APP]: "Transcriber app isn't running.",
@@ -222,7 +221,7 @@
 
   /**
    * What the selected Settings › Library row shows for one probe result.
-   * `action.kind` is start | retry | allowAccess | openDevServer | command | note.
+   * `action.kind` is start | retry | allowAccess | command | note.
    * `tone` colours the line under the rows: muted, warn (setup) or error.
    * `startFailure` is the reason from this panel's last failed Start, if any.
    */
@@ -255,9 +254,14 @@
         }
         return { action: null, message: errorMessage(reason || "unauthorized", APP), tone: "warn" };
       }
+      // Tokens only (no cookie fallback): a dev 401 is fixed by updating the helper.
       if (reason === "unauthorized") {
         return {
-          action: { kind: "openDevServer", label: STRINGS.action.openDevServer, url: t.apiBase },
+          action: {
+            kind: "command",
+            heading: STRINGS.action.updateHelper,
+            command: devSetupCommand(extId),
+          },
           message: errorMessage("unauthorized", DEV),
           tone: "warn",
         };

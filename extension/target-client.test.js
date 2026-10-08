@@ -157,7 +157,7 @@ test("each reason has its own human message per target", () => {
   assert.match(ConnectTarget.errorMessage("host_not_found", "dev"), /setup command/);
   assert.match(ConnectTarget.errorMessage("bad_project_root", "dev"), /--project-root/);
   assert.match(ConnectTarget.errorMessage("unauthorized", "app"), /access key/);
-  assert.match(ConnectTarget.errorMessage("unauthorized", "dev"), /127\.0\.0\.1:19720/);
+  assert.match(ConnectTarget.errorMessage("unauthorized", "dev"), /browser helper needs an update.*Settings › Library/);
   assert.equal(ConnectTarget.errorMessage("unreachable", "app"), "Transcriber app isn't running.");
   assert.equal(
     ConnectTarget.errorMessage("unreachable", "dev"),

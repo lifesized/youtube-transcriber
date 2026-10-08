@@ -1820,13 +1820,8 @@ function paintSelectedRow(currentId) {
     el.connectStart.disabled = !!a.busy || (kind === "allowAccess" && allowAccessPending);
   }
 
-  const link = kind === "retry" || kind === "openDevServer";
-  el.connectRetry.hidden = !link;
-  if (link) {
-    el.connectRetry.textContent = a.label;
-    el.connectRetry.dataset.kind = kind;
-    el.connectRetry.dataset.url = a.url || "";
-  }
+  el.connectRetry.hidden = kind !== "retry";
+  if (kind === "retry") el.connectRetry.textContent = a.label;
 
   el.connectCommand.hidden = kind !== "command";
   if (kind === "command") {
@@ -1887,13 +1882,7 @@ async function allowAccessClicked() {
 if (el.connectStart) el.connectStart.addEventListener("click", rowStartClicked);
 
 if (el.connectRetry) {
-  el.connectRetry.addEventListener("click", () => {
-    if (el.connectRetry.dataset.kind === "openDevServer") {
-      openNextToCurrentTab(el.connectRetry.dataset.url);
-      return;
-    }
-    refreshTargetStatuses();
-  });
+  el.connectRetry.addEventListener("click", () => refreshTargetStatuses());
 }
 
 if (el.connectCopy) {
