@@ -326,6 +326,7 @@ test("CI launches the packaged Transcriber.app and checks asar requires", () => 
   assert.ok(content.includes("assert-packaged-requires.js"));
   assert.ok(content.includes("Launch packaged Transcriber.app"));
   assert.ok(content.includes("Uncaught Exception"));
+  assert.ok(content.includes("UnhandledPromiseRejectionWarning"));
   assert.ok(content.includes("packaged-launch health"));
 });
 

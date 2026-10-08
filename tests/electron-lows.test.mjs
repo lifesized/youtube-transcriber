@@ -97,6 +97,18 @@ test("electron isMasked is exact equality with the GET placeholder", () => {
   assert.equal(isMasked("••••", masked), false);
 });
 
+test("powerSaveBlocker.isStarted is never called with a null id", () => {
+  const src = readFileSync(path.join(repoRoot, "electron/main.js"), "utf8");
+  assert.equal(
+    (src.match(/powerSaveBlocker\.isStarted\(/g) || []).length,
+    2
+  );
+  assert.equal(
+    (src.match(/powerSaveId !== null && powerSaveBlocker\.isStarted\(powerSaveId\)/g) || []).length,
+    2
+  );
+});
+
 test("afterPack flips fuses and keeps RunAsNode", () => {
   const src = readFileSync(path.join(repoRoot, "electron/after-pack.js"), "utf8");
   assert.ok(src.includes("@electron/fuses"));

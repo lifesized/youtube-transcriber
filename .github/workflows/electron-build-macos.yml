@@ -199,7 +199,7 @@ jobs:
               cat "$LOG" || true
               exit 1
             fi
-            if grep -q "Uncaught Exception" "$LOG" 2>/dev/null; then
+            if grep -qE "Uncaught Exception|UnhandledPromiseRejectionWarning" "$LOG" 2>/dev/null; then
               echo "ERROR: Uncaught Exception in packaged app"
               echo "----- packaged app log -----"
               cat "$LOG" || true

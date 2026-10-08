@@ -119,8 +119,8 @@ app.whenReady().then(async () => {
     attachSecretsIpc(child, secretsStore);
   });
   
-  // Start power save blocker
-  if (powerSaveBlocker.isStarted(powerSaveId)) {
+  // Start power save blocker. isStarted() rejects null; id is null until first start.
+  if (powerSaveId !== null && powerSaveBlocker.isStarted(powerSaveId)) {
     powerSaveBlocker.stop(powerSaveId);
   }
   powerSaveId = powerSaveBlocker.start("prevent-app-suspension");
@@ -157,6 +157,8 @@ app.whenReady().then(async () => {
   });
   
   console.log("Transcriber ready");
+}).catch((error) => {
+  console.error("Uncaught Exception", error);
 });
 
 app.on("will-quit", () => {
