@@ -2,7 +2,7 @@
 
 const CHANNEL_RE = /^C[A-Z0-9]{8,}$/;
 const DENIED_CONVERSATION_HINT =
-  "Tusk only runs in public channels it has been invited to, or channels on the allowlist in Settings.";
+  "Tusk only runs in channels on the allowlist in Settings.";
 
 function normalizeChannelId(id) {
   const s = String(id || "").trim().toUpperCase();
@@ -86,24 +86,28 @@ function teamAllowed(eventTeamId, storedTeamId) {
   return Boolean(eventTeamId) && eventTeamId === storedTeamId;
 }
 
-function conversationKind(channelId, channelType) {
+function conversationKind(channelId, channelType, channelName) {
   const type = String(channelType || "").toLowerCase();
+  const name = String(channelName || "").toLowerCase();
   const id = String(channelId || "");
+  // Slash commands send channel_name, not channel_type. Treat those first so
+  // private / DM / MPDM are never inferred as public from a C… id.
+  if (name === "directmessage") return "im";
+  if (name === "privategroup") return "group";
+  if (name === "mpdm" || name.startsWith("mpdm-")) return "mpim";
   if (type === "im" || id.startsWith("D")) return "im";
   if (type === "mpim") return "mpim";
   if (type === "group" || id.startsWith("G")) return "group";
   if (type === "channel") return "channel";
-  if (CHANNEL_RE.test(id.toUpperCase())) return "channel";
+  // Missing channel_type is unknown. Modern private channels also use C… ids.
   return "unknown";
 }
 
-function channelAllowed(channelId, allowlist, channelType) {
-  const kind = conversationKind(channelId, channelType);
-  if (kind === "im" || kind === "mpim" || kind === "group" || kind === "unknown") {
-    return false;
-  }
+function channelAllowed(channelId, allowlist, channelType, channelName) {
   const list = parseChannelAllowlist(allowlist);
-  if (list.length === 0) return kind === "channel";
+  if (list.length === 0) return false;
+  const kind = conversationKind(channelId, channelType, channelName);
+  if (kind === "im" || kind === "mpim") return false;
   const id = normalizeChannelId(channelId);
   return Boolean(id) && list.includes(id);
 }
@@ -133,7 +137,7 @@ function gateEvent(envelope, state, helpers) {
   if (!teamAllowed(authorTeam, state.teamId)) return { ok: false, reason: "slack_connect" };
   if (!isPlainUserMessage(event)) return { ok: false, reason: "ignored_message" };
   if (isSelfMessage(event, state.botUserId)) return { ok: false, reason: "self" };
-  if (!channelAllowed(event.channel, state.channelAllowlist, event.channel_type)) {
+  if (!channelAllowed(event.channel, state.channelAllowlist, event.channel_type, event.channel_name)) {
     return { ok: false, reason: "channel" };
   }
   if (helpers.dedupe.check(eventId) || helpers.dedupe.check(clientMsgId)) {
@@ -160,7 +164,7 @@ function gateSlashCommand(envelope, state, helpers) {
   if (!teamAllowed(teamId, state.teamId)) {
     return { ok: false, reason: "wrong_team", hint: DENIED_CONVERSATION_HINT };
   }
-  if (!channelAllowed(channel, state.channelAllowlist, payload.channel_type)) {
+  if (!channelAllowed(channel, state.channelAllowlist, payload.channel_type, payload.channel_name)) {
     return { ok: false, reason: "channel", hint: DENIED_CONVERSATION_HINT };
   }
   if (helpers && helpers.rateLimit && !helpers.rateLimit.allowAll({ channel, userId })) {

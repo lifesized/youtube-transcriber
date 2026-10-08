@@ -20,7 +20,7 @@ Display copy is the old Transcriber Dev manifest, renamed to Tusk. Socket Mode i
 | `files:write` | Later: upload a transcript file. Unused in milestone 1. Included now so the Slack app is created once. |
 | `reactions:write` | Milestone 1: 👀 on a supported link. Later: progress reactions. |
 
-**Not requested:** `incoming-webhook`, OAuth redirect URLs, `chat:write.public` (Tusk must be invited), `groups:history` / `im:history` (DMs, MPIMs, and private channels are denied unless the channel ID is on the explicit allowlist), `channels:read`. An empty allowlist is **not** allow-all: only public channels Tusk is a member of. Slash commands in any other conversation get an ephemeral hint.
+**Not requested:** `incoming-webhook`, OAuth redirect URLs, `chat:write.public` (Tusk must be invited), `groups:history` / `im:history` (DMs, MPIMs, and private channels are denied unless the channel ID is on the explicit allowlist), `channels:read`. An empty allowlist **denies every channel**. Missing `channel_type` is unknown (a `C…` id is not assumed public). Slash commands also use `channel_name` to deny `privategroup`, `directmessage`, and `mpdm-*` unless that channel ID is on the list. Slash commands in any other conversation get an ephemeral hint.
 
 The **app-level token** (`xapp-…`) is created in the Slack UI after the app exists. It needs only `connections:write` so Socket Mode can open a websocket. That is not a bot OAuth scope.
 

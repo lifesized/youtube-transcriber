@@ -32,7 +32,7 @@ Tusk talks to Slack over Socket Mode from Transcriber on this Mac. There is no p
 1. Open Transcriber from the menu bar → **Open Transcriber** → **Settings**.
 2. Find **Slack (Tusk)**.
 3. Paste the bot token and the app-level token.
-4. Leave the channel allowlist empty to accept **public** channels Tusk is invited to (DMs, MPIMs, and private channels are denied). Or type Slack channel IDs (`C…`), comma-separated, to restrict it to that list.
+4. Type Slack channel IDs (`C…`), comma-separated. An empty allowlist denies every channel, including public ones. A missing `channel_type` is treated as unknown. `/tusk` also uses `channel_name` (`privategroup`, `directmessage`, `mpdm-*`) to deny private, DM, and MPDM conversations unless that ID is on the list.
 5. Turn **Enable Tusk** on and save.
 6. After save the fields show only `saved ••••last4`. The app calls `auth.test` and should show the workspace name and bot name.
 7. The menu-bar status should read **Tusk: connected to &lt;workspace&gt;** (placeholder copy for Design).
@@ -66,7 +66,7 @@ in **#youtube-notes**. Tusk only receives `message.channels` for public channels
 
 **`auth.test` fails / wrong workspace.** The `xoxb-` token must be from this personal workspace install. Tusk pins `team_id` from `auth.test` at save and again at connect, **before** it handles any event. An empty pin denies every event. If you paste a token from a different workspace, save is refused until you check **Reset workspace** in Settings. Slack Connect messages from people whose team is not the pinned team are ignored.
 
-**No 👀 on a pasted link.** Confirm @Tusk is in that **public** channel, the allowlist is empty (public channels Tusk is in) or includes that channel ID (channel details → scroll to the bottom for `C…`), and the URL is YouTube, a Spotify episode, or a LinkedIn post/event the app already accepts. LinkedIn must be `https://` on `linkedin.com` / `www.linkedin.com` with no port or userinfo. `/tusk` in a DM or private channel replies with an ephemeral hint and does nothing.
+**No 👀 on a pasted link.** Confirm @Tusk is in that channel and the allowlist in Settings includes that channel ID (channel details → scroll to the bottom for `C…`). An empty allowlist denies every channel. The URL must be YouTube, a Spotify episode, or a LinkedIn post/event the app already accepts. LinkedIn must be `https://` on `linkedin.com` / `www.linkedin.com` with no port or userinfo. `/tusk` in a DM, MPDM, or private channel replies with an ephemeral hint unless that channel ID is allowlisted.
 
 **`/tusk` is unknown.** Reinstall the app to the workspace after saving the manifest so the slash command is registered. Slack can take a minute.
 

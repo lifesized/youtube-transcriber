@@ -44,62 +44,124 @@ const userMessage = {
   client_msg_id: "client-1",
 };
 
+const HOME = { teamId: "THOME", channelAllowlist: ["C01234567"] };
+
+function slashPayload(extra = {}) {
+  return {
+    type: "slash_commands",
+    payload: {
+      team_id: "THOME",
+      channel_id: "C01234567",
+      text: "help",
+      user_id: "Ujames",
+      ...extra,
+    },
+  };
+}
+
 test("empty team pin denies every event until auth.test sets it", () => {
   const h = helpers();
   assert.equal(gates.teamAllowed("THOME", ""), false);
-  assert.equal(gates.gateEvent(envelope(userMessage), { teamId: "" }, h).reason, "wrong_team");
-  assert.equal(gates.gateEvent(envelope(userMessage), { teamId: "THOME" }, h).ok, true);
+  assert.equal(gates.gateEvent(envelope(userMessage), { teamId: "", channelAllowlist: HOME.channelAllowlist }, h).reason, "wrong_team");
+  assert.equal(gates.gateEvent(envelope(userMessage), HOME, h).ok, true);
   const other = envelope(userMessage, { team_id: "TOTHER", event_id: "Ev2" });
-  assert.equal(gates.gateEvent(other, { teamId: "THOME" }, helpers()).reason, "wrong_team");
+  assert.equal(gates.gateEvent(other, HOME, helpers()).reason, "wrong_team");
 });
 
 test("Slack Connect external members are ignored even in the pinned workspace", () => {
   const h = helpers();
   const external = envelope({ ...userMessage, user_team: "TEXT", team: "TEXT" });
-  assert.equal(gates.gateEvent(external, { teamId: "THOME" }, h).reason, "slack_connect");
+  assert.equal(gates.gateEvent(external, HOME, h).reason, "slack_connect");
 });
 
-test("empty allowlist is public channels only; DMs MPIMs and private channels are denied", () => {
-  assert.equal(gates.channelAllowed("C01234567", []), true);
-  assert.equal(gates.channelAllowed("C01234567", [], "channel"), true);
+test("empty allowlist denies every conversation, including public C… ids", () => {
+  assert.equal(gates.channelAllowed("C01234567", []), false);
+  assert.equal(gates.channelAllowed("C01234567", [], "channel"), false);
+  assert.equal(gates.channelAllowed("C01234567", [], undefined), false);
   assert.equal(gates.channelAllowed("D01234567", []), false);
   assert.equal(gates.channelAllowed("C01234567", [], "im"), false);
   assert.equal(gates.channelAllowed("C01234567", [], "mpim"), false);
   assert.equal(gates.channelAllowed("G01234567", []), false);
   assert.equal(gates.channelAllowed("C01234567", [], "group"), false);
+  assert.equal(gates.gateEvent(envelope(userMessage), { teamId: "THOME" }, helpers()).reason, "channel");
+  assert.equal(gates.gateEvent(envelope(userMessage), { teamId: "THOME", channelAllowlist: [] }, helpers()).reason, "channel");
+  const mention = envelope({
+    ...userMessage,
+    type: "app_mention",
+    channel_type: undefined,
+    text: "<@Ubot> https://youtu.be/dQw4w9WgXcQ",
+  });
+  delete mention.payload.event.channel_type;
+  assert.equal(gates.gateEvent(mention, { teamId: "THOME" }, helpers()).reason, "channel");
+  assert.equal(gates.gateSlashCommand(slashPayload(), { teamId: "THOME" }, helpers()).reason, "channel");
+});
+
+test("missing channel_type is unknown and denied unless the channel is allowlisted", () => {
+  assert.equal(gates.conversationKind("C01234567"), "unknown");
+  assert.equal(gates.conversationKind("C01234567", ""), "unknown");
+  assert.equal(gates.conversationKind("C01234567", "channel"), "channel");
   assert.equal(gates.channelAllowed("C01234567", ["C01234567"]), true);
+  assert.equal(gates.channelAllowed("C01234567", ["C01234567"], undefined), true);
+  assert.equal(gates.channelAllowed("C01234567", ["C01234567"], "channel"), true);
   assert.equal(gates.channelAllowed("C99999999", ["C01234567"]), false);
+  const mention = envelope({
+    ...userMessage,
+    type: "app_mention",
+    text: "<@Ubot> https://youtu.be/dQw4w9WgXcQ",
+  });
+  delete mention.payload.event.channel_type;
+  assert.equal(gates.gateEvent(mention, HOME, helpers()).ok, true);
   assert.equal(
     gates.gateEvent(envelope(userMessage), { teamId: "THOME", channelAllowlist: ["C99999999"] }, helpers())
       .reason,
     "channel"
   );
-  const dm = envelope({ ...userMessage, channel: "D01234567", channel_type: "im" });
-  assert.equal(gates.gateEvent(dm, { teamId: "THOME" }, helpers()).reason, "channel");
 });
 
-test("slash commands outside allowed conversations get an ephemeral hint", () => {
-  const slash = {
-    type: "slash_commands",
-    payload: { team_id: "THOME", channel_id: "D01234567", text: "help", user_id: "Ujames" },
-  };
-  const denied = gates.gateSlashCommand(slash, { teamId: "THOME" }, helpers());
-  assert.equal(denied.ok, false);
-  assert.match(denied.hint, /public channels/);
-  const allowed = gates.gateSlashCommand(
-    {
-      type: "slash_commands",
-      payload: { team_id: "THOME", channel_id: "C01234567", text: "help", user_id: "Ujames" },
-    },
+test("slash channel_name denies private, DM, and MPDM unless allowlisted", () => {
+  assert.equal(gates.conversationKind("C01234567", undefined, "privategroup"), "group");
+  assert.equal(gates.conversationKind("C01234567", undefined, "directmessage"), "im");
+  assert.equal(gates.conversationKind("C01234567", undefined, "mpdm-Ujames--Ubot"), "mpim");
+  assert.equal(gates.channelAllowed("C01234567", [], undefined, "privategroup"), false);
+  assert.equal(gates.channelAllowed("C01234567", ["C01234567"], undefined, "privategroup"), true);
+  assert.equal(gates.channelAllowed("C01234567", ["C01234567"], undefined, "directmessage"), false);
+  assert.equal(gates.channelAllowed("C01234567", ["C01234567"], undefined, "mpdm-Ujames--Ubot"), false);
+
+  const privateSlash = gates.gateSlashCommand(
+    slashPayload({ channel_name: "privategroup" }),
     { teamId: "THOME" },
     helpers()
   );
+  assert.equal(privateSlash.ok, false);
+  assert.equal(privateSlash.reason, "channel");
+  assert.match(privateSlash.hint, /allowlist/);
+
+  assert.equal(
+    gates.gateSlashCommand(slashPayload({ channel_name: "privategroup" }), HOME, helpers()).ok,
+    true
+  );
+  assert.equal(
+    gates.gateSlashCommand(slashPayload({ channel_name: "directmessage" }), HOME, helpers()).reason,
+    "channel"
+  );
+  assert.equal(
+    gates.gateSlashCommand(slashPayload({ channel_name: "mpdm-Ujames--Ubot" }), HOME, helpers()).reason,
+    "channel"
+  );
+});
+
+test("slash commands outside allowed conversations get an ephemeral hint", () => {
+  const slash = slashPayload({ channel_id: "D01234567", channel_name: "directmessage" });
+  const denied = gates.gateSlashCommand(slash, HOME, helpers());
+  assert.equal(denied.ok, false);
+  assert.match(denied.hint, /allowlist/);
+  const allowed = gates.gateSlashCommand(slashPayload({ channel_type: "channel" }), HOME, helpers());
   assert.equal(allowed.ok, true);
 });
 
 test("ignores bots, self, and message subtypes", () => {
   const h = helpers();
-  const state = { teamId: "THOME", botUserId: "Ubot" };
+  const state = { ...HOME, botUserId: "Ubot" };
   assert.equal(
     gates.gateEvent(envelope({ ...userMessage, bot_id: "B1" }), state, h).reason,
     "ignored_message"
@@ -117,7 +179,7 @@ test("ignores bots, self, and message subtypes", () => {
 
 test("dedupes by event_id and client_msg_id", () => {
   const h = helpers();
-  const state = { teamId: "THOME" };
+  const state = HOME;
   assert.equal(gates.gateEvent(envelope(userMessage, { event_id: "EvA" }), state, h).ok, true);
   assert.equal(gates.gateEvent(envelope(userMessage, { event_id: "EvA" }), state, h).reason, "deduped");
   assert.equal(
@@ -132,7 +194,7 @@ test("dedupes by event_id and client_msg_id", () => {
 
 test("rate-limits a channel after the window fills", () => {
   const h = helpers();
-  const state = { teamId: "THOME" };
+  const state = HOME;
   assert.equal(gates.gateEvent(envelope(userMessage, { event_id: "R1" }), state, h).ok, true);
   assert.equal(
     gates.gateEvent(
@@ -154,7 +216,7 @@ test("rate-limits a channel after the window fills", () => {
 
 test("rate-limits per user and globally, including slash commands", () => {
   const perUser = helpers({ maxPerChannel: 20, maxPerUser: 1, maxGlobal: 20 });
-  const state = { teamId: "THOME" };
+  const state = { teamId: "THOME", channelAllowlist: ["C01234567", "C99999999"] };
   assert.equal(gates.gateEvent(envelope(userMessage, { event_id: "U1" }), state, perUser).ok, true);
   assert.equal(
     gates.gateEvent(

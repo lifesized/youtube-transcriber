@@ -761,7 +761,7 @@ export function SettingsPanel() {
           type="text"
           value={tuskAllowlist}
           onChange={(e) => setTuskAllowlist(e.target.value)}
-          placeholder="Channel IDs (C…), empty = public channels Tusk is in"
+          placeholder="Channel IDs (C…), empty = deny all"
           autoComplete="off"
           className="h-11 w-full rounded-md bg-[hsl(var(--panel-2))] px-3 py-3 text-sm text-white/90 placeholder:text-[hsl(var(--muted-2))] shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)]"
         />

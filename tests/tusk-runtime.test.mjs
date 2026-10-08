@@ -110,6 +110,7 @@ test("lifecycle connects, acks, reacts to a supported link, and disconnects", as
     appToken: APP,
     teamId: "THOME",
     botUserId: "Ubot",
+    channelAllowlist: ["C01234567"],
     slackApi: api,
     WebSocket: class extends FakeSocket {
       constructor(url) {
@@ -184,6 +185,7 @@ test("in-thread @Tusk with no URL is a thread question, not a new job", async ()
     appToken: APP,
     teamId: "THOME",
     botUserId: "Ubot",
+    channelAllowlist: ["C01234567"],
     slackApi: mockApi(),
     WebSocket: class extends FakeSocket {
       constructor(url) {

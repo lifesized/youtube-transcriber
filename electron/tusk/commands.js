@@ -33,7 +33,7 @@ function statusText(info) {
   lines.push(
     allowlist.length
       ? `Channel allowlist: ${allowlist.length} id(s).`
-      : "Channel allowlist: public channels Tusk is invited to. DMs, MPIMs, and private channels are denied."
+      : "Channel allowlist: empty — every channel is denied."
   );
   return lines.join("\n");
 }
