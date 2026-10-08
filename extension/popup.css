@@ -747,17 +747,27 @@ body::-webkit-scrollbar-thumb:hover {
 .connect-error[hidden] {
   display: none;
 }
+/* Library rows: stacked so "Name · port" never wraps in a narrow half. */
+.connect-segmented:has(.connect-segment-row) {
+  flex-direction: column;
+}
+.connect-segment:has(.connect-segment-row) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+}
 .connect-segment-row {
+  flex: 1;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
+  gap: 8px;
+  white-space: nowrap;
 }
 .connect-segment-status {
-  display: block;
-  margin-top: 2px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted-3);
+  white-space: nowrap;
 }
 
 /* Library status dot: shared by the header picker and Settings. */
@@ -841,6 +851,7 @@ body::-webkit-scrollbar-thumb:hover {
   left: 0;
   z-index: 20;
   min-width: 220px;
+  width: max-content;
   padding: 4px;
   display: flex;
   flex-direction: column;
@@ -882,10 +893,13 @@ body::-webkit-scrollbar-thumb:hover {
 }
 .target-picker-option-name {
   flex: 1;
+  white-space: nowrap;
 }
 .target-picker-option-status {
+  margin-left: 12px;
   font-size: 11px;
   color: var(--muted-3);
+  white-space: nowrap;
 }
 
 /* Settings → Server section (self-hosted + native host installed only). */
