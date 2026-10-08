@@ -110,6 +110,7 @@ test("signed entitlements are the minimum JIT pair and omit library validation",
   );
   assert.match(plist, /com\.apple\.security\.cs\.allow-jit/);
   assert.match(plist, /com\.apple\.security\.cs\.allow-unsigned-executable-memory/);
+  assert.match(plist, /TODO\(signed-run\): try allow-jit alone/);
   assert.doesNotMatch(plist, /disable-library-validation/);
   assert.doesNotMatch(plist, /network\.(client|server)/);
 });

@@ -86,6 +86,10 @@ npm run electron:build
 
 That still ad-hoc signs and runs `electron/dmg/finalize-dmg.sh` (helper + `.payload/`). It never reads Apple secrets from the environment for Developer ID signing.
 
+## Entitlements
+
+Signed builds use `electron/entitlements.mac.sign.plist`: `allow-jit` plus `allow-unsigned-executable-memory`. There is no `disable-library-validation`. On the first Developer ID run, try `allow-jit` alone — we could not prove the unsigned-executable-memory entitlement is required without a cert. If ELECTRON_RUN_AS_NODE (Next server + native-host wrapper) and better-sqlite3 still start, drop it.
+
 ## Runtime updater gate
 
 The packaged app initializes `electron-updater` only when all of these hold:

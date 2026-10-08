@@ -9,7 +9,10 @@
 
   <!-- V8 / wasm fallback when JIT cannot allocate executable pages.
        ELECTRON_RUN_AS_NODE and better-sqlite3's native addon hit this
-       path on some macOS versions. -->
+       path on some macOS versions.
+       TODO(signed-run): try allow-jit alone on the first Developer ID
+       run. Drop this entitlement if the Next server and better-sqlite3
+       still start without it. We cannot prove that without a cert. -->
   <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
   <true/>
 </dict>
