@@ -280,6 +280,11 @@ export function SettingsPanel() {
   const [llmHasKey, setLlmHasKey] = useState(false);
   const [llmSaving, setLlmSaving] = useState(false);
   const [llmError, setLlmError] = useState("");
+  const [notionToken, setNotionToken] = useState("");
+  const [notionDatabaseId, setNotionDatabaseId] = useState("");
+  const [notionHasToken, setNotionHasToken] = useState(false);
+  const [notionSaving, setNotionSaving] = useState(false);
+  const [notionError, setNotionError] = useState("");
 
   // Drag state
   const [dragId, setDragId] = useState<string | null>(null);
@@ -287,11 +292,12 @@ export function SettingsPanel() {
 
   const loadSettings = useCallback(async () => {
     try {
-      const [settingsRes, providersRes, usageRes, llmRes] = await Promise.all([
+      const [settingsRes, providersRes, usageRes, llmRes, notionRes] = await Promise.all([
         fetch("/api/settings"),
         fetch("/api/settings/providers"),
         fetch("/api/usage"),
         fetch("/api/settings/llm"),
+        fetch("/api/settings/notion"),
       ]);
 
       if (settingsRes.ok) {
@@ -346,6 +352,13 @@ export function SettingsPanel() {
         }
         setLlmHasKey(!!data.hasKey);
         setLlmKey(data.keyMasked || "");
+      }
+
+      if (notionRes.ok) {
+        const data = await notionRes.json();
+        setNotionHasToken(!!data.hasToken);
+        setNotionToken(data.tokenMasked || "");
+        setNotionDatabaseId(data.databaseId || "");
       }
     } catch {
       // Settings may not exist yet
@@ -580,6 +593,68 @@ export function SettingsPanel() {
           <p className="text-sm text-red-400">{llmError}</p>
         ) : llmHasKey ? (
           <p className="text-sm text-white/30">A key is saved in the app Keychain.</p>
+        ) : null}
+      </div>
+
+      <div className="space-y-3">
+        <h2 className="text-sm font-semibold text-white/80">Notion</h2>
+        <p className="text-sm text-white/40">
+          Paste an internal integration token and a database ID or URL. The extension never sees the token.
+        </p>
+        <input
+          type="password"
+          value={notionToken}
+          onChange={(e) => setNotionToken(e.target.value)}
+          placeholder={notionHasToken ? "Token saved" : "Internal integration token"}
+          autoComplete="off"
+          className="h-11 w-full rounded-md bg-[hsl(var(--panel-2))] px-3 py-3 text-sm text-white/90 placeholder:text-[hsl(var(--muted-2))] shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)]"
+        />
+        <input
+          type="text"
+          value={notionDatabaseId}
+          onChange={(e) => setNotionDatabaseId(e.target.value)}
+          placeholder="Database ID or URL (page ID is a fallback)"
+          autoComplete="off"
+          className="h-11 w-full rounded-md bg-[hsl(var(--panel-2))] px-3 py-3 text-sm text-white/90 placeholder:text-[hsl(var(--muted-2))] shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)]"
+        />
+        <button
+          type="button"
+          onClick={async () => {
+            setNotionSaving(true);
+            setNotionError("");
+            try {
+              const res = await fetch("/api/settings/notion", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  token: notionToken,
+                  databaseId: notionDatabaseId,
+                }),
+              });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok) {
+                setNotionError(data.error || "Could not save");
+                return;
+              }
+              setNotionHasToken(!!data.hasToken || notionHasToken);
+              if (data.tokenMasked) setNotionToken(data.tokenMasked);
+              if (data.databaseId) setNotionDatabaseId(data.databaseId);
+            } catch {
+              setNotionError("Could not save");
+            } finally {
+              setNotionSaving(false);
+            }
+          }}
+          disabled={notionSaving}
+          aria-busy={notionSaving}
+          className="h-11 rounded-md bg-[hsl(var(--accent))] px-4 py-3 text-sm font-semibold text-black shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] disabled:cursor-not-allowed disabled:text-[hsl(var(--muted-2))]"
+        >
+          {notionSaving ? "Saving…" : "Save Notion"}
+        </button>
+        {notionError ? (
+          <p className="text-sm text-red-400">{notionError}</p>
+        ) : notionHasToken ? (
+          <p className="text-sm text-white/30">Token is stored in the app Keychain.</p>
         ) : null}
       </div>
 

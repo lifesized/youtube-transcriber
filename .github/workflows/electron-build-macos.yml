@@ -33,6 +33,9 @@ jobs:
       - name: LLM summarize tests
         run: npm run test:llm
       
+      - name: Notion save tests
+        run: npm run test:notion
+      
       - name: Build Next.js
         run: npm run build
       
