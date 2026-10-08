@@ -79,6 +79,24 @@ test("an extension- or tray-opened Library tab gets the port's cookie and its fe
   }
 });
 
+test("page routes stay token-optional when the env token is unset", () => {
+  process.env.PORT = String(DEV);
+  delete process.env.TRANSCRIBER_LOCAL_TOKEN;
+  const page = middleware(
+    new NextRequest("http://127.0.0.1:19720/", {
+      headers: { host: "127.0.0.1:19720", "sec-fetch-site": "none", ...NAVIGATE },
+    })
+  );
+  assert.equal(page.headers.get("x-middleware-next"), "1");
+  assert.equal(page.status, 200);
+  const api = middleware(
+    new NextRequest("http://127.0.0.1:19720/api/health", {
+      headers: { host: "127.0.0.1:19720" },
+    })
+  );
+  assert.equal(api.status, 401);
+});
+
 test("a cross-site subresource, iframe or fetch never mints the cookie", () => {
   const contexts = [
     { "sec-fetch-site": "cross-site", "sec-fetch-mode": "no-cors", "sec-fetch-dest": "image" },
