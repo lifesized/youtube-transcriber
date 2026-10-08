@@ -16,11 +16,13 @@ function write(file, body = "x") {
   fs.writeFileSync(file, body);
 }
 
-test("prune drops cache, sourcemaps, foreign prisma engines, keeps darwin-arm64 and sqlite", () => {
+test("prune drops cache, sourcemaps, native prisma engines, sharp, docs; keeps sqlite wasm", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "prune-payload-"));
   write(path.join(root, ".next", "cache", "webpack", "chunk"), "cache-bytes-here");
   write(path.join(root, ".next", "static", "chunk.js"), "keep-js");
   write(path.join(root, ".next", "static", "chunk.js.map"), "sourcemap");
+  write(path.join(root, "mcp-server", "index.js"), "junk");
+  write(path.join(root, "electron-builder.json"), "{}");
   write(
     path.join(root, "node_modules", "@prisma", "engines", "schema-engine-debian-openssl-3.0.x"),
     "debian-engine"
@@ -51,21 +53,29 @@ test("prune drops cache, sourcemaps, foreign prisma engines, keeps darwin-arm64 
     ),
     "sqlite-wasm"
   );
+  write(path.join(root, "node_modules", "@prisma", "client", "index.d.ts"), "types");
+  write(path.join(root, "node_modules", "@prisma", "client", "README.md"), "docs");
+  write(path.join(root, "node_modules", "sharp", "index.js"), "sharp");
+  write(path.join(root, "node_modules", "@img", "sharp-darwin-arm64", "lib"), "img");
+  write(
+    path.join(root, "node_modules", "better-sqlite3", "build", "Release", "better_sqlite3.node"),
+    "node"
+  );
+  write(path.join(root, "node_modules", "better-sqlite3", "deps", "sqlite3.c"), "src");
 
   const result = prune.pruneStandaloneTree(root);
   assert.ok(result.total > 0);
   assert.equal(fs.existsSync(path.join(root, ".next", "cache")), false);
   assert.equal(fs.existsSync(path.join(root, ".next", "static", "chunk.js")), true);
   assert.equal(fs.existsSync(path.join(root, ".next", "static", "chunk.js.map")), false);
+  assert.equal(fs.existsSync(path.join(root, "mcp-server")), false);
+  assert.equal(fs.existsSync(path.join(root, "node_modules", "@prisma", "engines")), false);
+  assert.equal(fs.existsSync(path.join(root, "node_modules", "sharp")), false);
+  assert.equal(fs.existsSync(path.join(root, "node_modules", "@img")), false);
+  assert.equal(fs.existsSync(path.join(root, "node_modules", "better-sqlite3", "deps")), false);
   assert.equal(
     fs.existsSync(
-      path.join(root, "node_modules", "@prisma", "engines", "schema-engine-debian-openssl-3.0.x")
-    ),
-    false
-  );
-  assert.equal(
-    fs.existsSync(
-      path.join(root, "node_modules", "@prisma", "engines", "schema-engine-darwin-arm64")
+      path.join(root, "node_modules", "better-sqlite3", "build", "Release", "better_sqlite3.node")
     ),
     true
   );
@@ -94,6 +104,10 @@ test("prune drops cache, sourcemaps, foreign prisma engines, keeps darwin-arm64 
       )
     ),
     true
+  );
+  assert.equal(
+    fs.existsSync(path.join(root, "node_modules", "@prisma", "client", "index.d.ts")),
+    false
   );
   fs.rmSync(root, { recursive: true, force: true });
 });
@@ -125,6 +139,10 @@ test("electron-builder keeps only en locales and does not asar-pack prisma", () 
   assert.deepEqual(builder.mac.electronLanguages, ["en"]);
   assert.equal(builder.asarUnpack.includes("node_modules/@prisma/**/*"), false);
   assert.equal(builder.files.includes("node_modules/@prisma/**/*"), false);
+  assert.ok(builder.files.includes("!node_modules/**"));
+  assert.ok(builder.files.includes("node_modules/better-sqlite3/**/*"));
+  assert.ok(builder.files.includes("node_modules/bindings/**/*"));
+  assert.equal(builder.beforeBuild, "./electron/before-build.js");
 });
 
 test("CI reports app/DMG size and uploads only the DMG", () => {
@@ -134,6 +152,7 @@ test("CI reports app/DMG size and uploads only the DMG", () => {
   );
   assert.ok(workflow.includes("packaged size"));
   assert.ok(workflow.includes("du -sh"));
+  assert.ok(workflow.includes("assert-packaged-size.js"));
   assert.ok(workflow.includes("compression-level: 0"));
   assert.ok(workflow.includes("if-no-files-found: error"));
   assert.match(workflow, /path:\s*dist-electron\/\*\.dmg/);
@@ -142,4 +161,14 @@ test("CI reports app/DMG size and uploads only the DMG", () => {
     /path:\s*dist-electron\/?\s*$/m,
     "must not upload the unpacked dist-electron folder"
   );
+});
+
+test("size budget file exists and is finite", () => {
+  const budget = JSON.parse(
+    fs.readFileSync(path.join(projectRoot, "electron", "size-budget.json"), "utf8")
+  );
+  assert.equal(typeof budget.appBytes, "number");
+  assert.equal(typeof budget.dmgBytes, "number");
+  assert.ok(budget.appBytes > 100 * 1024 * 1024);
+  assert.ok(budget.dmgBytes > 50 * 1024 * 1024);
 });

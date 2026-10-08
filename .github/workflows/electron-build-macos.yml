@@ -505,13 +505,37 @@ jobs:
             echo "✓ present: $required"
           done
           
-          ENGINE_HIT=$(find "$STANDALONE/node_modules/.prisma" "$STANDALONE/node_modules/@prisma" \
-            \( -name '*darwin-arm64*' -o -name '*darwin_arm64*' \) 2>/dev/null | head -1)
-          if [ -z "$ENGINE_HIT" ]; then
-            echo "ERROR: no darwin-arm64 Prisma engine in standalone payload"
+          WASM="$STANDALONE/node_modules/.prisma/client/query_compiler_fast_bg.wasm-base64.js"
+          if [ ! -f "$WASM" ]; then
+            echo "ERROR: Prisma sqlite query compiler wasm missing: $WASM"
             exit 1
           fi
-          echo "✓ Prisma darwin-arm64 engine: $ENGINE_HIT"
+          echo "✓ Prisma sqlite query compiler wasm present"
+          ENGINE_HIT=$(find "$STANDALONE/node_modules" \
+            \( -name 'schema-engine*' -o -name 'query-engine*' -o -name 'libquery_engine*' \) \
+            2>/dev/null | head -5)
+          if [ -n "$ENGINE_HIT" ]; then
+            echo "ERROR: native Prisma engine must not ship (adapter + wasm only):"
+            echo "$ENGINE_HIT"
+            exit 1
+          fi
+          echo "✓ no native Prisma query/schema engine in standalone"
+
+          UNPACKED_NM="$ROOT/dist-electron/mac-arm64/Transcriber.app/Contents/Resources/app.asar.unpacked/node_modules"
+          for pkg in next @next @prisma prisma sharp @img; do
+            if [ -e "$UNPACKED_NM/$pkg" ]; then
+              echo "ERROR: asar.unpacked must not contain $pkg"
+              ls -la "$UNPACKED_NM" || true
+              exit 1
+            fi
+          done
+          echo "✓ asar.unpacked has no Next/Prisma/sharp tree"
+          if npx --no-install asar list "$ROOT/dist-electron/mac-arm64/Transcriber.app/Contents/Resources/app.asar" \
+            | grep -E 'node_modules/(next|@next|@prisma|prisma|sharp|@img)(/|$)' ; then
+            echo "ERROR: app.asar contains a Next/Prisma/sharp tree"
+            exit 1
+          fi
+          echo "✓ app.asar has no Next/Prisma/sharp tree"
           
           # Tray template PNGs must be packaged and non-empty (macOS menu bar)
           TRAY_DIR="$ROOT/dist-electron/mac-arm64/Transcriber.app/Contents/Resources/app.asar.unpacked/electron/resources"
@@ -623,6 +647,39 @@ jobs:
           fi
           echo "✓ GET /api/transcripts returned 200"
           echo "$TRANSCRIPTS_JSON"
+
+          echo "----- packaged transcript save/read -----"
+          SAVE_BODY=$(curl -sS -w "\n%{http_code}" \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"url":"https://www.youtube.com/watch?v=jNQXAC9IVRw","title":"CI save","segments":[{"start":0,"duration":1.5,"text":"hello from ci"}]}' \
+            "http://127.0.0.1:${PORT}/api/transcripts")
+          SAVE_CODE=$(printf '%s' "$SAVE_BODY" | tail -n 1)
+          SAVE_JSON=$(printf '%s' "$SAVE_BODY" | sed '$d')
+          if [ "$SAVE_CODE" != "201" ]; then
+            echo "ERROR: POST /api/transcripts returned $SAVE_CODE"
+            echo "$SAVE_JSON"
+            echo "----- server log -----"
+            cat "$LOG_FILE" || true
+            exit 1
+          fi
+          SAVE_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$SAVE_JSON")
+          if [ -z "$SAVE_ID" ]; then
+            echo "ERROR: POST /api/transcripts did not return an id"
+            echo "$SAVE_JSON"
+            exit 1
+          fi
+          GET_BODY=$(curl -sS -w "\n%{http_code}" \
+            -H "Authorization: Bearer ${TOKEN}" \
+            "http://127.0.0.1:${PORT}/api/transcripts/${SAVE_ID}")
+          GET_CODE=$(printf '%s' "$GET_BODY" | tail -n 1)
+          GET_JSON=$(printf '%s' "$GET_BODY" | sed '$d')
+          if [ "$GET_CODE" != "200" ]; then
+            echo "ERROR: GET /api/transcripts/$SAVE_ID returned $GET_CODE"
+            echo "$GET_JSON"
+            exit 1
+          fi
+          echo "$GET_JSON" | python3 -c 'import json,sys; d=json.load(sys.stdin); t=json.loads(d["transcript"]); assert "hello from ci" in t[0]["text"], d; print("✓ packaged transcript save/read", d["id"])'
           
           echo ""
           echo "✓ All smoke tests passed!"
@@ -647,15 +704,7 @@ jobs:
           du -sh "$APP/Contents/Resources/app.asar" "$APP/Contents/Resources/app.asar.unpacked" 2>/dev/null || true
           echo "DMG:"
           ls -lh "$DMG"
-          APP_SIZE=$(du -sh "$APP" | awk '{print $1}')
-          DMG_SIZE=$(ls -lh "$DMG" | awk '{print $5}')
-          {
-            echo "## Size"
-            echo ""
-            echo "- App: \`$APP_SIZE\`"
-            echo "- DMG: \`$DMG_SIZE\` (\`${DMG##*/}\`)"
-            echo "- Previous CI zip (unpruned): ~459 MB"
-          } >> "$GITHUB_STEP_SUMMARY"
+          node scripts/assert-packaged-size.js "$APP" "$DMG"
 
       - name: DMG sha256
         run: |

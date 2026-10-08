@@ -128,6 +128,7 @@ test("Next.js config has standalone output", () => {
   const configPath = path.join(projectRoot, "next.config.ts");
   const content = fs.readFileSync(configPath, "utf8");
   assert.ok(content.includes('output: "standalone"'), "next.config.ts should have standalone output");
+  assert.ok(content.includes("unoptimized: true"));
 });
 
 test("electron-builder copies standalone outside asar", () => {
@@ -360,6 +361,8 @@ test("packaged native host script path is app.asar.unpacked", () => {
   assert.equal(builder.asarUnpack.includes("lib/**/*"), false);
   assert.equal(builder.asarUnpack.includes("node_modules/@prisma/**/*"), false);
   assert.ok(builder.files.includes("lib/**/*.js"));
+  assert.ok(builder.files.includes("!node_modules/**"));
+  assert.ok(builder.files.includes("node_modules/better-sqlite3/**/*"));
 });
 
 test("CI launches the packaged Transcriber.app and checks asar requires", () => {
@@ -380,6 +383,10 @@ test("CI launches the packaged Transcriber.app and checks asar requires", () => 
   assert.ok(content.includes("ps -axo pid=,comm="));
   assert.ok(content.includes("ps -axo pid=,args="));
   assert.ok(content.includes("install helper args match found PID"));
+  assert.ok(content.includes("packaged transcript save/read"));
+  assert.ok(content.includes("POST /api/transcripts"));
+  assert.ok(content.includes("asar.unpacked has no Next/Prisma/sharp tree"));
+  assert.ok(content.includes("no native Prisma query/schema engine"));
 });
 
 test("CI fails outbound app symlinks and non-Electron sqlite addons", () => {

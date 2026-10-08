@@ -74,8 +74,9 @@ function main() {
 
   ensureDir(path.join(STAGING, "node_modules"));
 
+  // Do not overlay the full `next` package — Next's standalone trace is the
+  // server tree. Overlay only runtime Prisma/sqlite pieces the trace can miss.
   for (const pkg of [
-    "next",
     "@prisma/client",
     "@prisma/adapter-better-sqlite3",
     "@prisma/driver-adapter-utils",
@@ -90,10 +91,6 @@ function main() {
   copyIfExists(
     path.join(ROOT, "node_modules", ".prisma"),
     path.join(STAGING, "node_modules", ".prisma")
-  );
-  copyIfExists(
-    path.join(ROOT, "node_modules", "@prisma", "engines"),
-    path.join(STAGING, "node_modules", "@prisma", "engines")
   );
 
   ensureDir(path.join(STAGING, "tmp"));
@@ -113,23 +110,18 @@ function main() {
     throw new Error("@prisma/client missing inside standalone node_modules");
   }
 
-  const engineHits = [];
-  const walk = (dir) => {
-    if (!fs.existsSync(dir)) return;
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else if (/darwin[-_]arm64/i.test(entry.name)) engineHits.push(full);
-    }
-  };
-  walk(path.join(STAGING, "node_modules", ".prisma"));
-  walk(path.join(STAGING, "node_modules", "@prisma"));
-  if (engineHits.length === 0) {
-    console.warn("  warning: no darwin-arm64 Prisma engine files found (ok on non-mac hosts)");
+  const wasm =
+    path.join(
+      STAGING,
+      "node_modules",
+      ".prisma",
+      "client",
+      "query_compiler_fast_bg.wasm-base64.js"
+    );
+  if (fs.existsSync(wasm)) {
+    console.log("  prisma query compiler wasm present");
   } else {
-    for (const hit of engineHits) {
-      console.log(`  prisma engine: ${path.relative(STAGING, hit)}`);
-    }
+    console.warn("  warning: Prisma sqlite query compiler wasm missing");
   }
 
   const pruned = pruneStandaloneTree(STAGING);

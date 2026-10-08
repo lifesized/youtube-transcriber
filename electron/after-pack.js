@@ -3,10 +3,10 @@
  *
  * Responsibilities:
  * - Copy Electron-ABI better-sqlite3 into the extraResources standalone tree
- * - Verify the packaged server payload (standalone, static, prisma, engines)
+ * - Verify the packaged server payload (standalone, static, prisma client)
  * - Ad-hoc codesign bundled binaries (ffmpeg, yt-dlp) for macOS
  *
- * Note: electron-builder already rebuilds better-sqlite3 before this hook.
+ * Note: electron/before-build.js rebuilds better-sqlite3 for the Electron ABI.
  */
 
 const { execSync } = require("child_process");
@@ -16,6 +16,7 @@ const { flipFuses, FuseV1Options, FuseVersion } = require("@electron/fuses");
 const {
   pruneStandaloneTree,
   pruneElectronLocales,
+  pruneAsarUnpackedModules,
   logPrune,
 } = require("../scripts/prune-electron-payload.js");
 
@@ -38,6 +39,7 @@ module.exports = async function(context) {
     copyLibJsIntoUnpacked(path.join(appOutDir, "Transcriber.app"));
     prunePackagedApp(path.join(appOutDir, "Transcriber.app"));
     assertStandalonePayload(context);
+    assertAsarHasNoServerTree(path.join(appOutDir, "Transcriber.app"));
     await applyElectronFuses(context);
     await adHocCodesign(context);
   }
@@ -206,6 +208,26 @@ function prunePackagedApp(appPath) {
   logPrune("packaged standalone", pruned);
   const locales = pruneElectronLocales(appPath);
   logPrune("electron locales", locales);
+  const unpacked = pruneAsarUnpackedModules(appPath);
+  logPrune("asar unpacked modules", unpacked);
+}
+
+function assertAsarHasNoServerTree(appPath) {
+  const unpackedNm = path.join(
+    appPath,
+    "Contents",
+    "Resources",
+    "app.asar.unpacked",
+    "node_modules"
+  );
+  const banned = ["next", "@next", "@prisma", "prisma", "sharp", "@img"];
+  if (!fs.existsSync(unpackedNm)) return;
+  for (const name of banned) {
+    const hit = path.join(unpackedNm, name);
+    if (fs.existsSync(hit)) {
+      throw new Error(`asar.unpacked must not contain server package ${name}: ${hit}`);
+    }
+  }
 }
 
 function assertStandalonePayload(context) {
@@ -223,6 +245,13 @@ function assertStandalonePayload(context) {
     path.join(standalone, ".next", "static"),
     path.join(standalone, "prisma", "migrations"),
     path.join(standalone, "node_modules", "@prisma", "client"),
+    path.join(
+      standalone,
+      "node_modules",
+      ".prisma",
+      "client",
+      "query_compiler_fast_bg.wasm-base64.js"
+    ),
   ];
   for (const file of required) {
     if (!fs.existsSync(file)) {
@@ -305,4 +334,5 @@ module.exports.flattenStandaloneDirSymlinks = flattenStandaloneDirSymlinks;
 module.exports.overlaySqliteNativeAddon = overlaySqliteNativeAddon;
 module.exports.copyLibJsIntoUnpacked = copyLibJsIntoUnpacked;
 module.exports.prunePackagedApp = prunePackagedApp;
+module.exports.assertAsarHasNoServerTree = assertAsarHasNoServerTree;
 module.exports.applyElectronFuses = applyElectronFuses;

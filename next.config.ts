@@ -5,6 +5,9 @@ const projectRoot = path.resolve(__dirname);
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  images: {
+    unoptimized: true,
+  },
   turbopack: {
     root: projectRoot,
   },

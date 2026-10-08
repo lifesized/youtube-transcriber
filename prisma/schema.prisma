@@ -2,8 +2,9 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "darwin-arm64"]
+  // Prisma 7 + @prisma/adapter-better-sqlite3 uses the wasm query compiler.
+  // Native query/schema engines are not loaded at runtime and are not shipped.
+  provider = "prisma-client-js"
 }
 
 datasource db {
