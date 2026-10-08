@@ -920,6 +920,19 @@ jobs:
           TOKEN="$(openssl rand -hex 32)"
           APP_PID=""
 
+          # Earlier steps' packaged servers can outlive their parents and keep the port.
+          free_port() {
+            local pids=""
+            for i in $(seq 1 10); do
+              pids=$(lsof -ti "tcp:${PORT}" -sTCP:LISTEN 2>/dev/null || true)
+              [ -z "$pids" ] && return 0
+              echo "port ${PORT} still held by: $(ps -o pid=,args= -p "$(echo $pids | tr ' ' ',')" | cut -c1-160)"
+              if [ "$i" -lt 5 ]; then kill $pids 2>/dev/null || true; else kill -9 $pids 2>/dev/null || true; fi
+              sleep 1
+            done
+            echo "ERROR: port ${PORT} is still in use"; exit 1
+          }
+
           stop_app() {
             if [ -n "$APP_PID" ]; then
               kill "$APP_PID" 2>/dev/null || true
@@ -928,6 +941,7 @@ jobs:
               wait "$APP_PID" 2>/dev/null || true
               APP_PID=""
             fi
+            free_port
           }
           trap stop_app EXIT
 
@@ -938,6 +952,7 @@ jobs:
           # Launch the real app on HOME=$1, read Settings/ProviderConfig/DailyUsage through the API, quit.
           launch_and_read_settings() {
             local home="$1" log="$1/app.log" code=""
+            free_port
             HOME="$home" TRANSCRIBER_LOCAL_TOKEN="$TOKEN" "$APP_PATH" > "$log" 2>&1 &
             APP_PID=$!
             for i in $(seq 1 60); do
