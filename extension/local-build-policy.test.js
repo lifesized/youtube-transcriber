@@ -47,6 +47,7 @@ test("manifest is loopback-only and does not declare storage", () => {
   assert.deepEqual(manifest.host_permissions, [
     "http://127.0.0.1:19721/*",
     "http://127.0.0.1:19720/*",
+    "https://www.linkedin.com/*",
   ]);
   assert.equal(manifest.optional_permissions, undefined);
   assert.equal(manifest.optional_host_permissions, undefined);

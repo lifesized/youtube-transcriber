@@ -6,11 +6,12 @@ const { execSync } = require("node:child_process");
 
 const ROOT = __dirname;
 
-test("LOCAL manifest has loopback-only host_permissions", () => {
+test("LOCAL manifest host_permissions are loopback plus LinkedIn page access only", () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifests", "local.json"), "utf8"));
   assert.deepEqual(manifest.host_permissions, [
     "http://127.0.0.1:19721/*",
     "http://127.0.0.1:19720/*",
+    "https://www.linkedin.com/*",
   ]);
   assert.ok(manifest.permissions.includes("nativeMessaging"));
   assert.equal(manifest.name, "Transcriber for YouTube");
@@ -103,6 +104,7 @@ test("LOCAL build still works and produces loopback-only artifact", () => {
   assert.deepEqual(manifest.host_permissions, [
     "http://127.0.0.1:19721/*",
     "http://127.0.0.1:19720/*",
+    "https://www.linkedin.com/*",
   ]);
   assert.ok(manifest.permissions.includes("nativeMessaging"));
   

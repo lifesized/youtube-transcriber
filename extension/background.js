@@ -179,20 +179,27 @@ function clearLocalTokenMemory() {
   targetClient.clearTokens();
 }
 
+importScripts("linkedin-url.js", "linkedin-capture.js");
+
 async function sendPageUrl(pageUrl, title) {
   const target = await resolveTarget();
   const auth = await targetClient.authFor(target);
   if (!auth.ok) return { ok: false, reason: auth.reason };
 
-  // Try caption extraction for YouTube URLs
-  const captions = youtubeVideoId(pageUrl) ? await tryExtractCaptions(pageUrl, title) : null;
-
-  const request = auth.token
-    ? buildLocalSendRequest(pageUrl, auth.token, captions, target.apiBase)
-    : buildTokenlessDevSendRequest(pageUrl, captions);
+  const isLinkedIn = isLinkedInPageUrl(pageUrl);
+  let request;
+  if (isLinkedIn) {
+    request = await prepareLinkedInSend(pageUrl, auth.token, target.apiBase);
+  } else {
+    // Try caption extraction for YouTube URLs
+    const captions = youtubeVideoId(pageUrl) ? await tryExtractCaptions(pageUrl, title) : null;
+    request = auth.token
+      ? buildLocalSendRequest(pageUrl, auth.token, captions, target.apiBase)
+      : buildTokenlessDevSendRequest(pageUrl, captions);
+  }
   if (!request.ok) {
     // Request build failed (bad URL etc.)
-    return { ok: false, reason: "other" };
+    return { ok: false, reason: "other", ...(request.error ? { error: request.error } : {}) };
   }
 
   const sent = await targetClient.send(
@@ -206,6 +213,7 @@ async function sendPageUrl(pageUrl, title) {
 
   if (!res.ok) {
     // YTT-448: Never return server error text
+    if (isLinkedIn && res.status === 422) return { ok: false, reason: "other", error: LINKEDIN_ERRORS.server };
     return { ok: false, reason: "other" };
   }
   

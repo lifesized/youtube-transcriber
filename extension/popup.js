@@ -2550,6 +2550,10 @@ function extractVideoId(url) {
       const match = u.pathname.match(/^\/episode\/([a-zA-Z0-9]{22})/);
       if (match) return match[1];
     }
+
+    // LinkedIn post, event, or feed (linkedin-url.js)
+    const linkedInId = globalThis.LinkedInUrl?.panelVideoId(url);
+    if (linkedInId) return linkedInId;
   } catch { /* ignore */ }
   return null;
 }
@@ -2933,7 +2937,7 @@ async function doTranscribe() {
   });
 
   // Request YouTube permissions on user gesture (YTT-458 security requirement)
-  if (pageInfo.videoId) {
+  if (pageInfo.videoId && !pageInfo.videoId.startsWith("linkedin:")) {
     try {
       await chrome.permissions.request({
         origins: ["https://www.youtube.com/*", "https://m.youtube.com/*"],
