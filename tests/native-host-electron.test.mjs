@@ -103,9 +103,10 @@ test("native host messages are capped at 1 MiB", () => {
 });
 
 test("non-Electron start still uses npm run dev next to execPath", () => {
-  const launch = host.getStartLaunch({}, "/usr/local/bin/node");
+  const launch = host.getStartLaunch({}, "/usr/local/bin/node", "/Users/james/transcriber-local");
   assert.equal(launch.command, path.join("/usr/local/bin", "npm"));
   assert.deepEqual(launch.args, ["run", "dev"]);
+  assert.equal(launch.cwd, "/Users/james/transcriber-local");
   assert.ok(launch.extraBins.includes("/opt/homebrew/bin"));
 });
 
@@ -155,7 +156,7 @@ test("getLocalToken requires a paired caller origin in argv.slice(2)", () => {
       { idsPath }
     );
     assert.equal(denied.ok, false);
-    assert.equal(denied.error, "unauthorized_caller");
+    assert.equal(denied.error, "extension_not_allowed");
     assert.equal(denied._exit, true);
 
     const missing = host.replyGetLocalToken("tok", ["node", hostScript], {
@@ -207,7 +208,7 @@ test("spawned host getLocalToken authorizes the origin argument", async () => {
       { id: "tok", cmd: "getLocalToken" }
     );
     assert.equal(denied.msg?.ok, false, denied.stderr);
-    assert.equal(denied.msg?.error, "unauthorized_caller");
+    assert.equal(denied.msg?.error, "extension_not_allowed");
     assert.notEqual(denied.status, 0);
 
     const missing = await spawnHost([], env, { id: "tok", cmd: "getLocalToken" });

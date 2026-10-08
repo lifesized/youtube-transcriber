@@ -8,10 +8,11 @@
  * Commands accepted (one per request, response has matching `id`):
  *   { id, cmd: "ping" }
  *   { id, cmd: "probe" }    → { status: "ready"|"foreign"|"down", port, identity? }
- *   { id, cmd: "start" }    → { started: true, pid } | { started: false, reason }
+ *   { id, cmd: "start" }    → { started: true, pid } | { started: false, reason, detail? }
  *   { id, cmd: "stop" }     → { stopped: bool }
- *   { id, cmd: "status" }   → { running: bool, pid?, uptimeMs?, projectRoot, port }
+ *   { id, cmd: "status" }   → { running: bool, pid?, uptimeMs?, projectRoot, projectRootOk, port }
  *   { id, cmd: "getLocalToken" } → { token }  (loopback API Bearer; never log value)
+ *        | { ok: false, error: "unauthorized_caller" | "extension_not_allowed" }
  */
 
 const fs = require("fs");
@@ -32,6 +33,7 @@ const {
   KNOWN_STORE_EXTENSION_IDS,
 } = require("../../lib/native-host-pair.js");
 const { configuredPort } = require("../../lib/local-api-auth.js");
+const { readRecordedProjectRoot, resolveStartRoot } = require("./project-root.js");
 
 function getPort() {
   return configuredPort();
@@ -43,9 +45,6 @@ function healthUrl() {
 const IDENTITY_HEADER = "x-transcriber-service";
 const ELECTRON_BUNDLE_ID = "com.transcribed.app";
 const MAX_NATIVE_HOST_MESSAGE = 1024 * 1024;
-
-// Project root is two levels up from this file (tools/native-host/ → repo root).
-const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
 
 function stateDir() {
   return getStateDir();
@@ -154,8 +153,12 @@ function electronResourcesBin(execPath) {
   return path.join(path.dirname(execPath), "..", "Resources", "bin");
 }
 
-function getStartLaunch(env = process.env, execPath = process.execPath) {
-  if (env.ELECTRON_RUN_AS_NODE) {
+function isElectronHost(env = process.env) {
+  return !!env.ELECTRON_RUN_AS_NODE;
+}
+
+function getStartLaunch(env = process.env, execPath = process.execPath, projectRoot) {
+  if (isElectronHost(env)) {
     return {
       command: "open",
       args: ["-b", ELECTRON_BUNDLE_ID],
@@ -178,8 +181,25 @@ function getStartLaunch(env = process.env, execPath = process.execPath) {
   return {
     command: npmCmd,
     args: ["run", "dev"],
-    cwd: PROJECT_ROOT,
+    cwd: projectRoot,
     extraBins: [nodeBinDir, "/opt/homebrew/bin", "/usr/local/bin"],
+  };
+}
+
+/**
+ * The app host launches the bundle and needs no checkout. The dev host only
+ * starts from a validated recorded root, never from its own folder.
+ */
+function resolveStartLaunch(env = process.env, execPath = process.execPath, dir = stateDir()) {
+  if (isElectronHost(env)) {
+    return { ok: true, launch: getStartLaunch(env, execPath) };
+  }
+  const root = resolveStartRoot(dir);
+  if (!root.ok) return root;
+  return {
+    ok: true,
+    projectRoot: root.projectRoot,
+    launch: getStartLaunch(env, execPath, root.projectRoot),
   };
 }
 
@@ -201,7 +221,16 @@ async function startServer() {
     return { started: false, reason: "port_conflict" };
   }
 
-  const launch = getStartLaunch(process.env, process.execPath);
+  const resolved = resolveStartLaunch(process.env, process.execPath);
+  if (!resolved.ok) {
+    log("start_refused", {
+      reason: resolved.reason,
+      detail: resolved.detail,
+      projectRoot: resolved.projectRoot,
+    });
+    return { started: false, reason: resolved.reason, detail: resolved.detail };
+  }
+  const { launch, projectRoot } = resolved;
   const extraBins = launch.extraBins || [];
   const extendedPath =
     launch.path ||
@@ -235,8 +264,8 @@ async function startServer() {
   child.unref();
 
   const startedAt = Date.now();
-  writeState({ pid: child.pid, startedAt, projectRoot: PROJECT_ROOT });
-  log("spawned", { pid: child.pid, command: launch.command, args: launch.args });
+  writeState({ pid: child.pid, startedAt, projectRoot });
+  log("spawned", { pid: child.pid, command: launch.command, args: launch.args, cwd: launch.cwd });
 
   return { started: true, pid: child.pid, startedAt };
 }
@@ -261,13 +290,18 @@ function stopServer() {
 function getStatus() {
   const state = readState();
   const running = isPidAlive(state.pid);
-  return {
+  const out = {
     running,
     pid: running ? state.pid : undefined,
     uptimeMs: running && state.startedAt ? Date.now() - state.startedAt : undefined,
-    projectRoot: PROJECT_ROOT,
     port: getPort(),
   };
+  if (!isElectronHost()) {
+    const recorded = readRecordedProjectRoot(stateDir());
+    out.projectRoot = typeof recorded === "string" ? recorded : null;
+    out.projectRootOk = resolveStartRoot(stateDir()).ok;
+  }
+  return out;
 }
 
 const CALLER_ORIGIN_RE = /^chrome-extension:\/\/([a-p]{32})\/$/;
@@ -309,13 +343,13 @@ function authorizeNativeHostCaller(argv = process.argv, options = {}) {
   if (allowed.includes(extensionId) || known.includes(extensionId)) {
     return { ok: true, extensionId };
   }
-  return { ok: false, error: "unauthorized_caller" };
+  return { ok: false, error: "extension_not_allowed", extensionId };
 }
 
 function replyGetLocalToken(id, argv = process.argv, options = {}) {
   const auth = authorizeNativeHostCaller(argv, options);
   if (!auth.ok) {
-    log("getLocalToken_denied");
+    log("getLocalToken_denied", { error: auth.error, extensionId: auth.extensionId });
     return { id, ok: false, error: auth.error, _exit: true };
   }
   const token = ensureLocalApiToken();
@@ -431,7 +465,11 @@ function listen() {
     process.exit(1);
   });
 
-  log("native host started", { node: process.version, root: PROJECT_ROOT });
+  log("native host started", {
+    node: process.version,
+    script: __filename,
+    projectRoot: isElectronHost() ? undefined : readRecordedProjectRoot(stateDir()),
+  });
 }
 
 if (require.main === module) {
@@ -443,6 +481,9 @@ module.exports = {
   MAX_NATIVE_HOST_MESSAGE,
   electronResourcesBin,
   getStartLaunch,
+  resolveStartLaunch,
+  startServer,
+  getStatus,
   spawnDetached,
   parseCallerExtensionId,
   findCallerOriginArg,

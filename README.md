@@ -74,6 +74,16 @@ npm run install-native-host -- --ext-id=YOUR_EXTENSION_ID
 
 Find your extension ID at `chrome://extensions` (32-character string under the extension name when Developer mode is enabled).
 
+`--ext-id` adds the ID to both the Chrome manifest's `allowed_origins` and `extension-ids.json` in the Transcriber state directory (`~/Library/Application Support/Transcriber/` on macOS; `~/.config/transcriber/` on Linux). The host only hands out the local API token to IDs in that file. Re-running is safe; new IDs are appended. `--remove --ext-id=<id>` takes one ID out of both; `--replace` makes both exactly the IDs you pass.
+
+The host script stays in the checkout you install from, but **Start** runs `npm run dev` from the project root recorded in `native-host.json` in the same state directory. A plain install records the current checkout only if nothing is recorded yet. To point Start at a different checkout (for example, when the host lives in a worktree):
+
+```bash
+npm run install-native-host -- --ext-id=YOUR_EXTENSION_ID --project-root=/absolute/path/to/your/Transcriber
+```
+
+Start refuses with `bad_project_root` unless that folder has a `package.json` named `youtube-transcriber` with a `dev` script, `node_modules`, and a generated Prisma client. Clear it with `--clear-project-root`. Unknown flags are an error.
+
 Open `http://127.0.0.1:19720` to read the transcript.
 
 ### ENTERPRISE (Org-Hosted)

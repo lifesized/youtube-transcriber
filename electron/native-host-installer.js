@@ -15,7 +15,7 @@ const os = require("os");
 const { execFileSync } = require("child_process");
 const { checkIfTranslocated, writeFileAtomic } = require("./utils.js");
 const { filterValidExtensionIds } = require("../lib/native-host-pair.js");
-const { getStateDir, getLogDir } = require("../lib/local-api-token.js");
+const { getLogDir } = require("../lib/local-api-token.js");
 const config = require("./config.js");
 
 function shSingleQuote(value) {
@@ -88,7 +88,7 @@ class NativeHostInstaller {
     this.idsPathOverride = options.idsPath || null;
     this.hostName = options.hostName || HOST_NAME;
     this.port = options.port || config.port;
-    this.stateDir = options.stateDir || getStateDir();
+    this.stateDir = options.stateDir || config.resolveAppStateDir();
     this.logDir = options.logDir || getLogDir(this.stateDir);
     this.browsers = options.browsers || this._detectBrowsers();
     this.idsFileCorrupt = false;
@@ -126,6 +126,7 @@ class NativeHostInstaller {
 
   _writeExtensionIds(ids) {
     const configPath = this._idsPath();
+    this._assertAppStatePath(configPath);
     writeFileAtomic(configPath, JSON.stringify(ids, null, 2) + "\n", 0o600);
     this.extensionIds = ids;
     this.idsFileCorrupt = false;
@@ -387,6 +388,16 @@ exec ${shSingleQuote(electronBinary)} ${shSingleQuote(hostScript)} "$@"
     }
   }
   
+  _assertAppStatePath(filePath) {
+    const checkoutState = config.resolveCheckoutStateDir();
+    const rel = path.relative(path.resolve(checkoutState), path.resolve(filePath));
+    if (rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))) {
+      throw new Error(
+        `refusing to write app state inside the checkout state dir (${checkoutState})`
+      );
+    }
+  }
+
   _writeManifest(manifestPath, wrapperPath) {
     this._assertAppManifestPath(manifestPath);
     const manifest = {
