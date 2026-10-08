@@ -30,6 +30,7 @@ module.exports = async function(context) {
       path.join(process.cwd(), "electron", "resources", "standalone")
     );
     copyRebuiltSqliteIntoStandalone(context);
+    copyLibJsIntoUnpacked(path.join(appOutDir, "Transcriber.app"));
     assertStandalonePayload(context);
     await applyElectronFuses(context);
     await adHocCodesign(context);
@@ -44,6 +45,26 @@ function syncStandaloneFromStaging(appPath, stagingPath) {
   fs.mkdirSync(dest, { recursive: true });
   fs.cpSync(stagingPath, dest, { recursive: true, dereference: true });
   console.log("  copied staging standalone (including node_modules) into extraResources");
+}
+
+function copyLibJsIntoUnpacked(appPath) {
+  const src = path.join(process.cwd(), "lib");
+  const dest = path.join(
+    appPath,
+    "Contents",
+    "Resources",
+    "app.asar.unpacked",
+    "lib"
+  );
+  if (!fs.existsSync(src)) {
+    throw new Error(`lib/ missing at ${src}`);
+  }
+  fs.mkdirSync(dest, { recursive: true });
+  for (const name of fs.readdirSync(src)) {
+    if (!name.endsWith(".js")) continue;
+    fs.copyFileSync(path.join(src, name), path.join(dest, name));
+  }
+  console.log("  copied lib/*.js into app.asar.unpacked for native host");
 }
 
 function copyRebuiltSqliteIntoStandalone(context) {
@@ -209,4 +230,5 @@ async function adHocCodesign(context) {
 
 module.exports.syncStandaloneFromStaging = syncStandaloneFromStaging;
 module.exports.overlaySqliteNativeAddon = overlaySqliteNativeAddon;
+module.exports.copyLibJsIntoUnpacked = copyLibJsIntoUnpacked;
 module.exports.applyElectronFuses = applyElectronFuses;

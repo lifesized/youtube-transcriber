@@ -125,6 +125,89 @@ jobs:
         env:
           # Don't sign - we're doing ad-hoc signing only
           CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Assert asar contains every main-process require
+        run: |
+          set -euo pipefail
+          APP="$PWD/dist-electron/mac-arm64/Transcriber.app"
+          ASAR="$APP/Contents/Resources/app.asar"
+          echo "----- npx asar list -----"
+          npx --no-install asar list "$ASAR"
+          echo "----- resolve requires from electron/main.js -----"
+          node scripts/assert-packaged-requires.js --app "$APP" --entry electron/main.js
+          node -e '
+            const asar = require("@electron/asar");
+            const files = asar.listPackage(process.argv[1]).map((p) => p.replace(/^\//, ""));
+            if (!files.includes("lib/local-api-token.js")) {
+              console.error("ERROR: lib/local-api-token.js is not inside app.asar");
+              process.exit(1);
+            }
+            console.log("✓ app.asar contains lib/local-api-token.js");
+          ' "$ASAR"
+
+      - name: Launch packaged Transcriber.app
+        run: |
+          set -euo pipefail
+          ROOT="$PWD"
+          APP_PATH="$ROOT/dist-electron/mac-arm64/Transcriber.app/Contents/MacOS/Transcriber"
+          DATA_DIR="$(mktemp -d /tmp/transcriber-launch-XXXXXX)"
+          mkdir -p "$DATA_DIR/Library/Application Support/Transcriber"
+          TOKEN="$(openssl rand -hex 32)"
+          LOG="$DATA_DIR/main.log"
+          PORT=19720
+
+          cleanup() {
+            if [ -n "${APP_PID:-}" ]; then
+              kill "$APP_PID" 2>/dev/null || true
+              wait "$APP_PID" 2>/dev/null || true
+            fi
+          }
+          trap cleanup EXIT
+
+          HOME="$DATA_DIR" \
+          TRANSCRIBER_LOCAL_TOKEN="$TOKEN" \
+          ELECTRON_ENABLE_LOGGING=1 \
+          "$APP_PATH" > "$LOG" 2>&1 &
+          APP_PID=$!
+          echo "Launched packaged app PID $APP_PID"
+
+          HEALTH=""
+          for i in $(seq 1 60); do
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+              echo "ERROR: Transcriber.app exited early"
+              echo "----- packaged app log -----"
+              cat "$LOG" || true
+              exit 1
+            fi
+            if grep -q "Uncaught Exception" "$LOG" 2>/dev/null; then
+              echo "ERROR: Uncaught Exception in packaged app"
+              echo "----- packaged app log -----"
+              cat "$LOG" || true
+              exit 1
+            fi
+            set +e
+            HEALTH=$(curl -sS -o /tmp/packaged-health.json -w "%{http_code}" \
+              -H "Authorization: Bearer ${TOKEN}" \
+              "http://127.0.0.1:${PORT}/api/health")
+            set -e
+            if [ "$HEALTH" = "200" ]; then
+              echo "----- packaged-launch health -----"
+              cat /tmp/packaged-health.json
+              echo ""
+              echo "✓ packaged Transcriber.app /api/health 200"
+              break
+            fi
+            echo "  launch wait $i/60 (http=${HEALTH:-curl-fail})"
+            if [ "$i" -eq 60 ]; then
+              echo "ERROR: packaged app did not become healthy"
+              echo "----- packaged app log -----"
+              cat "$LOG" || true
+              exit 1
+            fi
+            sleep 1
+          done
+          echo "----- packaged app log -----"
+          cat "$LOG" || true
       
       - name: Test packaged app (smoke test)
         run: |

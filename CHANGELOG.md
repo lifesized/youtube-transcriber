@@ -17,6 +17,7 @@
 ### Fixed
 - **Native-host wrapper path** — Packaged host script is `Contents/Resources/app.asar.unpacked/tools/...` (not `Resources/app/tools`). `start` in Electron mode launches the app with `open -b com.transcribed.app`. Spawned children have an `error` handler. CI `ls`s the wrapper target and sends a framed `ping`.
 - **CI workflow** — Job uses `permissions: contents: read` and prints the DMG SHA-256 in the job summary.
+- **Packaged main-process modules** — `lib/*.js` is inside `app.asar` so Electron can `require('../lib/local-api-token.js')`. CI lists the asar, resolves every `require()` from `electron/main.js`, and launches `Transcriber.app` until `/api/health` returns 200.
 - **Pairing dialog** — Focuses the menu-bar app (`app.focus({ steal: true })`) before the confirm box, shows the extension ID in `detail`, and warns when the ID is not a known Chrome Web Store listing. A dialog timeout marks the request expired so a late Allow does not write the ID.
 - **Native-host PATH** — The Electron-installed wrapper no longer prepends `/opt/homebrew/bin` or `/usr/local/bin`. Those prefixes stay only for the dev/non-Electron host.
 - **Packaged `@prisma/client`** — electron-builder extraResources skips a source-root `node_modules`, so afterPack now copies the staging standalone tree (including Prisma) into the `.app` before the payload check.

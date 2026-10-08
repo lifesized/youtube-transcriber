@@ -224,6 +224,23 @@ test("afterPack overlays Electron ABI sqlite onto hashed Next copies", () => {
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
+test("afterPack copies lib/*.js into app.asar.unpacked", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "lib-unpacked-"));
+  const appPath = path.join(tmp, "Transcriber.app");
+  const afterPack = require(path.join(projectRoot, "electron", "after-pack.js"));
+  afterPack.copyLibJsIntoUnpacked(appPath);
+  const dest = path.join(
+    appPath,
+    "Contents",
+    "Resources",
+    "app.asar.unpacked",
+    "lib",
+    "local-api-token.js"
+  );
+  assert.ok(fs.existsSync(dest));
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
+
 test("tray template PNGs exist and are non-empty", () => {
   for (const name of ["trayTemplate.png", "trayTemplate@2x.png"]) {
     const pngPath = path.join(projectRoot, "electron", "resources", name);
@@ -291,8 +308,18 @@ test("packaged native host script path is app.asar.unpacked", () => {
     fs.readFileSync(path.join(projectRoot, "electron-builder.json"), "utf8")
   );
   assert.ok(builder.asarUnpack.includes("tools/**/*"));
-  assert.ok(builder.asarUnpack.includes("lib/**/*"));
-  assert.ok(builder.files.includes("lib/**/*"));
+  assert.equal(builder.asarUnpack.includes("lib/**/*"), false);
+  assert.ok(builder.files.includes("lib/**/*.js"));
+});
+
+test("CI launches the packaged Transcriber.app and checks asar requires", () => {
+  const workflowPath = path.join(projectRoot, ".github", "workflows", "electron-build-macos.yml");
+  const content = fs.readFileSync(workflowPath, "utf8");
+  assert.ok(content.includes("asar list"));
+  assert.ok(content.includes("assert-packaged-requires.js"));
+  assert.ok(content.includes("Launch packaged Transcriber.app"));
+  assert.ok(content.includes("Uncaught Exception"));
+  assert.ok(content.includes("packaged-launch health"));
 });
 
 test("CI pings the packaged native host wrapper", () => {

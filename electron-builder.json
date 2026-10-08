@@ -7,7 +7,6 @@
     "node_modules/better-sqlite3/**/*",
     "node_modules/@prisma/**/*",
     "tools/**/*",
-    "lib/**/*",
     "electron/resources/trayTemplate.png",
     "electron/resources/trayTemplate@2x.png"
   ],
@@ -16,7 +15,7 @@
     "!electron/resources/standalone/**",
     "!electron/resources/bin/**",
     "tools/**/*",
-    "lib/**/*",
+    "lib/**/*.js",
     "node_modules/better-sqlite3/**/*",
     "node_modules/@prisma/**/*",
     "package.json"
