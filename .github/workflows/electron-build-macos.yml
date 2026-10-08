@@ -408,6 +408,41 @@ jobs:
               sys.exit(1)
           print("✓ native host ping")
           PY
+
+          echo "----- native-host getLocalToken -----"
+          PAIR_ID="abcdefghijklmnopabcdefghijklmnop"
+          NMH_STATE="$NMH_HOME/Library/Application Support/Transcriber"
+          mkdir -p "$NMH_STATE"
+          printf '["%s"]\n' "$PAIR_ID" > "$NMH_STATE/extension-ids.json"
+          EXPECTED_TOKEN="$(python3 -c 'print("ab" * 32)')"
+          printf '%s' "$EXPECTED_TOKEN" > "$NMH_STATE/local-api.token"
+          chmod 600 "$NMH_STATE/local-api.token"
+          python3 - <<'PY' | HOME="$NMH_HOME" "$WRAPPER" "chrome-extension://${PAIR_ID}/" > /tmp/nmh-token.bin
+          import sys, struct, json
+          payload = json.dumps({"id": "ci-token", "cmd": "getLocalToken"}).encode("utf-8")
+          sys.stdout.buffer.write(struct.pack("<I", len(payload)))
+          sys.stdout.buffer.write(payload)
+          sys.stdout.buffer.flush()
+          PY
+          python3 - <<PY
+          import json, struct, sys
+          expected = "${EXPECTED_TOKEN}"
+          data = open("/tmp/nmh-token.bin", "rb").read()
+          print("native-host getLocalToken raw bytes:", len(data))
+          if len(data) < 4:
+              print("ERROR: native host produced no framed getLocalToken reply", file=sys.stderr)
+              sys.exit(1)
+          n = struct.unpack_from("<I", data, 0)[0]
+          msg = json.loads(data[4:4 + n])
+          print("native-host getLocalToken reply keys:", sorted(msg.keys()))
+          if msg.get("id") != "ci-token" or msg.get("ok") is not True:
+              print("ERROR: unexpected getLocalToken reply", json.dumps(msg, sort_keys=True), file=sys.stderr)
+              sys.exit(1)
+          if msg.get("token") != expected:
+              print("ERROR: getLocalToken returned the wrong token", file=sys.stderr)
+              sys.exit(1)
+          print("✓ native host getLocalToken ok:true")
+          PY
           
           # 4. Check bundled binaries exist, are arm64, and are not Homebrew-linked
           for binary in ffmpeg yt-dlp; do

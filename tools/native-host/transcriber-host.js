@@ -267,11 +267,21 @@ function getStatus() {
   };
 }
 
+const CALLER_ORIGIN_RE = /^chrome-extension:\/\/([a-p]{32})\/$/;
+
 function parseCallerExtensionId(originArg) {
   if (typeof originArg !== "string") return null;
-  const trimmed = originArg.trim();
-  const match = trimmed.match(/^chrome-extension:\/\/([a-p]{32})\/?$/);
+  const match = originArg.trim().match(CALLER_ORIGIN_RE);
   return match ? match[1] : null;
+}
+
+function findCallerOriginArg(argv = process.argv) {
+  for (const arg of argv.slice(2)) {
+    if (typeof arg === "string" && CALLER_ORIGIN_RE.test(arg.trim())) {
+      return arg.trim();
+    }
+  }
+  return null;
 }
 
 function loadAllowedExtensionIds(idsPath) {
@@ -284,7 +294,7 @@ function loadAllowedExtensionIds(idsPath) {
 }
 
 function authorizeNativeHostCaller(argv = process.argv, options = {}) {
-  const originArg = argv[1];
+  const originArg = findCallerOriginArg(argv);
   const extensionId = parseCallerExtensionId(originArg);
   if (!extensionId) {
     return { ok: false, error: "unauthorized_caller" };
@@ -312,11 +322,15 @@ function replyGetLocalToken(id, argv = process.argv, options = {}) {
 
 // --- Native messaging framing ---------------------------------------------
 
-function writeMessage(obj) {
+function encodeMessage(obj) {
   const json = Buffer.from(JSON.stringify(obj), "utf8");
   const len = Buffer.alloc(4);
   len.writeUInt32LE(json.length, 0);
-  process.stdout.write(Buffer.concat([len, json]));
+  return Buffer.concat([len, json]);
+}
+
+function writeMessage(obj) {
+  fs.writeSync(1, encodeMessage(obj));
 }
 
 let inBuf = Buffer.alloc(0);
@@ -356,42 +370,57 @@ async function handleMessage(msg) {
 }
 
 function listen() {
-  process.stdin.on("data", async (chunk) => {
-    inBuf = Buffer.concat([inBuf, chunk]);
-    if (inBuf.length > 4 + MAX_NATIVE_HOST_MESSAGE) {
-      log("input_too_large", { length: inBuf.length });
-      process.exit(1);
+  let inflight = 0;
+  let stdinEnded = false;
+  const maybeExitOnStdinEnd = () => {
+    if (stdinEnded && inflight === 0) {
+      log("stdin closed, exiting");
+      process.exit(0);
     }
-    while (inBuf.length >= 4) {
-      const len = inBuf.readUInt32LE(0);
-      if (len > MAX_NATIVE_HOST_MESSAGE) {
-        log("message_too_large", { len });
+  };
+
+  process.stdin.on("data", async (chunk) => {
+    inflight += 1;
+    try {
+      inBuf = Buffer.concat([inBuf, chunk]);
+      if (inBuf.length > 4 + MAX_NATIVE_HOST_MESSAGE) {
+        log("input_too_large", { length: inBuf.length });
         process.exit(1);
       }
-      if (inBuf.length < 4 + len) break;
-      const json = inBuf.slice(4, 4 + len).toString("utf8");
-      inBuf = inBuf.slice(4 + len);
-      let msg;
-      try {
-        msg = JSON.parse(json);
-      } catch (e) {
-        writeMessage({ ok: false, error: "bad_json" });
-        continue;
+      while (inBuf.length >= 4) {
+        const len = inBuf.readUInt32LE(0);
+        if (len > MAX_NATIVE_HOST_MESSAGE) {
+          log("message_too_large", { len });
+          process.exit(1);
+        }
+        if (inBuf.length < 4 + len) break;
+        const json = inBuf.slice(4, 4 + len).toString("utf8");
+        inBuf = inBuf.slice(4 + len);
+        let msg;
+        try {
+          msg = JSON.parse(json);
+        } catch (e) {
+          writeMessage({ ok: false, error: "bad_json" });
+          continue;
+        }
+        const reply = (await handleMessage(msg)) || {};
+        const exitAfter = reply._exit;
+        const wire = { ...reply };
+        delete wire._exit;
+        writeMessage(wire);
+        if (exitAfter) {
+          process.exit(1);
+        }
       }
-      const reply = (await handleMessage(msg)) || {};
-      const exitAfter = reply._exit;
-      const wire = { ...reply };
-      delete wire._exit;
-      writeMessage(wire);
-      if (exitAfter) {
-        process.exit(1);
-      }
+    } finally {
+      inflight -= 1;
+      maybeExitOnStdinEnd();
     }
   });
 
   process.stdin.on("end", () => {
-    log("stdin closed, exiting");
-    process.exit(0);
+    stdinEnded = true;
+    maybeExitOnStdinEnd();
   });
 
   process.on("uncaughtException", (e) => {
@@ -413,6 +442,7 @@ module.exports = {
   getStartLaunch,
   spawnDetached,
   parseCallerExtensionId,
+  findCallerOriginArg,
   loadAllowedExtensionIds,
   authorizeNativeHostCaller,
   replyGetLocalToken,

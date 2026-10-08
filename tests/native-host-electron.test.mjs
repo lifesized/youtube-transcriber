@@ -1,10 +1,70 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 const require = createRequire(import.meta.url);
 const host = require("../tools/native-host/transcriber-host.js");
+const hostScript = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../tools/native-host/transcriber-host.js"
+);
+
+function frameMessage(obj) {
+  const json = Buffer.from(JSON.stringify(obj), "utf8");
+  const len = Buffer.alloc(4);
+  len.writeUInt32LE(json.length, 0);
+  return Buffer.concat([len, json]);
+}
+
+function decodeFrame(buf) {
+  if (!buf || buf.length < 4) return null;
+  const n = buf.readUInt32LE(0);
+  if (buf.length < 4 + n) return null;
+  return JSON.parse(buf.subarray(4, 4 + n).toString("utf8"));
+}
+
+function stateDirForHome(home) {
+  if (process.platform === "darwin") {
+    return path.join(home, "Library", "Application Support", "Transcriber");
+  }
+  if (process.platform === "win32") {
+    return path.join(home, "Transcriber");
+  }
+  return path.join(home, ".config", "transcriber");
+}
+
+async function spawnHost(args, env, msg) {
+  const child = spawn(process.execPath, [hostScript, ...args], {
+    env,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  const stdout = [];
+  const stderr = [];
+  child.stdout.on("data", (c) => stdout.push(c));
+  child.stderr.on("data", (c) => stderr.push(c));
+  child.stdin.write(frameMessage(msg));
+  child.stdin.end();
+  const status = await new Promise((resolve, reject) => {
+    const t = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error("native host timed out"));
+    }, 8000);
+    child.on("close", (code) => {
+      clearTimeout(t);
+      resolve(code);
+    });
+  });
+  return {
+    status,
+    msg: decodeFrame(Buffer.concat(stdout)),
+    stderr: Buffer.concat(stderr).toString("utf8"),
+  };
+}
 
 test("Electron mode start launches the app by bundle id", () => {
   const launch = host.getStartLaunch(
@@ -35,49 +95,112 @@ test("non-Electron start still uses npm run dev next to execPath", () => {
   assert.ok(launch.extraBins.includes("/opt/homebrew/bin"));
 });
 
-test("getLocalToken requires a paired caller origin on argv[1]", () => {
-  const dir = require("node:fs").mkdtempSync(
-    require("node:os").tmpdir() + "/ytt-nmh-ids-"
-  );
-  const idsPath = require("node:path").join(dir, "extension-ids.json");
+test("getLocalToken requires a paired caller origin in argv.slice(2)", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ytt-nmh-ids-"));
+  const idsPath = path.join(dir, "extension-ids.json");
   const paired = "abcdefghijklmnopabcdefghijklmnop";
-  require("node:fs").writeFileSync(idsPath, JSON.stringify([paired]));
+  fs.writeFileSync(idsPath, JSON.stringify([paired]));
+  const electronArgv = [
+    "/App/Contents/MacOS/Transcriber",
+    "/App/Contents/Resources/app.asar.unpacked/tools/native-host/transcriber-host.js",
+    `chrome-extension://${paired}/`,
+  ];
   try {
     assert.equal(
       host.parseCallerExtensionId(`chrome-extension://${paired}/`),
       paired
     );
-    assert.equal(host.parseCallerExtensionId(`chrome-extension://${paired}`), paired);
+    assert.equal(host.parseCallerExtensionId(`chrome-extension://${paired}`), null);
     assert.equal(host.parseCallerExtensionId("/tmp/transcriber-host.js"), null);
+    assert.equal(
+      host.findCallerOriginArg(electronArgv),
+      `chrome-extension://${paired}/`
+    );
+    assert.equal(
+      host.findCallerOriginArg(["node", `chrome-extension://${paired}/`]),
+      null
+    );
 
-    const allowed = host.authorizeNativeHostCaller(
-      ["host", `chrome-extension://${paired}/`],
+    const allowed = host.authorizeNativeHostCaller(electronArgv, { idsPath });
+    assert.equal(allowed.ok, true);
+
+    const originOnArgv1 = host.authorizeNativeHostCaller(
+      ["node", `chrome-extension://${paired}/`],
       { idsPath }
     );
-    assert.equal(allowed.ok, true);
+    assert.equal(originOnArgv1.ok, false);
+    assert.equal(originOnArgv1.error, "unauthorized_caller");
 
     const denied = host.replyGetLocalToken(
       "tok",
-      ["host", "chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/"],
+      [
+        "node",
+        hostScript,
+        "chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/",
+      ],
       { idsPath }
     );
     assert.equal(denied.ok, false);
     assert.equal(denied.error, "unauthorized_caller");
     assert.equal(denied._exit, true);
 
-    const missing = host.replyGetLocalToken("tok", ["host", "/tmp/foo.js"], {
+    const missing = host.replyGetLocalToken("tok", ["node", hostScript], {
       idsPath,
     });
     assert.equal(missing.ok, false);
     assert.equal(missing._exit, true);
 
     const known = host.authorizeNativeHostCaller(
-      ["host", "chrome-extension://bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/"],
+      [
+        "node",
+        hostScript,
+        "chrome-extension://bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/",
+      ],
       { idsPath, knownIds: ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] }
     );
     assert.equal(known.ok, true);
   } finally {
-    require("node:fs").rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("spawned host getLocalToken authorizes the origin argument", async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "ytt-nmh-spawn-"));
+  const stateDir = stateDirForHome(home);
+  const paired = "abcdefghijklmnopabcdefghijklmnop";
+  const unpaired = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const token = "c".repeat(64);
+  fs.mkdirSync(stateDir, { recursive: true });
+  fs.writeFileSync(path.join(stateDir, "extension-ids.json"), JSON.stringify([paired]));
+  fs.writeFileSync(path.join(stateDir, "local-api.token"), token, { mode: 0o600 });
+  const env = { ...process.env, HOME: home };
+  delete env.XDG_CONFIG_HOME;
+  delete env.TRANSCRIBER_LOCAL_TOKEN;
+  try {
+    const allowed = await spawnHost(
+      [`chrome-extension://${paired}/`],
+      env,
+      { id: "tok", cmd: "getLocalToken" }
+    );
+    assert.equal(allowed.msg?.ok, true, allowed.stderr);
+    assert.equal(allowed.msg?.token, token);
+    assert.equal(allowed.msg?.id, "tok");
+
+    const denied = await spawnHost(
+      [`chrome-extension://${unpaired}/`],
+      env,
+      { id: "tok", cmd: "getLocalToken" }
+    );
+    assert.equal(denied.msg?.ok, false, denied.stderr);
+    assert.equal(denied.msg?.error, "unauthorized_caller");
+    assert.notEqual(denied.status, 0);
+
+    const missing = await spawnHost([], env, { id: "tok", cmd: "getLocalToken" });
+    assert.equal(missing.msg?.ok, false, missing.stderr);
+    assert.equal(missing.msg?.error, "unauthorized_caller");
+    assert.notEqual(missing.status, 0);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
   }
 });
 

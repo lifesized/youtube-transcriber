@@ -396,6 +396,9 @@ test("CI pings the packaged native host wrapper", () => {
   assert.ok(content.includes("app.asar.unpacked/tools/native-host/transcriber-host.js"));
   assert.ok(content.includes("native-host ping"));
   assert.ok(content.includes('"cmd": "ping"'));
+  assert.ok(content.includes("native-host getLocalToken"));
+  assert.ok(content.includes('"cmd": "getLocalToken"'));
+  assert.ok(content.includes("chrome-extension://${PAIR_ID}/"));
 });
 
 test("LOCAL background pairs via /api/native-host/pair then retries", () => {
