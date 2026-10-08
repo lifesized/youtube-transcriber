@@ -87,7 +87,8 @@ test("finalize-dmg.sh sets the helper icon and hides the app", () => {
   assert.ok(text.includes('chflags hidden "$MNT/$APP"'));
   assert.ok(text.includes("-format UDZO"));
   assert.doesNotMatch(text, /os\.getxattr/);
-  assert.doesNotMatch(text, /^\s*codesign\b/m);
+  assert.doesNotMatch(text, /codesign --(?:force|sign)/);
+  assert.ok(text.includes("codesign --verify --deep --strict"));
   assert.doesNotMatch(text, /\$MNT\/\$APP\/Contents/);
   assert.ok(text.includes("Must not modify Transcriber.app contents"));
   assert.ok(text.includes("install-helper.icns"));

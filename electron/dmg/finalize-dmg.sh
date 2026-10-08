@@ -79,6 +79,10 @@ if [ "$DATA_BEFORE" != "$DATA_AFTER" ]; then
 fi
 
 chflags hidden "$MNT/$APP"
+# --strict rejects FinderInfo / resource forks on the bundle wrapper.
+# UF_HIDDEN (chflags) is what Finder uses to hide the icon. Clear xattrs
+# on the .app directory only — never Contents/.
+xattr -c "$MNT/$APP" 2>/dev/null || true
 if [ -e "$MNT/Applications" ]; then rm -f "$MNT/Applications"; fi
 
 # Verify before sealing. Built-in macOS tools only — no Python xattr.
@@ -99,6 +103,13 @@ fi
 ls -lO "$MNT" | grep -q "hidden.*$APP" || { echo "finalize-dmg: $APP not hidden"; exit 1; }
 [ -x "$MNT/$HELPER" ] || { echo "finalize-dmg: helper lost its exec bit"; exit 1; }
 [ ! -e "$MNT/Applications" ] || { echo "finalize-dmg: Applications link still present"; exit 1; }
+if command -v codesign >/dev/null 2>&1; then
+  codesign --verify --deep --strict "$MNT/$APP" || {
+    echo "finalize-dmg: codesign --verify --deep --strict failed for $APP"
+    xattr -l "$MNT/$APP" || true
+    exit 1
+  }
+fi
 
 sync
 hdiutil detach "$MNT" -quiet
