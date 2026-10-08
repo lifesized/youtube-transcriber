@@ -59,10 +59,12 @@ export async function POST(request: NextRequest) {
 
   let videoId: string;
   let platform: string;
+  let storedUrl: string;
   try {
     const parsed = parseContentUrl(url);
     videoId = parsed.contentId;
     platform = parsed.platform;
+    storedUrl = parsed.canonicalUrl ?? url;
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Invalid URL";
     return NextResponse.json({ error: message }, { status: 400 });
@@ -79,7 +81,7 @@ export async function POST(request: NextRequest) {
     }
     const source = {
       videoId,
-      pageUrl: url,
+      pageUrl: new URL(url.trim()).href,
       mediaUrl: mediaUrl === undefined ? undefined : new URL(mediaUrl).href,
       title: cleanLinkedInText(body.title, 512),
       author: cleanLinkedInText(body.author, 256),
@@ -153,7 +155,7 @@ export async function POST(request: NextRequest) {
 
   try {
     // Use cache-aware transcript lookup/creation
-    const video = await getOrCreateTranscript(videoId, url, lang, platform, { fetcher });
+    const video = await getOrCreateTranscript(videoId, storedUrl, lang, platform, { fetcher });
     return NextResponse.json(video, { status: 201 });
   } catch (err: unknown) {
     if (err instanceof LinkedInMediaError) {

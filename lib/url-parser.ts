@@ -6,6 +6,8 @@ export interface ParsedUrl {
   platform: Platform;
   contentId: string;
   originalUrl: string;
+  /** LinkedIn only: page URL rebuilt from the parsed ID, safe to store and link to. */
+  canonicalUrl?: string;
 }
 
 const SPOTIFY_EPISODE_REGEX = /^[a-zA-Z0-9]{22}$/;
@@ -13,21 +15,31 @@ const SPOTIFY_EPISODE_REGEX = /^[a-zA-Z0-9]{22}$/;
 // LinkedIn snowflake IDs are 19 digits. Event slugs end with the ID
 // ("...energyclub7295762520814874625"), so take the trailing 19 digits.
 const LINKEDIN_EVENT_PATH = /^\/events\/[^/]*?(\d{19})(?:\/|$)/;
-const LINKEDIN_ACTIVITY = /(?:activity|ugcPost|share)[-:]([0-9]+)/;
+const LINKEDIN_ACTIVITY = /(activity|ugcPost|share)[-:]([0-9]+)/;
 const LINKEDIN_POST_PATH = /^\/(?:feed\/update|posts)\//;
+const LINKEDIN_HOSTS = ["www.linkedin.com", "linkedin.com"];
 
 /**
- * LinkedIn post or event page → `linkedin:<activityId>` / `linkedin:event-<eventId>`.
- * Keep in sync with extension/linkedin-url.js.
+ * LinkedIn post or event page → content ID and canonical page URL. Only
+ * https on (www.)linkedin.com with no port or userinfo. Content-ID rules
+ * stay in sync with extension/linkedin-url.js.
  */
-export function extractLinkedInContentId(url: string): string | null {
+function parseLinkedInPage(url: string): { contentId: string; canonicalUrl: string } | null {
   let parsed: URL;
   try {
     parsed = new URL(url);
   } catch {
     return null;
   }
-  if (parsed.hostname.replace(/^www\./, "") !== "linkedin.com") return null;
+  if (
+    parsed.protocol !== "https:" ||
+    !LINKEDIN_HOSTS.includes(parsed.hostname) ||
+    parsed.port ||
+    parsed.username ||
+    parsed.password
+  ) {
+    return null;
+  }
 
   let path = parsed.pathname;
   try {
@@ -37,18 +49,29 @@ export function extractLinkedInContentId(url: string): string | null {
   }
 
   const event = path.match(LINKEDIN_EVENT_PATH);
-  if (event) return `linkedin:event-${event[1]}`;
+  if (event) {
+    return {
+      contentId: `linkedin:event-${event[1]}`,
+      canonicalUrl: `https://www.linkedin.com/events/${event[1]}/`,
+    };
+  }
 
-  const highlighted = parsed.searchParams
-    .get("highlightedUpdateUrn")
-    ?.match(LINKEDIN_ACTIVITY);
-  if (highlighted) return `linkedin:${highlighted[1]}`;
-
-  if (LINKEDIN_POST_PATH.test(path)) {
-    const activity = path.match(LINKEDIN_ACTIVITY);
-    if (activity) return `linkedin:${activity[1]}`;
+  // Keep the URN type: activity, ugcPost and share IDs are different numbers for one post.
+  const activity =
+    parsed.searchParams.get("highlightedUpdateUrn")?.match(LINKEDIN_ACTIVITY) ??
+    (LINKEDIN_POST_PATH.test(path) ? path.match(LINKEDIN_ACTIVITY) : null);
+  if (activity) {
+    return {
+      contentId: `linkedin:${activity[2]}`,
+      canonicalUrl: `https://www.linkedin.com/feed/update/urn:li:${activity[1]}:${activity[2]}/`,
+    };
   }
   return null;
+}
+
+/** LinkedIn post or event page → `linkedin:<activityId>` / `linkedin:event-<eventId>`. */
+export function extractLinkedInContentId(url: string): string | null {
+  return parseLinkedInPage(url)?.contentId ?? null;
 }
 
 /**
@@ -90,9 +113,14 @@ export function parseContentUrl(url: string): ParsedUrl {
     return { platform: "youtube", contentId: videoId, originalUrl: url };
   }
 
-  const linkedInId = extractLinkedInContentId(parsed.href);
-  if (linkedInId) {
-    return { platform: "linkedin", contentId: linkedInId, originalUrl: url };
+  const linkedIn = parseLinkedInPage(parsed.href);
+  if (linkedIn) {
+    return {
+      platform: "linkedin",
+      contentId: linkedIn.contentId,
+      originalUrl: url,
+      canonicalUrl: linkedIn.canonicalUrl,
+    };
   }
 
   // Fall back to generic yt-dlp handler (Twitch, Vimeo, TikTok, Twitter/X,
