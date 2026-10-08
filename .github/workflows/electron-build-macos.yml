@@ -332,6 +332,8 @@ jobs:
           cleanup() {
             if [ -n "${APP_PID:-}" ]; then
               kill "$APP_PID" 2>/dev/null || true
+              sleep 1
+              kill -9 "$APP_PID" 2>/dev/null || true
               wait "$APP_PID" 2>/dev/null || true
             fi
           }

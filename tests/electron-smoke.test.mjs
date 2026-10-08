@@ -464,6 +464,7 @@ test("tray manager uses template images and human status copy, not setTitle T", 
   assert.ok(content.includes("popUpContextMenu"));
   assert.ok(content.includes("modalFallback: false"));
   assert.ok(content.includes("GITHUB_ACTIONS"));
+  assert.ok(content.includes("skip popUpContextMenu in CI"));
   assert.ok(main.includes("setImmediate(() => revealRunningApp"));
   assert.ok(content.includes("ensureTray"));
   assert.ok(content.includes("isTrayHealthy"));
@@ -547,6 +548,7 @@ test("CI launches the packaged Transcriber.app and checks asar requires", () => 
   assert.ok(content.includes("asar list"));
   assert.ok(content.includes("assert-packaged-requires.js"));
   assert.ok(content.includes("Launch packaged Transcriber.app"));
+  assert.ok(content.includes("kill -9"));
   assert.ok(content.includes("Uncaught Exception"));
   assert.ok(content.includes("UnhandledPromiseRejectionWarning"));
   assert.ok(content.includes("packaged-launch health"));
