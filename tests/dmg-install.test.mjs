@@ -66,7 +66,35 @@ test("electron-builder packs the helper and background into the DMG, not asar", 
   const appEntry = contents.find((c) => c.type === "file" && !c.path);
   assert.ok(appEntry, "dmg.contents must still include Transcriber.app (file, no path)");
   const apps = contents.find((c) => c.type === "link" && c.path === "/Applications");
-  assert.ok(apps, "dmg.contents must keep the Applications link as fallback");
+  assert.equal(apps, undefined, "no /Applications link: a manual drag leaves the unsigned app 'damaged'");
+  assert.equal(config.dmg.iconSize, 128);
+  assert.deepEqual(config.dmg.window, { width: 660, height: 420 });
+  assert.equal(helper.x, 330);
+  assert.equal(helper.y, 200);
+  assert.equal(appEntry.x, 330);
+  assert.equal(appEntry.y, 560);
+});
+
+test("finalize-dmg.sh sets the helper icon and hides the app", () => {
+  const script = path.join(projectRoot, "electron", "dmg", "finalize-dmg.sh");
+  assert.ok(fs.existsSync(script));
+  assert.ok(fs.statSync(script).mode & 0o111, "finalize-dmg.sh must be executable");
+  const text = fs.readFileSync(script, "utf8");
+  assert.ok(text.includes("setIconForFileOptions"));
+  assert.ok(text.includes("NSFileExtensionHidden"));
+  assert.ok(text.includes("SetFile -a E"));
+  assert.ok(text.includes("SetFile -a C"));
+  assert.ok(text.includes('chflags hidden "$MNT/$APP"'));
+  assert.ok(text.includes("-format UDZO"));
+  assert.doesNotMatch(text, /os\.getxattr/);
+  assert.ok(text.includes("install-helper.icns"));
+  const icns = path.join(projectRoot, "electron", "dmg", "install-helper.icns");
+  assert.ok(fs.existsSync(icns), "electron/dmg/install-helper.icns is Design's helper icon");
+  const buf = fs.readFileSync(icns);
+  assert.equal(buf.slice(0, 4).toString("ascii"), "icns");
+  assert.ok(buf.length > 1000);
+  const pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
+  assert.match(pkg.scripts["electron:build"], /electron-builder[^&]*&& bash electron\/dmg\/finalize-dmg\.sh$/);
 });
 
 test("DMG background PNG exists", () => {
@@ -81,31 +109,21 @@ test("DMG background PNG exists", () => {
     [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
   );
   assert.ok(buf.length > 500);
-  assert.equal(buf.readUInt32BE(16), 620);
-  assert.equal(buf.readUInt32BE(20), 440);
-  assert.equal(buf2x.readUInt32BE(16), 1240);
-  assert.equal(buf2x.readUInt32BE(20), 880);
+  assert.equal(buf.readUInt32BE(16), 660);
+  assert.equal(buf.readUInt32BE(20), 420);
+  assert.equal(buf2x.readUInt32BE(16), 1320);
+  assert.equal(buf2x.readUInt32BE(20), 840);
   const gen = fs.readFileSync(
     path.join(projectRoot, "electron", "dmg", "generate-background.py"),
     "utf8"
   );
-  assert.ok(gen.includes("#f4f1ea"));
-  assert.ok(gen.includes("#1a1a1a"));
-  assert.ok(gen.includes("215 * scale"));
-  assert.ok(gen.includes("405 * scale"));
-  assert.ok(gen.includes("Double-click Install Transcriber"));
-  assert.ok(gen.includes("right-click → Open (once)"));
+  assert.ok(gen.includes("#83735e"), "label band must stay the mid-tone that passes 4.5:1 for black and white labels");
+  assert.ok(gen.includes("Open Anyway"));
+  assert.ok(gen.includes("Double-click the installer"));
+  assert.ok(gen.includes("It copies Transcriber to Applications and opens it."));
+  assert.doesNotMatch(gen, /right-click/i, "macOS 15 removed right-click → Open");
   assert.doesNotMatch(gen, /run this/);
-  const config = JSON.parse(
-    fs.readFileSync(path.join(projectRoot, "electron-builder.json"), "utf8")
-  );
-  const contents = config.dmg.contents || [];
-  const appEntry = contents.find((c) => c.type === "file" && !c.path);
-  const apps = contents.find((c) => c.type === "link" && c.path === "/Applications");
-  assert.equal(appEntry.x, 160);
-  assert.equal(appEntry.y, 312);
-  assert.equal(apps.x, 460);
-  assert.equal(apps.y, 312);
+  assert.doesNotMatch(gen, /load_default/, "never fall back to Pillow's bitmap font");
 });
 
 test("beta install docs lead with the helper and xattr fallback", () => {
@@ -132,50 +150,25 @@ test("CI mounts the DMG and checks for the helper", () => {
   );
   assert.ok(workflow.includes("hdiutil attach"));
   assert.ok(workflow.includes("Install Transcriber.command"));
-});
-
-test("helper icon is one replaceable icns and CI stamps it into the DMG", () => {
-  const icns = path.join(projectRoot, "electron", "dmg", "helper-icon.icns");
-  assert.ok(fs.existsSync(icns), "electron/dmg/helper-icon.icns is the file Design replaces");
-  const buf = fs.readFileSync(icns);
-  assert.equal(buf.slice(0, 4).toString("ascii"), "icns");
-  assert.ok(buf.length > 1000);
-
-  const setIcon = fs.readFileSync(
-    path.join(projectRoot, "electron", "dmg", "set-custom-icon.sh"),
-    "utf8"
-  );
-  const stamp = fs.readFileSync(
-    path.join(projectRoot, "electron", "dmg", "stamp-dmg-helper-icon.sh"),
-    "utf8"
-  );
-  assert.match(setIcon, /HELPER_ICON="\$HERE\/helper-icon\.icns"/);
-  assert.doesNotMatch(setIcon, /resources\/icon\.icns/);
-  assert.match(stamp, /set-custom-icon\.sh/);
-  assert.match(stamp, /hdiutil convert/);
-  assert.match(stamp, /UDRW/);
-  assert.match(stamp, /UDZO/);
-  assert.doesNotMatch(stamp, /osascript -e 'tell application/);
-
-  const workflow = fs.readFileSync(
-    path.join(projectRoot, ".github", "workflows", "electron-build-macos.yml"),
-    "utf8"
-  );
-  const stampAt = workflow.indexOf("stamp-dmg-helper-icon.sh");
-  const assertAt = workflow.indexOf("Assert DMG contains Install Transcriber.command");
-  const shaAt = workflow.indexOf("- name: DMG sha256");
-  assert.ok(stampAt > 0 && stampAt < assertAt, "stamp must run after build and before the helper assert");
-  assert.ok(assertAt < shaAt, "helper assert must run before sha256");
+  assert.doesNotMatch(workflow, /stamp-dmg-helper-icon/);
   assert.match(workflow, /namedfork\/rsrc/);
-  assert.match(workflow, /GetFileInfo -a/);
+  assert.match(workflow, /GetFileInfo -aC/);
+  assert.match(workflow, /GetFileInfo -ae/);
   assert.match(workflow, /assert-helper-icon\.py/);
+  assert.match(workflow, /hidden.*Transcriber\.app/);
+  assert.match(workflow, /test ! -e "\$MOUNT\/Applications"/);
   assert.match(workflow, /screenshot-dmg-window\.py/);
   assert.match(workflow, /name: dmg-window/);
+  const assertAt = workflow.indexOf("Assert DMG contains Install Transcriber.command");
+  const shaAt = workflow.indexOf("- name: DMG sha256");
+  assert.ok(assertAt > 0 && assertAt < shaAt, "helper assert must run before sha256");
   const shot = fs.readFileSync(
     path.join(projectRoot, "electron", "dmg", "screenshot-dmg-window.py"),
     "utf8"
   );
   assert.match(shot, /screencapture/);
+  assert.match(shot, /660/);
+  assert.match(shot, /420/);
 });
 
 test("helper copies the app, clears quarantine, and does not sudo on success", () => {

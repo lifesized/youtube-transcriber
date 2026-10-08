@@ -5,6 +5,10 @@ import subprocess
 import sys
 import time
 
+# Match electron-builder dmg.window: 660×420.
+WINDOW_W, WINDOW_H = 660, 420
+ORIGIN_X, ORIGIN_Y = 80, 80
+
 
 def main() -> int:
     if len(sys.argv) != 3:
@@ -15,6 +19,8 @@ def main() -> int:
         subprocess.run(["open", mount], check=False, timeout=10)
         time.sleep(2)
         as_path = mount.replace("\\", "\\\\").replace('"', '\\"')
+        right = ORIGIN_X + WINDOW_W
+        bottom = ORIGIN_Y + WINDOW_H
         script = "\n".join(
             [
                 'tell application "Finder"',
@@ -27,14 +33,15 @@ def main() -> int:
                 "  set toolbar visible of w to false",
                 "  set sidebar width of w to 0",
                 "  set current view of w to icon view",
-                "  set bounds of w to {80, 80, 700, 520}",
+                f"  set bounds of w to {{{ORIGIN_X}, {ORIGIN_Y}, {right}, {bottom}}}",
                 "end tell",
             ]
         )
         subprocess.run(["osascript", "-e", script], check=False, timeout=20)
         time.sleep(1)
+        region = f"{ORIGIN_X},{ORIGIN_Y},{WINDOW_W},{WINDOW_H}"
         subprocess.run(
-            ["screencapture", "-x", "-R80,80,620,440", out],
+            ["screencapture", "-x", f"-R{region}", out],
             check=False,
             timeout=15,
         )

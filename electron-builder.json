@@ -64,30 +64,24 @@
   "dmg": {
     "title": "Transcriber",
     "background": "electron/dmg/background.png",
-    "iconSize": 80,
+    "iconSize": 128,
     "iconTextSize": 13,
     "window": {
-      "width": 620,
-      "height": 440
+      "width": 660,
+      "height": 420
     },
     "contents": [
       {
-        "x": 310,
-        "y": 157,
+        "x": 330,
+        "y": 200,
         "type": "file",
         "path": "electron/dmg/Install Transcriber.command",
         "name": "Install Transcriber.command"
       },
       {
-        "x": 160,
-        "y": 312,
+        "x": 330,
+        "y": 560,
         "type": "file"
-      },
-      {
-        "x": 460,
-        "y": 312,
-        "type": "link",
-        "path": "/Applications"
       }
     ]
   },

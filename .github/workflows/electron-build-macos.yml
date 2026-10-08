@@ -129,12 +129,6 @@ jobs:
           # Don't sign - we're doing ad-hoc signing only
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      - name: Stamp Finder icon onto Install Transcriber.command
-        run: |
-          set -euo pipefail
-          DMG=$(ls dist-electron/*.dmg | head -1)
-          electron/dmg/stamp-dmg-helper-icon.sh "$DMG"
-
       - name: Assert DMG contains Install Transcriber.command
         run: |
           set -euo pipefail
@@ -149,6 +143,7 @@ jobs:
           fi
           echo "Mounted at $MOUNT"
           ls -la "$MOUNT"
+          ls -lO "$MOUNT"
           test -d "$MOUNT/Transcriber.app"
           test -f "$MOUNT/Install Transcriber.command"
           test -x "$MOUNT/Install Transcriber.command"
@@ -164,21 +159,36 @@ jobs:
           fi
           echo "✓ helper resource fork is non-empty"
 
-          if command -v GetFileInfo >/dev/null 2>&1; then
-            ATTRS=$(GetFileInfo -a "$HELPER" || true)
-            HAS_C=$(GetFileInfo -aC "$HELPER" || true)
-            echo "GetFileInfo -a: $ATTRS"
-            echo "GetFileInfo -aC: $HAS_C"
-            if [ "$HAS_C" = "1" ] || case "$ATTRS" in *C*) true;; *) false;; esac; then
-              echo "✓ GetFileInfo custom-icon flag (C) is set"
-            else
-              echo "ERROR: GetFileInfo does not show the custom-icon flag"
-              xattr -l "$HELPER" || true
-              exit 1
-            fi
-          else
-            python3 electron/dmg/assert-helper-icon.py "$HELPER"
+          python3 electron/dmg/assert-helper-icon.py "$HELPER"
+
+          ATTRS=$(GetFileInfo -a "$HELPER" || true)
+          HAS_C=$(GetFileInfo -aC "$HELPER" || true)
+          HAS_E=$(GetFileInfo -ae "$HELPER" || true)
+          echo "GetFileInfo -a: $ATTRS"
+          echo "GetFileInfo -aC: $HAS_C"
+          echo "GetFileInfo -ae: $HAS_E"
+          if [ "$HAS_C" != "1" ]; then
+            echo "ERROR: GetFileInfo custom-icon flag (C) is not set"
+            xattr -l "$HELPER" || true
+            exit 1
           fi
+          echo "✓ GetFileInfo custom-icon flag (C) is set"
+          if [ "$HAS_E" != "1" ]; then
+            echo "ERROR: GetFileInfo extension-hidden flag (E) is not set"
+            xattr -l "$HELPER" || true
+            exit 1
+          fi
+          echo "✓ GetFileInfo extension-hidden flag (E) is set"
+
+          ls -lO "$MOUNT" | grep -q 'hidden.*Transcriber.app' || {
+            echo "ERROR: Transcriber.app is not hidden"
+            ls -lO "$MOUNT" || true
+            exit 1
+          }
+          echo "✓ Transcriber.app is present and hidden"
+
+          test ! -e "$MOUNT/Applications"
+          echo "✓ no Applications symlink"
 
           # Best-effort screenshot of the mounted DMG window. Do not fail the job.
           python3 electron/dmg/screenshot-dmg-window.py "$MOUNT" dist-electron/dmg-window.png || true
