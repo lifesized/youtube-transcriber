@@ -1,7 +1,11 @@
-importScripts("local-auth-headers.js", "send-url.js", "connect-target.js", "local-mode-lock.js");
+importScripts(
+  "local-auth-headers.js",
+  "send-url.js",
+  "connect-target.js",
+  "local-mode-lock.js",
+  "target-client.js"
+);
 
-// In-memory only — never persist the loopback token (YTT-435 / YTT-442).
-let _localTokenMemory = null;
 const CAPTION_EXTRACT_TIMEOUT_MS = 2500;
 
 let _pairAttempted = false;
@@ -11,13 +15,16 @@ async function resolveTarget() {
   return ConnectTarget.getTarget(ConnectTarget.normalize(stored[ConnectTarget.STORAGE_KEY]));
 }
 
-async function requestNativeHostPairOnce() {
-  if (_pairAttempted) return;
+/** Only the packaged app has a pairing endpoint; the dev host is paired by its installer. */
+async function requestNativeHostPairOnce(target) {
+  if (target.id !== ConnectTarget.APP || _pairAttempted) return false;
   _pairAttempted = true;
   try {
     await fetch(ConnectTarget.getTarget(ConnectTarget.APP).pairUrl, { method: "POST" });
+    return true;
   } catch {
     // App may not be running yet.
+    return false;
   }
 }
 
@@ -56,6 +63,15 @@ function callNativeHostCmd(cmd, payload = {}, timeoutMs = 5000, hostName) {
     port.postMessage({ id, cmd, ...payload });
   });
 }
+
+// In-memory only — never persist the loopback token (YTT-435 / YTT-442).
+const targetClient = TargetClient.create({
+  ConnectTarget,
+  callHost: (hostName, cmd, payload, timeoutMs) =>
+    callNativeHostCmd(cmd, payload, timeoutMs, hostName),
+  fetch: (url, init) => fetch(url, init),
+  pair: requestNativeHostPairOnce,
+});
 
 function youtubeVideoId(url) {
   try {
@@ -159,87 +175,35 @@ async function tryExtractCaptions(url, title) {
   };
 }
 
-async function getLocalApiToken() {
-  if (_localTokenMemory) return { ok: true, token: _localTokenMemory };
-
-  const hostName = (await resolveTarget()).nativeHostName;
-  let res;
-  try {
-    res = await callNativeHostCmd("getLocalToken", {}, 5000, hostName);
-  } catch {
-    await requestNativeHostPairOnce();
-    try {
-      res = await callNativeHostCmd("getLocalToken", {}, 5000, hostName);
-    } catch {
-      return { ok: false, reason: "unreachable" };
-    }
-  }
-  
-  if (res?.ok && typeof res.token === "string" && res.token.length > 0) {
-    _localTokenMemory = res.token;
-    return { ok: true, token: _localTokenMemory };
-  }
-  
-  // YTT-448: Native host { ok:false } maps to reason "other" (not unauthorized)
-  if (res?.ok === false) {
-    return { ok: false, reason: "other" };
-  }
-  
-  // Host OK but token missing/empty
-  return { ok: false, reason: "unauthorized" };
-}
-
 function clearLocalTokenMemory() {
-  _localTokenMemory = null;
+  targetClient.clearTokens();
 }
 
 async function sendPageUrl(pageUrl, title) {
-  const tokenResult = await getLocalApiToken();
-  
-  // Native host unavailable
-  if (!tokenResult.ok && tokenResult.reason === "unreachable") {
-    return { ok: false, reason: "unreachable" };
-  }
-  
-  // Host OK but no token
-  if (!tokenResult.ok && tokenResult.reason === "unauthorized") {
-    return { ok: false, reason: "unauthorized" };
-  }
-  
-  // YTT-448: Native host { ok:false } maps to other
-  if (!tokenResult.ok && tokenResult.reason === "other") {
-    return { ok: false, reason: "other" };
-  }
-  
+  const target = await resolveTarget();
+  const auth = await targetClient.authFor(target);
+  if (!auth.ok) return { ok: false, reason: auth.reason };
+
   // Try caption extraction for YouTube URLs
   const captions = youtubeVideoId(pageUrl) ? await tryExtractCaptions(pageUrl, title) : null;
-  
-  // Build request with token and optional segments
-  const target = await resolveTarget();
-  const request = buildLocalSendRequest(pageUrl, tokenResult.token, captions, target.apiBase);
+
+  const request = auth.token
+    ? buildLocalSendRequest(pageUrl, auth.token, captions, target.apiBase)
+    : buildTokenlessDevSendRequest(pageUrl, captions);
   if (!request.ok) {
-    // Token present but request build failed (bad URL etc.)
+    // Request build failed (bad URL etc.)
     return { ok: false, reason: "other" };
   }
 
-  let res;
-  try {
-    res = await fetch(request.url, {
-      method: "POST",
-      headers: request.headers,
-      credentials: "omit",
-      body: request.body,
-    });
-  } catch {
-    // Fetch failed after token was present
-    return { ok: false, reason: "unreachable" };
-  }
+  const sent = await targetClient.send(
+    target,
+    request.url,
+    { method: "POST", headers: request.headers, body: request.body },
+    auth
+  );
+  if (!sent.ok) return { ok: false, reason: sent.reason };
+  const res = sent.res;
 
-  if (res.status === 401) {
-    clearLocalTokenMemory();
-    return { ok: false, reason: "unauthorized" };
-  }
-  
   if (!res.ok) {
     // YTT-448: Never return server error text
     return { ok: false, reason: "other" };
@@ -299,43 +263,67 @@ function setBadge(text, color) {
 // API helpers for LOCAL mode
 // ---------------------------------------------------------------------------
 
-async function apiBase() {
-  return (await resolveTarget()).apiBase;
+async function apiGet(path, timeoutMs) {
+  const target = await resolveTarget();
+  const init = { method: "GET" };
+  if (timeoutMs) init.signal = AbortSignal.timeout(timeoutMs);
+  return targetClient.apiFetch(target, path, init);
 }
 
 async function checkService() {
-  try {
-    const res = await fetch(`${await apiBase()}/api/health`, {
-      method: "GET",
-      signal: AbortSignal.timeout(3000),
-    });
-    if (res.ok) {
+  const r = await apiGet("/api/health", 3000);
+  const mode = LocalModeLock.resolveMode();
+  if (!r.ok) {
+    return {
+      online: false,
+      mode,
+      reason: r.reason,
+      authError: r.reason === "unauthorized",
+    };
+  }
+  const res = r.res;
+  if (res.ok) {
+    try {
       const data = await res.json();
       if (data.projectPath) {
         chrome.storage.local.set({ projectPath: data.projectPath });
       }
+    } catch {
+      /* health body is optional */
     }
-    return {
-      online: res.ok || res.status === 503,
-      mode: LocalModeLock.resolveMode(),
-    };
-  } catch {
-    return { online: false, mode: LocalModeLock.resolveMode() };
   }
+  const online = res.ok || res.status === 503;
+  return { online, mode, reason: online ? null : "unreachable", tokenless: r.tokenless };
+}
+
+async function apiJson(path) {
+  const r = await apiGet(path);
+  if (!r.ok) throw new Error(ConnectTarget.errorMessage(r.reason, (await resolveTarget()).id));
+  if (!r.res.ok) throw new Error(`HTTP ${r.res.status}`);
+  return r.res.json();
 }
 
 async function getRecent() {
-  const res = await fetch(`${await apiBase()}/api/transcripts`);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const all = await res.json();
+  const all = await apiJson("/api/transcripts");
   return all.slice(0, 5);
 }
 
 async function checkExisting(videoId) {
-  const res = await fetch(`${await apiBase()}/api/transcripts`);
-  if (!res.ok) return null;
-  const all = await res.json();
+  let all;
+  try {
+    all = await apiJson("/api/transcripts");
+  } catch {
+    return null;
+  }
   return all.find((t) => t.videoId === videoId) || null;
+}
+
+async function targetStatuses() {
+  const ids = [ConnectTarget.APP, ConnectTarget.DEV];
+  const results = await Promise.all(
+    ids.map((id) => targetClient.probe(ConnectTarget.getTarget(id)))
+  );
+  return Object.fromEntries(results.map((r) => [r.id, r]));
 }
 
 // ---------------------------------------------------------------------------
@@ -371,21 +359,9 @@ async function doTranscribe(url, title) {
   } else {
     state.status = "error";
     
-    // Map result.reason to clear user-facing error messages
-    let errorMessage;
-    if (result.error) {
-      errorMessage = result.error;
-    } else if (result.reason === "unreachable") {
-      errorMessage = "Transcriber not reachable. Make sure the app is running and try: npm run install-native-host";
-    } else if (result.reason === "unauthorized") {
-      errorMessage = "Not authorized. Please restart the Transcriber app.";
-    } else if (result.reason === "other") {
-      errorMessage = "Transcription failed. Please try again.";
-    } else {
-      errorMessage = "Transcription failed";
-    }
-    
-    state.error = errorMessage;
+    // Host and auth problems get their own message; only "other" is generic.
+    const target = await resolveTarget();
+    state.error = ConnectTarget.errorMessage(result.reason || "other", target.id);
     await setState(state);
     setBadge("!", "#ef4444");
     throw new Error(state.error);
@@ -554,10 +530,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case "GET_TRANSCRIPT": {
         const transcriptId = message.id;
-        const res = await fetch(`${await apiBase()}/api/transcripts/${transcriptId}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        if (typeof transcriptId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(transcriptId)) {
+          throw new Error("Invalid transcript id");
+        }
+        const data = await apiJson(`/api/transcripts/${encodeURIComponent(transcriptId)}`);
         return { transcript: data.transcript, title: data.title };
+      }
+
+      case "TARGET_STATUS":
+        return await targetStatuses();
+
+      case "START_TARGET": {
+        const target = await resolveTarget();
+        const r = await targetClient.start(target);
+        return r.ok
+          ? { ok: true, targetId: target.id }
+          : {
+              ok: false,
+              targetId: target.id,
+              reason: r.reason,
+              message: ConnectTarget.errorMessage(r.reason, target.id),
+            };
+      }
+
+      case "STOP_TARGET": {
+        const target = await resolveTarget();
+        const r = await targetClient.stop(target);
+        return r.ok
+          ? { ok: true }
+          : { ok: false, reason: r.reason, message: ConnectTarget.errorMessage(r.reason, target.id) };
       }
 
       case "CALL_NATIVE_HOST": {

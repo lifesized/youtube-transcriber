@@ -11,6 +11,8 @@
   --error: #ef4444;
   --accent: #a58959;
   --success: #a58959;
+  --ok: #22c55e;
+  --warn: #f59e0b;
 }
 
 * {
@@ -744,6 +746,146 @@ body::-webkit-scrollbar-thumb:hover {
 .connect-retry[hidden],
 .connect-error[hidden] {
   display: none;
+}
+.connect-segment-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.connect-segment-status {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--muted-3);
+}
+
+/* Library status dot: shared by the header picker and Settings. */
+.target-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted-3);
+}
+.target-dot[data-status="running"] {
+  background: var(--ok);
+}
+.target-dot[data-status="needs_permission"],
+.target-dot[data-status="helper_outdated"] {
+  background: var(--warn);
+}
+.target-dot[data-status="starting"] {
+  background: var(--accent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.target-dot[data-status="unknown"] {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* Library picker in the panel header. Reuses the provider-picker layout,
+   with edges as box-shadow and hover as a translucent overlay. */
+.panel-header {
+  display: flex;
+  justify-content: flex-start;
+  min-height: 26px;
+}
+.target-picker {
+  position: relative;
+}
+.target-picker-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 26px;
+  padding: 4px 10px;
+  background: var(--panel-2);
+  border: 0;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+  transition: box-shadow 0.15s, background 0.15s, color 0.15s;
+}
+.target-picker-trigger:not([data-ready]) {
+  visibility: hidden;
+}
+.target-picker-trigger:hover {
+  background-image: linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04));
+  color: var(--text);
+}
+.target-picker-trigger:active,
+.target-picker-trigger[aria-expanded="true"] {
+  background-image: linear-gradient(rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.07));
+  color: var(--text);
+}
+.target-picker-trigger:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.target-picker-trigger:disabled {
+  color: var(--muted-3);
+  cursor: default;
+  background-image: none;
+}
+.target-picker-trigger[aria-busy="true"] {
+  cursor: progress;
+}
+.target-picker-name {
+  white-space: nowrap;
+}
+.target-picker-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  min-width: 220px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--panel-2);
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.target-picker-menu[hidden] {
+  display: none;
+}
+.target-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  transition: background 0.1s, box-shadow 0.1s;
+}
+.target-picker-option:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.target-picker-option:active {
+  background: rgba(255, 255, 255, 0.07);
+}
+.target-picker-option:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.target-picker-option[aria-checked="true"] .target-picker-option-name {
+  font-weight: 600;
+}
+.target-picker-option-name {
+  flex: 1;
+}
+.target-picker-option-status {
+  font-size: 11px;
+  color: var(--muted-3);
 }
 
 /* Settings → Server section (self-hosted + native host installed only). */

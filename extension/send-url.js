@@ -177,8 +177,21 @@ function buildLocalSendRequest(pageUrl, token, captions, apiBase) {
     return { ok: false };
   }
 
+  const body = sendBody(url, captions);
+  if (!body) return { ok: false };
+  if (body.includes(token) || endpoint.href.includes(token)) return { ok: false };
+
+  return {
+    ok: true,
+    url: endpoint.href,
+    headers,
+    body,
+  };
+}
+
+function sendBody(url, captions) {
   const payload = { url };
-  
+
   if (captions && typeof captions === "object") {
     const validSegments = validateSegments(captions.segments);
     if (validSegments) {
@@ -197,13 +210,23 @@ function buildLocalSendRequest(pageUrl, token, captions, apiBase) {
 
   const body = JSON.stringify(payload);
   const parsedBody = JSON.parse(body);
-  if (!parsedBody.url || parsedBody.url !== url) return { ok: false };
-  if (body.includes(token) || endpoint.href.includes(token)) return { ok: false };
+  if (!parsedBody.url || parsedBody.url !== url) return null;
+  return body;
+}
 
+/**
+ * Dev server only, for a stale or tokenless dev host. No Authorization
+ * header, and the endpoint is fixed to 127.0.0.1:19720.
+ */
+function buildTokenlessDevSendRequest(pageUrl, captions) {
+  const url = normalizePageUrl(pageUrl);
+  if (!url) return { ok: false };
+  const body = sendBody(url, captions);
+  if (!body) return { ok: false };
   return {
     ok: true,
-    url: endpoint.href,
-    headers,
+    url: LOCAL_SEND_ENDPOINT,
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
     body,
   };
 }
@@ -215,5 +238,6 @@ if (typeof module !== "undefined" && module.exports) {
     normalizePageUrl,
     validateSegments,
     buildLocalSendRequest,
+    buildTokenlessDevSendRequest,
   };
 }

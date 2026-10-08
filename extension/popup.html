@@ -11,6 +11,18 @@
 </head>
 <body>
   <div class="popup">
+    <!-- Library picker. Labels and status text come from ConnectTarget.STRINGS. -->
+    <div class="panel-header">
+      <div class="target-picker">
+        <button type="button" class="target-picker-trigger" id="targetPickerTrigger" aria-haspopup="menu" aria-expanded="false">
+          <span class="target-dot" id="targetPickerDot" data-status="unknown"></span>
+          <span class="target-picker-name" id="targetPickerName"></span>
+          <span class="provider-picker-chevron"></span>
+        </button>
+        <div class="target-picker-menu" id="targetPickerMenu" role="menu" hidden></div>
+      </div>
+    </div>
+
     <!-- Static loading feedback, independent of popup.js. Chrome still owns
          document activation and first paint. -->
     <div id="startupShell" class="startup-shell" role="status" aria-live="polite">
@@ -161,11 +173,19 @@
         <div class="connect-segmented" role="radiogroup" aria-labelledby="connectToLabel">
           <label class="connect-segment">
             <input type="radio" name="connectTarget" value="app" id="connectTargetApp" />
-            <span class="connect-segment-text" id="connectTargetAppLabel"></span>
+            <span class="connect-segment-row">
+              <span class="target-dot" id="connectTargetAppDot" data-status="unknown"></span>
+              <span class="connect-segment-text" id="connectTargetAppLabel"></span>
+            </span>
+            <span class="connect-segment-status" id="connectTargetAppStatus"></span>
           </label>
           <label class="connect-segment">
             <input type="radio" name="connectTarget" value="dev" id="connectTargetDev" />
-            <span class="connect-segment-text" id="connectTargetDevLabel"></span>
+            <span class="connect-segment-row">
+              <span class="target-dot" id="connectTargetDevDot" data-status="unknown"></span>
+              <span class="connect-segment-text" id="connectTargetDevLabel"></span>
+            </span>
+            <span class="connect-segment-status" id="connectTargetDevStatus"></span>
           </label>
         </div>
         <p class="connect-helper" id="connectHelper"></p>

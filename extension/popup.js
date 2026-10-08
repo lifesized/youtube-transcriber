@@ -194,6 +194,14 @@ const el = {
   connectTargetDev: document.getElementById("connectTargetDev"),
   connectTargetAppLabel: document.getElementById("connectTargetAppLabel"),
   connectTargetDevLabel: document.getElementById("connectTargetDevLabel"),
+  connectTargetAppDot: document.getElementById("connectTargetAppDot"),
+  connectTargetDevDot: document.getElementById("connectTargetDevDot"),
+  connectTargetAppStatus: document.getElementById("connectTargetAppStatus"),
+  connectTargetDevStatus: document.getElementById("connectTargetDevStatus"),
+  targetPickerTrigger: document.getElementById("targetPickerTrigger"),
+  targetPickerDot: document.getElementById("targetPickerDot"),
+  targetPickerName: document.getElementById("targetPickerName"),
+  targetPickerMenu: document.getElementById("targetPickerMenu"),
   connectHelper: document.getElementById("connectHelper"),
   connectError: document.getElementById("connectError"),
   connectRetry: document.getElementById("connectRetry"),
@@ -1688,11 +1696,132 @@ function paintConnectTargetLabels() {
   const T = connectTargetApi();
   if (!T || connectTargetPainted) return;
   if (el.connectToLabel) el.connectToLabel.textContent = T.CONNECT_TO_LABEL;
-  if (el.connectTargetAppLabel) el.connectTargetAppLabel.textContent = T.getTarget(T.APP).label;
-  if (el.connectTargetDevLabel) el.connectTargetDevLabel.textContent = T.getTarget(T.DEV).label;
+  if (el.connectTargetAppLabel) el.connectTargetAppLabel.textContent = T.optionLabel(T.APP);
+  if (el.connectTargetDevLabel) el.connectTargetDevLabel.textContent = T.optionLabel(T.DEV);
   if (el.connectHelper) el.connectHelper.textContent = T.CONNECT_HELPER;
   if (el.connectRetry) el.connectRetry.textContent = T.RETRY_LABEL;
   connectTargetPainted = true;
+}
+
+// CHECK_SERVICE reasons that mean "running but this browser can't use it".
+const RECONNECT_REASONS = new Set([
+  "extension_not_allowed",
+  "unauthorized_caller",
+  "host_forbidden",
+  "unknown_cmd",
+  "no_token",
+]);
+
+// Library picker status, from the background's TARGET_STATUS probe.
+let targetStatuses = {};
+let startingTargetId = null;
+let targetStatusTimer = null;
+
+function targetStatusFor(id) {
+  if (startingTargetId === id) return "starting";
+  return targetStatuses[id]?.status || "unknown";
+}
+
+function renderTargetMenu(currentId) {
+  const T = connectTargetApi();
+  const menu = el.targetPickerMenu;
+  if (!T || !menu) return;
+  menu.replaceChildren();
+  for (const id of [T.APP, T.DEV]) {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.className = "target-picker-option";
+    option.setAttribute("role", "menuitemradio");
+    option.setAttribute("aria-checked", String(id === currentId));
+    const dot = document.createElement("span");
+    dot.className = "target-dot";
+    dot.dataset.status = targetStatusFor(id);
+    const name = document.createElement("span");
+    name.className = "target-picker-option-name";
+    name.textContent = T.optionLabel(id);
+    const status = document.createElement("span");
+    status.className = "target-picker-option-status";
+    status.textContent = T.statusLabel(targetStatusFor(id));
+    option.append(dot, name, status);
+    option.addEventListener("click", () => {
+      closeTargetMenu();
+      setConnectTarget(id);
+    });
+    menu.appendChild(option);
+  }
+}
+
+async function paintTargetStatuses() {
+  const T = connectTargetApi();
+  if (!T) return;
+  const current = await currentConnectTarget();
+  const rows = {
+    [T.APP]: [el.connectTargetAppDot, el.connectTargetAppStatus],
+    [T.DEV]: [el.connectTargetDevDot, el.connectTargetDevStatus],
+  };
+  for (const id of [T.APP, T.DEV]) {
+    const [dot, text] = rows[id];
+    if (dot) dot.dataset.status = targetStatusFor(id);
+    if (text) text.textContent = T.statusLabel(targetStatusFor(id));
+  }
+  const trigger = el.targetPickerTrigger;
+  if (!trigger) return;
+  const label = `${T.optionLabel(current.id)} · ${T.statusLabel(targetStatusFor(current.id))}`;
+  el.targetPickerName.textContent = T.optionLabel(current.id);
+  el.targetPickerDot.dataset.status = targetStatusFor(current.id);
+  trigger.setAttribute("aria-label", `${T.STRINGS.pickerAriaLabel}: ${label}`);
+  trigger.title = label;
+  trigger.setAttribute("data-ready", "");
+  trigger.setAttribute("aria-busy", String(startingTargetId === current.id));
+  if (!el.targetPickerMenu.hidden) renderTargetMenu(current.id);
+}
+
+async function refreshTargetStatuses() {
+  if (!HAS_EXTENSION_APIS) return;
+  const res = await sendMsg({ type: "TARGET_STATUS" });
+  if (res?.success && res.data && typeof res.data === "object") {
+    targetStatuses = res.data;
+  }
+  await paintTargetStatuses();
+}
+
+function startTargetStatusPolling() {
+  if (targetStatusTimer) return;
+  refreshTargetStatuses();
+  targetStatusTimer = setInterval(() => {
+    if (document.visibilityState === "visible") refreshTargetStatuses();
+  }, 5000);
+}
+
+async function openTargetMenu() {
+  const current = await currentConnectTarget();
+  renderTargetMenu(current.id);
+  el.targetPickerMenu.hidden = false;
+  el.targetPickerTrigger.setAttribute("aria-expanded", "true");
+  el.targetPickerMenu.querySelector('[aria-checked="true"]')?.focus();
+}
+
+function closeTargetMenu() {
+  if (!el.targetPickerMenu || el.targetPickerMenu.hidden) return;
+  el.targetPickerMenu.hidden = true;
+  el.targetPickerTrigger.setAttribute("aria-expanded", "false");
+}
+
+if (el.targetPickerTrigger) {
+  el.targetPickerTrigger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (el.targetPickerMenu.hidden) openTargetMenu();
+    else closeTargetMenu();
+  });
+  document.addEventListener("click", (e) => {
+    if (!el.targetPickerMenu.contains(e.target)) closeTargetMenu();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !el.targetPickerMenu.hidden) {
+      closeTargetMenu();
+      el.targetPickerTrigger.focus();
+    }
+  });
 }
 
 function hideConnectTargetError() {
@@ -1739,9 +1868,21 @@ async function setConnectTarget(id) {
   }
   await chrome.storage.local.set({ [T.STORAGE_KEY]: next });
   nativeHostAvailable = null;
+  nativeHostState = "unknown";
   await sendMsg({ type: "CLEAR_LOCAL_TOKEN" });
-  await detectNativeHost();
-  await refreshConnectTargetError();
+  // The two libraries are separate; never paint one's cached rows for the other.
+  await chrome.storage.local.remove(RECENT_CACHE_KEY(currentMode));
+  if (el.connectTargetApp) el.connectTargetApp.checked = next === T.APP;
+  if (el.connectTargetDev) el.connectTargetDev.checked = next === T.DEV;
+  await paintTargetStatuses();
+  refreshTargetStatuses();
+  if (isSettingsOpen()) {
+    await detectNativeHost();
+    await refreshConnectTargetError();
+    refreshServerSection(currentSettingsMode);
+  } else {
+    init();
+  }
 }
 
 function classifyNativeHostError(err) {
@@ -1759,7 +1900,7 @@ function classifyNativeHostError(err) {
 }
 
 async function requestNativeHostPairOnce() {
-  if (nativeHostPairAttempted) return false;
+  if (nativeHostPairAttempted || (await currentConnectTarget()).id !== "app") return false;
   nativeHostPairAttempted = true;
   try {
     const T = connectTargetApi();
@@ -1808,8 +1949,11 @@ async function callNativeHost(cmd, payload = {}, timeoutMs = 30000) {
 
 async function tryNativeHostPing() {
   try {
-    await callNativeHost("ping", {}, 2500);
-    return { ok: true };
+    const reply = await callNativeHost("ping", {}, 2500);
+    const T = connectTargetApi();
+    const protocol = Number(reply?.protocol);
+    const outdated = !!T && !(Number.isFinite(protocol) && protocol >= T.MIN_HOST_PROTOCOL);
+    return { ok: true, outdated };
   } catch (err) {
     return { ok: false, kind: classifyNativeHostError(err) };
   }
@@ -1819,14 +1963,14 @@ async function detectNativeHost() {
   const first = await tryNativeHostPing();
   if (first.ok) {
     nativeHostAvailable = true;
-    nativeHostState = "available";
+    nativeHostState = first.outdated ? "outdated" : "available";
     return true;
   }
   const pairOk = await requestNativeHostPairOnce();
   const second = await tryNativeHostPing();
   if (second.ok) {
     nativeHostAvailable = true;
-    nativeHostState = "available";
+    nativeHostState = second.outdated ? "outdated" : "available";
     return true;
   }
   nativeHostAvailable = false;
@@ -1836,6 +1980,12 @@ async function detectNativeHost() {
     nativeHostState = "missing";
   }
   return false;
+}
+
+function paintSetupCommand() {
+  const cmd = `npm run install-native-host -- --ext-id=${chrome.runtime.id}`;
+  el.setupCommand.textContent = cmd;
+  el.setupCommand.dataset.fullCmd = cmd;
 }
 
 async function refreshOfflineStartUI() {
@@ -1850,6 +2000,18 @@ async function refreshOfflineStartUI() {
   }
   if (el.offlineConnectTargetLabel) {
     el.offlineConnectTargetLabel.textContent = target.label;
+  }
+
+  // An old helper may still start from the wrong folder; offer setup, not Start.
+  if (haveHost && nativeHostState === "outdated") {
+    const T = connectTargetApi();
+    if (el.offlineHeading) el.offlineHeading.textContent = T.statusLabel("helper_outdated");
+    if (el.offlineSub) el.offlineSub.textContent = T.errorMessage("unknown_cmd", target.id);
+    el.offlineStartWrap.hidden = true;
+    el.offlineCopyWrap.hidden = !isDev;
+    if (isDev) paintSetupCommand();
+    if (el.btnCheckAgain) el.btnCheckAgain.hidden = false;
+    return;
   }
 
   if (haveHost) {
@@ -1877,10 +2039,7 @@ async function refreshOfflineStartUI() {
     if (el.offlineSub) el.offlineSub.textContent = "Run this in your terminal to get going";
     el.offlineStartWrap.hidden = true;
     el.offlineCopyWrap.hidden = false;
-    const extId = chrome.runtime.id;
-    const cmd = `npm run install-native-host -- --ext-id=${extId}`;
-    el.setupCommand.textContent = cmd;
-    el.setupCommand.dataset.fullCmd = cmd;
+    paintSetupCommand();
     if (el.btnCheckAgain) el.btnCheckAgain.hidden = false;
     return;
   }
@@ -1901,49 +2060,54 @@ async function ensureNativeHostDetected() {
   return nativeHostAvailable;
 }
 
+/**
+ * Start the selected target. The background asks its host to start, then
+ * polls health for ~20s. Resolves { ok } or { ok: false, reason, message }.
+ */
+async function startSelectedTarget() {
+  const T = connectTargetApi();
+  const target = await currentConnectTarget();
+  startingTargetId = target.id;
+  paintTargetStatuses();
+  try {
+    const res = await sendMsg({ type: "START_TARGET" });
+    if (res?.success && res.data) return res.data;
+    return { ok: false, reason: "start_timeout", message: T.errorMessage("start_timeout", target.id) };
+  } finally {
+    startingTargetId = null;
+    refreshTargetStatuses();
+  }
+}
+
+function setStartButtonBusy(button, labelSelector, busy, idleLabel) {
+  const T = connectTargetApi();
+  button.disabled = busy;
+  button.setAttribute("aria-busy", String(busy));
+  button.querySelector(".start-spinner").hidden = !busy;
+  button.querySelector(labelSelector).textContent = busy ? T.STRINGS.starting : idleLabel;
+}
+
 async function startTranscriberClicked() {
   if (nativeStartInFlight) return;
   nativeStartInFlight = true;
-  el.btnStartTranscriber.disabled = true;
   el.offlineStartError.hidden = true;
-  el.btnStartTranscriber.querySelector(".start-spinner").hidden = false;
-  el.btnStartTranscriber.querySelector(".start-label").textContent = "Starting…";
-
+  setStartButtonBusy(el.btnStartTranscriber, ".start-label", true);
   try {
-    const res = await callNativeHost("start", {}, 30000);
-    if (res?.ok) {
-      // Server is up — let init() pick up the change.
+    const res = await startSelectedTarget();
+    if (res.ok) {
       stopOfflinePolling();
       init();
-    } else if (res?.reason === "port_conflict") {
-      el.offlineStartError.textContent =
-        `Port ${res.port || (await currentConnectTarget()).port} is already in use by another app. ` +
-        `Close it (or change the port) and try again.`;
-      el.offlineStartError.hidden = false;
-    } else if (res?.reason === "already_running") {
-      stopOfflinePolling();
-      init();
-    } else {
-      el.offlineStartError.textContent =
-        res?.error ||
-        `Couldn't start the server. Check ${(await currentConnectTarget()).nativeHostLogHint}`;
-      el.offlineStartError.hidden = false;
-    }
-  } catch (e) {
-    if (e.message === "native_host_unavailable" ||
-        /Specified native messaging host not found/i.test(e.message)) {
+    } else if (res.reason === "host_not_found") {
       nativeHostAvailable = false;
       nativeHostState = "missing";
       await refreshOfflineStartUI();
     } else {
-      el.offlineStartError.textContent = `Start failed: ${e.message}`;
+      el.offlineStartError.textContent = res.message;
       el.offlineStartError.hidden = false;
     }
   } finally {
     nativeStartInFlight = false;
-    el.btnStartTranscriber.disabled = false;
-    el.btnStartTranscriber.querySelector(".start-spinner").hidden = true;
-    el.btnStartTranscriber.querySelector(".start-label").textContent = "Start Transcriber";
+    setStartButtonBusy(el.btnStartTranscriber, ".start-label", false, "Start Transcriber");
   }
 }
 
@@ -2453,6 +2617,8 @@ async function init() {
   el.btnNavLibrary.classList.add("active");
   el.btnNavSettings.classList.remove("active");
   applyFooterLink();
+  paintTargetStatuses();
+  startTargetStatusPolling();
 
   // Reset stale UI from previous state
   for (const s of ALL_STATES) {
@@ -2626,13 +2792,18 @@ async function init() {
       globalThis.LocalModeLock.hideCloudSignIn(document);
     }
     const authError = serviceRes?.data?.authError;
+    const reason = serviceRes?.data?.reason || null;
+    const offlineTarget = await currentConnectTarget();
 
     el.offlineLocalMsg.hidden = false;
     if (el.offlineCloudMsg) el.offlineCloudMsg.hidden = true;
     if (el.cloudNudge) el.cloudNudge.hidden = true;
     if (el.localDetectedBanner) el.localDetectedBanner.hidden = true;
-    const localAuthError = !!authError;
-    const authMsg = "Quit and reopen Transcriber, then click Check Again.";
+    const localAuthError = !!authError || RECONNECT_REASONS.has(reason);
+    const authMsg =
+      offlineTarget.id === "app" && (!reason || reason === "unauthorized")
+        ? "Quit and reopen Transcriber, then click Check Again."
+        : connectTargetApi().errorMessage(reason || "unauthorized", offlineTarget.id);
     if (el.offlineLocalAuthError && el.offlineLocalSetup) {
       if (localAuthError) {
         el.offlineLocalAuthError.hidden = false;
@@ -3233,74 +3404,69 @@ async function refreshServerSection(mode) {
   
   el.stopServerHint.hidden = true;
 
+  if (nativeHostState === "outdated") {
+    const target = await currentConnectTarget();
+    el.serverStatus.textContent = connectTargetApi().statusLabel("helper_outdated");
+    el.serverStatus.hidden = false;
+    el.btnStartServer.hidden = true;
+    el.btnStopServer.hidden = true;
+    el.stopServerHint.textContent = connectTargetApi().errorMessage("unknown_cmd", target.id);
+    el.stopServerHint.hidden = false;
+    return;
+  }
+
   // Probe server state. Cheap — bg already polls and caches the result.
   const serviceRes = await sendMsg({ type: "CHECK_SERVICE" });
   const serverOnline = !!(serviceRes?.success && serviceRes.data?.online);
   el.serverStatus.textContent = serverOnline ? "Running" : "Stopped";
   el.serverStatus.hidden = false;
   el.btnStartServer.hidden = serverOnline;
-  el.btnStopServer.hidden = !serverOnline;
+  el.btnStopServer.hidden = !serverOnline || !connectTargetApi()?.FEATURES.stop;
 }
 
 async function startServerClicked() {
   if (nativeStartInFlight) return;
   nativeStartInFlight = true;
-  el.btnStartServer.disabled = true;
   el.stopServerHint.hidden = true;
-  el.btnStartServer.querySelector(".start-spinner").hidden = false;
-  el.btnStartServer.querySelector(".start-server-label").textContent = "Starting…";
+  setStartButtonBusy(el.btnStartServer, ".start-server-label", true);
   try {
-    const res = await callNativeHost("start", {}, 30000);
-    if (res?.ok || res?.reason === "already_running") {
+    const res = await startSelectedTarget();
+    if (res.ok) {
       // init() picks up the change, leaves Settings, shows Ready state.
       stopOfflinePolling();
       init();
-    } else if (res?.reason === "port_conflict") {
-      el.stopServerHint.textContent =
-        `Port ${res.port || (await currentConnectTarget()).port} is already in use by another app. ` +
-        `Close it (or change the port) and try again.`;
-      el.stopServerHint.hidden = false;
     } else {
-      el.stopServerHint.textContent =
-        res?.error ||
-        `Couldn't start the server. Check ${(await currentConnectTarget()).nativeHostLogHint}`;
+      el.stopServerHint.textContent = res.message;
       el.stopServerHint.hidden = false;
     }
-  } catch (e) {
-    el.stopServerHint.textContent = `Start failed: ${e.message}`;
-    el.stopServerHint.hidden = false;
   } finally {
     nativeStartInFlight = false;
-    el.btnStartServer.disabled = false;
-    el.btnStartServer.querySelector(".start-spinner").hidden = true;
-    el.btnStartServer.querySelector(".start-server-label").textContent = "Start Transcriber";
+    setStartButtonBusy(el.btnStartServer, ".start-server-label", false, "Start Transcriber");
   }
 }
 
 el.btnStartServer.addEventListener("click", startServerClicked);
 
 async function stopServerClicked() {
-  if (nativeStartInFlight) return;
+  if (nativeStartInFlight || !connectTargetApi()?.FEATURES.stop) return;
   el.btnStopServer.disabled = true;
   el.stopServerHint.hidden = true;
   el.btnStopServer.querySelector(".start-spinner").hidden = false;
   el.btnStopServer.querySelector(".stop-label").textContent = "Stopping…";
   try {
-    const res = await callNativeHost("stop", {}, 10000);
-    if (res?.stopped) {
+    const res = await sendMsg({ type: "STOP_TARGET" });
+    const data = res?.success ? res.data : null;
+    if (data?.ok) {
       el.stopServerHint.textContent = "Server stopped.";
       el.stopServerHint.hidden = false;
-    } else if (res?.reason === "not_running") {
+    } else if (data?.reason === "not_running") {
       el.stopServerHint.textContent =
         "No tracked server. If you started it from a Terminal, stop it there (Ctrl-C).";
       el.stopServerHint.hidden = false;
     } else {
-      el.stopServerHint.textContent = res?.error || "Couldn't stop the server.";
+      el.stopServerHint.textContent = data?.message || "Couldn't stop the server.";
       el.stopServerHint.hidden = false;
     }
-  } catch (e) {
-    el.stopServerHint.textContent = `Stop failed: ${e.message}`;
-    el.stopServerHint.hidden = false;
   } finally {
     el.btnStopServer.disabled = false;
     el.btnStopServer.querySelector(".start-spinner").hidden = true;
