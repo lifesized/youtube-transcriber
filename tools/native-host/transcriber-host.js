@@ -160,10 +160,16 @@ async function startServer() {
     process.platform === "win32"
       ? path.join(nodeBinDir, "npm.cmd")
       : path.join(nodeBinDir, "npm");
+  const extraBins = [nodeBinDir];
+  if (!process.env.ELECTRON_RUN_AS_NODE) {
+    // Dev / non-Electron native host only. Chrome's PATH has no Homebrew, so
+    // npm and user-installed ffmpeg/yt-dlp come from these prefixes.
+    // The Electron-installed wrapper (ELECTRON_RUN_AS_NODE=1) already ships
+    // ffmpeg/yt-dlp in Contents/Resources/bin and must not prefer Homebrew.
+    extraBins.push("/opt/homebrew/bin", "/usr/local/bin");
+  }
   const extendedPath = [
-    nodeBinDir,
-    "/opt/homebrew/bin",          // macOS Homebrew (Apple Silicon)
-    "/usr/local/bin",              // macOS Homebrew (Intel) / Linux user-installed
+    ...extraBins,
     path.join(os.homedir(), ".local", "bin"), // Linux per-user binaries
     path.join(os.homedir(), "bin"),           // BSD/Linux per-user binaries
     "/snap/bin",                   // Linux Snap

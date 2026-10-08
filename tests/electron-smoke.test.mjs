@@ -225,6 +225,16 @@ test("tray manager falls back to title T", () => {
   assert.ok(content.includes('setTitle("T")'));
 });
 
+test("Electron wrapper native host does not prepend Homebrew PATH", () => {
+  const hostPath = path.join(projectRoot, "tools", "native-host", "transcriber-host.js");
+  const content = fs.readFileSync(hostPath, "utf8");
+  const brewIdx = content.indexOf('"/opt/homebrew/bin"');
+  const guardIdx = content.indexOf("ELECTRON_RUN_AS_NODE");
+  assert.ok(brewIdx > 0, "Homebrew prefix still listed for the dev path");
+  assert.ok(guardIdx > 0 && guardIdx < brewIdx, "Homebrew prefixes must sit behind ELECTRON_RUN_AS_NODE");
+  assert.ok(content.includes("!process.env.ELECTRON_RUN_AS_NODE"));
+});
+
 test("LOCAL background pairs via /api/native-host/pair then retries", () => {
   const bgPath = path.join(projectRoot, "extension", "background.js");
   const content = fs.readFileSync(bgPath, "utf8");
