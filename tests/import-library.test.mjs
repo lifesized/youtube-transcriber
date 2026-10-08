@@ -263,7 +263,9 @@ test("import backups are created 0600 and keep only the last 5", async () => {
     path.join(projectRoot, "lib", "import-library.js"),
     "utf8"
   );
-  assert.ok(src.includes("process.umask(0o077)"));
+  assert.ok(src.includes('openSync(filePath, "wx", mode)'));
+  assert.ok(src.includes("createMode: 0o600"));
+  assert.equal(src.includes("process.umask("), false);
   assert.equal(src.includes("chmodSync(backupPath"), false);
   fs.rmSync(dir, { recursive: true, force: true });
 });
