@@ -584,9 +584,9 @@ function loadBackground({ targetId, hosts = {}, servers = {} }) {
   vm.runInContext(fs.readFileSync(path.join(ROOT, "background.js"), "utf8"), sandbox, {
     filename: "background.js",
   });
-  function send(message) {
+  function send(message, sender = { id: chrome.runtime.id }) {
     return new Promise((resolve) => {
-      listeners.message(message, { id: chrome.runtime.id }, resolve);
+      listeners.message(message, sender, resolve);
     });
   }
   return { send, world, listeners, store };
@@ -723,6 +723,35 @@ test("background: switching targets clears the token and talks to the new host",
   const statuses = await bg.send({ type: "TARGET_STATUS" });
   assert.equal(statuses.data.app.status, "running");
   assert.equal(statuses.data.dev.status, "running");
+});
+
+test("background: no message reaches the native host as a raw pass-through", async () => {
+  const bg = loadBackground({
+    targetId: "app",
+    hosts: {
+      [APP.nativeHostName]: {
+        ...currentHost(APP, APP_TOKEN),
+        start: { ok: true, started: true },
+        stop: { ok: true, stopped: true },
+      },
+    },
+  });
+  const senders = [
+    { id: "testextensionid", tab: { id: 7 }, url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" },
+    { id: "testextensionid", tab: { id: 8 }, url: "https://chatgpt.com/" },
+    { id: "testextensionid", url: "chrome-extension://testextensionid/popup.html" },
+  ];
+  for (const sender of senders) {
+    for (const cmd of ["getLocalToken", "start", "stop"]) {
+      const r = await bg.send({ type: "CALL_NATIVE_HOST", cmd, payload: {} }, sender);
+      assert.equal(r.data && r.data.result, undefined, `${cmd} from ${sender.url}`);
+      assert.equal(r.data && r.data.error, "Unknown message type", `${cmd} from ${sender.url}`);
+    }
+  }
+  assert.deepEqual(bg.world.hostCalls, [], "the host was never called");
+  for (const f of ["background.js", "popup.js", "content.js", "content-linkedin.js", "content-llm-handoff.js"]) {
+    assert.doesNotMatch(fs.readFileSync(path.join(ROOT, f), "utf8"), /CALL_NATIVE_HOST/, f);
+  }
 });
 
 test("background: START_TARGET reports a human message on failure", async () => {
