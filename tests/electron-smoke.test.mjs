@@ -463,7 +463,8 @@ test("tray manager uses template images and human status copy, not setTitle T", 
   assert.ok(main.includes("Exiting after handoff"));
   assert.ok(content.includes("popUpContextMenu"));
   assert.ok(content.includes("modalFallback: false"));
-  assert.ok(content.includes("setImmediate"));
+  assert.ok(content.includes("GITHUB_ACTIONS"));
+  assert.ok(main.includes("setImmediate(() => revealRunningApp"));
   assert.ok(content.includes("ensureTray"));
   assert.ok(content.includes("isTrayHealthy"));
   assert.ok(content.includes("getBounds"));

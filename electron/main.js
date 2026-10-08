@@ -64,11 +64,12 @@ if (!gotLock) {
 }
 
 app.on("second-instance", () => {
-  revealRunningApp("second-instance");
+  // Return before popping the menu so the second process can exit the lock.
+  setImmediate(() => revealRunningApp("second-instance"));
 });
 
 app.on("activate", () => {
-  revealRunningApp("activate");
+  setImmediate(() => revealRunningApp("activate"));
 });
 
 // Set app name for menu bar. Re-pin paths so setName does not

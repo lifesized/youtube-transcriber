@@ -263,17 +263,20 @@ class TrayManager {
     // Notification only — a modal dialog would block the main process and
     // deadlock requestSingleInstanceLock (CI has no one to dismiss it).
     this._notify("Transcriber", trayCopy.RUNNING_IN_MENU_BAR, { modalFallback: false });
-    // popUpContextMenu is synchronous on macOS until dismissed. Defer so
-    // second-instance and server startup can finish.
-    setImmediate(() => {
-      try {
-        if (this.tray && typeof this.tray.popUpContextMenu === "function") {
-          this.tray.popUpContextMenu();
-        }
-      } catch (error) {
-        console.warn("popUpContextMenu failed:", error && error.message);
+    // popUpContextMenu is synchronous on macOS until dismissed. Skip it on
+    // first-launch under GitHub Actions so the smoke test's second instance
+    // can take the lock. On a real Mac, second-instance / activate still pop.
+    if (reason === "first-launch" && process.env.GITHUB_ACTIONS) {
+      console.log("tray reveal: skip popUpContextMenu in CI first-launch");
+      return;
+    }
+    try {
+      if (this.tray && typeof this.tray.popUpContextMenu === "function") {
+        this.tray.popUpContextMenu();
       }
-    });
+    } catch (error) {
+      console.warn("popUpContextMenu failed:", error && error.message);
+    }
   }
 
   _startHealthWatch() {
