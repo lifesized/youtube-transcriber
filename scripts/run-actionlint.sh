@@ -5,15 +5,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-# Ignore pre-existing ls / unquoted-expansion nits in the unsigned job.
-# SC2097/SC2098 in the smoke test were fixed (export PORT, then -p "$PORT").
-IGNORE=(
-  -ignore 'SC2012:'
-  -ignore 'SC2086:'
-)
-
+# SC2012/SC2086 in the unsigned job were fixed (find instead of ls;
+# quoted PID lists). Do not ignore those codes globally.
 if command -v actionlint >/dev/null 2>&1; then
-  actionlint "${IGNORE[@]}"
+  actionlint
   echo "actionlint: ok"
   exit 0
 fi
@@ -59,5 +54,5 @@ if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
   exit 1
 fi
 tar -xzf "$WORK/actionlint.tgz" -C "$WORK" actionlint
-"$WORK/actionlint" "${IGNORE[@]}"
+"$WORK/actionlint"
 echo "actionlint: ok"

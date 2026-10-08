@@ -113,6 +113,8 @@ test("signing and notarization are gated on the exact secret names", () => {
   const actionlint = fs.readFileSync(path.join(root, "scripts", "run-actionlint.sh"), "utf8");
   assert.match(actionlint, /EXPECTED_SHA256=/);
   assert.doesNotMatch(actionlint, /download failed; skip/);
+  assert.doesNotMatch(actionlint, /-ignore 'SC2086:'/);
+  assert.doesNotMatch(actionlint, /-ignore 'SC2012:'/);
 });
 
 test("release job is tag or dispatch only, contents write, no PAT", () => {

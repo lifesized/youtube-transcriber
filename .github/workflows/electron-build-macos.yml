@@ -159,7 +159,7 @@ jobs:
       - name: Assert DMG contains Install Transcriber.command
         run: |
           set -euo pipefail
-          DMG=$(ls dist-electron/*.dmg | head -1)
+          DMG=$(find dist-electron -maxdepth 1 -name '*.dmg' -print | head -1)
           echo "Mounting $DMG"
           ATTACH=$(hdiutil attach -nobrowse -readonly "$DMG")
           echo "$ATTACH"
@@ -935,7 +935,7 @@ jobs:
           fi
           if [ ! -f "$ICON_PATH" ]; then
             echo "ERROR: packaged icon missing: $RES_DIR/$ICON_FILE"
-            ls "$RES_DIR" | head
+            find "$RES_DIR" -maxdepth 1 -print | head
             exit 1
           fi
           ICON_SIZE=$(wc -c < "$ICON_PATH" | tr -d ' ')
@@ -1089,8 +1089,11 @@ jobs:
             for i in $(seq 1 10); do
               pids=$(lsof -ti "tcp:${PORT}" -sTCP:LISTEN 2>/dev/null || true)
               [ -z "$pids" ] && return 0
-              echo "port ${PORT} still held by: $(ps -o pid=,args= -p "$(echo $pids | tr ' ' ',')" | cut -c1-160)"
-              if [ "$i" -lt 5 ]; then kill $pids 2>/dev/null || true; else kill -9 $pids 2>/dev/null || true; fi
+              echo "port ${PORT} still held by: $(ps -o pid=,args= -p "$(printf '%s' "$pids" | tr '\n' ',')" | cut -c1-160)"
+              while read -r pid; do
+                [ -n "$pid" ] || continue
+                if [ "$i" -lt 5 ]; then kill "$pid" 2>/dev/null || true; else kill -9 "$pid" 2>/dev/null || true; fi
+              done <<< "$pids"
               sleep 1
             done
             echo "ERROR: port ${PORT} is still in use"; exit 1
@@ -1222,7 +1225,7 @@ jobs:
         run: |
           set -euo pipefail
           APP="$PWD/dist-electron/mac-arm64/Transcriber.app"
-          DMG=$(ls dist-electron/*.dmg | head -1)
+          DMG=$(find dist-electron -maxdepth 1 -name '*.dmg' -print | head -1)
           echo "===== packaged size ====="
           echo "App:"
           du -sh "$APP"
@@ -1243,7 +1246,7 @@ jobs:
       - name: DMG sha256
         run: |
           set -euo pipefail
-          DMG=$(ls dist-electron/*.dmg | head -1)
+          DMG=$(find dist-electron -maxdepth 1 -name '*.dmg' -print | head -1)
           HASH=$(shasum -a 256 "$DMG" | awk '{print $1}')
           echo "DMG $DMG"
           echo "sha256 $HASH"
