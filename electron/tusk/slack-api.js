@@ -77,6 +77,16 @@ async function postMessage(args) {
   });
 }
 
+function parseRetryAfterMs(res) {
+  const raw = res && res.headers && typeof res.headers.get === "function" ? res.headers.get("retry-after") : null;
+  if (raw == null || raw === "") return undefined;
+  const seconds = Number.parseFloat(raw);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds * 1000);
+  const when = Date.parse(raw);
+  if (Number.isFinite(when)) return Math.max(0, when - Date.now());
+  return undefined;
+}
+
 async function openSocketConnection(appToken) {
   const res = await fetch("https://slack.com/api/apps.connections.open", {
     method: "POST",
@@ -86,7 +96,22 @@ async function openSocketConnection(appToken) {
     },
     body: "",
   });
-  return parseSlackResponse(res);
+  const retryAfterMs = parseRetryAfterMs(res);
+  let body;
+  try {
+    body = await res.json();
+  } catch {
+    body = { ok: false, error: res.ok ? "connections_open_failed" : `http_${res.status}` };
+  }
+  if (!body || typeof body !== "object") {
+    body = { ok: false, error: "connections_open_failed" };
+  }
+  if (retryAfterMs != null) body.retryAfterMs = retryAfterMs;
+  if (typeof body.ok !== "boolean") body.ok = Boolean(res.ok && body.url);
+  if (!body.ok && !body.error) {
+    body.error = res.ok ? "connections_open_failed" : `http_${res.status}`;
+  }
+  return body;
 }
 
 module.exports = {
@@ -95,4 +120,5 @@ module.exports = {
   addReaction,
   postMessage,
   openSocketConnection,
+  parseRetryAfterMs,
 };

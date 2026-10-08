@@ -59,7 +59,7 @@ function createTuskManager(options = {}) {
       },
       onAuth: (auth) => {
         store.setSlack({
-          teamId: cfg.teamId || auth.teamId,
+          teamId: auth.teamId,
           teamName: auth.teamName,
           botUserId: auth.botUserId,
           botName: auth.botName,
@@ -133,15 +133,35 @@ function createTuskManager(options = {}) {
       if (!auth || !auth.ok) {
         throw new Error((auth && auth.error) || "Slack auth.test failed");
       }
+      const newTeam = auth.team_id || "";
+      if (!newTeam) {
+        throw new Error("auth.test did not return a team_id");
+      }
+      if (current.teamId && newTeam !== current.teamId && !patch.resetWorkspace) {
+        throw new Error(
+          "This token belongs to a different Slack workspace. Click Reset workspace in Settings to pin the new team."
+        );
+      }
       store.setSlack({
         botToken: next.botToken,
         appToken: next.appToken,
         enabled: next.enabled,
         channelAllowlist: next.channelAllowlist,
-        teamId: current.teamId || auth.team_id || "",
+        teamId: newTeam,
         teamName: auth.team || "",
         botUserId: auth.user_id || "",
         botName: auth.user || "",
+      });
+    } else if (tokensChanged && !next.botToken) {
+      store.setSlack({
+        botToken: "",
+        appToken: next.appToken,
+        enabled: next.enabled,
+        channelAllowlist: next.channelAllowlist,
+        teamId: "",
+        teamName: "",
+        botUserId: "",
+        botName: "",
       });
     } else {
       store.setSlack({

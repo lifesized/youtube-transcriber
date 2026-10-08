@@ -6,12 +6,42 @@ const { parseSlashText, slashReply } = require("./commands.js");
 const slackApi = require("./slack-api.js");
 
 const BACKOFF_MS = [1000, 2000, 4000, 8000, 16000, 30000];
+const AUTH_FATAL_ERRORS = new Set([
+  "invalid_auth",
+  "token_revoked",
+  "account_inactive",
+  "link_disabled",
+]);
+const JITTER_MS = 250;
 
 function defaultWebSocket() {
   if (typeof WebSocket === "undefined") {
     throw new Error("WebSocket is not available");
   }
   return WebSocket;
+}
+
+function slackErrorCode(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (value.slackError) return String(value.slackError);
+  if (value.error) return String(value.error);
+  if (value.message) return String(value.message);
+  return "";
+}
+
+function isFatalAuthError(value) {
+  return AUTH_FATAL_ERRORS.has(slackErrorCode(value));
+}
+
+function isSlackSocketUrl(url) {
+  try {
+    const parsed = new URL(String(url || ""));
+    const host = parsed.hostname.toLowerCase();
+    return parsed.protocol === "wss:" && host.endsWith(".slack.com");
+  } catch {
+    return false;
+  }
 }
 
 function createTuskRuntime(options = {}) {
@@ -21,11 +51,16 @@ function createTuskRuntime(options = {}) {
     setTimeout: (fn, ms) => setTimeout(fn, ms),
     clearTimeout: (id) => clearTimeout(id),
   };
+  const random = typeof options.random === "function" ? options.random : Math.random;
   const dedupe = options.dedupe || createDedupe();
   const rateLimit = options.rateLimit || createRateLimiter();
 
   let ws = null;
+  let wsGeneration = 0;
   let stopped = true;
+  let fatal = false;
+  let generation = 0;
+  let connecting = false;
   let reconnectAttempt = 0;
   let reconnectTimer = null;
   let status = { state: "off", workspace: "" };
@@ -43,15 +78,45 @@ function createTuskRuntime(options = {}) {
     }
   }
 
-  function scheduleReconnect() {
-    if (stopped) return;
-    const delay = BACKOFF_MS[Math.min(reconnectAttempt, BACKOFF_MS.length - 1)];
+  function reconnectDelay(retryAfterMs) {
+    if (retryAfterMs != null && Number.isFinite(Number(retryAfterMs)) && Number(retryAfterMs) >= 0) {
+      return Number(retryAfterMs);
+    }
+    const base = BACKOFF_MS[Math.min(reconnectAttempt, BACKOFF_MS.length - 1)];
+    return base + Math.floor(random() * JITTER_MS);
+  }
+
+  function scheduleReconnect(retryAfterMs) {
+    if (stopped || fatal) return;
+    clearReconnect();
+    const delay = reconnectDelay(retryAfterMs);
     reconnectAttempt += 1;
     emitStatus({ state: "error", workspace: status.workspace || "" });
     reconnectTimer = timers.setTimeout(() => {
       reconnectTimer = null;
-      connectSocket().catch(() => scheduleReconnect());
+      connectSocket().catch((error) => {
+        if (isFatalAuthError(error)) {
+          stopPermanently(slackErrorCode(error));
+          return;
+        }
+        scheduleReconnect(error && error.retryAfterMs);
+      });
     }, delay);
+  }
+
+  function stopPermanently(reason) {
+    fatal = true;
+    stopped = true;
+    generation += 1;
+    connecting = false;
+    clearReconnect();
+    closeSocket();
+    emitStatus({
+      state: "error",
+      workspace: status.workspace || "",
+      fatal: true,
+      error: reason || "auth_revoked",
+    });
   }
 
   function ack(envelope, payload) {
@@ -73,14 +138,19 @@ function createTuskRuntime(options = {}) {
       return;
     }
     if (envelope.type === "disconnect") {
-      closeSocket();
-      scheduleReconnect();
+      if (ws && typeof ws.close === "function") {
+        try {
+          ws.close();
+        } catch {
+          // already closed; onClose reschedules if this is still the current socket
+        }
+      }
       return;
     }
     if (envelope.type === "slash_commands") {
-      const gated = gateSlashCommand(envelope, options);
+      const gated = gateSlashCommand(envelope, options, helpers);
       if (!gated.ok) {
-        ack(envelope, { text: "Tusk ignored that command." });
+        ack(envelope, { text: gated.hint || "Tusk ignored that command." });
         return;
       }
       const command = parseSlashText(gated.text);
@@ -107,6 +177,7 @@ function createTuskRuntime(options = {}) {
       await options.onSupportedLink({
         channel: gated.channel,
         ts: gated.ts,
+        threadTs: gated.event.thread_ts || gated.ts,
         text: gated.text,
         urls,
         teamId: gated.teamId,
@@ -114,9 +185,11 @@ function createTuskRuntime(options = {}) {
     }
   }
 
-  function attachSocket(socket) {
+  function attachSocket(socket, socketGeneration) {
+    const mySeq = (wsGeneration += 1);
     ws = socket;
     const onMessage = (raw) => {
+      if (socketGeneration !== generation || mySeq !== wsGeneration) return;
       const data = raw && raw.data !== undefined ? raw.data : raw;
       let parsed;
       try {
@@ -127,11 +200,13 @@ function createTuskRuntime(options = {}) {
       handleEnvelope(parsed).catch(() => {});
     };
     const onClose = () => {
+      if (socketGeneration !== generation || mySeq !== wsGeneration) return;
       if (ws === socket) ws = null;
-      if (!stopped) scheduleReconnect();
+      if (!stopped && !fatal) scheduleReconnect();
     };
     const onError = () => {
-      if (!stopped) emitStatus({ state: "error", workspace: status.workspace || "" });
+      if (socketGeneration !== generation || mySeq !== wsGeneration) return;
+      if (!stopped && !fatal) emitStatus({ state: "error", workspace: status.workspace || "" });
     };
     if (typeof socket.addEventListener === "function") {
       socket.addEventListener("message", onMessage);
@@ -144,35 +219,106 @@ function createTuskRuntime(options = {}) {
     }
   }
 
-  async function connectSocket() {
-    if (stopped) return;
-    const opened = await api.openSocketConnection(options.appToken);
+  function discardSocket(socket) {
+    if (!socket || typeof socket.close !== "function") return;
+    try {
+      socket.close();
+    } catch {
+      // already closed
+    }
+  }
+
+  async function connectSocketOnce(connectGeneration, appToken) {
+    if (stopped || fatal || connectGeneration !== generation) return;
+    const opened = await api.openSocketConnection(appToken);
+    if (stopped || fatal || connectGeneration !== generation) {
+      return;
+    }
+    if (options.appToken !== appToken) {
+      return;
+    }
     if (!opened || !opened.ok || !opened.url) {
-      throw new Error((opened && opened.error) || "connections_open_failed");
+      const code = (opened && opened.error) || "connections_open_failed";
+      const error = new Error(code);
+      error.slackError = code;
+      error.retryAfterMs = opened && opened.retryAfterMs;
+      if (AUTH_FATAL_ERRORS.has(code)) {
+        stopPermanently(code);
+        return;
+      }
+      throw error;
+    }
+    if (!isSlackSocketUrl(opened.url)) {
+      throw new Error("invalid_socket_url");
+    }
+    if (stopped || fatal || connectGeneration !== generation || options.appToken !== appToken) {
+      return;
     }
     const socket = new SocketImpl(opened.url);
-    attachSocket(socket);
+    if (stopped || fatal || connectGeneration !== generation || options.appToken !== appToken) {
+      discardSocket(socket);
+      return;
+    }
+    const previous = ws;
+    attachSocket(socket, connectGeneration);
+    if (previous && previous !== socket) discardSocket(previous);
+  }
+
+  async function connectSocket() {
+    if (stopped || fatal) return;
+    if (connecting) return;
+    connecting = true;
+    const connectGeneration = generation;
+    const appToken = options.appToken;
+    try {
+      await connectSocketOnce(connectGeneration, appToken);
+    } finally {
+      connecting = false;
+    }
   }
 
   async function start() {
+    fatal = false;
     stopped = false;
+    generation += 1;
+    connecting = false;
     clearReconnect();
+    closeSocket();
     const auth = await api.authTest(options.botToken);
+    if (stopped || fatal) return;
     if (!auth || !auth.ok) {
+      const code = (auth && auth.error) || "auth_test_failed";
+      if (AUTH_FATAL_ERRORS.has(code)) {
+        stopPermanently(code);
+        throw new Error(code);
+      }
       emitStatus({ state: "error", workspace: "" });
-      throw new Error((auth && auth.error) || "auth_test_failed");
+      throw new Error(code);
     }
+    const teamId = auth.team_id || "";
+    if (!teamId) {
+      emitStatus({ state: "error", workspace: "" });
+      throw new Error("auth_test_missing_team");
+    }
+    if (options.teamId && options.teamId !== teamId) {
+      emitStatus({ state: "error", workspace: auth.team || "" });
+      throw new Error("workspace_mismatch");
+    }
+    options.teamId = teamId;
+    options.teamName = auth.team || options.teamName;
+    options.botUserId = auth.user_id || options.botUserId;
+    options.botName = auth.user || options.botName;
     const workspace = auth.team || "";
     emitStatus({
       state: "starting",
       workspace,
-      teamId: auth.team_id || "",
+      teamId,
       botUserId: auth.user_id || "",
       botName: auth.user || "",
     });
     if (typeof options.onAuth === "function") {
       options.onAuth({
-        teamId: auth.team_id || "",
+        teamId,
         teamName: workspace,
         botUserId: auth.user_id || "",
         botName: auth.user || "",
@@ -181,14 +327,19 @@ function createTuskRuntime(options = {}) {
     try {
       await connectSocket();
     } catch (error) {
+      if (isFatalAuthError(error)) {
+        stopPermanently(slackErrorCode(error));
+        throw error;
+      }
       emitStatus({ state: "error", workspace });
-      scheduleReconnect();
+      scheduleReconnect(error && error.retryAfterMs);
       throw error;
     }
   }
 
   function closeSocket() {
     const current = ws;
+    wsGeneration += 1;
     ws = null;
     if (current && typeof current.close === "function") {
       try {
@@ -201,6 +352,9 @@ function createTuskRuntime(options = {}) {
 
   async function stop() {
     stopped = true;
+    fatal = false;
+    generation += 1;
+    connecting = false;
     clearReconnect();
     closeSocket();
     emitStatus({ state: "off", workspace: status.workspace || "" });
@@ -212,10 +366,14 @@ function createTuskRuntime(options = {}) {
     handleEnvelope,
     getStatus: () => ({ ...status }),
     isStopped: () => stopped,
+    isFatal: () => fatal,
   };
 }
 
 module.exports = {
   createTuskRuntime,
   BACKOFF_MS,
+  AUTH_FATAL_ERRORS,
+  isSlackSocketUrl,
+  isFatalAuthError,
 };
