@@ -20,6 +20,7 @@ const PairingBridge = require("./pairing-bridge.js");
 const NativeHostInstaller = require("./native-host-installer.js");
 const { SecretsStore, attachSecretsIpc } = require("./secrets-store.js");
 const { checkIfTranslocated } = require("./utils.js");
+const { launchedByNativeHost, shouldRevealOnLaunch } = require("../lib/launch-source.js");
 
 const IS_DEV = process.env.NODE_ENV === "development";
 const PORT = config.port;
@@ -63,7 +64,11 @@ if (!gotLock) {
   process.exit(0);
 }
 
-app.on("second-instance", () => {
+app.on("second-instance", (_event, argv) => {
+  if (launchedByNativeHost(argv)) {
+    console.log("second-instance from native host: no reveal");
+    return;
+  }
   // Return before popping the menu so the second process can exit the lock.
   setImmediate(() => revealRunningApp("second-instance"));
 });
@@ -201,9 +206,17 @@ app.whenReady().then(async () => {
   // After the server is up: Notification + menu pop so a notch-clipped
   // icon still has visible feedback. popUpContextMenu does not return until
   // the menu closes, so it runs last and off the ready path.
+  const openedAtLogin = app.getLoginItemSettings().wasOpenedAtLogin === true;
   const revealReason = pendingReveal ? "second-instance-queued" : "first-launch";
+  const reveal = pendingReveal || shouldRevealOnLaunch({ openedAtLogin, argv: process.argv });
   pendingReveal = false;
-  setImmediate(() => trayManager.revealInMenuBar(revealReason));
+  if (reveal) {
+    setImmediate(() => trayManager.revealInMenuBar(revealReason));
+  } else {
+    console.log(
+      `launch reveal skipped (openedAtLogin=${openedAtLogin} nativeHost=${launchedByNativeHost(process.argv)})`
+    );
+  }
 
   console.log("Transcriber ready");
 }).catch((error) => {

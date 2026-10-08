@@ -87,7 +87,12 @@ test("Electron mode start opens the given bundle with open -a", () => {
     "/Applications/Transcriber.app"
   );
   assert.equal(launch.command, "/usr/bin/open");
-  assert.deepEqual(launch.args, ["-a", "/Applications/Transcriber.app"]);
+  assert.deepEqual(launch.args, [
+    "-a",
+    "/Applications/Transcriber.app",
+    "--args",
+    "--launched-by=native-host",
+  ]);
   assert.equal(host.ELECTRON_BUNDLE_ID, "com.transcribed.app");
   assert.equal(
     launch.path,

@@ -227,7 +227,7 @@ test("the app host ignores any recorded root and still launches the bundle", () 
   );
   assert.equal(r.ok, true);
   assert.equal(r.launch.command, "/usr/bin/open");
-  assert.deepEqual(r.launch.args, ["-a", bundle]);
+  assert.deepEqual(r.launch.args, ["-a", bundle, "--args", "--launched-by=native-host"]);
   assert.equal(r.launch.cwd, undefined);
 });
 

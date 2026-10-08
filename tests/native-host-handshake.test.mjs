@@ -132,7 +132,7 @@ test("app Start opens the install the wrapper runs from with /usr/bin/open -a", 
   assert.equal(r.ok, true, JSON.stringify(r));
   assert.equal(r.bundle, bundle);
   assert.equal(r.launch.command, "/usr/bin/open");
-  assert.deepEqual(r.launch.args, ["-a", bundle]);
+  assert.deepEqual(r.launch.args, ["-a", bundle, "--args", "--launched-by=native-host"]);
   assert.equal(r.launch.cwd, undefined);
 });
 

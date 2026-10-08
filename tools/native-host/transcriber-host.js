@@ -34,6 +34,7 @@ const {
   KNOWN_STORE_EXTENSION_IDS,
 } = require("../../lib/native-host-pair.js");
 const { configuredPort } = require("../../lib/local-api-auth.js");
+const { NATIVE_HOST_LAUNCH_ARG } = require("../../lib/launch-source.js");
 const { readRecordedProjectRoot, resolveStartRoot } = require("./project-root.js");
 
 function getPort() {
@@ -227,7 +228,7 @@ function getStartLaunch(env = process.env, execPath = process.execPath, target) 
   if (isElectronHost(env)) {
     return {
       command: "/usr/bin/open",
-      args: ["-a", target],
+      args: ["-a", target, "--args", NATIVE_HOST_LAUNCH_ARG],
       cwd: undefined,
       extraBins: [],
       path: [electronResourcesBin(execPath), "/usr/bin", "/bin"].join(
