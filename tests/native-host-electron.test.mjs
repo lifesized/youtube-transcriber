@@ -264,3 +264,72 @@ test("spawnDetached error handler keeps the process alive", async () => {
   });
   assert.equal(err.code, "ENOENT");
 });
+
+function withHostLogDir(fn) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ytt-nmh-log-"));
+  const prevState = process.env.TRANSCRIBER_STATE_DIR;
+  const prevLog = process.env.TRANSCRIBER_LOG_DIR;
+  process.env.TRANSCRIBER_STATE_DIR = path.join(dir, "state");
+  process.env.TRANSCRIBER_LOG_DIR = path.join(dir, "logs");
+  try {
+    return fn(host, process.env.TRANSCRIBER_LOG_DIR);
+  } finally {
+    if (prevState === undefined) delete process.env.TRANSCRIBER_STATE_DIR;
+    else process.env.TRANSCRIBER_STATE_DIR = prevState;
+    if (prevLog === undefined) delete process.env.TRANSCRIBER_LOG_DIR;
+    else process.env.TRANSCRIBER_LOG_DIR = prevLog;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+const logMode = (file) => fs.statSync(file).mode & 0o777;
+
+test("native-host.log is created 0600 and an existing 0644 is chmodded", () => {
+  assert.equal(host.LOG_FILE_MODE, 0o600);
+  assert.equal(typeof host.log, "function");
+  withHostLogDir((_, logDir) => {
+    host.log("first line");
+    const file = host.logFile();
+    assert.equal(file, path.join(logDir, "native-host.log"));
+    assert.equal(logMode(file), 0o600, "a new native-host.log");
+    assert.match(fs.readFileSync(file, "utf8"), /first line/);
+  });
+  withHostLogDir((_, logDir) => {
+    fs.mkdirSync(logDir, { recursive: true });
+    const file = path.join(logDir, "native-host.log");
+    fs.writeFileSync(file, "old line\n");
+    fs.chmodSync(file, 0o644);
+    host.log("after tighten");
+    assert.equal(logMode(file), 0o600, "an existing native-host.log");
+    assert.match(fs.readFileSync(file, "utf8"), /^old line\n/);
+    assert.match(fs.readFileSync(file, "utf8"), /after tighten/);
+  });
+});
+
+test("native-host.log rotates at about 5MB and keeps one .1", () => {
+  assert.equal(host.LOG_MAX_BYTES, 5 * 1024 * 1024);
+  withHostLogDir((_, logDir) => {
+    const file = host.logFile();
+    const rotated = `${file}.1`;
+    host.log("open");
+
+    fs.writeFileSync(file, "a".repeat(host.LOG_MAX_BYTES - 10));
+    host.log("still under the cap");
+    assert.equal(fs.existsSync(rotated), false, "no rotation under 5MB");
+
+    fs.writeFileSync(file, "b".repeat(host.LOG_MAX_BYTES));
+    host.log("first after rotation");
+    assert.equal(fs.statSync(rotated).size, host.LOG_MAX_BYTES);
+    assert.match(fs.readFileSync(file, "utf8"), /first after rotation/);
+    assert.equal(logMode(file), 0o600);
+    assert.equal(logMode(rotated), 0o600);
+
+    fs.writeFileSync(file, "c".repeat(host.LOG_MAX_BYTES + 1));
+    host.log("second rotation");
+    assert.equal(fs.readFileSync(rotated, "utf8")[0], "c", ".1 is replaced, not kept beside");
+    assert.deepEqual(
+      fs.readdirSync(logDir).filter((f) => f.startsWith("native-host.log")).sort(),
+      ["native-host.log", "native-host.log.1"]
+    );
+  });
+});
