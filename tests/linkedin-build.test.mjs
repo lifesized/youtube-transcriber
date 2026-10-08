@@ -62,9 +62,30 @@ test("LinkedIn access is www.linkedin.com only, isolated world, and no extension
   assert.equal(connectSrc.trim(), "'self' http://127.0.0.1:19721 http://127.0.0.1:19720");
 });
 
-test("LinkedIn scripts make no network requests and store nothing", () => {
+const MAIN_WORLD = /\bworld["']?\s*:\s*["']MAIN["']/;
+
+test("LinkedIn scripts make no network requests, store nothing, and don't touch page storage, HTML or eval", () => {
+  const forbidden = [
+    /\bfetch\(|XMLHttpRequest|WebSocket|sendBeacon|chrome\.storage|cookies/,
+    /document\.cookie/,
+    /\blocalStorage\b/,
+    /\bsessionStorage\b/,
+    /\bindexedDB\b/,
+    /\binnerHTML\b/,
+    /\beval\b/,
+    MAIN_WORLD,
+  ];
   for (const file of LINKEDIN_FILES) {
     const source = read(file);
-    assert.doesNotMatch(source, /\bfetch\(|XMLHttpRequest|WebSocket|sendBeacon|chrome\.storage|cookies/, file);
+    for (const pattern of forbidden) assert.doesNotMatch(source, pattern, `${file}: ${pattern}`);
+  }
+});
+
+test("no content script runs in the page's MAIN world", () => {
+  for (const entry of manifest.content_scripts) {
+    assert.ok(!("world" in entry) || entry.world === "ISOLATED", `${entry.js.join(", ")} world=${entry.world}`);
+  }
+  for (const file of fs.readdirSync(dist).filter((name) => name.endsWith(".js"))) {
+    assert.doesNotMatch(read(file), MAIN_WORLD, file);
   }
 });
