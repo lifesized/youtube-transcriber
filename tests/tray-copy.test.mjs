@@ -54,3 +54,8 @@ test("tooltips and template image names follow spec §4.3", () => {
   assert.equal(copy.RESTART, "Restart Transcriber");
   assert.equal(copy.RUNNING_IN_MENU_BAR, "Transcriber is running in the menu bar");
 });
+
+test("menu names the library it serves and offers its folder", () => {
+  assert.equal(copy.servingLabel(19721), "Serving: Transcriber app library · 19721");
+  assert.equal(copy.OPEN_LIBRARY_FOLDER, "Open Library Folder");
+});

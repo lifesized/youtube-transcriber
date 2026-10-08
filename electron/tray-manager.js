@@ -375,6 +375,10 @@ class TrayManager {
       },
     ];
 
+    if (running) {
+      template.push({ label: trayCopy.servingLabel(this.port), enabled: false });
+    }
+
     if (this.status === "port-conflict") {
       template.push({
         label: trayCopy.TRY_AGAIN,
@@ -402,6 +406,10 @@ class TrayManager {
         label: "Open Transcriber",
         enabled: running,
         click: () => this._openTranscriber(),
+      },
+      {
+        label: trayCopy.OPEN_LIBRARY_FOLDER,
+        click: () => this._openLibraryFolder(),
       },
       { type: "separator" },
       {
@@ -486,6 +494,11 @@ class TrayManager {
     if (typeof app.moveToApplicationsFolder === "function") {
       app.moveToApplicationsFolder();
     }
+  }
+
+  async _openLibraryFolder() {
+    const error = await shell.openPath(config.appStatePaths().stateDir);
+    if (error) console.warn("open library folder failed:", error);
   }
 
   _openTranscriber() {

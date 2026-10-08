@@ -475,6 +475,18 @@ test("tray manager uses template images and human status copy, not setTitle T", 
   assert.ok(content.includes("RUNNING_IN_MENU_BAR"));
 });
 
+test("tray shows the served library read-only and opens the app's own folder", () => {
+  const content = fs.readFileSync(path.join(projectRoot, "electron", "tray-manager.js"), "utf8");
+  assert.match(
+    content,
+    /if \(running\) \{\s*template\.push\(\{ label: trayCopy\.servingLabel\(this\.port\), enabled: false \}\);/
+  );
+  assert.ok(content.includes("label: trayCopy.OPEN_LIBRARY_FOLDER"));
+  // The dev checkout library is a separate DB; the app must never open it.
+  assert.ok(content.includes("shell.openPath(config.appStatePaths().stateDir)"));
+  assert.doesNotMatch(content, /openPath\(config\.checkoutStatePaths/);
+});
+
 test("launch reveal waits for the status listener and never blocks ready", () => {
   const main = fs.readFileSync(path.join(projectRoot, "electron", "main.js"), "utf8");
   const listener = main.indexOf('serverManager.on("status-change"');
