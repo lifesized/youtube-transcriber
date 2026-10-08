@@ -1,4 +1,4 @@
-importScripts("local-auth-headers.js", "send-url.js", "connect-target.js");
+importScripts("local-auth-headers.js", "send-url.js", "connect-target.js", "local-mode-lock.js");
 
 // In-memory only — never persist the loopback token (YTT-435 / YTT-442).
 let _localTokenMemory = null;
@@ -315,9 +315,12 @@ async function checkService() {
         chrome.storage.local.set({ projectPath: data.projectPath });
       }
     }
-    return { online: res.ok || res.status === 503 };
+    return {
+      online: res.ok || res.status === 503,
+      mode: LocalModeLock.resolveMode(),
+    };
   } catch {
-    return { online: false };
+    return { online: false, mode: LocalModeLock.resolveMode() };
   }
 }
 
@@ -539,16 +542,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       case "GET_SETTINGS": {
-        const { mode } = await chrome.storage.sync.get("mode");
-        return { mode: mode || "local" };
+        // LOCAL build: ignore leftover chrome.storage.sync.mode from a
+        // dual-mode install. Cloud sign-in is never a valid panel mode.
+        return { mode: LocalModeLock.resolveMode() };
       }
 
       case "SAVE_SETTINGS": {
-        if (message.mode) {
-          await chrome.storage.sync.set({ mode: message.mode });
-        }
+        await chrome.storage.sync.set({ mode: LocalModeLock.resolveMode() });
         return { ok: true };
       }
+
+      case "OPEN_GOOGLE_SIGNIN":
+      case "SEND_MAGIC_LINK":
+        return {
+          ok: false,
+          error: "Cloud sign-in is not available in the local build.",
+        };
 
       case "GET_TRANSCRIPT": {
         const transcriptId = message.id;

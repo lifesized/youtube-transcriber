@@ -55,3 +55,11 @@ test("friends build hides the footer GitHub link and pairing does not fall throu
   assert.match(popup, /nativeHostState = "pairing"/);
   assert.doesNotMatch(popup, /setTimeout\(\s*\(\)\s*=>\s*\{[^}]*refreshOfflineStartUI/, "no 2.5s fallthrough timer");
 });
+
+test("offline init never paints cloud sign-in when the local target is down", () => {
+  assert.match(popup, /hideCloudSignIn/);
+  assert.match(popup, /LocalModeLock/);
+  assert.doesNotMatch(popup, /cfgMode === ["']cloud["']/);
+  assert.doesNotMatch(html, /transcribed\.dev/);
+  assert.doesNotMatch(html, /id="cloudAuthCard"/);
+});

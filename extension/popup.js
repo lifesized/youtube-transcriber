@@ -674,6 +674,10 @@ async function launchWithProvider(provider, transcriptId, videoTitle) {
 // tab, so tabs.query({active:true}) returns the underlying page the user
 // clicked "summarize" from — that's the anchor we want the new tab next to.
 async function openNextToCurrentTab(url) {
+  if (globalThis.LocalModeLock?.isCloudHostedUrl(url)) {
+    console.warn("[ytt-popup] blocked transcribed.dev navigation");
+    return;
+  }
   try {
     const [current] = await chrome.tabs.query({
       active: true,
@@ -860,7 +864,9 @@ async function fetchDestinations() {
       return { ...d, connected: false };
     });
 
-    const mode = settingsRes?.data?.mode || "cloud";
+    const mode = globalThis.LocalModeLock?.resolveMode(
+      settingsRes?.data?.mode
+    ) || "local";
 
     let cloudAdapters;
     let cloudReady = false;
@@ -1308,7 +1314,9 @@ async function toggleRowActionsMenu(wrapper, transcriptId, videoTitle) {
               }
             }
             try {
-              chrome.tabs.create({ url: payload.schemeUrl, active: true });
+              if (!globalThis.LocalModeLock?.isCloudHostedUrl(payload.schemeUrl)) {
+                chrome.tabs.create({ url: payload.schemeUrl, active: true });
+              }
             } catch {
               // tabs.create fails silently in some extension contexts.
             }
@@ -1318,7 +1326,9 @@ async function toggleRowActionsMenu(wrapper, transcriptId, videoTitle) {
           // focus via its URL handler if installed.
           if (d.adapterId === "notion" && ok && payload.url) {
             try {
-              chrome.tabs.create({ url: payload.url, active: true });
+              if (!globalThis.LocalModeLock?.isCloudHostedUrl(payload.url)) {
+                chrome.tabs.create({ url: payload.url, active: true });
+              }
             } catch {
               // Open failure is non-fatal — the page still exists in Notion.
             }
@@ -1862,6 +1872,9 @@ async function refreshOfflineStartUI() {
   const pairing = nativeHostState === "pairing" && !isDev;
 
   if (el.githubLink) el.githubLink.hidden = true;
+  if (globalThis.LocalModeLock) {
+    globalThis.LocalModeLock.hideCloudSignIn(document);
+  }
   if (el.offlineConnectTargetLabel) {
     el.offlineConnectTargetLabel.textContent = target.label;
   }
@@ -2502,8 +2515,8 @@ async function init() {
   } catch { /* ignore */ }
   if (thisInit !== initVersion) return;
 
-  // LOCAL build is always local mode
-  const mode = "local";
+  // LOCAL build is always local mode — ignore leftover sync.mode / CHECK_SERVICE.mode.
+  const mode = globalThis.LocalModeLock?.resolveMode("local") || "local";
   currentMode = mode;
   // Hydrate the YTT-259 transcribe-mode setting alongside `mode` so the
   // primary button label is correct on first paint.
@@ -2633,72 +2646,42 @@ async function init() {
   coldStartHandled = true;
 
   if (!online) {
-    const cfgMode = serviceRes?.data?.mode || mode;
+    // LOCAL build: leftover mode:"cloud" from storage or CHECK_SERVICE must
+    // never paint Google / magic-link sign-in. Every offline / unauthorized /
+    // unpaired path stays on the friendly local screens.
+    if (globalThis.LocalModeLock) {
+      globalThis.LocalModeLock.hideCloudSignIn(document);
+    }
     const authError = serviceRes?.data?.authError;
 
-    if (cfgMode === "cloud") {
-      // Cloud mode — dead path in LOCAL build (mode is always "local")
-      if (authError) await setCachedAuth(false);
-      el.offlineLocalMsg.hidden = true;
-      if (el.offlineCloudMsg) el.offlineCloudMsg.hidden = false;
-      if (el.cloudNudge) el.cloudNudge.hidden = true;
-      if (el.localDetectedBanner) el.localDetectedBanner.hidden = true;
-
-      const firstTime = !!serviceRes?.data?.firstTime;
-      if (authError && !firstTime) {
-        if (el.cloudOnboarding) el.cloudOnboarding.hidden = true;
-        if (el.cloudAuthError) el.cloudAuthError.hidden = false;
-      } else {
-        if (el.cloudOnboarding) el.cloudOnboarding.hidden = false;
-        if (el.cloudAuthError) el.cloudAuthError.hidden = true;
-      }
-      if (el.cloudAuthSent && !el.cloudAuthSent.hidden) {
-        if (el.cloudAuthCard) el.cloudAuthCard.hidden = true;
-      } else {
-        if (el.cloudAuthCard) el.cloudAuthCard.hidden = false;
-        if (el.cloudAuthErrorMsg) el.cloudAuthErrorMsg.hidden = true;
-      }
-
-      const { localBannerDismissed } = await chrome.storage.sync.get([
-        "localBannerDismissed",
-      ]);
-      if (!localBannerDismissed) {
-        const localRes = await sendMsg({ type: "DETECT_LOCAL" });
-        if (thisInit !== initVersion) return;
-        if (localRes?.success && localRes.data?.available) {
-          if (el.localDetectedBanner) el.localDetectedBanner.hidden = false;
+    el.offlineLocalMsg.hidden = false;
+    if (el.offlineCloudMsg) el.offlineCloudMsg.hidden = true;
+    if (el.cloudNudge) el.cloudNudge.hidden = true;
+    if (el.localDetectedBanner) el.localDetectedBanner.hidden = true;
+    const localAuthError = !!authError;
+    const authMsg = "Quit and reopen Transcriber, then click Check Again.";
+    if (el.offlineLocalAuthError && el.offlineLocalSetup) {
+      if (localAuthError) {
+        el.offlineLocalAuthError.hidden = false;
+        const authHeading = el.offlineLocalAuthError.querySelector(".offline-heading");
+        if (authHeading) authHeading.textContent = "Reconnect to Transcriber";
+        if (el.offlineLocalAuthErrorMsg) {
+          el.offlineLocalAuthErrorMsg.textContent = authMsg;
         }
+        el.offlineLocalSetup.hidden = true;
+        if (el.offlineStartError) el.offlineStartError.hidden = true;
+        if (el.btnCheckAgain) el.btnCheckAgain.hidden = false;
+        if (el.githubLink) el.githubLink.hidden = true;
+        showState("NoService");
+        startOfflinePolling();
+        return;
       }
-    } else {
-      el.offlineLocalMsg.hidden = false;
-      if (el.offlineCloudMsg) el.offlineCloudMsg.hidden = true;
-      if (el.cloudNudge) el.cloudNudge.hidden = false;
-      if (el.localDetectedBanner) el.localDetectedBanner.hidden = true;
-      const localAuthError = !!authError;
-      const authMsg = "Quit and reopen Transcriber, then click Check Again.";
-      if (el.offlineLocalAuthError && el.offlineLocalSetup) {
-        if (localAuthError) {
-          el.offlineLocalAuthError.hidden = false;
-          const authHeading = el.offlineLocalAuthError.querySelector(".offline-heading");
-          if (authHeading) authHeading.textContent = "Reconnect to Transcriber";
-          if (el.offlineLocalAuthErrorMsg) {
-            el.offlineLocalAuthErrorMsg.textContent = authMsg;
-          }
-          el.offlineLocalSetup.hidden = true;
-          if (el.offlineStartError) el.offlineStartError.hidden = true;
-          if (el.btnCheckAgain) el.btnCheckAgain.hidden = false;
-          if (el.githubLink) el.githubLink.hidden = true;
-          showState("NoService");
-          startOfflinePolling();
-          return;
-        }
-        el.offlineLocalAuthError.hidden = true;
-        el.offlineLocalSetup.hidden = false;
-      }
-      loadCachedPath();
-      await detectNativeHost();
-      await refreshOfflineStartUI();
+      el.offlineLocalAuthError.hidden = true;
+      el.offlineLocalSetup.hidden = false;
     }
+    loadCachedPath();
+    await detectNativeHost();
+    await refreshOfflineStartUI();
 
     showState("NoService");
     startOfflinePolling();
@@ -2879,7 +2862,9 @@ async function doTranscribe() {
     // In self-hosted mode, re-check server health before showing error —
     // if the server is down, show the "Waiting for server" screen instead
     // of a generic error message.
-    const mode = (await sendMsg({ type: "GET_SETTINGS" }))?.data?.mode || "cloud";
+    const mode = globalThis.LocalModeLock?.resolveMode(
+      (await sendMsg({ type: "GET_SETTINGS" }))?.data?.mode
+    ) || "local";
     if (mode === "local") {
       const health = await sendMsg({ type: "CHECK_SERVICE" });
       if (!health?.success || !health.data?.online) {
@@ -2932,6 +2917,7 @@ if (el.btnOfflineChangeTarget) {
 let lastAuthEmail = "";
 
 async function sendMagicLink(email) {
+  if (globalThis.LocalModeLock && !globalThis.LocalModeLock.shouldShowCloudAuth()) return;
   if (!el.cloudAuthSubmit || !el.cloudAuthResend || !el.cloudAuthErrorMsg) return;
   
   el.cloudAuthSubmit.disabled = true;
@@ -2977,6 +2963,7 @@ if (el.cloudAuthResend) {
 
 if (el.cloudAuthGoogle) {
   el.cloudAuthGoogle.addEventListener("click", async () => {
+    if (globalThis.LocalModeLock && !globalThis.LocalModeLock.shouldShowCloudAuth()) return;
     el.cloudAuthGoogle.disabled = true;
     const res = await sendMsg({ type: "OPEN_GOOGLE_SIGNIN" });
     el.cloudAuthGoogle.disabled = false;
@@ -3130,7 +3117,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 // Settings panel
 // ---------------------------------------------------------------------------
 
-let currentSettingsMode = "cloud";
+let currentSettingsMode = "local";
 
 async function showSettingsView() {
   closeLlmDropdown();
@@ -3494,6 +3481,7 @@ if (el.obsidianAdvUriInput) {
 }
 
 async function switchMode(newMode) {
+  if (globalThis.LocalModeLock?.isLocalBuild() && newMode !== "local") return;
   destinationsCache = null;
   // Mode switch invalidates the apiConfigCache in the background worker.
   // The first /api/account hit after rebuild can 401 on a cookie race the
@@ -3563,7 +3551,9 @@ if (el.setupWallContinue) {
   el.setupWallContinue.addEventListener("click", async () => {
     hideSetupWall();
     await markSelfHostedSetupCompleted();
-    chrome.tabs.create({ url: SETUP_GUIDE_URL });
+    if (!globalThis.LocalModeLock?.isCloudHostedUrl(SETUP_GUIDE_URL)) {
+      chrome.tabs.create({ url: SETUP_GUIDE_URL });
+    }
     await switchMode("local");
   });
 }

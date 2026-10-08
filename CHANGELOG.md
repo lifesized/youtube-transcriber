@@ -12,6 +12,7 @@
 - **Native-host hardening** — Wrapper paths are single-quoted; Electron PATH is exactly Resources/bin, /usr/bin, /bin; stdin messages capped at 1 MiB. `extension-ids.json` and the secrets file are written atomically (mode 0600). Corrupt JSON is refused on append. Masked key detection is exact equality with the GET placeholder.
 
 ### Fixed
+- **LOCAL extension never falls through to cloud Sign-in** — If the app (19721) or dev server (19720) is unreachable, unauthorized, or unpaired, the side panel stays on the friendly offline screens (`Transcriber isn't running` / `Allow Transcriber to connect`). Leftover `mode: "cloud"` from a dual-mode install, a failed `GET_SETTINGS`, or a `CHECK_SERVICE` payload cannot show Google / magic-link auth or open `transcribed.dev`.
 - **Gold Save hover** — Settings → Summaries Save no longer uses `hover:bg-white/[0.04]`, which wiped the accent fill.
 
 ### Added

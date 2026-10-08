@@ -30,6 +30,7 @@ const COPY_FILES = [
   "local-auth-headers.js",
   "send-url.js",
   "connect-target.js",
+  "local-mode-lock.js",
   "background.js",
   "content.js",
   "content-llm-handoff.js",
