@@ -67,31 +67,36 @@ submit() {
     # notarytool may mention --key paths; that is not a secret.
     cat "$WORK/submit.err"
   fi
-  printf '%s\n' "$out" | python3 -c '
+  local parsed
+  parsed="$(printf '%s\n' "$out" | python3 -c '
 import json, sys
 raw = sys.stdin.read().strip()
 if not raw:
+    print("status=")
+    print("id=")
     sys.exit(0)
 try:
     data = json.loads(raw)
 except json.JSONDecodeError:
-    print(raw)
+    print(raw, file=sys.stderr)
+    print("status=")
+    print("id=")
     sys.exit(0)
-print("id:", data.get("id", ""))
-print("status:", data.get("status", ""))
-print("message:", data.get("message", ""))
-' || true
-  local sid
-  sid="$(printf '%s\n' "$out" | python3 -c '
-import json, sys
-raw = sys.stdin.read().strip()
-try:
-    print(json.loads(raw).get("id", ""))
-except Exception:
-    pass
-' || true)"
-  if [ "$rc" -ne 0 ]; then
-    echo "notary: submit failed for $name"
+print("id:", data.get("id", ""), file=sys.stderr)
+print("status:", data.get("status", ""), file=sys.stderr)
+print("message:", data.get("message", ""), file=sys.stderr)
+print("status=" + str(data.get("status") or ""))
+print("id=" + str(data.get("id") or ""))
+')"
+  local status="" sid=""
+  while IFS= read -r line; do
+    case "$line" in
+      status=*) status="${line#status=}" ;;
+      id=*) sid="${line#id=}" ;;
+    esac
+  done <<< "$parsed"
+  if [ "$rc" -ne 0 ] || [ "$status" != "Accepted" ]; then
+    echo "notary: submit failed for $name (status=${status:-unknown} rc=$rc)"
     if [ -n "$sid" ]; then
       echo "notary: log for $sid"
       prepare_notary_auth

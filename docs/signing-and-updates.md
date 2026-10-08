@@ -101,7 +101,7 @@ The packaged app initializes `electron-updater` only when all of these hold:
 
 Feed is pinned to `lifesized/youtube-transcriber` on GitHub. There is no env or Settings override. `allowDowngrade` is false. macOS signature validation (Squirrel.Mac designated requirement) is left enabled.
 
-One network call when the updater is enabled: GitHub Releases for this repo. Documented in `extension/privacy-policy.md`. Disabled builds make none.
+When the updater is enabled it checks `releases.atom` and `latest-mac.yml` on GitHub Releases for this repo 30 seconds after launch and then every 6 hours. A found update zip downloads automatically; installing it needs a click on **Restart to Update**. Documented in `extension/privacy-policy.md`. Disabled builds make no GitHub calls.
 
 ## Native host after a signed install
 

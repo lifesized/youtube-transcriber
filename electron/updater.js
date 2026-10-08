@@ -172,6 +172,7 @@ function createUpdater(options) {
     autoUpdater.autoInstallOnAppQuit = false;
     autoUpdater.allowDowngrade = false;
     autoUpdater.allowPrerelease = true;
+    autoUpdater.channel = "beta";
     autoUpdater.forceDevUpdateConfig = false;
     autoUpdater.setFeedURL(pinnedFeed());
   } catch (error) {

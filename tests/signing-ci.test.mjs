@@ -88,6 +88,9 @@ test("signing and notarization are gated on the exact secret names", () => {
   assert.match(workflow, /build-signed-dmg\.sh/);
   assert.match(workflow, /macos-update-artifacts\.sh/);
   assert.match(workflow, /run-actionlint\.sh/);
+  const actionlint = fs.readFileSync(path.join(root, "scripts", "run-actionlint.sh"), "utf8");
+  assert.match(actionlint, /EXPECTED_SHA256=/);
+  assert.doesNotMatch(actionlint, /download failed; skip/);
 });
 
 test("release job is tag or dispatch only, contents write, no PAT", () => {
@@ -144,6 +147,7 @@ test("signing scripts never echo secrets and write decoded files under RUNNER_TE
   assert.match(sign, /signing-identity\.json/);
   const notary = files[3];
   assert.match(notary, /notarytool submit/);
+  assert.match(notary, /"\$status" != "Accepted"/);
   assert.match(notary, /notarytool log/);
   assert.match(notary, /APPLE_API_KEY_P8_BASE64/);
   assert.match(notary, /APPLE_APP_SPECIFIC_PASSWORD/);

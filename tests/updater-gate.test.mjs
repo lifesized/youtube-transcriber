@@ -214,6 +214,7 @@ test("enabled updater pins the GitHub feed and does not honor env overrides", ()
     assert.equal(fake.autoDownload, false);
     assert.equal(fake.allowDowngrade, false);
     assert.equal(fake.allowPrerelease, true);
+    assert.equal(fake.channel, "beta");
     assert.equal(fake.forceDevUpdateConfig, false);
     assert.equal(updater.feed.owner, "lifesized");
     assert.equal(updater.feed.repo, "youtube-transcriber");
