@@ -30,4 +30,14 @@ export function isAuthorizedRequest(
   equalFn?: (a: string, b: string) => boolean,
   port?: number
 ): boolean;
+export function isSettingsPageWrite(
+  headers: {
+    authorization?: string | null;
+    cookie?: string | null;
+    secFetchSite?: string | null;
+  },
+  expected: string | null,
+  equalFn?: (a: string, b: string) => boolean,
+  port?: number
+): boolean;
 export function unauthorizedJson(): { error: string };

@@ -229,6 +229,40 @@ test("token cookie is minted for same-origin loads and top-level document naviga
   assert.equal(mint("", "", ""), false);
 });
 
+test("Tusk settings writes need the port cookie and same-origin, not Bearer", () => {
+  const expected = "t".repeat(64);
+  const cookie = `${auth.cookieName(19721)}=${expected}`;
+  const call = (headers, port = 19721) =>
+    auth.isSettingsPageWrite(headers, expected, auth.tokensEqual, port);
+
+  assert.equal(
+    call({ authorization: `Bearer ${expected}`, secFetchSite: "same-origin" }),
+    false,
+    "Bearer-only (extension / MCP / native host)"
+  );
+  assert.equal(
+    call({ cookie, secFetchSite: "none" }),
+    false,
+    "cookie + none is not the Settings page"
+  );
+  assert.equal(call({ cookie, secFetchSite: "same-site" }), false);
+  assert.equal(call({ cookie, secFetchSite: "cross-site" }), false);
+  assert.equal(call({ cookie }), false, "missing Sec-Fetch-Site");
+  assert.equal(call({ cookie, secFetchSite: "same-origin" }), true);
+  assert.equal(
+    call(
+      {
+        authorization: `Bearer ${expected}`,
+        cookie,
+        secFetchSite: "same-origin",
+      }
+    ),
+    true,
+    "Settings may also send Bearer; cookie + same-origin is what counts"
+  );
+  assert.equal(call({ cookie, secFetchSite: "same-origin" }, 19720), false);
+});
+
 test("middleware decision: missing token → 401; good Bearer → allow", () => {
   const expected = "c".repeat(64);
   function decide(authorization) {

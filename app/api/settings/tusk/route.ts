@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requestFromMain } from "@/lib/electron-ipc.js";
+import { isSettingsPageWrite } from "@/lib/local-api-auth.js";
+import { getExpectedToken } from "@/lib/local-api-token.js";
 
 function unavailable() {
   return NextResponse.json(
@@ -22,12 +24,27 @@ export async function GET() {
   }
 }
 
+function tuskSettingsWriteAllowed(request: NextRequest) {
+  return isSettingsPageWrite(
+    {
+      authorization: request.headers.get("authorization"),
+      cookie: request.headers.get("cookie"),
+      secFetchSite: request.headers.get("sec-fetch-site"),
+    },
+    getExpectedToken()
+  );
+}
+
 export async function PUT(request: NextRequest) {
+  if (!tuskSettingsWriteAllowed(request)) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
   let body: {
     botToken?: string;
     appToken?: string;
     enabled?: boolean;
     channelAllowlist?: string | string[];
+    resetWorkspace?: boolean;
   };
   try {
     body = await request.json();
@@ -40,6 +57,7 @@ export async function PUT(request: NextRequest) {
       appToken: body.appToken,
       enabled: body.enabled,
       channelAllowlist: body.channelAllowlist,
+      resetWorkspace: body.resetWorkspace,
     });
     return NextResponse.json(payload);
   } catch (error) {
