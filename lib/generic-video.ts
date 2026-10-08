@@ -31,7 +31,7 @@ async function fetchVideoInfo(url: string): Promise<YtDlpInfo> {
   const ytdlp = getYtdlpPath();
   const { stdout } = await execFileAsync(
     ytdlp,
-    ["--dump-json", "--no-download", "--no-playlist", url],
+    ["--dump-json", "--no-download", "--no-playlist", "--", url],
     { timeout: 60_000, maxBuffer: 50 * 1024 * 1024 }
   );
   const info = JSON.parse(stdout) as YtDlpInfo;
@@ -85,6 +85,7 @@ async function downloadGenericAudio(url: string, outputId: string): Promise<stri
       "--audio-quality", "9",
       "-o", outputTemplate,
       "--no-playlist",
+      "--",
       url,
     ],
     { timeout: 600_000, maxBuffer: 50 * 1024 * 1024 }
