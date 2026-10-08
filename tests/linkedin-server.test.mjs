@@ -22,6 +22,7 @@ const ytdlpLog = path.join(dir, "yt-dlp.log");
 const EVENT_URL = "https://www.linkedin.com/events/7512647010907250689/";
 const POST_URL =
   "https://www.linkedin.com/posts/jane-doe_local-first-activity-7151241570371948544-4Gu7";
+const POST_CANONICAL = "https://www.linkedin.com/feed/update/urn:li:activity:7151241570371948544/";
 const media = (sig) =>
   `https://dms.licdn.com/playlist/vid/v2/D4E10AQ_EVENT/mp4-360p-30fp-crf28/B4EZ_EVENT/0/1759251600000?e=1760000000&v=beta&t=${sig}`;
 
@@ -194,11 +195,23 @@ test("public post without media URL goes through yt-dlp's LinkedIn page extracto
   const { status, data } = await post({ url: POST_URL });
   assert.equal(status, 201, JSON.stringify(data));
   assert.equal(data.videoId, "linkedin:7151241570371948544");
-  assert.equal(data.videoUrl, POST_URL);
+  assert.equal(data.videoUrl, POST_CANONICAL);
   assert.equal(data.title, "Jane Doe on LinkedIn: Local-first is back");
   assert.equal(data.author, "Jane Doe");
   const last = ytdlpCalls().at(-1);
   assert.equal(last[last.length - 1], POST_URL);
+});
+
+test("a pasted post URL reaches yt-dlp only in parsed form and is stored by its canonical URL", async () => {
+  const { status, data } = await post({
+    url: " https://www.linkedin.com\\@127.0.0.1:8443/?highlightedUpdateUrn=urn%3Ali%3Aactivity%3A7200000000000000001 ",
+  });
+  assert.equal(status, 201, JSON.stringify(data));
+  assert.equal(data.videoUrl, "https://www.linkedin.com/feed/update/urn:li:activity:7200000000000000001/");
+  assert.equal(
+    ytdlpCalls().at(-1).at(-1),
+    "https://www.linkedin.com/@127.0.0.1:8443/?highlightedUpdateUrn=urn%3Ali%3Aactivity%3A7200000000000000001"
+  );
 });
 
 test("the library list shows LinkedIn entries with their page URLs", async () => {
@@ -207,7 +220,7 @@ test("the library list shows LinkedIn entries with their page URLs", async () =>
   const byId = Object.fromEntries(list.map((video) => [video.videoId, video]));
   assert.equal(byId["linkedin:event-7512647010907250689"].videoUrl, EVENT_URL);
   assert.equal(byId["linkedin:event-7512647010907250689"].title, "Building local-first apps");
-  assert.equal(byId["linkedin:7151241570371948544"].videoUrl, POST_URL);
+  assert.equal(byId["linkedin:7151241570371948544"].videoUrl, POST_CANONICAL);
 });
 
 test("both yt-dlp calls (info and download) put -- right before the URL", () => {

@@ -102,6 +102,42 @@ test("parseContentUrl routes LinkedIn posts and events to the linkedin platform"
   assert.equal(parseContentUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ").platform, "youtube");
 });
 
+test("server takes LinkedIn page URLs only as https (www.)linkedin.com with no port or userinfo", () => {
+  const path = "/feed/update/urn:li:activity:7016901149999955968/";
+  for (const url of [
+    `javascript://www.linkedin.com${path}`,
+    `http://www.linkedin.com${path}`,
+    `https://www.linkedin.com:8443${path}`,
+    `https://user@www.linkedin.com${path}`,
+    `https://user:pass@linkedin.com${path}`,
+  ]) {
+    assert.equal(extractLinkedInContentId(url), null, url);
+    assert.notEqual(parseContentUrl(url).platform, "linkedin", url);
+  }
+  assert.equal(extractLinkedInContentId(`https://www.linkedin.com:443${path}`), "linkedin:7016901149999955968");
+});
+
+test("server's canonical LinkedIn URL is rebuilt from the parsed ID, not the pasted URL", () => {
+  const canonical = (url) => parseContentUrl(url).canonicalUrl;
+  assert.equal(
+    canonical("https://www.linkedin.com/posts/jane-doe_local-first-activity-7151241570371948544-4Gu7?trk=public_post"),
+    "https://www.linkedin.com/feed/update/urn:li:activity:7151241570371948544/"
+  );
+  assert.equal(
+    canonical("https://linkedin.com/posts/mishalkhawaja_toronto-ugcPost-6850898786781339649-mM20/"),
+    "https://www.linkedin.com/feed/update/urn:li:ugcPost:6850898786781339649/"
+  );
+  assert.equal(
+    canonical("https://www.linkedin.com/feed/?highlightedUpdateUrn=urn%3Ali%3Ashare%3A7151241570371948544#x"),
+    "https://www.linkedin.com/feed/update/urn:li:share:7151241570371948544/"
+  );
+  assert.equal(
+    canonical(" https://www.linkedin.com/events/27-02energyfreedombyenergyclub7295762520814874625/comments/?x=1 "),
+    "https://www.linkedin.com/events/7295762520814874625/"
+  );
+  assert.equal(canonical("https://www.youtube.com/watch?v=dQw4w9WgXcQ"), undefined);
+});
+
 test("media CDN check accepts only https *.licdn.com", () => {
   assert.ok(LinkedInUrl.isMediaCdnUrl("https://dms.licdn.com/playlist/vid/v2/X/mp4-360p-30fp-crf28/Y/0/1?e=1&t=x"));
   assert.ok(!LinkedInUrl.isMediaCdnUrl("http://dms.licdn.com/playlist/vid/v2/X/mp4-360p/Y"));
