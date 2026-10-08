@@ -214,14 +214,20 @@ test("status reports the recorded root and whether Start can use it", async () =
 test("the app host ignores any recorded root and still launches the bundle", () => {
   const stateDir = tmp("ytt-app-state-");
   recordRoot(stateDir, "");
+  const bundle = path.join(tmp("ytt-app-"), "Transcriber.app");
+  fs.mkdirSync(path.join(bundle, "Contents", "MacOS"), { recursive: true });
+  fs.writeFileSync(
+    path.join(bundle, "Contents", "Info.plist"),
+    "<plist><dict><key>CFBundleIdentifier</key><string>com.transcribed.app</string></dict></plist>"
+  );
   const r = host.resolveStartLaunch(
     { ELECTRON_RUN_AS_NODE: "1" },
-    "/Applications/Transcriber.app/Contents/MacOS/Transcriber",
+    path.join(bundle, "Contents", "MacOS", "Transcriber"),
     stateDir
   );
   assert.equal(r.ok, true);
-  assert.equal(r.launch.command, "open");
-  assert.deepEqual(r.launch.args, ["-b", "com.transcribed.app"]);
+  assert.equal(r.launch.command, "/usr/bin/open");
+  assert.deepEqual(r.launch.args, ["-a", bundle]);
   assert.equal(r.launch.cwd, undefined);
 });
 

@@ -6,20 +6,21 @@
  * followed by UTF-8 JSON. https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging
  *
  * Commands accepted (one per request, response has matching `id`):
- *   { id, cmd: "ping" }
+ *   { id, cmd: "ping" | "version" } → { pong, protocol, commands, target }
  *   { id, cmd: "probe" }    → { status: "ready"|"foreign"|"down", port, identity? }
- *   { id, cmd: "start" }    → { started: true, pid } | { started: false, reason, detail? }
- *   { id, cmd: "stop" }     → { stopped: bool }
+ *   { id, cmd: "start" }    → { started: true, pid? } | { started: false, reason, detail? }
+ *        Returns as soon as the launch is issued; callers poll health.
+ *   { id, cmd: "stop" }     → { stopped: bool, reason? }  (dev host, own process group only)
  *   { id, cmd: "status" }   → { running: bool, pid?, uptimeMs?, projectRoot, projectRootOk, port }
  *   { id, cmd: "getLocalToken" } → { token }  (loopback API Bearer; never log value)
- *        | { ok: false, error: "unauthorized_caller" | "extension_not_allowed" }
+ *        | { ok: false, error: "unauthorized_caller" | "extension_not_allowed" | "no_token" }
  */
 
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const http = require("http");
-const { spawn } = require("child_process");
+const { spawn, execFileSync } = require("child_process");
 const {
   ensureLocalApiToken,
   ensureInEnv,
@@ -44,7 +45,18 @@ function healthUrl() {
 }
 const IDENTITY_HEADER = "x-transcriber-service";
 const ELECTRON_BUNDLE_ID = "com.transcribed.app";
+const DEFAULT_APP_BUNDLE = "/Applications/Transcriber.app";
 const MAX_NATIVE_HOST_MESSAGE = 1024 * 1024;
+const PROTOCOL_VERSION = 2;
+const COMMANDS = Object.freeze([
+  "ping",
+  "version",
+  "probe",
+  "start",
+  "stop",
+  "status",
+  "getLocalToken",
+]);
 
 function stateDir() {
   return getStateDir();
@@ -157,11 +169,65 @@ function isElectronHost(env = process.env) {
   return !!env.ELECTRON_RUN_AS_NODE;
 }
 
-function getStartLaunch(env = process.env, execPath = process.execPath, projectRoot) {
+/** `<bundle>.app/Contents/MacOS/<binary>` → `<bundle>.app`, else null. */
+function bundleFromExecPath(execPath) {
+  if (typeof execPath !== "string" || !path.isAbsolute(execPath)) return null;
+  const macos = path.dirname(execPath);
+  const contents = path.dirname(macos);
+  const bundle = path.dirname(contents);
+  if (path.basename(macos) !== "MacOS" || path.basename(contents) !== "Contents") {
+    return null;
+  }
+  return bundle.endsWith(".app") ? bundle : null;
+}
+
+function isTransientBundlePath(bundle) {
+  return bundle.startsWith("/Volumes/") || bundle.includes("/AppTranslocation/");
+}
+
+function readInfoPlist(bundle) {
+  const plistPath = path.join(bundle, "Contents", "Info.plist");
+  const raw = fs.readFileSync(plistPath);
+  if (raw.subarray(0, 6).toString("latin1") !== "bplist") return raw.toString("utf8");
+  return execFileSync("/usr/bin/plutil", ["-convert", "xml1", "-o", "-", plistPath], {
+    encoding: "utf8",
+    timeout: 2000,
+  });
+}
+
+const BUNDLE_ID_RE = new RegExp(
+  `<key>CFBundleIdentifier</key>\\s*<string>${ELECTRON_BUNDLE_ID.replace(/\./g, "\\.")}</string>`
+);
+
+function isTranscriberBundle(bundle) {
+  try {
+    return BUNDLE_ID_RE.test(readInfoPlist(bundle));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The only bundles the app host will launch: the install its wrapper execs
+ * from (recorded by the app's installer) and /Applications/Transcriber.app.
+ */
+function appBundleCandidates(execPath = process.execPath) {
+  const recorded = bundleFromExecPath(execPath);
+  const out = [];
+  if (recorded && !isTransientBundlePath(recorded)) out.push(recorded);
+  if (!out.includes(DEFAULT_APP_BUNDLE)) out.push(DEFAULT_APP_BUNDLE);
+  return out;
+}
+
+function resolveAppBundle(execPath = process.execPath) {
+  return appBundleCandidates(execPath).find(isTranscriberBundle) || null;
+}
+
+function getStartLaunch(env = process.env, execPath = process.execPath, target) {
   if (isElectronHost(env)) {
     return {
-      command: "open",
-      args: ["-b", ELECTRON_BUNDLE_ID],
+      command: "/usr/bin/open",
+      args: ["-a", target],
       cwd: undefined,
       extraBins: [],
       path: [electronResourcesBin(execPath), "/usr/bin", "/bin"].join(
@@ -181,18 +247,26 @@ function getStartLaunch(env = process.env, execPath = process.execPath, projectR
   return {
     command: npmCmd,
     args: ["run", "dev"],
-    cwd: projectRoot,
+    cwd: target,
     extraBins: [nodeBinDir, "/opt/homebrew/bin", "/usr/local/bin"],
   };
 }
 
 /**
- * The app host launches the bundle and needs no checkout. The dev host only
- * starts from a validated recorded root, never from its own folder.
+ * The app host launches an allowlisted bundle and needs no checkout. The dev
+ * host only starts from a validated recorded root, never from its own folder.
  */
 function resolveStartLaunch(env = process.env, execPath = process.execPath, dir = stateDir()) {
   if (isElectronHost(env)) {
-    return { ok: true, launch: getStartLaunch(env, execPath) };
+    const bundle = resolveAppBundle(execPath);
+    if (!bundle) {
+      return {
+        ok: false,
+        reason: "app_not_found",
+        detail: `No Transcriber.app at ${appBundleCandidates(execPath).join(" or ")}`,
+      };
+    }
+    return { ok: true, bundle, launch: getStartLaunch(env, execPath, bundle) };
   }
   const root = resolveStartRoot(dir);
   if (!root.ok) return root;
@@ -230,7 +304,7 @@ async function startServer() {
     });
     return { started: false, reason: resolved.reason, detail: resolved.detail };
   }
-  const { launch, projectRoot } = resolved;
+  const { launch, projectRoot, bundle } = resolved;
   const extraBins = launch.extraBins || [];
   const extendedPath =
     launch.path ||
@@ -264,23 +338,37 @@ async function startServer() {
   child.unref();
 
   const startedAt = Date.now();
-  writeState({ pid: child.pid, startedAt, projectRoot });
   log("spawned", { pid: child.pid, command: launch.command, args: launch.args, cwd: launch.cwd });
+  // `open` exits once LaunchServices has the request, so its pid is not the app.
+  if (bundle) return { started: true, startedAt };
 
+  writeState({ pid: child.pid, startedAt, projectRoot });
   return { started: true, pid: child.pid, startedAt };
 }
 
+function isProcessGroupAlive(pgid) {
+  if (!Number.isInteger(pgid) || pgid <= 1) return false;
+  try {
+    process.kill(-pgid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Only ever signals the process group this host spawned for `npm run dev`. */
 function stopServer() {
+  if (isElectronHost()) return { stopped: false, reason: "stop_unsupported" };
   const state = readState();
-  if (!state.pid || !isPidAlive(state.pid)) {
+  if (!isProcessGroupAlive(state.pid)) {
     writeState({});
     return { stopped: false, reason: "not_running" };
   }
   try {
-    // Negative PID kills the whole process group (npm + next).
     process.kill(-state.pid, "SIGTERM");
   } catch (e) {
-    try { process.kill(state.pid, "SIGTERM"); } catch {}
+    log("stop_failed", { pid: state.pid, message: e && e.message });
+    return { stopped: false, reason: "stop_failed" };
   }
   writeState({});
   log("stopped dev server", { pid: state.pid });
@@ -352,9 +440,26 @@ function replyGetLocalToken(id, argv = process.argv, options = {}) {
     log("getLocalToken_denied", { error: auth.error, extensionId: auth.extensionId });
     return { id, ok: false, error: auth.error, _exit: true };
   }
-  const token = ensureLocalApiToken();
+  let token;
+  try {
+    token = ensureLocalApiToken();
+  } catch (e) {
+    log("getLocalToken_failed", { path: getLocalApiTokenPath(), message: e && e.message });
+    return { id, ok: false, error: "no_token" };
+  }
   log("getLocalToken", { path: getLocalApiTokenPath() });
   return { id, ok: true, token };
+}
+
+function versionReply(id, env = process.env) {
+  return {
+    id,
+    ok: true,
+    pong: true,
+    protocol: PROTOCOL_VERSION,
+    commands: [...COMMANDS],
+    target: isElectronHost(env) ? "app" : "dev",
+  };
 }
 
 // --- Native messaging framing ---------------------------------------------
@@ -379,17 +484,16 @@ async function handleMessage(msg) {
   try {
     switch (cmd) {
       case "ping":
-        return { id, ok: true, pong: true };
+      case "version":
+        return versionReply(id);
       case "probe": {
         const r = await probeWithRetry(1, 0);
         return { id, ok: true, ...r, port: getPort() };
       }
       case "start": {
         const r = await startServer();
-        if (!r.started) return { id, ok: false, ...r };
-        // Wait briefly for the server to come up so the UI can transition.
-        const ready = await probeWithRetry(20, 750);
-        return { id, ok: ready.status === "ready", ...r, probe: ready };
+        if (!r.started) return { id, ok: false, ...r, port: getPort() };
+        return { id, ok: true, ...r };
       }
       case "stop":
         return { id, ok: true, ...stopServer() };
@@ -478,12 +582,22 @@ if (require.main === module) {
 
 module.exports = {
   ELECTRON_BUNDLE_ID,
+  DEFAULT_APP_BUNDLE,
   MAX_NATIVE_HOST_MESSAGE,
+  PROTOCOL_VERSION,
+  COMMANDS,
   electronResourcesBin,
+  bundleFromExecPath,
+  appBundleCandidates,
+  isTranscriberBundle,
+  resolveAppBundle,
   getStartLaunch,
   resolveStartLaunch,
   startServer,
+  stopServer,
   getStatus,
+  versionReply,
+  handleMessage,
   spawnDetached,
   parseCallerExtensionId,
   findCallerOriginArg,

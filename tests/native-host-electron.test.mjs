@@ -80,13 +80,14 @@ test("native host port follows PORT env and defaults to 19720", () => {
   }
 });
 
-test("Electron mode start launches the app by bundle id", () => {
+test("Electron mode start opens the given bundle with open -a", () => {
   const launch = host.getStartLaunch(
     { ELECTRON_RUN_AS_NODE: "1" },
-    "/App/Contents/MacOS/Transcriber"
+    "/App/Contents/MacOS/Transcriber",
+    "/Applications/Transcriber.app"
   );
-  assert.equal(launch.command, "open");
-  assert.deepEqual(launch.args, ["-b", "com.transcribed.app"]);
+  assert.equal(launch.command, "/usr/bin/open");
+  assert.deepEqual(launch.args, ["-a", "/Applications/Transcriber.app"]);
   assert.equal(host.ELECTRON_BUNDLE_ID, "com.transcribed.app");
   assert.equal(
     launch.path,

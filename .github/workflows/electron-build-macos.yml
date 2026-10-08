@@ -579,8 +579,26 @@ jobs:
           if msg.get("id") != "ci-ping" or not msg.get("ok") or not msg.get("pong"):
               print("ERROR: unexpected ping reply", file=sys.stderr)
               sys.exit(1)
-          print("✓ native host ping")
+          if msg.get("protocol") != 2 or msg.get("target") != "app" or "getLocalToken" not in msg.get("commands", []):
+              print("ERROR: packaged host must report protocol 2, target app, and its commands", file=sys.stderr)
+              sys.exit(1)
+          print("✓ native host ping (protocol 2)")
           PY
+
+          echo "----- native-host app Start allowlist -----"
+          cat > /tmp/ci-app-start.js <<'JS'
+          const host = require(process.argv[2]);
+          const exe = process.argv[3];
+          const bundle = require("path").resolve(exe, "..", "..", "..");
+          const r = host.resolveStartLaunch({ ELECTRON_RUN_AS_NODE: "1" }, exe);
+          console.log(JSON.stringify(r));
+          if (!r.ok || r.bundle !== bundle) throw new Error("packaged bundle is not in the Start allowlist");
+          if (r.launch.command !== "/usr/bin/open" || r.launch.args.join(" ") !== "-a " + bundle) {
+            throw new Error("app Start must be /usr/bin/open -a <bundle>");
+          }
+          JS
+          ELECTRON_RUN_AS_NODE=1 "$APP_PATH" /tmp/ci-app-start.js "$HOST_JS" "$APP_PATH"
+          echo "✓ app Start resolves the packaged bundle with open -a"
 
           echo "----- native-host getLocalToken -----"
           PAIR_ID="abcdefghijklmnopabcdefghijklmnop"
