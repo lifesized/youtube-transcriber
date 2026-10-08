@@ -161,7 +161,12 @@ test("signing scripts never echo secrets and write decoded files under RUNNER_TE
   assert.match(keychain, /chmod 600/);
   assert.match(keychain, /-T \/usr\/bin\/codesign/);
   assert.match(keychain, /set-key-partition-list/);
+  assert.match(keychain, /-lut 900/);
+  assert.match(keychain, /security import[\s\S]*\s-x\s/);
+  assert.match(keychain, /rm -f "\$CERT_PATH"/);
+  assert.match(keychain, /lock-keychain/);
   assert.doesNotMatch(keychain, /security import[\s\S]*\s-A\s/);
+  assert.doesNotMatch(keychain, /-lut 21600/);
   assert.match(keychain, /openssl rand/);
   assert.match(keychain, /Developer ID Application/);
   const sign = files[1];
@@ -171,6 +176,7 @@ test("signing scripts never echo secrets and write decoded files under RUNNER_TE
   const notary = files[3];
   assert.match(notary, /notarytool submit/);
   assert.match(notary, /"\$status" != "Accepted"/);
+  assert.match(notary, /rm -f "\$P8_PATH"/);
   assert.match(notary, /notarytool log/);
   assert.match(notary, /APPLE_API_KEY_P8_BASE64/);
   assert.match(notary, /APPLE_APP_SPECIFIC_PASSWORD/);

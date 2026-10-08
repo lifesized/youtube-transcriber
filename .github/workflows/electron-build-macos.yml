@@ -1334,6 +1334,9 @@ jobs:
       - name: Sign the signed DMG
         run: bash scripts/macos-codesign-dmg.sh dist-electron/signed/Transcriber-signed.dmg
 
+      - name: Lock signing keychain
+        run: bash scripts/macos-signing-keychain.sh lock
+
       - name: Notarize and staple the DMG
         id: notarize_dmg
         env:

@@ -104,8 +104,10 @@ print("id=" + str(data.get("id") or ""))
       xcrun notarytool log "$sid" "${NOTARY_ARGS[@]}" || true
       set -e
     fi
+    rm -f "$P8_PATH"
     exit 1
   fi
+  rm -f "$P8_PATH"
 }
 
 if [ "$MODE" = "app" ]; then

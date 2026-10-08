@@ -38,14 +38,16 @@ setup() {
   chmod 600 "$CERT_PATH"
 
   security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-  security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+  security set-keychain-settings -lut 900 "$KEYCHAIN_PATH"
   security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
   security import "$CERT_PATH" \
     -P "$MACOS_CERT_PASSWORD" \
+    -x \
     -t cert -f pkcs12 \
     -k "$KEYCHAIN_PATH" \
     -T /usr/bin/codesign
+  rm -f "$CERT_PATH"
 
   security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
@@ -76,6 +78,13 @@ setup() {
   echo "signing: using Developer ID Application identity for team ${APPLE_TEAM_ID}"
 }
 
+lock() {
+  if [ -f "$KEYCHAIN_PATH" ]; then
+    security lock-keychain "$KEYCHAIN_PATH" || true
+    echo "signing: keychain locked"
+  fi
+}
+
 teardown() {
   if [ -f "$KEYCHAIN_PATH" ]; then
     security delete-keychain "$KEYCHAIN_PATH" || true
@@ -86,6 +95,7 @@ teardown() {
 
 case "${1:-}" in
   setup) setup ;;
+  lock) lock ;;
   teardown) teardown ;;
-  *) echo "usage: $0 setup|teardown" >&2; exit 2 ;;
+  *) echo "usage: $0 setup|lock|teardown" >&2; exit 2 ;;
 esac
