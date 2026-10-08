@@ -570,21 +570,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           : { ok: false, reason: r.reason, message: ConnectTarget.errorMessage(r.reason, target.id) };
       }
 
-      case "CALL_NATIVE_HOST": {
-        try {
-          const hostName = (await resolveTarget()).nativeHostName;
-          const result = await callNativeHostCmd(
-            message.cmd,
-            message.payload,
-            message.timeoutMs || 5000,
-            hostName
-          );
-          return { ok: true, result };
-        } catch (err) {
-          return { ok: false, error: err.message };
-        }
-      }
-
       case "CLEAR_LOCAL_TOKEN":
         clearLocalTokenMemory();
         return { ok: true };
