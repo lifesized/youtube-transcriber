@@ -6,6 +6,7 @@
  * - Open Transcriber (opens in browser)
  * - Start at Login (toggle)
  * - Connect browser extension… (2-minute pairing window)
+ * - Paired extensions… (list + remove, rotates local API token)
  * - Reinstall browser connection (P1)
  * - Quit
  */
@@ -14,6 +15,17 @@ const { app, Tray, Menu, shell, nativeImage, Notification, dialog } = require("e
 const path = require("path");
 const NativeHostInstaller = require("./native-host-installer.js");
 const { PAIRING_WINDOW_MS } = require("../lib/native-host-pair.js");
+const { rotateLocalApiToken } = require("../lib/local-api-token.js");
+
+async function unpairExtension(id, deps) {
+  const rotate = deps.rotate || rotateLocalApiToken;
+  deps.installer.removeExtensionId(id);
+  await deps.installer.rewriteManifests();
+  rotate();
+  if (deps.serverManager && typeof deps.serverManager.restart === "function") {
+    await deps.serverManager.restart();
+  }
+}
 
 class TrayManager {
   constructor(options) {
@@ -113,6 +125,10 @@ class TrayManager {
         click: () => this._openPairingWindow(),
       },
       {
+        label: "Paired extensions…",
+        click: () => this._showPairedExtensions(),
+      },
+      {
         label: "Reinstall Browser Connection",
         click: () => this._reinstallNativeHost(),
       },
@@ -166,6 +182,37 @@ class TrayManager {
     this._notify(
       "Connect browser extension",
       "Pairing is open for 2 minutes. Click the Transcriber extension in Chrome to connect."
+    );
+  }
+
+  async _showPairedExtensions() {
+    const ids = this.nativeHostInstaller.listExtensionIds();
+    if (ids.length === 0) {
+      await dialog.showMessageBox({
+        type: "info",
+        message: "Paired extensions",
+        detail: "No extensions are paired.",
+        buttons: ["OK"],
+      });
+      return;
+    }
+    const result = await dialog.showMessageBox({
+      type: "question",
+      message: "Paired extensions",
+      detail:
+        "Select an extension ID to remove it. That rewrites native-host manifests and rotates the local API token.",
+      buttons: [...ids, "Close"],
+      cancelId: ids.length,
+      defaultId: ids.length,
+    });
+    if (result.response < 0 || result.response >= ids.length) return;
+    await unpairExtension(ids[result.response], {
+      installer: this.nativeHostInstaller,
+      serverManager: this.serverManager,
+    });
+    this._notify(
+      "Paired extensions",
+      `Removed ${ids[result.response]}. Local API token rotated.`
     );
   }
   
@@ -227,3 +274,4 @@ class TrayManager {
 }
 
 module.exports = TrayManager;
+module.exports.unpairExtension = unpairExtension;

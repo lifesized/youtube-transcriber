@@ -70,6 +70,41 @@ test("ensureLocalApiToken respects env and writes 0600 file", () => {
   }
 });
 
+test("rotateLocalApiToken replaces file and env", () => {
+  const prevEnv = process.env.TRANSCRIBER_LOCAL_TOKEN;
+  const tokenPath = tokenMod.getLocalApiTokenPath();
+  let prevFile = null;
+  try {
+    try {
+      prevFile = readFileSync(tokenPath, "utf8");
+    } catch {
+      prevFile = null;
+    }
+    delete process.env.TRANSCRIBER_LOCAL_TOKEN;
+    const first = tokenMod.ensureLocalApiToken();
+    const second = tokenMod.rotateLocalApiToken();
+    assert.notEqual(second, first);
+    assert.equal(second.length, 64);
+    assert.equal(process.env.TRANSCRIBER_LOCAL_TOKEN, second);
+    assert.equal(readFileSync(tokenPath, "utf8").trim(), second);
+    const third = tokenMod.rotateLocalApiToken();
+    assert.notEqual(third, second);
+    assert.equal(process.env.TRANSCRIBER_LOCAL_TOKEN, third);
+  } finally {
+    if (prevEnv === undefined) delete process.env.TRANSCRIBER_LOCAL_TOKEN;
+    else process.env.TRANSCRIBER_LOCAL_TOKEN = prevEnv;
+    if (prevFile !== null) {
+      writeFileSync(tokenPath, prevFile, { encoding: "utf8", mode: 0o600 });
+    } else {
+      try {
+        rmSync(tokenPath, { force: true });
+      } catch {
+        // ignore
+      }
+    }
+  }
+});
+
 test("unauthorizedJson shape", () => {
   assert.deepEqual(auth.unauthorizedJson(), { error: "unauthorized" });
 });

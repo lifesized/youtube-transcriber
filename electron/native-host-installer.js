@@ -28,8 +28,9 @@ function packagedNativeHostScriptPath(resourcesPath) {
 }
 
 class NativeHostInstaller {
-  constructor() {
-    this.browsers = this._detectBrowsers();
+  constructor(options = {}) {
+    this.idsPathOverride = options.idsPath || null;
+    this.browsers = options.browsers || this._detectBrowsers();
     this.extensionIds = this._loadExtensionIds();
   }
   
@@ -44,6 +45,7 @@ class NativeHostInstaller {
    * ["abcdefghijklmnopqrstuvwxyz123456", "anotherextensionid32chars"]
    */
   _idsPath() {
+    if (this.idsPathOverride) return this.idsPathOverride;
     const home = os.homedir();
     return path.join(
       home,
@@ -54,6 +56,22 @@ class NativeHostInstaller {
     );
   }
 
+  listExtensionIds() {
+    this.extensionIds = this._loadExtensionIds();
+    return [...this.extensionIds];
+  }
+
+  _writeExtensionIds(ids) {
+    const configPath = this._idsPath();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify(ids, null, 2) + "\n", {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    this.extensionIds = ids;
+    return ids;
+  }
+
   appendExtensionId(id) {
     if (typeof id !== "string" || !/^[a-p]{32}$/.test(id)) {
       throw new Error("Invalid extension ID");
@@ -62,14 +80,32 @@ class NativeHostInstaller {
     if (!ids.includes(id)) {
       ids.push(id);
     }
-    this.extensionIds = ids;
-    const configPath = this._idsPath();
-    fs.mkdirSync(path.dirname(configPath), { recursive: true });
-    fs.writeFileSync(configPath, JSON.stringify(ids, null, 2) + "\n", {
-      encoding: "utf8",
-      mode: 0o600,
-    });
-    return ids;
+    return this._writeExtensionIds(ids);
+  }
+
+  removeExtensionId(id) {
+    const ids = this._loadExtensionIds().filter((existing) => existing !== id);
+    return this._writeExtensionIds(ids);
+  }
+
+  async rewriteManifests() {
+    const results = [];
+    const errors = [];
+    for (const browser of this.browsers) {
+      try {
+        await this._installForBrowser(browser);
+        results.push(browser.name);
+      } catch (error) {
+        console.error(`Failed to rewrite manifest for ${browser.name}:`, error);
+        errors.push(`${browser.name}: ${error.message}`);
+      }
+    }
+    return {
+      success: errors.length === 0,
+      browsers: results,
+      extensionIds: this.extensionIds,
+      error: errors.length > 0 ? errors.join("; ") : undefined,
+    };
   }
 
   _loadExtensionIds() {

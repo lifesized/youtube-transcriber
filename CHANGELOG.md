@@ -5,6 +5,7 @@
 ### Security
 - **Loopback Host pin** — Requests whose `Host` is not `127.0.0.1:<port>` or `localhost:<port>` (port from `PORT`, default 19720) return 421. The local-token cookie is minted only when `Sec-Fetch-Site` is `none` or `same-origin`.
 - **Pairing opt-in** — Tray **Connect browser extension…** opens a 2-minute window. Outside it, `/api/native-host/pair` returns 403 and no dialog is shown. Origin must match `^chrome-extension://[a-p]{32}$`. Deny is a global cooldown; main never stacks a second dialog and caps about 3 dialogs per hour.
+- **Unpair** — Tray **Paired extensions…** lists paired IDs. Removing one rewrites native-host manifests, rotates the local API token, and restarts the server.
 
 ### Changed
 - **Pinned ffmpeg 9.0.2** — CI downloads a specific Martin Riedl macOS arm64 zip (`electron/ffmpeg.lock.json`) and fails if the SHA-256 does not match. Packaged `ffmpeg -version` plus a 1-second sine encode, and `yt-dlp --version`, must exit 0. The lock records provenance: single-maintainer Martin Riedl build, re-signed ad-hoc in afterPack.

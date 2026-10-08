@@ -245,6 +245,8 @@ test("tray manager falls back to title T", () => {
   assert.ok(content.includes('setTitle("T")'));
   assert.ok(content.includes("Connect browser extension…"));
   assert.ok(content.includes("_openPairingWindow"));
+  assert.ok(content.includes("Paired extensions…"));
+  assert.ok(content.includes("_showPairedExtensions"));
 });
 
 test("installer validates extension IDs when loading extension-ids.json", () => {
