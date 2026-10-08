@@ -164,6 +164,22 @@ test("media URLs outside LinkedIn's https CDN are rejected", async () => {
   }
 });
 
+test("media URLs that aren't already in URL-parser form are rejected before yt-dlp", async () => {
+  const before = ytdlpCalls().length;
+  for (const mediaUrl of [
+    // Node reads host dms.licdn.com; yt-dlp connects to 127.0.0.1:8443.
+    "https://dms.licdn.com\\@127.0.0.1:8443/x.mp4",
+    "https://dms.licdn\u3002com/x.mp4",
+    "https://dms.\u217Cicdn.com/x.mp4",
+    " https://dms.licdn.com/x.mp4",
+    "https://dms.licdn.com/x.mp4 ",
+  ]) {
+    const { status } = await post({ url: "https://www.linkedin.com/events/7000000000000000002/", mediaUrl });
+    assert.equal(status, 400, JSON.stringify(mediaUrl));
+  }
+  assert.equal(ytdlpCalls().length, before);
+});
+
 test("an expired media URL maps to a fixed message, not yt-dlp output", async () => {
   const { status, data } = await post({
     url: "https://www.linkedin.com/events/7084656651378536448/",
