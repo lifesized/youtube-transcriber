@@ -180,12 +180,19 @@ jobs:
           fi
           echo "✓ GetFileInfo extension-hidden flag (E) is set"
 
-          ls -lO "$MOUNT" | grep -q 'hidden.*Transcriber.app' || {
-            echo "ERROR: Transcriber.app is not hidden"
-            ls -lO "$MOUNT" || true
+          test -d "$MOUNT/Transcriber.app"
+          ls -lO "$MOUNT" || true
+          if ls -lO "$MOUNT" | grep -q 'hidden.*Transcriber.app'; then
+            echo "✓ Transcriber.app is present and hidden"
+          else
+            echo "✓ Transcriber.app is present (off-canvas at y=560). UF_HIDDEN does not survive UDZO without FinderInfo, and --strict forbids FinderInfo."
+          fi
+          if xattr -p com.apple.FinderInfo "$MOUNT/Transcriber.app" >/dev/null 2>&1; then
+            echo "ERROR: mounted Transcriber.app still has FinderInfo (breaks codesign --strict and copies into /Applications)"
+            xattr -l "$MOUNT/Transcriber.app" || true
             exit 1
-          }
-          echo "✓ Transcriber.app is present and hidden"
+          fi
+          echo "✓ mounted Transcriber.app has no FinderInfo"
 
           test ! -e "$MOUNT/Applications"
           echo "✓ no Applications symlink"

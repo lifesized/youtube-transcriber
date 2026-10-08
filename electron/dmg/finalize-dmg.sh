@@ -78,12 +78,13 @@ if [ "$DATA_BEFORE" != "$DATA_AFTER" ]; then
   exit 1
 fi
 
-# --strict rejects FinderInfo on the bundle wrapper. Strip wrapper xattrs
-# first, then set UF_HIDDEN last so xattr -c cannot clear the hidden flag.
-# Never touch Contents/.
+# Hide the .app on this RW image, then strip wrapper FinderInfo.
+# codesign --verify --deep --strict rejects FinderInfo on the bundle
+# directory; chflags hidden writes that xattr. Keep UF_HIDDEN if the
+# OS leaves it after the strip. Never touch Contents/.
+chflags hidden "$MNT/$APP"
 xattr -c "$MNT/$APP" 2>/dev/null || true
 xattr -d com.apple.FinderInfo "$MNT/$APP" 2>/dev/null || true
-chflags hidden "$MNT/$APP"
 if [ -e "$MNT/Applications" ]; then rm -f "$MNT/Applications"; fi
 
 # Verify before sealing. Built-in macOS tools only — no Python xattr.
@@ -101,7 +102,16 @@ if command -v GetFileInfo >/dev/null 2>&1; then
   [ "$HAS_C" = "1" ] || { echo "finalize-dmg: custom-icon flag not set"; exit 1; }
   [ "$HAS_E" = "1" ] || { echo "finalize-dmg: extension-hidden flag not set"; exit 1; }
 fi
-ls -lO "$MNT" | grep -q "hidden.*$APP" || { echo "finalize-dmg: $APP not hidden"; exit 1; }
+if ls -lO "$MNT" | grep -q "hidden.*$APP"; then
+  echo "finalize-dmg: $APP has UF_HIDDEN"
+else
+  echo "finalize-dmg: $APP is off-canvas (UF_HIDDEN dropped with FinderInfo; --strict forbids FinderInfo)"
+fi
+if xattr -p com.apple.FinderInfo "$MNT/$APP" >/dev/null 2>&1; then
+  echo "finalize-dmg: FinderInfo still on $APP after strip"
+  xattr -l "$MNT/$APP" || true
+  exit 1
+fi
 [ -x "$MNT/$HELPER" ] || { echo "finalize-dmg: helper lost its exec bit"; exit 1; }
 [ ! -e "$MNT/Applications" ] || { echo "finalize-dmg: Applications link still present"; exit 1; }
 if command -v codesign >/dev/null 2>&1; then

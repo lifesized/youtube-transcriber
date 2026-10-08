@@ -88,9 +88,10 @@ test("finalize-dmg.sh sets the helper icon and hides the app", () => {
   const hideAt = text.indexOf('chflags hidden "$MNT/$APP"');
   const xattrAt = text.indexOf('xattr -c "$MNT/$APP"');
   assert.ok(
-    xattrAt > 0 && xattrAt < hideAt,
-    "strip wrapper xattrs before chflags hidden so UF_HIDDEN survives"
+    hideAt > 0 && xattrAt > hideAt,
+    "chflags then strip FinderInfo so codesign --strict can pass"
   );
+  assert.ok(text.includes("com.apple.FinderInfo"));
   assert.ok(text.includes("-format UDZO"));
   assert.doesNotMatch(text, /os\.getxattr/);
   assert.doesNotMatch(text, /codesign --(?:force|sign)/);
@@ -166,6 +167,7 @@ test("CI mounts the DMG and checks for the helper", () => {
   assert.match(workflow, /GetFileInfo -ae/);
   assert.match(workflow, /assert-helper-icon\.py/);
   assert.match(workflow, /hidden.*Transcriber\.app/);
+  assert.match(workflow, /com\.apple\.FinderInfo/);
   assert.match(workflow, /test ! -e "\$MOUNT\/Applications"/);
   assert.match(workflow, /codesign --verify --deep --strict "\$MOUNT\/Transcriber\.app"/);
   assert.match(workflow, /screenshot-dmg-window\.py/);
