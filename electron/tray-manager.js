@@ -26,6 +26,7 @@ const { importLibrary, inspectSourceDatabase } = require("../lib/import-library.
 const { resolveMigrationsDir } = require("../lib/apply-migrations.js");
 const { findPortHolder } = require("./utils.js");
 const config = require("./config.js");
+const appLog = require("./app-log.js");
 const productDefaults = require("./product-defaults.js");
 const trayCopy = require("./tray-copy.js");
 const { buildTrayMenuTemplate, transcriberUrl, libraryUrl } = require("./tray-menu.js");
@@ -126,18 +127,7 @@ class TrayManager {
   // Private methods
 
   _logError(message) {
-    const text = String(message || "Unknown error");
-    console.error("Transcriber error:", text);
-    try {
-      const logDir = app.getPath("logs");
-      fs.mkdirSync(logDir, { recursive: true });
-      fs.appendFileSync(
-        path.join(logDir, "main.log"),
-        `[${new Date().toISOString()}] ${text}\n`
-      );
-    } catch (error) {
-      console.error("Could not write app log:", error.message);
-    }
+    appLog.error("Transcriber error:", String(message || "Unknown error"));
   }
 
   _loadTrayImage(filename) {

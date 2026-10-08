@@ -15,6 +15,9 @@ const FILE_NAME = "main.log";
 const FILE_MODE = 0o600;
 const MAX_BYTES = 5 * 1024 * 1024;
 
+// The console before install() teed it, so error() prints each line once.
+let plainConsole = console;
+
 function resolveLogDir() {
   return config.resolveAppLogDir();
 }
@@ -73,6 +76,7 @@ function install(consoleObj = console) {
     warn: consoleObj.warn.bind(consoleObj),
     error: consoleObj.error.bind(consoleObj),
   };
+  plainConsole = orig;
   consoleObj.log = (...args) => {
     writeLine("info", args);
     orig.log(...args);
@@ -89,6 +93,12 @@ function install(consoleObj = console) {
   return resolveLogFile();
 }
 
+/** One main.log line and one console line, whether or not install() ran. */
+function error(...args) {
+  writeLine("error", args);
+  plainConsole.error(...args);
+}
+
 module.exports = {
   FILE_NAME,
   MAX_BYTES,
@@ -97,4 +107,5 @@ module.exports = {
   ensureLogDir,
   writeLine,
   install,
+  error,
 };
