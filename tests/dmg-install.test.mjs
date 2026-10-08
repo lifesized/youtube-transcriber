@@ -185,6 +185,27 @@ test("CI mounts the DMG and checks for the helper", () => {
   assert.match(assertPy, /\.\.namedfork\/rsrc/);
 });
 
+test("CI reads the fuses and CDHash of the app inside the mounted DMG", () => {
+  const workflow = fs.readFileSync(
+    path.join(projectRoot, ".github", "workflows", "electron-build-macos.yml"),
+    "utf8"
+  );
+  const step = workflow.slice(
+    workflow.indexOf("- name: Assert DMG contains Install Transcriber.command"),
+    workflow.indexOf("- name: Upload DMG window screenshot")
+  );
+  const detachAt = step.indexOf('hdiutil detach "$MOUNT"');
+  const fusesAt = step.indexOf('@electron/fuses read --app "$MOUNT/Transcriber.app"');
+  assert.ok(fusesAt > 0 && fusesAt < detachAt, "fuses are read from the mounted app");
+  for (const fuse of ["EnableNodeOptionsEnvironmentVariable", "EnableNodeCliInspectArguments"]) {
+    assert.ok(step.includes(fuse), fuse);
+  }
+  const cdhashAt = step.indexOf('cdhash "$MOUNT/Transcriber.app"');
+  assert.ok(cdhashAt > 0 && cdhashAt < detachAt, "CDHash is read from the mounted app");
+  assert.match(step, /cdhash dist-electron\/mac-arm64\/Transcriber\.app/);
+  assert.match(step, /"\$MOUNTED_CDHASH" != "\$BUILT_CDHASH"/);
+});
+
 test("helper copies the app, clears quarantine, and does not sudo on success", () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dmg-install-"));
   const volume = path.join(tmp, "Transcriber");
