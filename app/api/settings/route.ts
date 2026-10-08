@@ -55,25 +55,25 @@ export async function PUT(request: Request) {
     }
 
     await Promise.all(
-      entries.map(([key, value]) => {
-        let stored = value;
+      entries.map(async ([key, value]) => {
         if (key === "groq_api_key") {
-          return prisma.setting.findUnique({ where: { key } }).then((row) => {
-            const currentMasked = row ? maskApiKeyForResponse(row.value) : "";
-            if (isMaskedPlaceholder(value, currentMasked)) {
-              return Promise.resolve();
-            }
-            return prisma.setting.upsert({
-              where: { key },
-              update: { value: encryptApiKeyForStorage(value) },
-              create: { key, value: encryptApiKeyForStorage(value) },
-            });
+          const row = await prisma.setting.findUnique({ where: { key } });
+          const currentMasked = row ? maskApiKeyForResponse(row.value) : "";
+          if (isMaskedPlaceholder(value, currentMasked)) {
+            return;
+          }
+          const stored = encryptApiKeyForStorage(value);
+          await prisma.setting.upsert({
+            where: { key },
+            update: { value: stored },
+            create: { key, value: stored },
           });
+          return;
         }
-        return prisma.setting.upsert({
+        await prisma.setting.upsert({
           where: { key },
-          update: { value: stored },
-          create: { key, value: stored },
+          update: { value },
+          create: { key, value },
         });
       })
     );

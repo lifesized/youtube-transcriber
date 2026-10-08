@@ -10,3 +10,10 @@ export function getSecretsFromMainOrEnv(): Promise<{
   notionToken: string;
   notionDatabaseId: string;
 }>;
+
+export function secretsFromEnv(): {
+  llmProvider: string;
+  llmApiKey: string;
+  notionToken: string;
+  notionDatabaseId: string;
+};
