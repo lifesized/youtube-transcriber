@@ -65,8 +65,8 @@ function createRateLimiter(options = {}) {
     },
     allowAll({ channel, userId } = {}) {
       const now = Date.now();
-      if (!allowBucket(hits, "g:*", now, windowMs, maxGlobal)) return false;
       if (!allowBucket(hits, `u:${userId || "unknown"}`, now, windowMs, maxPerUser)) return false;
+      if (!allowBucket(hits, "g:*", now, windowMs, maxGlobal)) return false;
       if (!allowBucket(hits, `c:${channel || ""}`, now, windowMs, maxPerChannel)) return false;
       return true;
     },

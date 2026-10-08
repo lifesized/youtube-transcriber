@@ -214,6 +214,18 @@ test("rate-limits a channel after the window fills", () => {
   );
 });
 
+test("a rate-limited user does not drain the global budget", () => {
+  const limiter = gates.createRateLimiter({
+    maxPerChannel: 20,
+    maxPerUser: 1,
+    maxGlobal: 2,
+    windowMs: 60_000,
+  });
+  assert.equal(limiter.allowAll({ channel: "C01234567", userId: "Ujames" }), true);
+  assert.equal(limiter.allowAll({ channel: "C01234567", userId: "Ujames" }), false);
+  assert.equal(limiter.allowAll({ channel: "C99999999", userId: "Uother" }), true);
+});
+
 test("rate-limits per user and globally, including slash commands", () => {
   const perUser = helpers({ maxPerChannel: 20, maxPerUser: 1, maxGlobal: 20 });
   const state = { teamId: "THOME", channelAllowlist: ["C01234567", "C99999999"] };
