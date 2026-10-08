@@ -8,15 +8,12 @@
 
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const require = createRequire(import.meta.url);
-const Database = require("better-sqlite3");
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ytt-linkedin-"));
@@ -90,19 +87,6 @@ before(async () => {
     env: process.env,
     stdio: "pipe",
   });
-  // Settings tables come from `prisma db push` in scripts/setup.sh, not from
-  // migrations; create them the way a dev DB has them.
-  const db = new Database(process.env.DATABASE_URL.replace(/^file:/, ""));
-  db.exec(`
-    CREATE TABLE "Setting" ("key" TEXT NOT NULL PRIMARY KEY, "value" TEXT NOT NULL, "updatedAt" DATETIME NOT NULL);
-    CREATE TABLE "ProviderConfig" (
-      "id" TEXT NOT NULL PRIMARY KEY, "provider" TEXT NOT NULL, "apiKey" TEXT NOT NULL,
-      "model" TEXT, "baseUrl" TEXT, "enabled" BOOLEAN NOT NULL DEFAULT true,
-      "priority" INTEGER NOT NULL DEFAULT 0,
-      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" DATETIME NOT NULL
-    );
-  `);
-  db.close();
   ({ POST, GET } = await import("../app/api/transcripts/route.ts"));
 });
 
