@@ -140,14 +140,6 @@ app.whenReady().then(async () => {
     nativeHostInstaller,
     pairingBridge,
   });
-  if (pendingReveal) {
-    pendingReveal = false;
-    trayManager.revealInMenuBar("second-instance-queued");
-  } else {
-    // Notch overflow clips new status items. Always surface a
-    // notification + menu on first launch so the app is not silent.
-    trayManager.revealInMenuBar("first-launch");
-  }
 
   if (process.platform === "darwin") {
     const translocated = checkIfTranslocated(app.getAppPath());
@@ -183,6 +175,15 @@ app.whenReady().then(async () => {
     } else {
       trayManager.showError(error && error.message);
     }
+  }
+
+  // After the server is up: Notification + deferred menu pop so a
+  // notch-clipped icon still has visible feedback. Never block ready.
+  if (pendingReveal) {
+    pendingReveal = false;
+    trayManager.revealInMenuBar("second-instance-queued");
+  } else {
+    trayManager.revealInMenuBar("first-launch");
   }
   
   // Monitor server health

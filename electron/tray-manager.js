@@ -260,14 +260,20 @@ class TrayManager {
 
   revealInMenuBar(reason = "second-instance") {
     this.ensureTray(reason);
-    try {
-      if (this.tray && typeof this.tray.popUpContextMenu === "function") {
-        this.tray.popUpContextMenu();
+    // Notification only — a modal dialog would block the main process and
+    // deadlock requestSingleInstanceLock (CI has no one to dismiss it).
+    this._notify("Transcriber", trayCopy.RUNNING_IN_MENU_BAR, { modalFallback: false });
+    // popUpContextMenu is synchronous on macOS until dismissed. Defer so
+    // second-instance and server startup can finish.
+    setImmediate(() => {
+      try {
+        if (this.tray && typeof this.tray.popUpContextMenu === "function") {
+          this.tray.popUpContextMenu();
+        }
+      } catch (error) {
+        console.warn("popUpContextMenu failed:", error && error.message);
       }
-    } catch (error) {
-      console.warn("popUpContextMenu failed:", error && error.message);
-    }
-    this._notify("Transcriber", trayCopy.RUNNING_IN_MENU_BAR);
+    });
   }
 
   _startHealthWatch() {
@@ -637,9 +643,10 @@ class TrayManager {
     }
   }
 
-  _notify(title, body) {
+  _notify(title, body, options = {}) {
     // displayBalloon is Windows-only. Prefer a native Notification on macOS;
-    // fall back to a modal if notifications are unsupported.
+    // fall back to a modal if notifications are unsupported — unless the
+    // caller is a reveal, which must never block the main process.
     if (typeof Notification === "function" && Notification.isSupported()) {
       try {
         new Notification({ title, body }).show();
@@ -650,6 +657,10 @@ class TrayManager {
     }
     if (process.platform === "win32" && this.tray) {
       this.tray.displayBalloon({ title, content: body });
+      return;
+    }
+    if (options.modalFallback === false) {
+      console.log(`notify (no modal): ${title}: ${body}`);
       return;
     }
     dialog
