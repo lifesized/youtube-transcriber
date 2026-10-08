@@ -4,7 +4,7 @@
 
 ## Overview
 
-This is the local build of Transcriber for YouTube. It sends the URL of the page you choose to the Transcriber app running on your computer (`http://127.0.0.1:19720`). Transcription and library storage happen in that app, not in the extension.
+This is the local build of Transcriber for YouTube. It sends the URL of the page you choose to the Transcriber app running on your computer (`http://127.0.0.1:19721` for the packaged menu-bar app, or `http://127.0.0.1:19720` for a checkout). Transcription and library storage happen in that app, not in the extension.
 
 The extension does not collect analytics, does not track your browsing, and does not sell or share data with advertisers.
 
@@ -16,7 +16,7 @@ When you click **Send this page**, the extension sends that page URL to your loc
 - The token is not written to `chrome.storage`, not put in a query string, and not shown in the panel.
 - The extension does not ask for or store provider API keys.
 
-**YouTube caption extraction (optional):** If you transcribe a YouTube video with captions, the extension may read those captions directly from YouTube's native transcript panel DOM and send the extracted segments to the local API (`127.0.0.1:19720`) instead of downloading audio. Content script is read-only — no cookies, no credentials, no external fetch.
+**YouTube caption extraction (optional):** If you transcribe a YouTube video with captions, the extension may read those captions directly from YouTube's native transcript panel DOM and send the extracted segments to the local API (`127.0.0.1:19721` packaged, or `127.0.0.1:19720` checkout) instead of downloading audio. Content script is read-only — no cookies, no credentials, no external fetch.
 
 **LinkedIn posts and events:** When you press **Transcribe** on a LinkedIn post or a past LinkedIn Event, the extension finds that video's LinkedIn CDN (`licdn.com`) address in your open tab and sends the page URL, that address, and the post's title and author to your local Transcriber. Your local app then downloads the video from LinkedIn's CDN. The LinkedIn content script remembers up to 50 LinkedIn video addresses the tab has loaded, in that tab's memory only, and forgets them when you navigate. It doesn't read cookies or credentials, makes no network requests, and stores nothing. For a LinkedIn post you paste or queue without its tab open, the extension sends only the post URL, and your local Transcriber app fetches the public post page itself.
 
@@ -27,6 +27,8 @@ If you add YouTube channel or playlist IDs to the Tusk watchlist in Settings, th
 **Summarize (optional):** If you pick Claude or ChatGPT, the extension may open that site and place a prepared prompt (summarize instruction plus the full transcript) into the composer (content script on those hosts only, only during a handoff). Without your Summarize action, that script does nothing. Prompt text stays on your machine / in that provider tab — the extension does not upload it elsewhere.
 
 No data is sent to a remote Transcriber host. The extension does not contact `transcribed.dev`.
+
+**Packaged app updates (Developer ID builds only):** A notarized, Developer ID–signed Transcriber.app may check GitHub Releases for `lifesized/youtube-transcriber` (one HTTPS request for `latest-mac.yml` / release metadata; a download only after an update is offered). Ad-hoc, unsigned, and `electron:dev` builds never initialize the updater and make no GitHub calls. The extension itself never checks for app updates.
 
 ## Data stored in the browser
 

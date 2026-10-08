@@ -37,7 +37,7 @@ LOCAL build. Paste these into the Chrome Web Store developer console.
 ## Optional host permissions
 
 ### `https://www.youtube.com/*` and `https://m.youtube.com/*`
-> Optional. Requested only when you transcribe a YouTube video. Content script reads YouTube's native transcript panel DOM (if captions exist) to extract segments locally instead of downloading audio. Segments are sent to the local API (`127.0.0.1:19720`) only. Read-only — no cookies, no credentials, no external fetch from content script.
+> Optional. Requested only when you transcribe a YouTube video. Content script reads YouTube's native transcript panel DOM (if captions exist) to extract segments locally instead of downloading audio. Segments are sent to the local API (`127.0.0.1:19721` packaged, or `127.0.0.1:19720` checkout) only. Read-only — no cookies, no credentials, no external fetch from content script.
 
 ### `https://claude.ai/*` and `https://chatgpt.com/*`
 > Optional. Requested only when you use **Summarize** with Claude or ChatGPT. Opens that site and places the summarize instruction **plus the full transcript** into the chat composer so you don't paste by hand. Does not read your Claude/ChatGPT history, does not store those accounts' credentials, and does not send transcript text to any server other than the provider page you already use.
