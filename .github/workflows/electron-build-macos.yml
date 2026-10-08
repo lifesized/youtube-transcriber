@@ -1243,19 +1243,8 @@ jobs:
           path: dist-electron/build-info.txt
           retention-days: 30
 
-      # Non-PR only. The sign job (environment: release) downloads these.
-      # PR runs never upload them, never see Apple secrets, never sign.
-      - name: Package signing helpers
-        if: github.event_name != 'pull_request'
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/signing-helpers/node_modules
-          cp -R node_modules/@electron/fuses /tmp/signing-helpers/node_modules/@electron/fuses
-          if [ -d node_modules/app-builder-bin ]; then
-            cp -R node_modules/app-builder-bin /tmp/signing-helpers/node_modules/app-builder-bin
-          fi
-          tar -C /tmp/signing-helpers -czf /tmp/signing-helpers.tgz node_modules
-
+      # Non-PR only. The sign job downloads the unsigned .app bytes.
+      # It never executes anything from this artifact.
       - name: Stage unsigned app for signing
         if: github.event_name != 'pull_request'
         run: |
@@ -1273,15 +1262,6 @@ jobs:
           path: /tmp/unsigned-app-artifact
           if-no-files-found: error
           compression-level: 0
-          retention-days: 5
-
-      - name: Upload signing helpers artifact
-        if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
-        with:
-          name: signing-helpers
-          path: /tmp/signing-helpers.tgz
-          if-no-files-found: error
           retention-days: 5
 
   sign:
@@ -1323,19 +1303,6 @@ jobs:
           fi
           test -d dist-electron/mac-arm64/Transcriber.app/Contents
 
-      - name: Download signing helpers
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: signing-helpers
-          path: /tmp
-
-      - name: Extract signing helpers
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/signing-helpers"
-          tar -C "$RUNNER_TEMP/signing-helpers" -xzf /tmp/signing-helpers.tgz
-          test -f "$RUNNER_TEMP/signing-helpers/node_modules/@electron/fuses/dist/bin.js"
-
       - name: Import Developer ID into a temporary keychain
         env:
           MACOS_CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
@@ -1349,9 +1316,7 @@ jobs:
         run: bash scripts/macos-codesign-app.sh
 
       - name: Read fuses on the signed app
-        env:
-          FUSES_MODULE: ${{ runner.temp }}/signing-helpers/node_modules/@electron/fuses
-        run: node scripts/assert-signed-fuses.js dist-electron/signed/Transcriber.app
+        run: node scripts/read-electron-fuses.js --assert dist-electron/signed/Transcriber.app
 
       - name: Notarize and staple the app
         env:
@@ -1384,8 +1349,6 @@ jobs:
           echo "notarized=true" >> "$GITHUB_OUTPUT"
 
       - name: Read fuses on the app inside the signed DMG
-        env:
-          FUSES_MODULE: ${{ runner.temp }}/signing-helpers/node_modules/@electron/fuses
         run: |
           set -euo pipefail
           DMG=dist-electron/signed/Transcriber-signed.dmg
@@ -1394,17 +1357,11 @@ jobs:
           MOUNT=$(printf '%s\n' "$ATTACH" | awk '/\/Volumes\// { print $NF; exit }')
           test -n "$MOUNT"
           test -d "$MOUNT/Transcriber.app"
-          node scripts/assert-signed-fuses.js "$MOUNT/Transcriber.app"
+          node scripts/read-electron-fuses.js --assert "$MOUNT/Transcriber.app"
           hdiutil detach "$MOUNT"
 
       - name: Write updater artifacts
-        run: |
-          set -euo pipefail
-          if [ -d "$RUNNER_TEMP/signing-helpers/node_modules/app-builder-bin" ]; then
-            mkdir -p node_modules
-            cp -R "$RUNNER_TEMP/signing-helpers/node_modules/app-builder-bin" node_modules/app-builder-bin
-          fi
-          bash scripts/macos-update-artifacts.sh
+        run: bash scripts/macos-update-artifacts.sh
 
       - name: Screenshot signed DMG window
         run: |

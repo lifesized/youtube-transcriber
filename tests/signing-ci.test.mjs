@@ -2,7 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+
+const require = createRequire(import.meta.url);
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workflowPath = path.join(root, ".github", "workflows", "electron-build-macos.yml");
@@ -94,7 +97,10 @@ test("signing and notarization are gated on the exact secret names", () => {
   assert.match(workflow, /macos-notarize\.sh dmg/);
   assert.match(workflow, /build-signed-dmg\.sh/);
   assert.match(workflow, /macos-update-artifacts\.sh/);
-  assert.match(workflow, /assert-signed-fuses\.js/);
+  assert.match(workflow, /read-electron-fuses\.js/);
+  assert.doesNotMatch(sign, /@electron\/fuses/);
+  assert.doesNotMatch(sign, /app-builder-bin/);
+  assert.doesNotMatch(sign, /signing-helpers/);
   assert.match(sign, /Read fuses on the signed app/);
   assert.match(sign, /Read fuses on the app inside the signed DMG/);
   assert.match(workflow, /run-actionlint\.sh/);
@@ -205,10 +211,28 @@ test("main wires the updater gate and stops Next before quitAndInstall", () => {
   const afterPack = fs.readFileSync(path.join(root, "electron", "after-pack.js"), "utf8");
   assert.ok(afterPack.includes("copyUpdaterModules"));
   assert.ok(afterPack.includes("electron-updater"));
-  const fuses = fs.readFileSync(path.join(root, "scripts", "assert-signed-fuses.js"), "utf8");
-  assert.match(fuses, /RunAsNode/);
-  assert.match(fuses, /EnableNodeOptionsEnvironmentVariable/);
-  assert.match(fuses, /EnableNodeCliInspectArguments/);
+  const fuses = fs.readFileSync(path.join(root, "scripts", "read-electron-fuses.js"), "utf8");
+  assert.match(fuses, /dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX/);
+  assert.doesNotMatch(fuses, /@electron\/fuses/);
+});
+
+test("dependency-free fuse reader parses the sentinel wire", () => {
+  const {
+    SENTINEL,
+    ENABLE,
+    DISABLE,
+    findSentinel,
+    parseFuseWire,
+  } = require(path.join(root, "scripts", "read-electron-fuses.js"));
+  const wire = Buffer.from([1, 9, ENABLE, ENABLE, DISABLE, DISABLE, ENABLE, ENABLE, DISABLE, ENABLE, DISABLE]);
+  const buf = Buffer.concat([Buffer.from("xxxx"), SENTINEL, wire]);
+  const at = findSentinel(buf);
+  const parsed = parseFuseWire(buf, at);
+  assert.equal(parsed.version, 1);
+  assert.equal(parsed.length, 9);
+  assert.equal(parsed.bytes[0], ENABLE);
+  assert.equal(parsed.bytes[2], DISABLE);
+  assert.equal(parsed.bytes[3], DISABLE);
 });
 
 test("docs list every secret and the GitHub update call", () => {

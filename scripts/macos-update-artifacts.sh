@@ -25,17 +25,8 @@ echo "update-artifacts: zip $ZIP_NAME"
 rm -f "$ZIP"
 ditto -c -k --keepParent "$APP" "$ZIP"
 
+# No app-builder-bin. The zip is a full download; hdiutil/codesign handle the DMG.
 BLOCKMAP=""
-APP_BUILDER=""
-if [ -x "$ROOT/node_modules/app-builder-bin/mac/app-builder" ]; then
-  APP_BUILDER="$ROOT/node_modules/app-builder-bin/mac/app-builder"
-elif [ -x "$ROOT/node_modules/app-builder-bin/linux/x64/app-builder" ]; then
-  APP_BUILDER="$ROOT/node_modules/app-builder-bin/linux/x64/app-builder"
-fi
-if [ -n "$APP_BUILDER" ]; then
-  "$APP_BUILDER" blockmap --input "$ZIP" --output "$ZIP.blockmap"
-  BLOCKMAP="$ZIP.blockmap"
-fi
 
 ZIP="$ZIP" YML="$YML" BETA_YML="$BETA_YML" VERSION="$VERSION" ZIP_NAME="$ZIP_NAME" node --input-type=module <<'NODE'
 import fs from "node:fs";
