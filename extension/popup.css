@@ -709,10 +709,13 @@ body::-webkit-scrollbar-thumb:hover {
 .connect-segment:has(input:focus-visible) {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
+/* A long status wraps under the name in a narrow panel instead of overlapping it. */
 .connect-segment-line {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  column-gap: 10px;
+  row-gap: 2px;
   cursor: pointer;
   user-select: none;
 }
@@ -743,8 +746,7 @@ body::-webkit-scrollbar-thumb:hover {
   background: var(--accent);
 }
 .connect-segment-row {
-  flex: 1;
-  min-width: 0;
+  flex: 1 0 auto;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -759,6 +761,7 @@ body::-webkit-scrollbar-thumb:hover {
   font-weight: 600;
 }
 .connect-segment-status {
+  margin-left: auto;
   font-size: 11px;
   color: var(--muted-3);
   white-space: nowrap;
@@ -834,7 +837,7 @@ body::-webkit-scrollbar-thumb:hover {
   font-size: 11px;
   line-height: 1.35;
   color: var(--muted);
-  overflow-wrap: anywhere;
+  word-break: break-all;
   user-select: all;
 }
 .connect-copy {
