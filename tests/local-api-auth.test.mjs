@@ -20,7 +20,7 @@ test("tokensEqual is timing-safe and rejects mismatches", () => {
   assert.equal(tokenMod.tokensEqual("deadbeef", "deadbeee"), false);
 });
 
-test("isAuthorizedRequest accepts Bearer and cookie", () => {
+test("isAuthorizedRequest accepts Bearer, and the port's cookie only same-origin or none", () => {
   const expected = "a".repeat(64);
   assert.equal(
     auth.isAuthorizedRequest({ authorization: `Bearer ${expected}` }, expected),
@@ -31,13 +31,51 @@ test("isAuthorizedRequest accepts Bearer and cookie", () => {
     false
   );
   assert.equal(auth.isAuthorizedRequest({}, expected), false);
+
+  assert.equal(auth.cookieName(19720), "transcriber_local_token_19720");
+  assert.equal(auth.cookieName(19721), "transcriber_local_token_19721");
+  const cookie = `${auth.cookieName(19721)}=${expected}; other=1`;
+  const call = (secFetchSite, port = 19721) =>
+    auth.isAuthorizedRequest({ cookie, secFetchSite }, expected, auth.tokensEqual, port);
+  assert.equal(call("same-origin"), true);
+  assert.equal(call("none"), true);
+  assert.equal(call("same-site"), false);
+  assert.equal(call("cross-site"), false);
+  assert.equal(call(null), false);
+  assert.equal(call("same-origin", 19720), false, "19721's cookie on 19720");
   assert.equal(
     auth.isAuthorizedRequest(
-      { cookie: `${auth.COOKIE_NAME}=${expected}; other=1` },
+      { cookie: `transcriber_local_token=${expected}`, secFetchSite: "same-origin" },
+      expected,
+      auth.tokensEqual,
+      19721
+    ),
+    false,
+    "the old unsuffixed cookie"
+  );
+  assert.equal(
+    auth.isAuthorizedRequest(
+      { authorization: `Bearer ${expected}`, secFetchSite: "cross-site" },
       expected
     ),
-    true
+    true,
+    "Bearer ignores Sec-Fetch-Site"
   );
+});
+
+test("cookieName follows the server's own PORT", () => {
+  const prev = process.env.PORT;
+  try {
+    delete process.env.PORT;
+    assert.equal(auth.cookieName(), "transcriber_local_token_19720");
+    process.env.PORT = "19721";
+    assert.equal(auth.cookieName(), "transcriber_local_token_19721");
+    assert.equal(auth.parseCookieToken("transcriber_local_token_19720=x"), null);
+    assert.equal(auth.parseCookieToken("transcriber_local_token_19721=y"), "y");
+  } finally {
+    if (prev === undefined) delete process.env.PORT;
+    else process.env.PORT = prev;
+  }
 });
 
 test("ensureLocalApiToken respects env and writes 0600 file", () => {
@@ -176,60 +214,19 @@ test("rebinding Host is rejected with 421 on pages and /api/*", () => {
   }
 });
 
-test("token cookie is minted only for none/same-origin navigations", () => {
-  assert.equal(auth.shouldMintTokenCookie("none"), true);
-  assert.equal(auth.shouldMintTokenCookie("same-origin"), true);
-  assert.equal(auth.shouldMintTokenCookie("cross-site"), false);
-  assert.equal(auth.shouldMintTokenCookie("same-site"), false);
-  assert.equal(auth.shouldMintTokenCookie(null), false);
-  assert.equal(auth.shouldMintTokenCookie(""), false);
-
-  const expected = "d".repeat(64);
-  function wouldSetCookie({ host, pathname, secFetchSite, hasCookie }) {
-    if (!auth.isAllowedLoopbackHost(host)) return { status: 421, setCookie: false };
-    if (pathname.startsWith("/api/")) return { status: 200, setCookie: false };
-    if (!auth.shouldMintTokenCookie(secFetchSite)) {
-      return { status: 200, setCookie: false };
-    }
-    return { status: 200, setCookie: !hasCookie };
-  }
-
-  assert.deepEqual(
-    wouldSetCookie({
-      host: "127.0.0.1:19720",
-      pathname: "/",
-      secFetchSite: "none",
-      hasCookie: false,
-    }),
-    { status: 200, setCookie: true }
-  );
-  assert.deepEqual(
-    wouldSetCookie({
-      host: "localhost:19720",
-      pathname: "/",
-      secFetchSite: "same-origin",
-      hasCookie: false,
-    }),
-    { status: 200, setCookie: true }
-  );
-  assert.deepEqual(
-    wouldSetCookie({
-      host: "127.0.0.1:19720",
-      pathname: "/",
-      secFetchSite: "cross-site",
-      hasCookie: false,
-    }),
-    { status: 200, setCookie: false }
-  );
-  assert.deepEqual(
-    wouldSetCookie({
-      host: "evil.example:19720",
-      pathname: "/",
-      secFetchSite: "none",
-      hasCookie: false,
-    }),
-    { status: 421, setCookie: false }
-  );
+test("token cookie is minted for same-origin loads and top-level document navigations", () => {
+  const mint = (site, mode, dest) => auth.shouldMintTokenCookie({ site, mode, dest });
+  assert.equal(mint("none", "navigate", "document"), true);
+  assert.equal(mint("same-origin", "navigate", "document"), true);
+  assert.equal(mint("same-origin", "cors", "empty"), true);
+  assert.equal(mint("cross-site", "navigate", "document"), true);
+  assert.equal(mint("same-site", "navigate", "document"), true);
+  assert.equal(mint("cross-site", "navigate", "iframe"), false);
+  assert.equal(mint("cross-site", "cors", "empty"), false);
+  assert.equal(mint("cross-site", "no-cors", "image"), false);
+  assert.equal(mint("same-site", "cors", "empty"), false);
+  assert.equal(mint(null, null, null), false);
+  assert.equal(mint("", "", ""), false);
 });
 
 test("middleware decision: missing token → 401; good Bearer → allow", () => {

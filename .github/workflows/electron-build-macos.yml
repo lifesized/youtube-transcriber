@@ -51,6 +51,9 @@ jobs:
 
       - name: Home page library gate tests
         run: npm run test:library-gate
+
+      - name: Local API cookie auth (middleware) tests
+        run: npm run test:middleware
       
       - name: Build Next.js
         run: npm run build
