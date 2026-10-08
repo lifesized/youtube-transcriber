@@ -474,6 +474,17 @@ jobs:
                 exit 1
               fi
               echo "✓ a cross-site fetch of a page gets no cookie"
+              echo "----- pages forbid framing -----"
+              for page in "/" "/?layout=list&id=ci" "/settings" "/does-not-exist"; do
+                curl -sS -o /dev/null -D /tmp/packaged-frame.txt "http://127.0.0.1:${PORT}${page}" || true
+                if ! grep -i '^content-security-policy:' /tmp/packaged-frame.txt | grep -q "frame-ancestors 'none'" \
+                  || ! grep -qiE '^x-frame-options: *DENY' /tmp/packaged-frame.txt; then
+                  echo "ERROR: ${page} must send CSP frame-ancestors 'none' and X-Frame-Options: DENY"
+                  redact /tmp/packaged-frame.txt || true
+                  exit 1
+                fi
+                echo "✓ ${page} sends frame-ancestors 'none' and X-Frame-Options: DENY"
+              done
               echo "----- ps comm vs args for Transcriber -----"
               COMM_LINE=$(ps -axo pid=,comm= | awk -v pid="$APP_PID" '$1==pid { sub(/^[ \t]*[0-9]+[ \t]+/, ""); print }')
               ARGS_LINE=$(ps -axo pid=,args= | awk -v pid="$APP_PID" '$1==pid { sub(/^[ \t]*[0-9]+[ \t]+/, ""); print }')
