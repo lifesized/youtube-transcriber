@@ -189,6 +189,7 @@ const el = {
   cloudLink: null,
   settingsPanel: document.getElementById("settingsPanel"),
   connectTargetSection: document.getElementById("connectTargetSection"),
+  connectTargetSection: document.getElementById("connectTargetSection"),
   connectToLabel: document.getElementById("connectToLabel"),
   connectTargetApp: document.getElementById("connectTargetApp"),
   connectTargetDev: document.getElementById("connectTargetDev"),
@@ -201,7 +202,6 @@ const el = {
   targetPickerTrigger: document.getElementById("targetPickerTrigger"),
   targetPickerDot: document.getElementById("targetPickerDot"),
   targetPickerName: document.getElementById("targetPickerName"),
-  targetPickerMenu: document.getElementById("targetPickerMenu"),
   connectHelper: document.getElementById("connectHelper"),
   connectError: document.getElementById("connectError"),
   connectRetry: document.getElementById("connectRetry"),
@@ -1722,35 +1722,6 @@ function targetStatusFor(id) {
   return targetStatuses[id]?.status || "unknown";
 }
 
-function renderTargetMenu(currentId) {
-  const T = connectTargetApi();
-  const menu = el.targetPickerMenu;
-  if (!T || !menu) return;
-  menu.replaceChildren();
-  for (const id of [T.APP, T.DEV]) {
-    const option = document.createElement("button");
-    option.type = "button";
-    option.className = "target-picker-option";
-    option.setAttribute("role", "menuitemradio");
-    option.setAttribute("aria-checked", String(id === currentId));
-    const dot = document.createElement("span");
-    dot.className = "target-dot";
-    dot.dataset.status = targetStatusFor(id);
-    const name = document.createElement("span");
-    name.className = "target-picker-option-name";
-    name.textContent = T.optionLabel(id);
-    const status = document.createElement("span");
-    status.className = "target-picker-option-status";
-    status.textContent = T.statusLabel(targetStatusFor(id));
-    option.append(dot, name, status);
-    option.addEventListener("click", () => {
-      closeTargetMenu();
-      setConnectTarget(id);
-    });
-    menu.appendChild(option);
-  }
-}
-
 async function paintTargetStatuses() {
   const T = connectTargetApi();
   if (!T) return;
@@ -1766,14 +1737,13 @@ async function paintTargetStatuses() {
   }
   const trigger = el.targetPickerTrigger;
   if (!trigger) return;
-  const label = `${T.optionLabel(current.id)} · ${T.statusLabel(targetStatusFor(current.id))}`;
-  el.targetPickerName.textContent = T.optionLabel(current.id);
+  const title = T.indicatorTitle(current.id, targetStatusFor(current.id));
+  el.targetPickerName.textContent = T.indicatorText(current.id);
   el.targetPickerDot.dataset.status = targetStatusFor(current.id);
-  trigger.setAttribute("aria-label", `${T.STRINGS.pickerAriaLabel}: ${label}`);
-  trigger.title = label;
+  trigger.setAttribute("aria-label", title);
+  trigger.title = title;
   trigger.setAttribute("data-ready", "");
   trigger.setAttribute("aria-busy", String(startingTargetId === current.id));
-  if (!el.targetPickerMenu.hidden) renderTargetMenu(current.id);
 }
 
 async function refreshTargetStatuses() {
@@ -1793,35 +1763,14 @@ function startTargetStatusPolling() {
   }, 5000);
 }
 
-async function openTargetMenu() {
-  const current = await currentConnectTarget();
-  renderTargetMenu(current.id);
-  el.targetPickerMenu.hidden = false;
-  el.targetPickerTrigger.setAttribute("aria-expanded", "true");
-  el.targetPickerMenu.querySelector('[aria-checked="true"]')?.focus();
-}
-
-function closeTargetMenu() {
-  if (!el.targetPickerMenu || el.targetPickerMenu.hidden) return;
-  el.targetPickerMenu.hidden = true;
-  el.targetPickerTrigger.setAttribute("aria-expanded", "false");
+async function openLibrarySettings() {
+  if (!isSettingsOpen()) await showSettingsView();
+  el.connectTargetSection?.scrollIntoView({ block: "nearest" });
+  (el.connectTargetApp?.checked ? el.connectTargetApp : el.connectTargetDev)?.focus();
 }
 
 if (el.targetPickerTrigger) {
-  el.targetPickerTrigger.addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (el.targetPickerMenu.hidden) openTargetMenu();
-    else closeTargetMenu();
-  });
-  document.addEventListener("click", (e) => {
-    if (!el.targetPickerMenu.contains(e.target)) closeTargetMenu();
-  });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !el.targetPickerMenu.hidden) {
-      closeTargetMenu();
-      el.targetPickerTrigger.focus();
-    }
-  });
+  el.targetPickerTrigger.addEventListener("click", openLibrarySettings);
 }
 
 function hideConnectTargetError() {

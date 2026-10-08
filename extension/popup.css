@@ -793,15 +793,12 @@ body::-webkit-scrollbar-thumb:hover {
   animation: pulse 2s ease-in-out infinite;
 }
 
-/* Library picker in the panel header. Reuses the provider-picker layout,
-   with edges as box-shadow and hover as a translucent overlay. */
+/* Library indicator in the panel header: read-only, a click opens Settings.
+   Edges as box-shadow and hover as a translucent overlay. */
 .panel-header {
   display: flex;
   justify-content: flex-start;
   min-height: 26px;
-}
-.target-picker {
-  position: relative;
 }
 .target-picker-trigger {
   display: inline-flex;
@@ -826,8 +823,7 @@ body::-webkit-scrollbar-thumb:hover {
   background-image: linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04));
   color: var(--text);
 }
-.target-picker-trigger:active,
-.target-picker-trigger[aria-expanded="true"] {
+.target-picker-trigger:active {
   background-image: linear-gradient(rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.07));
   color: var(--text);
 }
@@ -843,62 +839,6 @@ body::-webkit-scrollbar-thumb:hover {
   cursor: progress;
 }
 .target-picker-name {
-  white-space: nowrap;
-}
-.target-picker-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 20;
-  min-width: 220px;
-  width: max-content;
-  padding: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  background: var(--panel-2);
-  border-radius: 6px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 8px 24px rgba(0, 0, 0, 0.35);
-}
-.target-picker-menu[hidden] {
-  display: none;
-}
-.target-picker-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 7px 10px;
-  background: none;
-  border: 0;
-  border-radius: 4px;
-  color: var(--text);
-  font-size: 12px;
-  text-align: left;
-  cursor: pointer;
-  outline: none;
-  transition: background 0.1s, box-shadow 0.1s;
-}
-.target-picker-option:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-.target-picker-option:active {
-  background: rgba(255, 255, 255, 0.07);
-}
-.target-picker-option:focus-visible {
-  box-shadow: inset 0 0 0 2px var(--accent);
-}
-.target-picker-option[aria-checked="true"] .target-picker-option-name {
-  font-weight: 600;
-}
-.target-picker-option-name {
-  flex: 1;
-  white-space: nowrap;
-}
-.target-picker-option-status {
-  margin-left: 12px;
-  font-size: 11px;
-  color: var(--muted-3);
   white-space: nowrap;
 }
 

@@ -80,6 +80,21 @@ test("header indicator reads App · 19721 / Dev · 19720 with a Settings tooltip
   );
 });
 
+test("panel header is a read-only indicator that opens Settings › Library", () => {
+  const popupJs = fs.readFileSync(path.join(ROOT, "popup.js"), "utf8");
+  const popupHtml = fs.readFileSync(path.join(ROOT, "popup.html"), "utf8");
+  const header = popupHtml.match(/<div class="panel-header">[\s\S]*?<\/div>/)[0];
+  assert.doesNotMatch(header, /aria-haspopup|chevron|role="menu"/);
+  assert.doesNotMatch(popupHtml, /targetPickerMenu/);
+  assert.doesNotMatch(popupJs, /menuitemradio|renderTargetMenu/);
+  assert.match(popupJs, /targetPickerName\.textContent = T\.indicatorText\(/);
+  assert.match(popupJs, /T\.indicatorTitle\(/);
+  assert.match(
+    popupJs,
+    /targetPickerTrigger\.addEventListener\("click", openLibrarySettings\)/
+  );
+});
+
 test("dev setup command carries the extension ID", () => {
   assert.equal(
     ConnectTarget.devSetupCommand("abc"),

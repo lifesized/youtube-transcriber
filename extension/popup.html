@@ -12,16 +12,13 @@
 </head>
 <body>
   <div class="popup">
-    <!-- Library picker. Labels and status text come from ConnectTarget.STRINGS. -->
+    <!-- Library indicator (read-only). A click opens Settings › Library.
+         Text comes from ConnectTarget.STRINGS. -->
     <div class="panel-header">
-      <div class="target-picker">
-        <button type="button" class="target-picker-trigger" id="targetPickerTrigger" aria-haspopup="menu" aria-expanded="false">
-          <span class="target-dot" id="targetPickerDot" data-status="unknown"></span>
-          <span class="target-picker-name" id="targetPickerName"></span>
-          <span class="provider-picker-chevron"></span>
-        </button>
-        <div class="target-picker-menu" id="targetPickerMenu" role="menu" hidden></div>
-      </div>
+      <button type="button" class="target-picker-trigger" id="targetPickerTrigger">
+        <span class="target-dot" id="targetPickerDot" data-status="unknown"></span>
+        <span class="target-picker-name" id="targetPickerName"></span>
+      </button>
     </div>
 
     <!-- Static loading feedback, independent of popup.js. Chrome still owns
