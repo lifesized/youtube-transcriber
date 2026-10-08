@@ -159,34 +159,47 @@ test("the app Start allowlist is the recorded install plus /Applications only", 
   assert.equal(host.bundleFromExecPath("/opt/Transcriber/Contents/MacOS/Transcriber"), null);
 });
 
-test("signed-identity bundles must match the codesign Team ID", () => {
-  const bundle = makeBundle();
-  fs.mkdirSync(path.join(bundle, "Contents", "Resources"), { recursive: true });
-  fs.writeFileSync(
-    path.join(bundle, "Contents", "Resources", "signing-identity.json"),
-    JSON.stringify({ teamId: "ABCD123456" })
-  );
-  assert.equal(
-    host.isTranscriberBundle(bundle, () => ({
-      status: 1,
-      stdout: "",
-      stderr: "unsigned",
-    })),
-    false
-  );
-  assert.equal(
-    host.isTranscriberBundle(bundle, (_bin, args) => {
+test("signed host requires the candidate Team ID to match, even without signing-identity.json", () => {
+  const hostBundle = makeBundle("com.transcribed.app", "Host.app");
+  const hostExe = exe(hostBundle);
+  const candidate = makeBundle();
+  const stub = (candidateTeam) => (_bin, args) => {
+    const bundle = args[args.length - 1];
+    if (bundle === hostBundle) {
       if (args[0] === "--verify") return { status: 0, stdout: "", stderr: "" };
       return { status: 0, stdout: "", stderr: "TeamIdentifier=ABCD123456\n" };
-    }),
+    }
+    if (!candidateTeam) return { status: 1, stdout: "", stderr: "unsigned" };
+    if (args[0] === "--verify") return { status: 0, stdout: "", stderr: "" };
+    return { status: 0, stdout: "", stderr: `TeamIdentifier=${candidateTeam}\n` };
+  };
+  assert.equal(host.isTranscriberBundle(candidate, stub("ABCD123456"), hostExe), true);
+  assert.equal(host.isTranscriberBundle(candidate, stub("ZZZZZZZZZZ"), hostExe), false);
+  assert.equal(host.isTranscriberBundle(candidate, stub(""), hostExe), false);
+});
+
+test("ad-hoc host keeps today's bundle-id-only check", () => {
+  const hostBundle = makeBundle("com.transcribed.app", "Host.app");
+  const hostExe = exe(hostBundle);
+  const candidate = makeBundle();
+  assert.equal(
+    host.isTranscriberBundle(
+      candidate,
+      () => ({ status: 1, stdout: "", stderr: "code object is not signed at all" }),
+      hostExe
+    ),
     true
   );
   assert.equal(
-    host.isTranscriberBundle(bundle, (_bin, args) => {
-      if (args[0] === "--verify") return { status: 0, stdout: "", stderr: "" };
-      return { status: 0, stdout: "", stderr: "TeamIdentifier=ZZZZZZZZZZ\n" };
-    }),
-    false
+    host.isTranscriberBundle(
+      candidate,
+      (_bin, args) => {
+        if (args[0] === "--verify") return { status: 0, stdout: "", stderr: "" };
+        return { status: 0, stdout: "", stderr: "TeamIdentifier=not set\n" };
+      },
+      hostExe
+    ),
+    true
   );
 });
 

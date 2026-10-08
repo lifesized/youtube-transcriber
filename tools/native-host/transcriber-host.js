@@ -241,19 +241,15 @@ function teamIdFromCodesign(bundle, run = spawnSync) {
   return team.trim() === "not set" ? "" : team.trim();
 }
 
-function isTranscriberBundle(bundle, run = spawnSync) {
+function isTranscriberBundle(bundle, run = spawnSync, hostExecPath = process.execPath) {
   try {
     if (!BUNDLE_ID_RE.test(readInfoPlist(bundle))) return false;
-    const identityPath = path.join(bundle, "Contents", "Resources", "signing-identity.json");
-    let expectedTeam = "";
-    try {
-      const parsed = JSON.parse(fs.readFileSync(identityPath, "utf8"));
-      expectedTeam = typeof parsed.teamId === "string" ? parsed.teamId : "";
-    } catch {
-      return true;
-    }
-    if (!/^[A-Z0-9]{10}$/.test(expectedTeam)) return true;
-    return teamIdFromCodesign(bundle, run) === expectedTeam;
+    // Expected Team ID comes from the host's own bundle signature, not
+    // from a candidate signing-identity.json (that failed open).
+    const hostBundle = bundleFromExecPath(hostExecPath);
+    const hostTeam = hostBundle ? teamIdFromCodesign(hostBundle, run) : "";
+    if (!/^[A-Z0-9]{10}$/.test(hostTeam)) return true;
+    return teamIdFromCodesign(bundle, run) === hostTeam;
   } catch {
     return false;
   }
