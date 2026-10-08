@@ -8,6 +8,7 @@
  * - Connect browser extension… (2-minute pairing window)
  * - Paired extensions… (list + remove, rotates local API token)
  * - Reinstall browser connection (P1)
+ * - Import existing library… (backup-first merge from a .db)
  * - Quit
  */
 
@@ -15,7 +16,9 @@ const { app, Tray, Menu, shell, nativeImage, Notification, dialog } = require("e
 const path = require("path");
 const NativeHostInstaller = require("./native-host-installer.js");
 const { PAIRING_WINDOW_MS } = require("../lib/native-host-pair.js");
-const { rotateLocalApiToken } = require("../lib/local-api-token.js");
+const { rotateLocalApiToken, getStateDir } = require("../lib/local-api-token.js");
+const { importLibrary, inspectSourceDatabase } = require("../lib/import-library.js");
+const { resolveMigrationsDir } = require("../lib/apply-migrations.js");
 
 async function unpairExtension(id, deps) {
   const rotate = deps.rotate || rotateLocalApiToken;
@@ -132,6 +135,10 @@ class TrayManager {
         label: "Reinstall Browser Connection",
         click: () => this._reinstallNativeHost(),
       },
+      {
+        label: "Import existing library…",
+        click: () => this._importExistingLibrary(),
+      },
       { type: "separator" },
       {
         label: "Quit Transcriber",
@@ -234,6 +241,84 @@ class TrayManager {
     this._updateMenu();
   }
   
+  async _importExistingLibrary() {
+    if (this._importing) return;
+    this._importing = true;
+    try {
+      if (typeof app.focus === "function") {
+        app.focus({ steal: true });
+      }
+      const picked = await dialog.showOpenDialog({
+        title: "Import existing library",
+        message: "Choose a Transcriber .db file",
+        filters: [
+          { name: "SQLite database", extensions: ["db"] },
+          { name: "All files", extensions: ["*"] },
+        ],
+        properties: ["openFile"],
+      });
+      if (picked.canceled || !picked.filePaths || !picked.filePaths[0]) return;
+      const sourcePath = picked.filePaths[0];
+      let inspect;
+      try {
+        inspect = inspectSourceDatabase(sourcePath);
+      } catch (error) {
+        await dialog.showMessageBox({
+          type: "error",
+          message: "Could not open that file",
+          detail: error.message || String(error),
+          buttons: ["OK"],
+        });
+        return;
+      }
+      const confirm = await dialog.showMessageBox({
+        type: "question",
+        message: `Import ${inspect.count} transcripts? Your current library will be backed up first.`,
+        buttons: ["Import", "Cancel"],
+        defaultId: 0,
+        cancelId: 1,
+      });
+      if (confirm.response !== 0) return;
+
+      const destPath = path.join(getStateDir(), "transcriber.db");
+      const backupsDir = path.join(getStateDir(), "backups");
+      const packagedMigrations = process.resourcesPath
+        ? path.join(process.resourcesPath, "standalone", "prisma", "migrations")
+        : undefined;
+      const result = await importLibrary({
+        sourcePath,
+        destPath,
+        backupsDir,
+        migrationsDir: resolveMigrationsDir(packagedMigrations),
+      });
+      if (this.serverManager && typeof this.serverManager.restart === "function") {
+        try {
+          await this.serverManager.restart();
+        } catch (error) {
+          console.warn("Restart after import failed:", error.message);
+        }
+      }
+      await dialog.showMessageBox({
+        type: "info",
+        message: "Library imported",
+        detail:
+          `Imported ${result.imported}. Skipped ${result.skipped} already in your library. Failed ${result.failed}.\n\n` +
+          `Backup: ${result.backupPath}`,
+        buttons: ["OK"],
+      });
+    } catch (error) {
+      console.error("Import existing library failed:", error);
+      await dialog.showMessageBox({
+        type: "error",
+        message: "Import failed",
+        detail: `${(error && error.message) || error}\n\nYour current library was not changed. The source file was not modified.`,
+        buttons: ["OK"],
+      });
+    } finally {
+      this._importing = false;
+    }
+  }
+
   async _reinstallNativeHost() {
     try {
       const result = await this.nativeHostInstaller.install();

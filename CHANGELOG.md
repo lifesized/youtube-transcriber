@@ -16,6 +16,7 @@
 - **Pinned yt-dlp 2026.08.19** — CI downloads `yt-dlp_macos` from that release (`electron/yt-dlp.lock.json`), checks SHA-256 against the lock and against yt-dlp's `SHA2-256SUMS`, and fails on mismatch. `curl --fail` with `set -o pipefail`.
 
 ### Added
+- **Import existing library…** — Tray item opens a `.db` file read-only, confirms `Import N transcripts? Your current library will be backed up first.`, online-backups the app DB to `~/Library/Application Support/Transcriber/backups/<timestamp>.db`, copies the source with `.backup()` to a temp file, migrates that copy (extra `_prisma_migrations` / indexes are tolerated), and merges Video rows in one transaction. Dedupes on `(videoId, captionLanguage, pipelineVersion)` with old rows as `en`/1; existing rows win. Any error rolls back; the source file is never modified.
 - **Install Transcriber.command** — the DMG includes a helper that copies Transcriber to `/Applications`, clears `com.apple.quarantine`, and opens the app. A DMG background tells friends to run it. First launch of the helper needs right-click → Open (or Privacy & Security → Open Anyway) once. Docs: `docs/beta-install-macos.md`.
 
 ### Fixed
