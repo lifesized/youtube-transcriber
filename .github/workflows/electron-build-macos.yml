@@ -705,6 +705,8 @@ jobs:
             }
             echo "✓ packaged $png ($PNG_SIZE bytes)"
           done
+          node electron/tray-png.js "$TRAY_DIR"
+          echo "✓ packaged tray PNGs decode, 16/18×16/18 or 32/36×32/36, non-zero alpha"
 
           # Menu-bar app: LSUIElement hides the Dock; CFBundleIconFile must ship.
           PLIST="$ROOT/dist-electron/mac-arm64/Transcriber.app/Contents/Info.plist"

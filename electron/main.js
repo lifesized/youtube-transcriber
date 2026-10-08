@@ -143,6 +143,10 @@ app.whenReady().then(async () => {
   if (pendingReveal) {
     pendingReveal = false;
     trayManager.revealInMenuBar("second-instance-queued");
+  } else {
+    // Notch overflow clips new status items. Always surface a
+    // notification + menu on first launch so the app is not silent.
+    trayManager.revealInMenuBar("first-launch");
   }
 
   if (process.platform === "darwin") {

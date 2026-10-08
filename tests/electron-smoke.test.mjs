@@ -357,32 +357,34 @@ test("afterPack copies lib/*.js into app.asar.unpacked", () => {
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-test("tray template PNGs exist and are non-empty", () => {
-  const names = [
+test("tray template PNGs decode, are 18×18 / 36×36, and have non-zero alpha", () => {
+  const trayPng = require(path.join(projectRoot, "electron", "tray-png.js"));
+  const dir = path.join(projectRoot, "electron", "resources");
+  const results = trayPng.assertTrayPngs(dir);
+  assert.equal(results.length, 6);
+  const one = results.find((r) => r.name === "trayTemplate.png");
+  const two = results.find((r) => r.name === "trayTemplate@2x.png");
+  assert.equal(one.width, 18);
+  assert.equal(one.height, 18);
+  assert.ok(one.nonzeroAlpha > 0);
+  assert.equal(two.width, 36);
+  assert.equal(two.height, 36);
+  assert.ok(two.nonzeroAlpha > 0);
+});
+
+test("tray png loader prefers asar.unpacked over asar", () => {
+  const trayPng = require(path.join(projectRoot, "electron", "tray-png.js"));
+  const paths = trayPng.candidatePaths(
     "trayTemplate.png",
-    "trayTemplate@2x.png",
-    "trayStartingTemplate.png",
-    "trayStartingTemplate@2x.png",
-    "trayAlertTemplate.png",
-    "trayAlertTemplate@2x.png",
-  ];
-  for (const name of names) {
-    const pngPath = path.join(projectRoot, "electron", "resources", name);
-    assert.ok(fs.existsSync(pngPath), `${name} should exist`);
-    const buf = fs.readFileSync(pngPath);
-    assert.ok(buf.length > 50, `${name} should not be empty`);
-    assert.deepEqual(
-      [...buf.subarray(0, 8)],
-      [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
-      `${name} should be a PNG`
-    );
-  }
-  const one = fs.readFileSync(path.join(projectRoot, "electron", "resources", "trayTemplate.png"));
-  assert.equal(one.readUInt32BE(16), 18);
-  assert.equal(one.readUInt32BE(20), 18);
-  const two = fs.readFileSync(path.join(projectRoot, "electron", "resources", "trayTemplate@2x.png"));
-  assert.equal(two.readUInt32BE(16), 36);
-  assert.equal(two.readUInt32BE(20), 36);
+    "/App/Contents/Resources/app.asar/electron"
+  );
+  assert.equal(
+    paths[0],
+    "/App/Contents/Resources/app.asar.unpacked/electron/resources/trayTemplate.png"
+  );
+  assert.ok(
+    paths.includes("/App/Contents/Resources/app.asar/electron/resources/trayTemplate.png")
+  );
 });
 
 test("app icon files exist for electron-builder and dialogs", () => {
@@ -425,11 +427,18 @@ test("tray manager uses template images and human status copy, not setTitle T", 
     "utf8"
   );
   assert.ok(content.includes("tray-copy.js"));
+  assert.ok(content.includes("tray-png.js"));
   assert.ok(copySrc.includes("trayTemplate.png"));
   assert.ok(copySrc.includes("trayStartingTemplate.png"));
   assert.ok(copySrc.includes("trayAlertTemplate.png"));
   assert.ok(content.includes("setTemplateImage(true)"));
-  assert.equal(content.includes("setTitle("), false);
+  assert.ok(content.includes("createFromBuffer"));
+  assert.ok(content.includes("createFromPath"));
+  assert.ok(content.includes("falling back to title"));
+  assert.ok(content.includes('setTitle("Transcriber")'));
+  assert.ok(content.includes("retainedTray"));
+  assert.ok(content.includes("Never destroy()"));
+  assert.ok(main.includes("first-launch"));
   assert.ok(copySrc.includes("Try Again"));
   assert.ok(copySrc.includes("Restart Transcriber"));
   assert.ok(content.includes("TRY_AGAIN"));
@@ -553,6 +562,7 @@ test("CI launches the packaged Transcriber.app and checks asar requires", () => 
   assert.ok(content.includes("no native Prisma query/schema engine"));
   assert.ok(content.includes("trayStartingTemplate.png"));
   assert.ok(content.includes("trayAlertTemplate.png"));
+  assert.ok(content.includes("node electron/tray-png.js"));
   assert.ok(content.includes("Print :LSUIElement"));
   assert.ok(content.includes("Print :CFBundleIconFile"));
   assert.ok(content.includes("unauthenticated /api/health must stay 401"));

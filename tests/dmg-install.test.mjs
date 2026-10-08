@@ -85,6 +85,12 @@ test("finalize-dmg.sh sets the helper icon and hides the app", () => {
   assert.ok(text.includes("SetFile -a E"));
   assert.ok(text.includes("SetFile -a C"));
   assert.ok(text.includes('chflags hidden "$MNT/$APP"'));
+  const hideAt = text.indexOf('chflags hidden "$MNT/$APP"');
+  const xattrAt = text.indexOf('xattr -c "$MNT/$APP"');
+  assert.ok(
+    xattrAt > 0 && xattrAt < hideAt,
+    "strip wrapper xattrs before chflags hidden so UF_HIDDEN survives"
+  );
   assert.ok(text.includes("-format UDZO"));
   assert.doesNotMatch(text, /os\.getxattr/);
   assert.doesNotMatch(text, /codesign --(?:force|sign)/);

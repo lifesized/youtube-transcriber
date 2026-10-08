@@ -78,11 +78,12 @@ if [ "$DATA_BEFORE" != "$DATA_AFTER" ]; then
   exit 1
 fi
 
-chflags hidden "$MNT/$APP"
-# --strict rejects FinderInfo / resource forks on the bundle wrapper.
-# UF_HIDDEN (chflags) is what Finder uses to hide the icon. Clear xattrs
-# on the .app directory only — never Contents/.
+# --strict rejects FinderInfo on the bundle wrapper. Strip wrapper xattrs
+# first, then set UF_HIDDEN last so xattr -c cannot clear the hidden flag.
+# Never touch Contents/.
 xattr -c "$MNT/$APP" 2>/dev/null || true
+xattr -d com.apple.FinderInfo "$MNT/$APP" 2>/dev/null || true
+chflags hidden "$MNT/$APP"
 if [ -e "$MNT/Applications" ]; then rm -f "$MNT/Applications"; fi
 
 # Verify before sealing. Built-in macOS tools only — no Python xattr.

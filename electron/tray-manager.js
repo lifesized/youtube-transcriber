@@ -28,6 +28,11 @@ const { findPortHolder } = require("./utils.js");
 const config = require("./config.js");
 const productDefaults = require("./product-defaults.js");
 const trayCopy = require("./tray-copy.js");
+const trayPng = require("./tray-png.js");
+
+// Strong module-level pin. V8 can otherwise GC the Tray and the
+// NSStatusItem vanishes while the process stays alive on :19721.
+let retainedTray = null;
 
 async function unpairExtension(id, deps) {
   const rotate = deps.rotate || rotateLocalApiToken;
@@ -135,19 +140,86 @@ class TrayManager {
   }
 
   _loadTrayImage(filename) {
-    const iconPath = path.join(__dirname, "resources", filename);
-    const icon = nativeImage.createFromPath(iconPath);
-    if (!icon.isEmpty()) {
+    const one = trayPng.readPngFile(filename, __dirname);
+    const twoName = filename.replace(/\.png$/i, "@2x.png");
+    const two = twoName === filename ? null : trayPng.readPngFile(twoName, __dirname);
+    let icon = nativeImage.createEmpty();
+    try {
+      if (one) {
+        const info = trayPng.inspectPng(one.buf);
+        icon.addRepresentation({
+          buffer: one.buf,
+          width: info.width,
+          height: info.height,
+          scaleFactor: 1,
+        });
+      }
+      if (two) {
+        const info = trayPng.inspectPng(two.buf);
+        icon.addRepresentation({
+          buffer: two.buf,
+          width: info.width,
+          height: info.height,
+          scaleFactor: 2,
+        });
+      }
+    } catch (error) {
+      console.warn(`tray addRepresentation failed for ${filename}:`, error && error.message);
+    }
+    if (!this._imageIsUsable(icon) && (one || two)) {
+      const fallback = two || one;
+      try {
+        icon = nativeImage.createFromBuffer(fallback.buf);
+      } catch (error) {
+        console.warn(`tray createFromBuffer failed for ${filename}:`, error && error.message);
+      }
+    }
+    if (!this._imageIsUsable(icon) && one) {
+      try {
+        icon = nativeImage.createFromPath(one.path);
+      } catch (error) {
+        console.warn(`tray createFromPath failed for ${one.path}:`, error && error.message);
+      }
+    }
+    const size = icon.getSize ? icon.getSize() : { width: 0, height: 0 };
+    let alpha = "?";
+    try {
+      if (one) alpha = String(trayPng.inspectPng(one.buf).nonzeroAlpha);
+    } catch {
+      alpha = "unreadable";
+    }
+    console.log(
+      `tray image ${filename} empty=${icon.isEmpty()} size=${size.width}x${size.height} alpha=${alpha} path=${(one && one.path) || "(missing)"}`
+    );
+    if (this._imageIsUsable(icon)) {
       icon.setTemplateImage(true);
     }
     return icon;
   }
 
+  _imageIsUsable(icon) {
+    if (!icon || typeof icon.isEmpty !== "function" || icon.isEmpty()) return false;
+    const size = icon.getSize ? icon.getSize() : { width: 0, height: 0 };
+    return size.width > 0 && size.height > 0;
+  }
+
   _applyTrayImage() {
     if (!this.tray) return;
+    // Swap pixels on the existing Tray. Never destroy() here — that is
+    // how a live status item disappears on starting→running.
     const icon = this._loadTrayImage(trayCopy.trayImageName(this.status));
-    if (!icon.isEmpty()) {
+    const usable = this._imageIsUsable(icon);
+    if (usable) {
       this.tray.setImage(icon);
+      if (typeof this.tray.setTitle === "function") this.tray.setTitle("");
+    } else {
+      console.warn("tray image unusable; falling back to title");
+      try {
+        this.tray.setImage(nativeImage.createEmpty());
+      } catch {
+        // keep existing image
+      }
+      if (typeof this.tray.setTitle === "function") this.tray.setTitle("Transcriber");
     }
     this.tray.setToolTip(trayCopy.tooltipFor(this.status, this.port));
   }
@@ -158,8 +230,8 @@ class TrayManager {
       if (typeof this.tray.isDestroyed === "function" && this.tray.isDestroyed()) {
         return false;
       }
-      const bounds = this.tray.getBounds();
-      if (!bounds || !bounds.width || !bounds.height) return false;
+      // Zero bounds means the item is clipped (notch / crowded menu bar),
+      // not that the Tray is dead. Recreating it would drop the only item.
       return true;
     } catch {
       return false;
@@ -167,7 +239,10 @@ class TrayManager {
   }
 
   ensureTray(reason = "health-check") {
-    if (this.isTrayHealthy()) return this.tray;
+    if (this.isTrayHealthy()) {
+      this._retainTray(this.tray);
+      return this.tray;
+    }
     console.log(`tray recreate: ${reason}`);
     try {
       if (this.tray && typeof this.tray.isDestroyed === "function" && !this.tray.isDestroyed()) {
@@ -177,6 +252,7 @@ class TrayManager {
       // Native item may already be gone (FBScene disconnect).
     }
     this.tray = null;
+    retainedTray = null;
     this._createTray();
     this._updateMenu();
     return this.tray;
@@ -220,13 +296,32 @@ class TrayManager {
     }
   }
 
+  _retainTray(tray) {
+    this.tray = tray;
+    retainedTray = tray;
+  }
+
   _createTray() {
     const icon = this._loadTrayImage("trayTemplate.png");
-    this.tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
-    this.tray.setToolTip(trayCopy.tooltipFor(this.status, this.port));
+    const usable = this._imageIsUsable(icon);
+    const tray = new Tray(usable ? icon : nativeImage.createEmpty());
+    this._retainTray(tray);
+    if (!usable && typeof tray.setTitle === "function") {
+      console.warn("tray create: image empty or zero-size; using title fallback");
+      tray.setTitle("Transcriber");
+    }
+    tray.setToolTip(trayCopy.tooltipFor(this.status, this.port));
+    try {
+      const bounds = tray.getBounds ? tray.getBounds() : null;
+      console.log(
+        `tray created bounds=${bounds ? `${bounds.x},${bounds.y} ${bounds.width}x${bounds.height}` : "n/a"}`
+      );
+    } catch {
+      console.log("tray created (bounds unavailable)");
+    }
 
     if (process.platform !== "darwin") {
-      this.tray.on("click", () => {
+      tray.on("click", () => {
         this._openTranscriber();
       });
     }
