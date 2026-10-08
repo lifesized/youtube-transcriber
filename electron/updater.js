@@ -135,32 +135,40 @@ function createUpdater(options) {
   const menu = () =>
     updaterMenuItem({ enabled: gate.enabled, status, percent });
 
+  const disabled = (reason) => ({
+    enabled: false,
+    reason,
+    feed: null,
+    getMenuItem: () =>
+      updaterMenuItem({ enabled: false, status: "idle", percent: 0 }),
+    startBackgroundChecks() {},
+    checkForUpdates() {},
+    downloadUpdate() {},
+    async quitAndInstall() {},
+    dispose() {},
+  });
+
   if (!gate.enabled) {
-    return {
-      enabled: false,
-      reason: gate.reason,
-      feed: null,
-      getMenuItem: menu,
-      startBackgroundChecks() {},
-      checkForUpdates() {},
-      downloadUpdate() {},
-      async quitAndInstall() {},
-      dispose() {},
-    };
+    return disabled(gate.reason);
   }
 
+  try {
     const loaded =
-    typeof loadAutoUpdater === "function"
-      ? loadAutoUpdater()
-      : loadElectronUpdater(resourcesPath);
+      typeof loadAutoUpdater === "function"
+        ? loadAutoUpdater()
+        : loadElectronUpdater(resourcesPath);
 
-  autoUpdater = loaded;
-  autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = false;
-  autoUpdater.allowDowngrade = false;
-  autoUpdater.allowPrerelease = true;
-  autoUpdater.forceDevUpdateConfig = false;
-  autoUpdater.setFeedURL(pinnedFeed());
+    autoUpdater = loaded;
+    autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = false;
+    autoUpdater.allowDowngrade = false;
+    autoUpdater.allowPrerelease = true;
+    autoUpdater.forceDevUpdateConfig = false;
+    autoUpdater.setFeedURL(pinnedFeed());
+  } catch (error) {
+    console.warn("updater: load failed:", error && error.message);
+    return disabled("load-failed");
+  }
 
   autoUpdater.on("checking-for-update", () => {
     status = "checking";

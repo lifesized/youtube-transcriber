@@ -25,6 +25,9 @@ const {
   INITIAL_DELAY_MS,
   INTERVAL_MS,
 } = require(path.join(root, "electron", "updater.js"));
+const { buildTrayMenuTemplate } = require(
+  path.join(root, "electron", "tray-menu.js")
+);
 
 const TEAM = "ABCD123456";
 const developerId = {
@@ -250,4 +253,67 @@ test("stopServerThenInstall stops Next before quitAndInstall", async () => {
 test("background cadence is 30s then 6h", () => {
   assert.equal(INITIAL_DELAY_MS, 30_000);
   assert.equal(INTERVAL_MS, 6 * 60 * 60 * 1000);
+});
+
+test("load or settings failure disables the updater and still builds the tray", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "ytt-load-fail-"));
+  try {
+    writeFileSync(
+      path.join(dir, "signing-identity.json"),
+      JSON.stringify({ teamId: TEAM })
+    );
+    const requireFailed = createUpdater({
+      isPackaged: true,
+      isDev: false,
+      resourcesPath: dir,
+      signature: developerId,
+      loadAutoUpdater() {
+        throw new Error("electron-updater missing from asar");
+      },
+    });
+    assert.equal(requireFailed.enabled, false);
+    assert.equal(requireFailed.reason, "load-failed");
+    assert.equal(requireFailed.feed, null);
+
+    const settingsFailed = createUpdater({
+      isPackaged: true,
+      isDev: false,
+      resourcesPath: dir,
+      signature: developerId,
+      loadAutoUpdater() {
+        return {
+          on() {},
+          setFeedURL() {
+            throw new Error("setFeedURL refused");
+          },
+        };
+      },
+    });
+    assert.equal(settingsFailed.enabled, false);
+    assert.equal(settingsFailed.reason, "load-failed");
+
+    const template = buildTrayMenuTemplate(
+      {
+        status: "running",
+        port: 19721,
+        supportsSublabel: true,
+        openAtLogin: false,
+        showImport: false,
+        updater: {
+          enabled: requireFailed.enabled,
+          status: "idle",
+          percent: 0,
+        },
+      },
+      new Proxy({}, { get: () => () => {} })
+    );
+    const labels = template.map((item) => item.label);
+    assert.equal(labels.includes("Transcriber is running"), true);
+    assert.equal(labels.includes("Quit Transcriber"), true);
+    const update = template.find((item) => item.label === "Check for Updates…");
+    assert.ok(update);
+    assert.equal(update.enabled, false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
