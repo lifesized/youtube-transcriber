@@ -30,6 +30,9 @@ export function isLinkedInMediaUrl(value: unknown): value is string {
   } catch {
     return false;
   }
+  // yt-dlp parses URLs differently (it reads "https://a.licdn.com\@127.0.0.1/" as host 127.0.0.1),
+  // so accept only input that is already in WHATWG form.
+  if (parsed.href !== value) return false;
   if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.port) return false;
   return parsed.hostname === "licdn.com" || parsed.hostname.endsWith(".licdn.com");
 }

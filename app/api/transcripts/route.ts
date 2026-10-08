@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     const source = {
       videoId,
       pageUrl: url,
-      mediaUrl,
+      mediaUrl: mediaUrl === undefined ? undefined : new URL(mediaUrl).href,
       title: cleanLinkedInText(body.title, 512),
       author: cleanLinkedInText(body.author, 256),
     };
