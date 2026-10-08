@@ -50,6 +50,14 @@ class PairingBridge {
     return openUntil;
   }
 
+  closeWindow(child = this.child) {
+    this.openUntil = 0;
+    const target = child || this.child;
+    if (target && typeof target.send === "function") {
+      target.send({ type: PAIR_WINDOW_TYPE, openUntil: 0 });
+    }
+  }
+
   _electron() {
     return require("electron");
   }
@@ -130,9 +138,12 @@ class PairingBridge {
       if (!allowed) {
         this.globalDenyUntil = this.now() + this.denyTtlMs;
       }
-      if (allowed && this.installer) {
-        this.installer.appendExtensionId(msg.extensionId);
-        await this.installer.install();
+      if (allowed) {
+        this.closeWindow(child);
+        if (this.installer) {
+          this.installer.appendExtensionId(msg.extensionId);
+          await this.installer.install();
+        }
       }
     } catch (error) {
       console.error("Pairing dialog failed:", error);

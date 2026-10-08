@@ -330,12 +330,13 @@ test("caps pairing dialogs at 3 per hour", async () => {
       },
     },
   });
-  bridge.openWindow(10 * 60 * 60 * 1000);
   const replies = [];
   const child = { send: (msg) => replies.push(msg) };
 
   for (let i = 0; i < 3; i++) {
     now = i * 1_000;
+    // Allow closes the window, so each dialog needs a fresh tray open.
+    bridge.openWindow(10 * 60 * 60 * 1000);
     await bridge._onMessage(child, {
       type: pair.PAIR_TYPE,
       extensionId: VALID_ID,
@@ -345,6 +346,7 @@ test("caps pairing dialogs at 3 per hour", async () => {
   assert.equal(shown.length, 3);
 
   now = 4_000;
+  bridge.openWindow(10 * 60 * 60 * 1000);
   await bridge._onMessage(child, {
     type: pair.PAIR_TYPE,
     extensionId: VALID_ID,
@@ -354,12 +356,69 @@ test("caps pairing dialogs at 3 per hour", async () => {
   assert.equal(replies.at(-1).reason, "rate_limit");
 
   now = 60 * 60 * 1000 + 1;
+  bridge.openWindow(10 * 60 * 60 * 1000);
   await bridge._onMessage(child, {
     type: pair.PAIR_TYPE,
     extensionId: VALID_ID,
     requestId: "req-5",
   });
   assert.equal(shown.length, 4);
+});
+
+test("after one Allow a second pair request is rejected without a dialog", async () => {
+  const PairingBridge = require("../electron/pairing-bridge.js");
+  const otherId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const shown = [];
+  const windowMsgs = [];
+  const bridge = new PairingBridge({
+    now: () => 1_000,
+    app: { focus() {} },
+    dialog: {
+      showMessageBox: async () => {
+        shown.push("dialog");
+        return { response: 0 };
+      },
+    },
+    installer: {
+      appendExtensionId() {},
+      async install() {},
+    },
+  });
+  const child = {
+    send(msg) {
+      if (msg.type === pair.PAIR_WINDOW_TYPE) windowMsgs.push(msg);
+    },
+  };
+  bridge.openWindow(1_000 + pair.PAIRING_WINDOW_MS, child);
+  await bridge._onMessage(child, {
+    type: pair.PAIR_TYPE,
+    extensionId: VALID_ID,
+    requestId: "allow-1",
+  });
+  assert.equal(shown.length, 1);
+  assert.equal(bridge.openUntil, 0);
+  assert.equal(windowMsgs.at(-1).openUntil, 0);
+
+  await bridge._onMessage(child, {
+    type: pair.PAIR_TYPE,
+    extensionId: otherId,
+    requestId: "allow-2",
+  });
+  assert.equal(shown.length, 1);
+
+  pair.resetPairingControllerForTests({ now: () => 1_000 });
+  const first = await pair.handlePairPost(VALID_ORIGIN, {
+    send: () => {},
+    waitForResult: async () => true,
+  });
+  assert.equal(first.status, 200);
+  const sent = [];
+  const second = await pair.handlePairPost(`chrome-extension://${otherId}`, {
+    send: (msg) => sent.push(msg),
+    waitForResult: async () => true,
+  });
+  assert.equal(second.status, 403);
+  assert.equal(sent.length, 0);
 });
 
 test("attach resends an open pairing window to the server child", () => {
