@@ -412,6 +412,45 @@ jobs:
                 exit 1
               fi
               echo "✓ fake Host header returns 421"
+              echo "----- Library tab cookie: port-scoped, same-origin only -----"
+              JAR="$DATA_DIR/cookies.txt"
+              redact() { sed -E 's/(transcriber_local_token[_0-9]*=)[^;[:space:]]*/\1<redacted>/g' "$@"; }
+              NAV_CODE=$(curl -sS -o /dev/null -D /tmp/packaged-nav.txt -c "$JAR" -w "%{http_code}" \
+                -H "Sec-Fetch-Site: none" -H "Sec-Fetch-Mode: navigate" -H "Sec-Fetch-Dest: document" \
+                "http://127.0.0.1:${PORT}/?layout=list&id=ci" || true)
+              SET_COOKIE=$(grep -i "^set-cookie: transcriber_local_token_${PORT}=" /tmp/packaged-nav.txt || true)
+              if [ "$NAV_CODE" != "200" ] || [ -z "$SET_COOKIE" ] \
+                || ! grep -qi "httponly" <<<"$SET_COOKIE" || ! grep -qi "samesite=strict" <<<"$SET_COOKIE"; then
+                echo "ERROR: Library navigation must mint HttpOnly SameSite=Strict transcriber_local_token_${PORT} (http=${NAV_CODE:-curl-fail})"
+                redact /tmp/packaged-nav.txt || true
+                exit 1
+              fi
+              echo "✓ Library navigation minted HttpOnly SameSite=Strict transcriber_local_token_${PORT}"
+              COOKIE_VALUE=$(awk -v n="transcriber_local_token_${PORT}" '$6 == n { print $7 }' "$JAR")
+              cookie_api() {
+                local site="$1" want="$2" cookie="${3:-transcriber_local_token_${PORT}=${COOKIE_VALUE}}" got
+                got=$(curl -sS -o /dev/null -w "%{http_code}" -b "$cookie" \
+                  -H "Sec-Fetch-Site: ${site}" -H "Sec-Fetch-Mode: cors" -H "Sec-Fetch-Dest: empty" \
+                  "http://127.0.0.1:${PORT}/api/transcripts" || true)
+                if [ "$got" != "$want" ]; then
+                  echo "ERROR: cookie GET /api/transcripts (Sec-Fetch-Site: ${site}, ${cookie%%=*}) expected $want, got ${got:-curl-fail}"
+                  exit 1
+                fi
+                echo "✓ cookie GET /api/transcripts (Sec-Fetch-Site: ${site}, ${cookie%%=*}) -> $want"
+              }
+              cookie_api same-origin 200
+              cookie_api same-site 401
+              cookie_api cross-site 401
+              cookie_api same-origin 401 "transcriber_local_token_19720=${COOKIE_VALUE}"
+              cookie_api same-origin 401 "transcriber_local_token=${COOKIE_VALUE}"
+              FETCH_SET=$(curl -sS -o /dev/null -D - \
+                -H "Sec-Fetch-Site: cross-site" -H "Sec-Fetch-Mode: cors" -H "Sec-Fetch-Dest: empty" \
+                "http://127.0.0.1:${PORT}/?layout=list&id=ci" | grep -ci '^set-cookie:' || true)
+              if [ "$FETCH_SET" != "0" ]; then
+                echo "ERROR: a cross-site fetch of a page must not mint the cookie"
+                exit 1
+              fi
+              echo "✓ a cross-site fetch of a page gets no cookie"
               echo "----- ps comm vs args for Transcriber -----"
               COMM_LINE=$(ps -axo pid=,comm= | awk -v pid="$APP_PID" '$1==pid { $1=""; sub(/^ +/, ""); print }')
               ARGS_LINE=$(ps -axo pid=,args= | awk -v pid="$APP_PID" '$1==pid { $1=""; sub(/^ +/, ""); print }')
