@@ -10,6 +10,13 @@ import { IconButton, iconButtonClassName } from "@/components/ui/icon-button";
 import { LlmLauncher } from "@/components/ui/llm-launcher";
 import { AnimationTuner, DEFAULT_TUNING } from "@/components/animation-tuner";
 import type { MotionTuning } from "@/components/animation-tuner";
+import {
+  UNLOCK_KEY,
+  libraryView,
+  parseSelectedId,
+  rememberUnlock,
+  type SelectedStatus,
+} from "@/lib/library-gate";
 
 interface QueueItem {
   url: string;
@@ -140,9 +147,8 @@ function eventCategory(type: string): keyof DebugFilters {
 function HomeInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const rawId = searchParams.get("id");
   // Validate transcript ID format (same as extension)
-  const selectedId = rawId && /^[A-Za-z0-9_-]{1,128}$/.test(rawId) ? rawId : null;
+  const selectedId = parseSelectedId(searchParams.get("id"));
   const scrollHint = searchParams.get("t");
   const libraryLayout = searchParams.get("layout") === "tiles" ? "tiles" : "list";
 
@@ -358,7 +364,7 @@ function HomeInner() {
     didInitRef.current = true;
 
     // Check if user has ever created a transcript
-    const hasTranscripts = localStorage.getItem("hasCreatedTranscript") === "true";
+    const hasTranscripts = localStorage.getItem(UNLOCK_KEY) === "true";
     const completionAlerts = localStorage.getItem("completionAlertsEnabled");
     if (completionAlerts !== null) {
       setCompletionAlertsEnabled(completionAlerts === "true");
@@ -380,6 +386,26 @@ function HomeInner() {
     addDebugEvent("library.loading", "setLibraryLoading(true) initial");
     fetchTranscripts("");
   }, [addDebugEvent, fetchTranscripts, router, searchParams]);
+
+  const selected: SelectedStatus = !selectedId
+    ? "none"
+    : video?.id === selectedId
+      ? "loaded"
+      : videoError
+        ? "missing"
+        : "loading";
+  const view = libraryView({
+    unlocked: hasCreatedTranscript,
+    listLoading: libraryLoading,
+    rowCount: transcripts.length,
+    selected,
+  });
+
+  useEffect(() => {
+    if (hasCreatedTranscript || !rememberUnlock(localStorage, view)) return;
+    setHasCreatedTranscript(true);
+    addDebugEvent("ftu.unlock", `rows=${transcripts.length} selected=${selected}`);
+  }, [addDebugEvent, hasCreatedTranscript, selected, transcripts.length, view]);
 
   useEffect(() => {
     // Skip the first run; initial library fetch is handled in the init effect.
@@ -669,7 +695,7 @@ function HomeInner() {
 
         if (res.ok) {
           // Mark that user has created at least one transcript
-          localStorage.setItem("hasCreatedTranscript", "true");
+          localStorage.setItem(UNLOCK_KEY, "true");
           setHasCreatedTranscript(true);
 
           if (data?.duplicate) {
@@ -872,6 +898,8 @@ function HomeInner() {
   const segments: TranscriptSegment[] =
     video?.transcript ? JSON.parse(video.transcript) : [];
 
+  if (view === "pending") return <PageSpinner />;
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-12">
       <div className="mx-auto max-w-[800px]">
@@ -884,7 +912,7 @@ function HomeInner() {
               <h1 className="anim-fade-up-d1 mt-3 text-[22px] font-semibold tracking-tight text-white/90">
                 Paste a link. Get the transcript.
               </h1>
-              {!hasCreatedTranscript && (
+              {view === "ftu" && (
                 <p className="anim-fade-up-d2 mt-3 text-sm text-white/30">
                   Local transcription powered by Whisper. No data leaves your machine.
                 </p>
@@ -1130,7 +1158,7 @@ function HomeInner() {
             )}
           </section>
 
-          {hasCreatedTranscript && (
+          {view === "library" && (
             <section className="anim-fade-up-d3">
               <div className="mb-5 flex items-center justify-between">
                 <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-white/25">
@@ -1611,15 +1639,17 @@ function HomeInner() {
   );
 }
 
+function PageSpinner() {
+  return (
+    <div className="mx-auto flex min-h-[calc(100vh-57px)] max-w-7xl items-center justify-center px-4">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-white/15 border-t-white/50" />
+    </div>
+  );
+}
+
 export default function Home() {
   return (
-    <Suspense
-      fallback={
-        <div className="mx-auto flex min-h-[calc(100vh-57px)] max-w-7xl items-center justify-center px-4">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-white/15 border-t-white/50" />
-        </div>
-      }
-    >
+    <Suspense fallback={<PageSpinner />}>
       <HomeInner />
     </Suspense>
   );
