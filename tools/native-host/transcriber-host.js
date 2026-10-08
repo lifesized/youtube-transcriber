@@ -48,6 +48,8 @@ const IDENTITY_HEADER = "x-transcriber-service";
 const ELECTRON_BUNDLE_ID = "com.transcribed.app";
 const DEFAULT_APP_BUNDLE = "/Applications/Transcriber.app";
 const MAX_NATIVE_HOST_MESSAGE = 1024 * 1024;
+const LOG_FILE_MODE = 0o600;
+const LOG_MAX_BYTES = 5 * 1024 * 1024;
 const PROTOCOL_VERSION = 2;
 const COMMANDS = Object.freeze([
   "ping",
@@ -80,13 +82,34 @@ function ensureDirs() {
   fs.mkdirSync(logDir(), { recursive: true });
 }
 
+/** Builds before 0600 created native-host.log 0644. */
+function tightenLogMode(file = logFile()) {
+  try {
+    fs.chmodSync(file, LOG_FILE_MODE);
+  } catch {
+    // Not created yet; appendFileSync creates it 0600.
+  }
+}
+
+/** Keep one previous file: native-host.log.1 is replaced each time. */
+function rotateLogIfFull(file = logFile()) {
+  try {
+    if (fs.statSync(file).size >= LOG_MAX_BYTES) fs.renameSync(file, `${file}.1`);
+  } catch {
+    // No log yet.
+  }
+}
+
 function log(...args) {
   try {
     ensureDirs();
+    const file = logFile();
+    rotateLogIfFull(file);
     const line = `[${new Date().toISOString()}] ${args.map((a) =>
       typeof a === "string" ? a : JSON.stringify(a)
     ).join(" ")}\n`;
-    fs.appendFileSync(logFile(), line);
+    fs.appendFileSync(file, line, { mode: LOG_FILE_MODE });
+    tightenLogMode(file);
   } catch {
     // Logging must never throw — Chrome treats stderr writes as errors.
   }
@@ -585,6 +608,8 @@ module.exports = {
   ELECTRON_BUNDLE_ID,
   DEFAULT_APP_BUNDLE,
   MAX_NATIVE_HOST_MESSAGE,
+  LOG_FILE_MODE,
+  LOG_MAX_BYTES,
   PROTOCOL_VERSION,
   COMMANDS,
   electronResourcesBin,
@@ -611,5 +636,6 @@ module.exports = {
   stateDir,
   logDir,
   logFile,
+  log,
   stateFile,
 };
