@@ -72,8 +72,9 @@ assert_dest_is_ours() {
 pids_matching_exe() {
   local exe="$1"
   # comm= is the 16-char basename on Darwin; args= is the full argv.
-  # Exact path, or that path as argv[0] followed by a space.
-  ps -axo pid=,args= 2>/dev/null | awk -v exe="$exe" '{pid=$1; $1=""; sub(/^ +/,""); if ($0==exe || index($0, exe " ")==1) print pid}'
+  # Exact path, or that path as argv[0] followed by a space. Strip the pid
+  # with sub() on $0: assigning a field rebuilds $0 with single spaces.
+  ps -axo pid=,args= 2>/dev/null | awk -v exe="$exe" '{pid=$1; sub(/^[ \t]*[0-9]+[ \t]+/, ""); if ($0==exe || index($0, exe " ")==1) print pid}'
 }
 
 quit_running() {
@@ -200,4 +201,7 @@ main() {
   fi
 }
 
-main "$@"
+# CI sources this file to call pids_matching_exe.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  main "$@"
+fi

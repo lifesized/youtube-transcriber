@@ -452,11 +452,11 @@ jobs:
               fi
               echo "✓ a cross-site fetch of a page gets no cookie"
               echo "----- ps comm vs args for Transcriber -----"
-              COMM_LINE=$(ps -axo pid=,comm= | awk -v pid="$APP_PID" '$1==pid { $1=""; sub(/^ +/, ""); print }')
-              ARGS_LINE=$(ps -axo pid=,args= | awk -v pid="$APP_PID" '$1==pid { $1=""; sub(/^ +/, ""); print }')
+              COMM_LINE=$(ps -axo pid=,comm= | awk -v pid="$APP_PID" '$1==pid { sub(/^[ \t]*[0-9]+[ \t]+/, ""); print }')
+              ARGS_LINE=$(ps -axo pid=,args= | awk -v pid="$APP_PID" '$1==pid { sub(/^[ \t]*[0-9]+[ \t]+/, ""); print }')
               echo "ps comm= [${COMM_LINE}]"
               echo "ps args= [${ARGS_LINE}]"
-              MATCH=$(ps -axo pid=,args= | awk -v exe="$APP_PATH" '{pid=$1; $1=""; sub(/^ +/,""); if ($0==exe || index($0, exe " ")==1) print pid}' | awk -v pid="$APP_PID" '$1==pid { print }')
+              MATCH=$(bash -c 'source "$1"; pids_matching_exe "$2"' _ "electron/dmg/Install Transcriber.command" "$APP_PATH" | awk -v pid="$APP_PID" '$1==pid { print }')
               if [ -z "$MATCH" ]; then
                 echo "ERROR: install-helper args match did not find PID $APP_PID at $APP_PATH"
                 echo "comm was not the full executable path; helper uses args= prefix match"
