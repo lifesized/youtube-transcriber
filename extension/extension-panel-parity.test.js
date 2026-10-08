@@ -97,7 +97,8 @@ test('popup.js should be in local mode', () => {
 test('popup.js should null-guard cloud element listeners', () => {
   const popupJs = fs.readFileSync(path.join(__dirname, 'dist', 'popup.js'), 'utf8');
   
-  assert.ok(popupJs.includes('if (el.cloudAuthForm)'), 'cloudAuthForm listener must be null-guarded');
+  assert.ok(!popupJs.includes('sendMagicLink'), 'must not keep sendMagicLink');
+  assert.ok(!popupJs.includes('el.cloudAuthForm'), 'must not keep cloudAuthForm listener');
   assert.ok(popupJs.includes('if (el.btnModeLocal)'), 'btnModeLocal listener must be null-guarded');
   assert.ok(popupJs.includes('if (el.setupWallStay)'), 'setupWallStay listener must be null-guarded');
 });

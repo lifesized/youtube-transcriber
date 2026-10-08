@@ -230,16 +230,72 @@ test("GET_SETTINGS and CHECK_SERVICE stay locked to local", () => {
     /case "GET_SETTINGS": \{[\s\S]*?return \{ mode: LocalModeLock\.resolveMode\(\) \}/
   );
   assert.match(backgroundJs, /mode: LocalModeLock\.resolveMode\(\)/);
-  assert.match(backgroundJs, /case "OPEN_GOOGLE_SIGNIN":/);
-  assert.match(backgroundJs, /case "SEND_MAGIC_LINK":/);
-  assert.match(
-    backgroundJs,
-    /Cloud sign-in is not available in the local build/
-  );
+  assert.doesNotMatch(backgroundJs, /case "OPEN_GOOGLE_SIGNIN":/);
+  assert.doesNotMatch(backgroundJs, /case "SEND_MAGIC_LINK":/);
   assert.doesNotMatch(
     backgroundJs,
     /return \{ mode: mode \|\| "local" \}/
   );
+});
+
+test("dead cloud sign-in code is gone from popup and background", () => {
+  assert.doesNotMatch(popupJs, /async function sendMagicLink/);
+  assert.doesNotMatch(popupJs, /el\.cloudAuthForm/);
+  assert.doesNotMatch(popupJs, /el\.cloudAuthGoogle/);
+  assert.doesNotMatch(popupJs, /OPEN_GOOGLE_SIGNIN/);
+  assert.doesNotMatch(popupJs, /SEND_MAGIC_LINK/);
+  assert.doesNotMatch(popupJs, /if \(mode === ["']cloud["']\) setCachedAuth/);
+});
+
+test("LOCAL manifest short_name is Transcriber; dev tag is Transcriber (dev)", () => {
+  const localManifest = JSON.parse(
+    fs.readFileSync(path.join(ROOT, "manifests", "local.json"), "utf8")
+  );
+  assert.equal(localManifest.short_name, "Transcriber");
+  assert.match(buildJs, /short_name = "Transcriber \(dev\)"/);
+  assert.doesNotMatch(buildJs, /short_name = "Transcriber dev"/);
+});
+
+test("stored mode cloud and both ports down still shows the offline UI", async () => {
+  const stored = { mode: "cloud" };
+  const appReachable = await probePort(19721);
+  const devReachable = await probePort(19720);
+  const ports = { 19721: appReachable, 19720: devReachable };
+
+  if (!bothPortsUnreachable(ports)) {
+    assert.equal(ConnectTarget.nextTargetWhenUnreachable("app"), "app");
+    assert.equal(ConnectTarget.nextTargetWhenUnreachable("dev"), "dev");
+  } else {
+    assert.equal(ports["19721"], false);
+    assert.equal(ports["19720"], false);
+  }
+
+  const mode = Lock.resolveMode(stored.mode, "cloud");
+  assert.equal(mode, "local");
+  assert.equal(Lock.shouldShowCloudAuth(stored.mode), false);
+
+  const doc = makeDoc(popupHtml);
+  const painted = Lock.paintLocalOffline(doc, {
+    targetId: "app",
+    nativeHostAvailable: false,
+    nativeHostState: "missing",
+  });
+
+  const heading = painted.heading;
+  assert.ok(
+    heading === "Transcriber isn't running" || heading === "Dev server setup",
+    `unexpected heading: ${heading}`
+  );
+  assert.equal(doc.getElementById("stateNoService").hidden, false);
+  assert.equal(doc.getElementById("offlineLocalMsg").hidden, false);
+
+  const visible = [];
+  for (const [id, node] of doc._ids) {
+    if (!node.hidden) visible.push(`${id} ${node.textContent || ""}`);
+  }
+  visible.push(painted.heading);
+  const blob = `${popupHtml}\n${visible.join("\n")}`;
+  assert.doesNotMatch(blob, /Google|magic link|transcribed\.dev|Sign in/i);
 });
 
 test("popup defaults never fall back to cloud when GET_SETTINGS fails", () => {

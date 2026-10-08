@@ -839,14 +839,6 @@ const CLIENT_SIDE_ADAPTERS = [
   { adapterId: "obsidian-scheme", name: "Obsidian", icon: "", clientSide: true, setupHelpUrl: CONNECTOR_SETUP_HELP_URL },
 ];
 
-// Cloud-only teasers — shown when the user is in cloud mode but the
-// destinations fetch failed (signed out, offline, 5xx). Renders with a
-// "Sign in" CTA instead of Connect. Hidden entirely in self-hosted mode
-// since these adapters can't work without the cloud backend.
-const CLOUD_TEASER_ADAPTERS = [
-  { adapterId: "notion", name: "Notion", icon: "", cloudOnly: true, setupHelpUrl: CONNECTOR_SETUP_HELP_URL },
-];
-
 async function fetchDestinations() {
   if (destinationsLoading) return destinationsCache;
   destinationsLoading = true;
@@ -868,31 +860,12 @@ async function fetchDestinations() {
       settingsRes?.data?.mode
     ) || "local";
 
-    let cloudAdapters;
-    let cloudReady = false;
-    let cloudReason = null; // "local" | "authError" | "unavailable" | "unknown"
-    if (mode === "cloud") {
-      const res = await sendMsg({ type: "LIST_DESTINATIONS" });
-      if (res?.success && res.data?.ok) {
-        // Drop Obsidian if the cloud list includes it — the client-side
-        // entry is authoritative.
-        cloudAdapters = (res.data.destinations || []).filter(
-          (d) => d.adapterId !== "obsidian-scheme"
-        );
-        cloudReady = true;
-      } else {
-        // Classify so the teaser can show an accurate reason.
-        if (res?.data?.authError) cloudReason = "authError";
-        else if (res?.data?.unavailable) cloudReason = "unavailable";
-        else cloudReason = "unknown";
-        cloudAdapters = CLOUD_TEASER_ADAPTERS;
-      }
-    } else {
-      // Self-hosted mode — hide cloud-only adapters entirely. They can't
-      // work without the cloud backend, so a teaser would just be noise.
-      cloudReason = "local";
-      cloudAdapters = [];
-    }
+    // LOCAL build: cloud destinations never apply. Keep the local-only
+    // list (Obsidian) so leftover stored mode:"cloud" cannot fetch hosted
+    // adapters or show a Sign-in teaser.
+    const cloudAdapters = [];
+    const cloudReady = false;
+    const cloudReason = "local";
 
     destinationsCache = {
       ok: true,
@@ -2689,10 +2662,6 @@ async function init() {
   }
   stopOfflinePolling();
 
-  // Confirmed online. Refresh auth cache for cloud so next reopen paints
-  // optimistically without the round-trip gating.
-  if (mode === "cloud") setCachedAuth(true);
-
   startHeartbeat();
 
   // Warm the destinations cache so the ⋯ menu renders instantly.
@@ -2905,73 +2874,6 @@ el.btnCheckAgain.addEventListener("click", () => {
 if (el.btnOfflineChangeTarget) {
   el.btnOfflineChangeTarget.addEventListener("click", () => {
     showSettingsView();
-  });
-}
-
-// In-panel sign-in. The user never leaves the YouTube tab:
-// — Google: a small popup window runs the OAuth flow and closes itself.
-// — Magic link: we POST to /api/auth/magic-link; the email link lands on
-//   /auth/extension-bridge which auto-closes.
-// In both cases the existing `startOfflinePolling()` loop picks up the
-// restored session within ~5s and reruns init().
-let lastAuthEmail = "";
-
-async function sendMagicLink(email) {
-  if (globalThis.LocalModeLock && !globalThis.LocalModeLock.shouldShowCloudAuth()) return;
-  if (!el.cloudAuthSubmit || !el.cloudAuthResend || !el.cloudAuthErrorMsg) return;
-  
-  el.cloudAuthSubmit.disabled = true;
-  el.cloudAuthResend.disabled = true;
-  el.cloudAuthErrorMsg.hidden = true;
-  el.cloudAuthErrorMsg.textContent = "";
-
-  const res = await sendMsg({ type: "SEND_MAGIC_LINK", email });
-
-  el.cloudAuthSubmit.disabled = false;
-  el.cloudAuthResend.disabled = false;
-
-  if (res?.success) {
-    lastAuthEmail = email;
-    if (el.cloudAuthSentEmail) el.cloudAuthSentEmail.textContent = email;
-    if (el.cloudOnboarding) el.cloudOnboarding.hidden = true;
-    if (el.cloudAuthError) el.cloudAuthError.hidden = true;
-    if (el.cloudAuthCard) el.cloudAuthCard.hidden = true;
-    if (el.cloudAuthSent) el.cloudAuthSent.hidden = false;
-    return;
-  }
-  el.cloudAuthErrorMsg.textContent =
-    res?.error || "Couldn't send the magic link. Try again.";
-  el.cloudAuthErrorMsg.hidden = false;
-}
-
-// Cloud-only auth listeners — null in LOCAL build
-if (el.cloudAuthForm) {
-  el.cloudAuthForm.addEventListener("submit", (e) => {
-    e.preventDefault();
-    const email = el.cloudAuthEmail.value.trim();
-    if (!email) return;
-    sendMagicLink(email);
-  });
-}
-
-if (el.cloudAuthResend) {
-  el.cloudAuthResend.addEventListener("click", () => {
-    if (!lastAuthEmail) return;
-    sendMagicLink(lastAuthEmail);
-  });
-}
-
-if (el.cloudAuthGoogle) {
-  el.cloudAuthGoogle.addEventListener("click", async () => {
-    if (globalThis.LocalModeLock && !globalThis.LocalModeLock.shouldShowCloudAuth()) return;
-    el.cloudAuthGoogle.disabled = true;
-    const res = await sendMsg({ type: "OPEN_GOOGLE_SIGNIN" });
-    el.cloudAuthGoogle.disabled = false;
-    if (!res?.success) {
-      el.cloudAuthErrorMsg.textContent =
-        res?.error || "Couldn't open the Google sign-in window.";
-      el.cloudAuthErrorMsg.hidden = false;
-    }
   });
 }
 

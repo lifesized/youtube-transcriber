@@ -78,7 +78,7 @@ withTemporaryBuildDirectory((buildDir) => {
     const manifestPath = path.join(buildDir, "manifest.json");
     const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
     manifest.name = `${manifest.name} (dev)`;
-    manifest.short_name = "Transcriber dev";
+    manifest.short_name = "Transcriber (dev)";
 
   // Inject "key" field from local keypair so unpacked dev ext gets a stable ID.
   // Without this, Chrome derives the ID from the install path — meaning every

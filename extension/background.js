@@ -552,13 +552,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return { ok: true };
       }
 
-      case "OPEN_GOOGLE_SIGNIN":
-      case "SEND_MAGIC_LINK":
-        return {
-          ok: false,
-          error: "Cloud sign-in is not available in the local build.",
-        };
-
       case "GET_TRANSCRIPT": {
         const transcriptId = message.id;
         const res = await fetch(`${await apiBase()}/api/transcripts/${transcriptId}`);

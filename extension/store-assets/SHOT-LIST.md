@@ -7,7 +7,7 @@ Save final files here as `01-*.png`, `02-*.png`, etc.
 ## Setup before shooting
 
 1. Load unpacked extension from `extension/dist/` (chrome://extensions → Developer mode → Load unpacked)
-2. Sign in to transcribed.dev cloud mode (or use local mode if you want OSS shots)
+2. Use the LOCAL build (`extension/dist/` from `npm run build:ext`). Do not sign in to transcribed.dev or switch to cloud mode.
 3. Run a few transcriptions ahead of time so the Library has real-looking entries
 4. Use a clean Chrome profile if possible — no other extensions visible
 5. Open Chrome at exactly **1280×800** window size, or resize the side panel + content area to compose nicely; you can crop after
