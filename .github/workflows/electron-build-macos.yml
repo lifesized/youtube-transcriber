@@ -27,6 +27,9 @@ jobs:
       - name: Unit tests (packaging + migrations)
         run: npm run test:electron
       
+      - name: Transcript cache integration test
+        run: npm run test:cache
+      
       - name: Build Next.js
         run: npm run build
       

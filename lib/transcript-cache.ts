@@ -50,14 +50,23 @@ export interface CachedTranscript {
  * @param platform - Platform (default: "youtube")
  * @returns Cached or newly created transcript record
  */
+export type TranscriptFetcher = (
+  url: string,
+  lang?: string
+) => Promise<VideoTranscriptResult & { source?: string }>;
+
 export async function getOrCreateTranscript(
   videoId: string,
   url: string,
   lang?: string,
-  platform: string = "youtube"
+  platform: string = "youtube",
+  options?: {
+    fetcher?: TranscriptFetcher;
+    pipelineVersion?: number;
+  }
 ): Promise<CachedTranscript> {
   const captionLanguage = normalizeCaptionLanguage(lang);
-  const pipelineVersion = PIPELINE_VERSION;
+  const pipelineVersion = options?.pipelineVersion ?? PIPELINE_VERSION;
 
   // Check cache
   const cached = await prisma.video.findUnique({
@@ -81,7 +90,8 @@ export async function getOrCreateTranscript(
   }
 
   // Cache miss — fetch/transcribe
-  const result = await getVideoTranscript(url, lang);
+  const fetchTranscript = options?.fetcher ?? getVideoTranscript;
+  const result = await fetchTranscript(url, lang);
 
   const data = {
     videoId,
