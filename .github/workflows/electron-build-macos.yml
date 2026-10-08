@@ -215,6 +215,27 @@ jobs:
           codesign --verify --deep --strict "$MOUNT/Transcriber.app"
           echo "✓ mounted Transcriber.app codesign --verify --deep --strict"
 
+          echo "----- fuses and CDHash of the mounted .app (what users install) -----"
+          MOUNTED_FUSES=$(npx --no-install @electron/fuses read --app "$MOUNT/Transcriber.app")
+          echo "$MOUNTED_FUSES"
+          for fuse in EnableNodeOptionsEnvironmentVariable EnableNodeCliInspectArguments; do
+            echo "$MOUNTED_FUSES" | grep "$fuse" | grep -q Disabled || {
+              echo "ERROR: $fuse is not off in the DMG's Transcriber.app"
+              exit 1
+            }
+          done
+          echo "✓ mounted Transcriber.app fuses NodeOptions and Inspect are off"
+          cdhash() { codesign -dvvv "$1" 2>&1 | awk -F= '/^CDHash=/ { print $2; exit }'; }
+          BUILT_CDHASH=$(cdhash dist-electron/mac-arm64/Transcriber.app)
+          MOUNTED_CDHASH=$(cdhash "$MOUNT/Transcriber.app")
+          echo "CDHash dist-electron $BUILT_CDHASH"
+          echo "CDHash mounted DMG   $MOUNTED_CDHASH"
+          if [ -z "$MOUNTED_CDHASH" ] || [ "$MOUNTED_CDHASH" != "$BUILT_CDHASH" ]; then
+            echo "ERROR: the DMG's Transcriber.app is not the app the later steps check"
+            exit 1
+          fi
+          echo "✓ mounted Transcriber.app CDHash matches dist-electron/mac-arm64"
+
           # Best-effort screenshot of the mounted DMG window. Do not fail the job.
           python3 electron/dmg/screenshot-dmg-window.py "$MOUNT" dist-electron/dmg-window.png || true
 
