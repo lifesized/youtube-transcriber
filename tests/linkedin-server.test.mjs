@@ -209,3 +209,10 @@ test("the library list shows LinkedIn entries with their page URLs", async () =>
   assert.equal(byId["linkedin:event-7512647010907250689"].title, "Building local-first apps");
   assert.equal(byId["linkedin:7151241570371948544"].videoUrl, POST_URL);
 });
+
+test("both yt-dlp calls (info and download) put -- right before the URL", () => {
+  const calls = ytdlpCalls();
+  assert.ok(calls.some((args) => args.includes("--dump-json")));
+  assert.ok(calls.some((args) => args.includes("-x")));
+  for (const args of calls) assert.equal(args.at(-2), "--", JSON.stringify(args));
+});
