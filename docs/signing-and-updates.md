@@ -4,7 +4,7 @@ James pastes the secrets himself. This file is the runbook, not a request to com
 
 Unsigned / ad-hoc CI is unchanged: the `build` job still produces an ad-hoc-signed DMG with `Install Transcriber.command` and `.payload/Transcriber.app`, artifact name `Transcriber-macOS-arm64`. It never sees Apple secrets.
 
-Signing, notarization, and the drag-to-Applications DMG run in a **separate** `sign` job on a fresh runner. Publishing runs in a **separate** `release` job. Both jobs use the GitHub Environment named `release`.
+Signing, notarization, and the drag-to-Applications DMG run in a **separate** `sign` job on a fresh runner. Publishing runs in a **separate** `release` job. Both jobs use the GitHub Environment named `release`, and both also require the repository variable `SIGNING_ENABLED=true`. Landing this PR does **not** create that Environment or start a signed run.
 
 ## Why an Environment (not repo secrets)
 
@@ -12,13 +12,27 @@ Fork pull requests do **not** receive repository secrets. **Same-repo** pull req
 
 That is why every Apple secret lives on the Environment `release`, **not** as repository secrets:
 
-- The `sign` and `release` jobs set `environment: release` and `if: github.event_name != 'pull_request'`.
-- The `sign` job does **not** run `npm ci` or any `package.json` lifecycle script. It downloads the unsigned app artifact and the signing scripts from the triggering ref (the Environment protection rules gate that ref).
+- The `sign` and `release` jobs set `environment: release` and run only when `vars.SIGNING_ENABLED == 'true'` **and** the event is a `v*-beta.*` tag or a `workflow_dispatch` from `refs/heads/beta/electron-menubar`. Plain pushes to `beta/electron-menubar` stay unsigned.
+- The `sign` job does **not** run `npm ci` or any `package.json` lifecycle script. It never executes anything from the build artifact (`@electron/fuses`, `app-builder-bin`). It checks out scripts, downloads the unsigned `.app` bytes, and uses `hdiutil` / `codesign` / a dependency-free fuse reader.
 - PR runs never receive the secrets and never produce a signed artifact.
 
-## James: create Environment `release` (one-time)
+## James: do this in this order (one-time)
 
-Do this in GitHub **before** the first signed build. Add the secrets as **Environment secrets** on `release`. Do **not** add them as repository secrets. If they already exist as repo secrets, delete those copies after the Environment ones are in place.
+Do **not** set `SIGNING_ENABLED` until the Environment exists and is protected. GitHub creates an Environment on first use if the name is missing; landing this PR with the variable already `true` would auto-create an unprotected `release` Environment.
+
+1. **Create the `release` environment** with reviewer and deployment rules (below).
+2. **Add the environment secrets** (table below). Do **not** add them as repository secrets. If they already exist as repo secrets, delete those copies after the Environment ones are in place.
+3. **Add the tag ruleset** for `v*-beta.*` (below).
+4. **Set the repository variable** `SIGNING_ENABLED` to `true` (Settings → Secrets and variables → Actions → Variables).
+5. **Push the first tag** `v0.2.0-beta.1` (or the current `package.json` version). Do this *after* the ruleset is active.
+
+Also do these repo settings once. They are not required for the first signed build, but they are the intended posture:
+
+- **Prevent self review: leave it OFF.** James is the only reviewer. GitHub's "Require a pull request before merging" option **Require approval from someone other than the last pusher** would lock the beta branch because there is no second reviewer.
+- **Protect `beta/electron-menubar`:** require a pull request before merging, dismiss stale reviews, and block force pushes. Do not require a second reviewer.
+- **Default workflow permissions: read.** Settings → Actions → General → Workflow permissions → **Read repository contents and packages permissions**. The `release` job still requests `contents: write` for `gh release create`. Everything else stays read.
+
+## James: create Environment `release` (step 1)
 
 1. Open `https://github.com/lifesized/youtube-transcriber/settings/environments`.
 2. **New environment**. Name it exactly `release`.
@@ -26,7 +40,9 @@ Do this in GitHub **before** the first signed build. Add the secrets as **Enviro
 4. **Deployment branches and tags:** restrict to:
    - Branch: `beta/electron-menubar` (needed for `workflow_dispatch` from that branch).
    - Tag pattern: `v*-beta.*` (example: `v0.2.0-beta.1`).
-5. **Environment secrets** — **Add secret** for each name below. Same values you would have put on the repo.
+5. Wait to add secrets until this Environment exists with those rules.
+
+## James: add Environment secrets (step 2)
 
 | Secret | What it is |
 |---|---|
@@ -41,7 +57,7 @@ Do this in GitHub **before** the first signed build. Add the secrets as **Enviro
 
 Do not add a PAT. The release job uses the built-in `GITHUB_TOKEN` with `contents: write`.
 
-## James: tag ruleset for `v*-beta.*` (one-time)
+## James: tag ruleset for `v*-beta.*` (step 3)
 
 Restrict who can create release tags so a random collaborator cannot fire the Environment:
 
@@ -53,6 +69,17 @@ Restrict who can create release tags so a random collaborator cannot fire the En
 6. Bypass: only James (or the repo admin role you want).
 7. Rules: **Restrict creations**, **Restrict updates**, **Restrict deletions**. Creator: James only.
 
+The tag ruleset **blocks `gh release create` from creating the tag**. Push the tag first (`git tag v0.2.0-beta.1 && git push origin v0.2.0-beta.1`), then let the tag event run `sign` / `release`. `workflow_dispatch` with **Publish a GitHub prerelease** requires that `refs/tags/v${package.json.version}` already exist; it will not create it. To create a tag anyway, use the ruleset bypass (James only).
+
+## James: set `SIGNING_ENABLED` (step 4)
+
+Only after steps 1–3: Settings → Secrets and variables → Actions → Variables → **New repository variable**.
+
+- Name: `SIGNING_ENABLED`
+- Value: `true`
+
+Until this is set, `sign` and `release` are skipped on every event, including tags. That is intentional.
+
 ## Job graph
 
 ```
@@ -60,12 +87,17 @@ pull_request → build (unsigned only) + unsigned-path-contract
                no Environment, no Apple secrets, no signed artifact
 
 push to beta/electron-menubar
-  or tag v*-beta.*
+               → build (unsigned only). sign and release stay skipped.
+
+tag v*-beta.*
   or workflow_dispatch on beta/electron-menubar
-               → build (unsigned DMG + unsigned .app + fuses helper)
-               → sign  [environment: release]  (fresh runner, no npm ci)
-               → release [environment: release]  (draft GitHub prerelease, only
-                  when notarized and the ref/tag gates pass)
+  AND vars.SIGNING_ENABLED == 'true'
+               → build (unsigned DMG + unsigned .app bytes)
+               → sign  [environment: release]  (fresh runner, no npm ci,
+                  no build-artifact code)
+               → release [environment: release]  (draft GitHub prerelease,
+                  only when notarized; dispatch also needs an existing tag
+                  and inputs.publish_github_release)
 ```
 
 ## Create the Developer ID certificate
@@ -118,9 +150,9 @@ The workflow tag filter is `v*-beta.*`. The release job refuses to publish unles
 3. Tag `v<same-version>` (example: version `0.2.0-beta.1` → `v0.2.0-beta.1`) and push the tag. Only James should be able to create that tag (ruleset above).
 4. Approve the Environment `release` deployments when GitHub asks.
 5. The `release` job creates a **draft** GitHub prerelease targeted at `$GITHUB_SHA`. James publishes it manually from the GitHub Releases UI when he is ready. Draft releases are not picked up by electron-updater.
-6. `workflow_dispatch` is allowed only on `beta/electron-menubar`. Check **Publish a GitHub prerelease** only when you intend to open a draft. The job still requires `$GITHUB_SHA` to be an ancestor of `origin/beta/electron-menubar` and the version to be `X.Y.Z-beta.N`.
+6. `workflow_dispatch` is allowed only on `refs/heads/beta/electron-menubar`. Check **Publish a GitHub prerelease** only when you intend to open a draft. The matching tag must already exist (`git rev-parse refs/tags/v${version}`). The job still requires `$GITHUB_SHA` to be an ancestor of `origin/beta/electron-menubar` and the version to be `X.Y.Z-beta.N`.
 
-Do **not** expect a GitHub Release on every push to `beta/electron-menubar`.
+Do **not** expect a GitHub Release on every push to `beta/electron-menubar`. Do **not** expect `sign` on those pushes either.
 
 ## Local unsigned build (unchanged)
 

@@ -288,6 +288,13 @@ test("docs list every secret and the GitHub update call", () => {
   assert.ok(docs.includes("v*-beta.*"));
   assert.doesNotMatch(docs, /beta-v\*/);
   assert.ok(docs.includes("environment: release"));
+  assert.ok(docs.includes("SIGNING_ENABLED"));
+  assert.ok(docs.includes("Prevent self review: leave it OFF"));
+  assert.ok(docs.includes("Protect `beta/electron-menubar`"));
+  assert.ok(docs.includes("Default workflow permissions: read"));
+  assert.ok(docs.includes("blocks `gh release create` from creating the tag"));
+  assert.ok(docs.includes("Push the tag first"));
+  assert.ok(docs.includes("Beta clients follow the beta channel only"));
   const privacy = fs.readFileSync(path.join(root, "extension", "privacy-policy.md"), "utf8");
   assert.ok(privacy.includes("19721"));
   assert.ok(privacy.includes("lifesized/youtube-transcriber"));
