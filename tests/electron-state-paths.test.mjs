@@ -8,10 +8,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   mkdtempSync,
+  mkdirSync,
   readFileSync,
+  readdirSync,
   writeFileSync,
   existsSync,
   rmSync,
+  statSync,
+  chmodSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
@@ -220,4 +224,65 @@ test("app-log creates ~/Library/Logs/Transcriber App/main.log and tees console",
     else process.env.HOME = prevHome;
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+function withAppLogHome(fn) {
+  const dir = mkdtempSync(path.join(tmpdir(), "ytt-app-log-"));
+  const prevHome = process.env.HOME;
+  process.env.HOME = dir;
+  try {
+    const appLog = require(path.join(repoRoot, "electron/app-log.js"));
+    return fn(appLog, config.resolveAppLogDir(dir));
+  } finally {
+    if (prevHome === undefined) delete process.env.HOME;
+    else process.env.HOME = prevHome;
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+const mode = (file) => statSync(file).mode & 0o777;
+const quiet = { log: () => {}, warn: () => {}, error: () => {} };
+
+test("app-log creates main.log 0600 and tightens an existing 0644 one", () => {
+  withAppLogHome((appLog) => {
+    const file = appLog.install({ ...quiet });
+    assert.equal(mode(file), 0o600, "a new main.log");
+  });
+  withAppLogHome((appLog, logDir) => {
+    mkdirSync(logDir, { recursive: true });
+    const file = path.join(logDir, "main.log");
+    writeFileSync(file, "old line\n");
+    chmodSync(file, 0o644);
+    appLog.install({ ...quiet });
+    assert.equal(mode(file), 0o600, "an existing main.log");
+    assert.match(readFileSync(file, "utf8"), /^old line\n/);
+  });
+});
+
+test("app-log rotates main.log at about 5MB and keeps one .1", () => {
+  withAppLogHome((appLog, logDir) => {
+    assert.equal(appLog.MAX_BYTES, 5 * 1024 * 1024);
+    const file = path.join(logDir, "main.log");
+    const rotated = `${file}.1`;
+    appLog.install({ ...quiet });
+
+    writeFileSync(file, "a".repeat(appLog.MAX_BYTES - 10));
+    appLog.writeLine("info", ["still under the cap"]);
+    assert.equal(existsSync(rotated), false, "no rotation under 5MB");
+
+    writeFileSync(file, "b".repeat(appLog.MAX_BYTES));
+    appLog.writeLine("info", ["first after rotation"]);
+    assert.equal(statSync(rotated).size, appLog.MAX_BYTES);
+    assert.match(readFileSync(file, "utf8"), /^\[.*\] \[info\] first after rotation\n$/);
+    assert.equal(mode(file), 0o600);
+    assert.equal(mode(rotated), 0o600);
+
+    writeFileSync(file, "c".repeat(appLog.MAX_BYTES + 1));
+    appLog.writeLine("info", ["second rotation"]);
+    assert.equal(readFileSync(rotated, "utf8")[0], "c", ".1 is replaced, not kept beside");
+    assert.deepEqual(
+      readdirSync(logDir).filter((f) => f.startsWith("main.log")).sort(),
+      ["main.log", "main.log.1"]
+    );
+  });
 });
