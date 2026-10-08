@@ -48,8 +48,12 @@ function syncStandaloneFromStaging(appPath, stagingPath) {
   if (!fs.existsSync(stagingPath)) {
     throw new Error(`Staging standalone missing: ${stagingPath}`);
   }
-  fs.mkdirSync(dest, { recursive: true });
-  fs.cpSync(stagingPath, dest, { recursive: true, dereference: true });
+  // Replace the extraResources copy. Merging with dereference:true can
+  // throw on Node 22 when dest already holds a symlink to the same tree
+  // ("cannot overwrite X with X").
+  fs.rmSync(dest, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.cpSync(stagingPath, dest, { recursive: true, dereference: true, force: true });
   console.log("  copied staging standalone (including node_modules) into extraResources");
 }
 

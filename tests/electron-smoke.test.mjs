@@ -161,18 +161,22 @@ test("afterPack restores standalone node_modules skipped by extraResources", () 
   const dest = path.join(appPath, "Contents", "Resources", "standalone");
 
   fs.mkdirSync(path.join(staging, "node_modules", "@prisma", "client"), { recursive: true });
+  fs.mkdirSync(path.join(staging, "node_modules", "better-sqlite3"), { recursive: true });
   fs.mkdirSync(path.join(staging, ".next", "static"), { recursive: true });
   fs.mkdirSync(path.join(staging, "prisma", "migrations"), { recursive: true });
   fs.writeFileSync(path.join(staging, "server.js"), "ok");
   fs.writeFileSync(path.join(staging, "node_modules", "@prisma", "client", "index.js"), "ok");
+  fs.writeFileSync(path.join(staging, "node_modules", "better-sqlite3", "package.json"), "{}");
   fs.writeFileSync(path.join(staging, ".next", "static", "chunk.js"), "ok");
 
-  fs.mkdirSync(dest, { recursive: true });
+  fs.mkdirSync(path.join(dest, "node_modules"), { recursive: true });
   fs.copyFileSync(path.join(staging, "server.js"), path.join(dest, "server.js"));
   fs.cpSync(path.join(staging, ".next"), path.join(dest, ".next"), { recursive: true });
   fs.cpSync(path.join(staging, "prisma"), path.join(dest, "prisma"), { recursive: true });
-  fs.mkdirSync(path.join(dest, "node_modules", "better-sqlite3"), { recursive: true });
-  fs.writeFileSync(path.join(dest, "node_modules", "better-sqlite3", "package.json"), "{}");
+  fs.symlinkSync(
+    path.join(staging, "node_modules", "better-sqlite3"),
+    path.join(dest, "node_modules", "better-sqlite3")
+  );
 
   assert.equal(
     fs.existsSync(path.join(dest, "node_modules", "@prisma", "client")),
@@ -189,7 +193,7 @@ test("afterPack restores standalone node_modules skipped by extraResources", () 
   );
   assert.ok(
     fs.existsSync(path.join(dest, "node_modules", "better-sqlite3", "package.json")),
-    "already-copied better-sqlite3 must remain"
+    "staging better-sqlite3 must land even if dest had a symlink to it"
   );
 
   fs.rmSync(tmp, { recursive: true, force: true });
