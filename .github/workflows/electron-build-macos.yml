@@ -908,6 +908,109 @@ jobs:
           
           echo ""
           echo "✓ All smoke tests passed!"
+
+      - name: Packaged app creates and heals every schema table
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          ROOT="$PWD"
+          APP_PATH="$ROOT/dist-electron/mac-arm64/Transcriber.app/Contents/MacOS/Transcriber"
+          MIGRATIONS="$ROOT/dist-electron/mac-arm64/Transcriber.app/Contents/Resources/standalone/prisma/migrations"
+          PORT=$(node -p "require('./electron/config.js').port")
+          TOKEN="$(openssl rand -hex 32)"
+          APP_PID=""
+
+          stop_app() {
+            if [ -n "$APP_PID" ]; then
+              kill "$APP_PID" 2>/dev/null || true
+              sleep 1
+              kill -9 "$APP_PID" 2>/dev/null || true
+              wait "$APP_PID" 2>/dev/null || true
+              APP_PID=""
+            fi
+          }
+          trap stop_app EXIT
+
+          state_dir() {
+            HOME="$1" node -p "require('./electron/config.js').resolveAppStateDir()"
+          }
+
+          # Launch the real app on HOME=$1, read Settings/ProviderConfig/DailyUsage through the API, quit.
+          launch_and_read_settings() {
+            local home="$1" log="$1/app.log" code=""
+            HOME="$home" TRANSCRIBER_LOCAL_TOKEN="$TOKEN" "$APP_PATH" > "$log" 2>&1 &
+            APP_PID=$!
+            for i in $(seq 1 60); do
+              if ! kill -0 "$APP_PID" 2>/dev/null; then
+                echo "ERROR: Transcriber.app exited early"; cat "$log"; exit 1
+              fi
+              code=$(curl -sS -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${TOKEN}" \
+                "http://127.0.0.1:${PORT}/api/health" 2>/dev/null || true)
+              [ "$code" = "200" ] && break
+              if [ "$i" -eq 60 ]; then
+                echo "ERROR: app did not become healthy (http=${code:-curl-fail})"; cat "$log"; exit 1
+              fi
+              sleep 1
+            done
+            for route in /api/settings /api/settings/providers /api/usage; do
+              code=$(curl -sS -o /tmp/settings-route.json -w "%{http_code}" \
+                -H "Authorization: Bearer ${TOKEN}" "http://127.0.0.1:${PORT}${route}")
+              echo "GET $route -> $code $(head -c 200 /tmp/settings-route.json)"
+              if [ "$code" != "200" ]; then
+                echo "ERROR: GET $route returned $code"; cat "$log"; exit 1
+              fi
+            done
+            stop_app
+            if grep -E "no such table|\[secrets\] Migration failed" "$log"; then
+              echo "ERROR: packaged server logged a missing-table error"; exit 1
+            fi
+            echo "✓ settings, providers and usage routes return 200 with no missing-table errors"
+          }
+
+          assert_schema() {
+            local db="$1"
+            for table in Setting ProviderConfig DailyUsage WaitlistSignup Video _prisma_migrations; do
+              if [ "$(sqlite3 "$db" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='$table'")" != "1" ]; then
+                echo "ERROR: table $table missing from $db"; sqlite3 "$db" .schema; exit 1
+              fi
+            done
+            for index in DailyUsage_date_provider_key WaitlistSignup_email_key Video_videoId_captionLanguage_pipelineVersion_key; do
+              if [ "$(sqlite3 "$db" "SELECT count(*) FROM sqlite_master WHERE type='index' AND name='$index'")" != "1" ]; then
+                echo "ERROR: index $index missing from $db"; sqlite3 "$db" .schema; exit 1
+              fi
+            done
+            echo "✓ every schema table and unique index exists in $db"
+          }
+
+          echo "----- first launch on an empty HOME -----"
+          FRESH="$(mktemp -d /tmp/transcriber-db-fresh-XXXXXX)"
+          launch_and_read_settings "$FRESH"
+          assert_schema "$(state_dir "$FRESH")/transcriber.db"
+
+          echo "----- next launch heals a library from the old bootstrap -----"
+          OLD="$(mktemp -d /tmp/transcriber-db-old-XXXXXX)"
+          OLD_DB="$(state_dir "$OLD")/transcriber.db"
+          mkdir -p "$(dirname "$OLD_DB")"
+          sqlite3 "$OLD_DB" < "$MIGRATIONS/20260212021540_init/migration.sql"
+          sqlite3 "$OLD_DB" < "$MIGRATIONS/20261007210826_add_transcript_cache_keys/migration.sql"
+          sqlite3 "$OLD_DB" <<'SQL'
+          CREATE TABLE _prisma_migrations (id TEXT PRIMARY KEY NOT NULL, checksum TEXT NOT NULL, finished_at DATETIME, migration_name TEXT NOT NULL, logs TEXT, rolled_back_at DATETIME, started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, applied_steps_count INTEGER NOT NULL DEFAULT 0);
+          INSERT INTO _prisma_migrations (id, checksum, finished_at, migration_name, applied_steps_count) VALUES
+            ('ci-1', 'ci', CURRENT_TIMESTAMP, '20260212021540_init', 1),
+            ('ci-2', 'ci', CURRENT_TIMESTAMP, '20261007210826_add_transcript_cache_keys', 1);
+          INSERT INTO Video (id, videoId, title, author, videoUrl, transcript, updatedAt)
+            VALUES ('old-row', 'oldvid', 'Old library row', 'CI', 'https://www.youtube.com/watch?v=oldvid', '[{"text":"kept"}]', CURRENT_TIMESTAMP);
+          SQL
+          if [ "$(sqlite3 "$OLD_DB" "SELECT count(*) FROM sqlite_master WHERE name='Setting'")" != "0" ]; then
+            echo "ERROR: seeded library should not have Setting yet"; exit 1
+          fi
+          launch_and_read_settings "$OLD"
+          assert_schema "$OLD_DB"
+          if [ "$(sqlite3 "$OLD_DB" "SELECT title FROM Video WHERE id='old-row'")" != "Old library row" ]; then
+            echo "ERROR: the existing Video row did not survive the upgrade"; exit 1
+          fi
+          sqlite3 "$OLD_DB" "SELECT migration_name FROM _prisma_migrations ORDER BY migration_name"
+          echo "✓ old-bootstrap library healed on next launch and kept its rows"
       
       - name: Report packaged size
         run: |
