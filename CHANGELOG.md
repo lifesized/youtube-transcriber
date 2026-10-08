@@ -20,6 +20,7 @@
 - **Install Transcriber.command** — the DMG includes a helper that copies Transcriber to `/Applications`, clears `com.apple.quarantine`, and opens the app. A DMG background tells friends to run it. First launch of the helper needs right-click → Open (or Privacy & Security → Open Anyway) once. Docs: `docs/beta-install-macos.md`.
 
 ### Fixed
+- **CI Node 22 for `npx asar`** — `@electron/asar` 4.x requires Node >=22.12, so the macOS DMG job uses Node 22. Node 20 failed the packaged-require gate with `CANNOT RUN WITH NODE 20`.
 - **Native-host wrapper path** — Packaged host script is `Contents/Resources/app.asar.unpacked/tools/...` (not `Resources/app/tools`). `start` in Electron mode launches the app with `open -b com.transcribed.app`. Spawned children have an `error` handler. CI `ls`s the wrapper target and sends a framed `ping`.
 - **CI workflow** — Job uses `permissions: contents: read` and prints the DMG SHA-256 in the job summary.
 - **Packaged main-process modules** — `lib/*.js` is inside `app.asar` so Electron can `require('../lib/local-api-token.js')`. CI lists the asar, resolves every `require()` from `electron/main.js`, and launches `Transcriber.app` until `/api/health` returns 200.

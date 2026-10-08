@@ -317,6 +317,7 @@ test("packaged native host script path is app.asar.unpacked", () => {
 test("CI launches the packaged Transcriber.app and checks asar requires", () => {
   const workflowPath = path.join(projectRoot, ".github", "workflows", "electron-build-macos.yml");
   const content = fs.readFileSync(workflowPath, "utf8");
+  assert.match(content, /node-version:\s*['"]22['"]/);
   assert.ok(content.includes("asar list"));
   assert.ok(content.includes("assert-packaged-requires.js"));
   assert.ok(content.includes("Launch packaged Transcriber.app"));
