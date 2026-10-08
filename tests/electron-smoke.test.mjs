@@ -63,6 +63,15 @@ test("GitHub Actions workflow exists", () => {
   assert.ok(fs.existsSync(workflowPath), "electron-build-macos.yml workflow should exist");
 });
 
+test("CI bundles static ffmpeg not Homebrew", () => {
+  const workflowPath = path.join(projectRoot, ".github", "workflows", "electron-build-macos.yml");
+  const content = fs.readFileSync(workflowPath, "utf8");
+  assert.ok(content.includes("ffmpeg.martin-riedl.de"));
+  assert.ok(!content.includes("brew install ffmpeg"));
+  assert.ok(content.includes("otool -L"));
+  assert.ok(content.includes("/opt/homebrew"));
+});
+
 test("beta install docs exist", () => {
   const docsPath = path.join(projectRoot, "docs", "beta-install-macos.md");
   assert.ok(fs.existsSync(docsPath), "beta-install-macos.md should exist");

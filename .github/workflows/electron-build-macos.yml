@@ -30,23 +30,39 @@ jobs:
       - name: Build Next.js
         run: npm run build
       
-      - name: Download ffmpeg (arm64)
+      - name: Download ffmpeg (arm64 static)
         run: |
+          set -euo pipefail
           mkdir -p electron/resources/bin
-          # Install ffmpeg via Homebrew (guarantees correct architecture)
-          brew install ffmpeg
-          # Copy the binary to our resources
-          cp "$(which ffmpeg)" electron/resources/bin/ffmpeg
+          # Static arm64 build (no Homebrew dylibs). Homebrew ffmpeg links
+          # /opt/homebrew and will not run on friends' machines.
+          curl -L --fail -o /tmp/ffmpeg.zip \
+            "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip"
+          rm -rf /tmp/ffmpeg-extract
+          mkdir -p /tmp/ffmpeg-extract
+          unzip -o /tmp/ffmpeg.zip -d /tmp/ffmpeg-extract
+          FFMPEG_SRC=$(find /tmp/ffmpeg-extract -type f -name ffmpeg | head -1)
+          if [ -z "$FFMPEG_SRC" ]; then
+            echo "ERROR: ffmpeg binary not found in zip"
+            find /tmp/ffmpeg-extract -type f
+            exit 1
+          fi
+          cp "$FFMPEG_SRC" electron/resources/bin/ffmpeg
           chmod +x electron/resources/bin/ffmpeg
           
-          # Verify architecture (must be arm64)
           file electron/resources/bin/ffmpeg | tee /dev/stderr | grep -q "arm64" || {
             echo "ERROR: ffmpeg is not arm64!"
             lipo -info electron/resources/bin/ffmpeg || true
             file electron/resources/bin/ffmpeg
             exit 1
           }
-          echo "✓ ffmpeg architecture verified: arm64"
+          echo "----- otool -L ffmpeg (pre-pack) -----"
+          otool -L electron/resources/bin/ffmpeg
+          if otool -L electron/resources/bin/ffmpeg | grep -E '/opt/homebrew|/usr/local'; then
+            echo "ERROR: ffmpeg links Homebrew or /usr/local dylibs"
+            exit 1
+          fi
+          echo "✓ static arm64 ffmpeg bundled"
       
       - name: Download yt-dlp
         run: |
@@ -108,7 +124,7 @@ jobs:
           fi
           echo "✓ ELECTRON_RUN_AS_NODE works"
           
-          # 4. Check bundled binaries exist
+          # 4. Check bundled binaries exist, are arm64, and are not Homebrew-linked
           for binary in ffmpeg yt-dlp; do
             if [ ! -f "$BIN_DIR/$binary" ]; then
               echo "ERROR: $binary not found in $BIN_DIR"
@@ -120,6 +136,13 @@ jobs:
               exit 1
             }
             echo "✓ $binary exists and is arm64"
+            echo "----- otool -L $binary -----"
+            otool -L "$BIN_DIR/$binary"
+            if otool -L "$BIN_DIR/$binary" | grep -E '/opt/homebrew|/usr/local'; then
+              echo "ERROR: $binary links /opt/homebrew or /usr/local"
+              exit 1
+            fi
+            echo "✓ $binary has no Homebrew /usr/local linkage"
           done
           
           # 5. Standalone payload (outside asar) — server, node_modules, static, public, prisma
