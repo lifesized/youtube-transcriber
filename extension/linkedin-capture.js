@@ -56,11 +56,16 @@ function parseLinkedInMedia(response) {
   };
 }
 
-/** Same choice as sendPageUrl: tokenless only for the dev server's fallback. */
+/**
+ * The getLocalToken token when there is one. Without it, only the dev server
+ * (a no-auth one) can take the request, so any other target is refused.
+ * Cookies are never sent: background.js posts through targetClient.send.
+ */
 function buildPageSendRequest(pageUrl, token, apiBase) {
-  return token
-    ? buildLocalSendRequest(pageUrl, token, null, apiBase)
-    : buildTokenlessDevSendRequest(pageUrl, null);
+  if (token) return buildLocalSendRequest(pageUrl, token, null, apiBase);
+  const request = buildTokenlessDevSendRequest(pageUrl, null);
+  if (!request.ok || new URL(request.url).origin !== apiBase) return { ok: false };
+  return request;
 }
 
 /**
