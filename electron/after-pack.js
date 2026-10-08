@@ -67,7 +67,6 @@ function assertStandalonePayload(context) {
     path.join(standalone, "server.js"),
     path.join(standalone, "node_modules"),
     path.join(standalone, ".next", "static"),
-    path.join(standalone, "public"),
     path.join(standalone, "prisma", "migrations"),
     path.join(standalone, "node_modules", "@prisma", "client"),
   ];
@@ -75,6 +74,12 @@ function assertStandalonePayload(context) {
     if (!fs.existsSync(file)) {
       throw new Error(`Packaged standalone payload missing: ${file}`);
     }
+  }
+  const publicDir = path.join(standalone, "public");
+  if (!fs.existsSync(publicDir)) {
+    fs.mkdirSync(publicDir, { recursive: true });
+    fs.writeFileSync(path.join(publicDir, "keep"), "");
+    console.log("  created empty standalone/public");
   }
   console.log("  standalone payload verified");
 }

@@ -65,6 +65,10 @@ function main() {
   if (!copyIfExists(path.join(ROOT, "public"), path.join(STAGING, "public"))) {
     ensureDir(path.join(STAGING, "public"));
   }
+  const publicKeep = path.join(STAGING, "public", "keep");
+  if (!fs.existsSync(publicKeep)) {
+    fs.writeFileSync(publicKeep, "placeholder so electron-builder copies public/\n");
+  }
   copyIfExists(path.join(ROOT, "prisma"), path.join(STAGING, "prisma"));
 
   ensureDir(path.join(STAGING, "node_modules"));
