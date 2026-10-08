@@ -78,12 +78,13 @@ function fileExists(name, asarFiles, unpackedRoot) {
   return null;
 }
 
-function resolveNodeModule(fromFile, spec, asarFiles, unpackedRoot) {
+function resolveNodeModule(fromFile, spec, asarFiles, unpackedRoot, readFile) {
   let dir = path.posix.dirname(fromFile);
   const name = spec.startsWith("@")
     ? spec.split("/").slice(0, 2).join("/")
     : spec.split("/")[0];
   const rest = spec.slice(name.length).replace(/^\//, "");
+  const readPkg = readFile || ((hit) => readPackagedFile(hit, asarFiles, unpackedRoot, null));
   while (true) {
     const pkgDir = path.posix.join(dir === "." ? "" : dir, "node_modules", name);
     const pkgJson = `${normalizeAsarPath(pkgDir)}/package.json`;
@@ -97,7 +98,7 @@ function resolveNodeModule(fromFile, spec, asarFiles, unpackedRoot) {
       } else {
         let pkg = {};
         try {
-          pkg = JSON.parse(readPackagedFile(hit, asarFiles, unpackedRoot, null));
+          pkg = JSON.parse(readPkg(hit));
         } catch {
           pkg = {};
         }
@@ -123,7 +124,10 @@ function readPackagedFile(hit, asarFiles, unpackedRoot, asarArchive) {
   if (asarArchive) {
     return loadAsar().extractFile(asarArchive, hit.path).toString("utf8");
   }
-  return asarFiles.get(hit.path) || "";
+  if (asarFiles && typeof asarFiles.get === "function") {
+    return asarFiles.get(hit.path) || "";
+  }
+  return "";
 }
 
 function walkRequires(options) {
@@ -165,7 +169,7 @@ function walkRequires(options) {
           if (resolved) break;
         }
       } else {
-        resolved = resolveNodeModule(current, spec, asarFiles, unpackedRoot);
+        resolved = resolveNodeModule(current, spec, asarFiles, unpackedRoot, readFile);
       }
       if (!resolved) {
         missing.push({ from: current, spec });
@@ -216,8 +220,9 @@ function main() {
   const listed = asar.listPackage(asarPath);
   console.log(`asar entries: ${listed.length}`);
   for (const name of listed.sort()) {
-    if (/(^|\/)lib\/|^lib\//.test(normalizeAsarPath(name))) {
-      console.log(`  asar ${normalizeAsarPath(name)}`);
+    const n = normalizeAsarPath(name);
+    if (n === "lib" || n.startsWith("lib/")) {
+      console.log(`  asar ${n}`);
     }
   }
   const asarFiles = new Set(listed.map(normalizeAsarPath).filter(Boolean));

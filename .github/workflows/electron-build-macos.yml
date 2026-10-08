@@ -151,8 +151,8 @@ jobs:
           set -euo pipefail
           APP="$PWD/dist-electron/mac-arm64/Transcriber.app"
           ASAR="$APP/Contents/Resources/app.asar"
-          echo "----- npx asar list -----"
-          npx --no-install asar list "$ASAR"
+          echo "----- asar first-party files -----"
+          npx --no-install asar list "$ASAR" | grep -E '^(lib/|electron/)' || true
           echo "----- resolve requires from electron/main.js -----"
           node scripts/assert-packaged-requires.js --app "$APP" --entry electron/main.js
           node -e '
