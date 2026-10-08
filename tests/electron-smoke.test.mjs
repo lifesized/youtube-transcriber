@@ -82,7 +82,27 @@ test("CI bundles static ffmpeg not Homebrew", () => {
   assert.ok(content.includes("otool -L"));
   assert.ok(content.includes("ffmpeg -version"));
   assert.ok(content.includes("sine=d=1"));
+  assert.ok(lock.provenance.includes("Martin Riedl"));
+  assert.ok(lock.provenance.includes("ad-hoc"));
   assert.ok(content.includes("yt-dlp") && content.includes("--version"));
+});
+
+test("CI pins yt-dlp by version and sha256", () => {
+  const workflowPath = path.join(projectRoot, ".github", "workflows", "electron-build-macos.yml");
+  const content = fs.readFileSync(workflowPath, "utf8");
+  const lockPath = path.join(projectRoot, "electron", "yt-dlp.lock.json");
+  const lock = JSON.parse(fs.readFileSync(lockPath, "utf8"));
+  assert.ok(lock.version, "yt-dlp.lock.json needs version");
+  assert.match(lock.sha256, /^[a-f0-9]{64}$/);
+  assert.ok(lock.url.includes(`/${lock.version}/`));
+  assert.ok(!lock.url.includes("/latest/"), "lock URL must not use latest");
+  assert.ok(lock.sumsUrl.includes("SHA2-256SUMS"));
+  assert.equal(lock.asset, "yt-dlp_macos");
+  assert.ok(content.includes("yt-dlp.lock.json"));
+  assert.ok(content.includes("SHA2-256SUMS"));
+  assert.ok(content.includes("set -euo pipefail"));
+  assert.ok(content.includes("curl -L --fail"));
+  assert.ok(!content.includes("releases/latest/download/yt-dlp"));
 });
 
 test("CI smoke test launches Electron with an absolute path after cd", () => {

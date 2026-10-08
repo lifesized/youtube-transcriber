@@ -7,7 +7,8 @@
 - **Pairing opt-in** — Tray **Connect browser extension…** opens a 2-minute window. Outside it, `/api/native-host/pair` returns 403 and no dialog is shown. Origin must match `^chrome-extension://[a-p]{32}$`. Deny is a global cooldown; main never stacks a second dialog and caps about 3 dialogs per hour.
 
 ### Changed
-- **Pinned ffmpeg 9.0.2** — CI downloads a specific Martin Riedl macOS arm64 zip (`electron/ffmpeg.lock.json`) and fails if the SHA-256 does not match. Packaged `ffmpeg -version` plus a 1-second sine encode, and `yt-dlp --version`, must exit 0.
+- **Pinned ffmpeg 9.0.2** — CI downloads a specific Martin Riedl macOS arm64 zip (`electron/ffmpeg.lock.json`) and fails if the SHA-256 does not match. Packaged `ffmpeg -version` plus a 1-second sine encode, and `yt-dlp --version`, must exit 0. The lock records provenance: single-maintainer Martin Riedl build, re-signed ad-hoc in afterPack.
+- **Pinned yt-dlp 2026.08.19** — CI downloads `yt-dlp_macos` from that release (`electron/yt-dlp.lock.json`), checks SHA-256 against the lock and against yt-dlp's `SHA2-256SUMS`, and fails on mismatch. `curl --fail` with `set -o pipefail`.
 - **Pairing dialog** — Focuses the menu-bar app (`app.focus({ steal: true })`) before the confirm box, shows the extension ID in `detail`, and warns when the ID is not a known Chrome Web Store listing. A dialog timeout marks the request expired so a late Allow does not write the ID.
 - **Native-host PATH** — The Electron-installed wrapper no longer prepends `/opt/homebrew/bin` or `/usr/local/bin`. Those prefixes stay only for the dev/non-Electron host.
 

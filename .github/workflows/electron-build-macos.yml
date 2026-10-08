@@ -87,8 +87,35 @@ jobs:
       
       - name: Download yt-dlp
         run: |
+          set -euo pipefail
           mkdir -p electron/resources/bin
-          curl -L -o electron/resources/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos
+          LOCK=electron/yt-dlp.lock.json
+          URL=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["url"])' "$LOCK")
+          EXPECTED=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha256"])' "$LOCK")
+          VERSION=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$LOCK")
+          SUMS_URL=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sumsUrl"])' "$LOCK")
+          ASSET=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["asset"])' "$LOCK")
+          echo "Pinned yt-dlp $VERSION"
+          echo "URL $URL"
+          curl -L --fail -o /tmp/yt-dlp_macos "$URL"
+          ACTUAL=$(shasum -a 256 /tmp/yt-dlp_macos | awk '{print $1}')
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "ERROR: yt-dlp sha256 mismatch"
+            echo "expected $EXPECTED"
+            echo "got      $ACTUAL"
+            exit 1
+          fi
+          echo "✓ yt-dlp sha256 matches lock file"
+          curl -L --fail -o /tmp/SHA2-256SUMS "$SUMS_URL"
+          SUMS_HASH=$(awk -v asset="$ASSET" '$2 == asset { print $1; found=1 } END { if (!found) exit 1 }' /tmp/SHA2-256SUMS)
+          if [ "$SUMS_HASH" != "$EXPECTED" ]; then
+            echo "ERROR: lock sha256 does not match SHA2-256SUMS for $ASSET"
+            echo "lock     $EXPECTED"
+            echo "sums     $SUMS_HASH"
+            exit 1
+          fi
+          echo "✓ lock sha256 matches yt-dlp SHA2-256SUMS ($ASSET)"
+          cp /tmp/yt-dlp_macos electron/resources/bin/yt-dlp
           chmod +x electron/resources/bin/yt-dlp
       
       - name: Build Electron app
