@@ -5,9 +5,10 @@
  * handshake, loopback token, authed fetches, status, and Start.
  *
  * Tokens live in memory only, per target. Requests only ever go to the
- * target's own 127.0.0.1 origin. The dev target may fall back to a request
- * without Authorization when its host is stale (unknown_cmd) or has no
- * token (no_token). The app target always needs the token.
+ * target's own 127.0.0.1 origin and never carry cookies. The dev target may
+ * fall back to a request without Authorization when its host is stale
+ * (unknown_cmd) or has no token (no_token); that only works against a dev
+ * server running without auth. The app target always needs the token.
  */
 
 (function (root, factory) {
@@ -127,12 +128,8 @@
       if (auth.token) headers.Authorization = `Bearer ${auth.token}`;
       let res;
       try {
-        res = await fetchImpl(url, {
-          ...init,
-          headers,
-          // Tokenless dev requests may ride the dev web UI's httpOnly cookie.
-          credentials: auth.tokenless ? "include" : "omit",
-        });
+        // Never send cookies: tokenless only reaches a dev server without auth.
+        res = await fetchImpl(url, { ...init, headers, credentials: "omit" });
       } catch {
         return { ok: false, reason: "unreachable" };
       }
