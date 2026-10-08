@@ -1749,6 +1749,10 @@ async function startTranscriberClicked() {
     } else if (res?.reason === "already_running") {
       stopOfflinePolling();
       init();
+    } else if (res?.reason === "project_not_configured") {
+      el.offlineStartError.textContent =
+        "Transcriber isn't set up in this folder yet. Run `npm run install-native-host -- --project-root <your Transcriber folder>` and try again.";
+      el.offlineStartError.hidden = false;
     } else {
       el.offlineStartError.textContent =
         res?.error || "Couldn't start the server. Check ~/Library/Logs/Transcriber/native-host.log";
@@ -3174,6 +3178,10 @@ async function startServerClicked() {
       el.stopServerHint.textContent =
         `Port ${res.port || 19720} is already in use by another app. ` +
         `Close it (or change the port) and try again.`;
+      el.stopServerHint.hidden = false;
+    } else if (res?.reason === "project_not_configured") {
+      el.stopServerHint.textContent =
+        "Transcriber isn't set up in this folder yet. Run `npm run install-native-host -- --project-root <your Transcriber folder>` and try again.";
       el.stopServerHint.hidden = false;
     } else {
       el.stopServerHint.textContent =

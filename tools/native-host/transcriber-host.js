@@ -8,9 +8,9 @@
  * Commands accepted (one per request, response has matching `id`):
  *   { id, cmd: "ping" }
  *   { id, cmd: "probe" }    → { status: "ready"|"foreign"|"down", port, identity? }
- *   { id, cmd: "start" }    → { started: true, pid } | { started: false, reason }
+ *   { id, cmd: "start" }    → { started: true, pid } | { started: false, reason, missing? }
  *   { id, cmd: "stop" }     → { stopped: bool }
- *   { id, cmd: "status" }   → { running: bool, pid?, uptimeMs?, projectRoot, port }
+ *   { id, cmd: "status" }   → { running: bool, pid?, uptimeMs?, projectRoot, projectRootSource, port }
  *   { id, cmd: "getLocalToken" } → { token }  (loopback API Bearer; never log value)
  */
 
@@ -25,23 +25,26 @@ const {
   getLocalApiTokenPath,
   ENV_NAME,
 } = require("../../lib/local-api-token.js");
+const {
+  getStateDir,
+  defaultProjectRoot,
+  resolveProjectRoot,
+  precheckProjectRoot,
+} = require("./project-root.js");
 
 const PORT = 19720;
 const HEALTH_URL = `http://127.0.0.1:${PORT}/api/health`;
 const IDENTITY_HEADER = "x-transcriber-service";
 
-// Project root is two levels up from this file (tools/native-host/ → repo root).
-const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
+const DEFAULT_PROJECT_ROOT = defaultProjectRoot();
+const STATE_DIR = getStateDir();
 
-const STATE_DIR = (() => {
-  if (process.platform === "darwin") {
-    return path.join(os.homedir(), "Library", "Application Support", "Transcriber");
-  }
-  if (process.platform === "win32") {
-    return path.join(process.env.APPDATA || os.homedir(), "Transcriber");
-  }
-  return path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "transcriber");
-})();
+function currentProjectRoot() {
+  return resolveProjectRoot({
+    stateDir: STATE_DIR,
+    defaultRoot: DEFAULT_PROJECT_ROOT,
+  });
+}
 
 const LOG_DIR = (() => {
   if (process.platform === "darwin") {
@@ -150,6 +153,13 @@ async function startServer() {
     return { started: false, reason: "port_conflict" };
   }
 
+  const { projectRoot } = currentProjectRoot();
+  const precheck = precheckProjectRoot(projectRoot);
+  if (!precheck.ok) {
+    log("project_not_configured", { projectRoot, missing: precheck.missing });
+    return precheck;
+  }
+
   // Launch detached so the server keeps running after the host exits.
   // Chrome's inherited PATH is minimal (no Homebrew, no nvm), so we can't
   // rely on `npm` being resolvable. Use the absolute path next to the node
@@ -184,7 +194,7 @@ async function startServer() {
   }
 
   const child = spawn(npmCmd, ["run", "dev"], {
-    cwd: PROJECT_ROOT,
+    cwd: projectRoot,
     detached: true,
     stdio: "ignore",
     env: { ...process.env, PATH: extendedPath, ...tokenEnv },
@@ -192,8 +202,8 @@ async function startServer() {
   child.unref();
 
   const startedAt = Date.now();
-  writeState({ pid: child.pid, startedAt, projectRoot: PROJECT_ROOT });
-  log("spawned dev server", { pid: child.pid, cwd: PROJECT_ROOT });
+  writeState({ pid: child.pid, startedAt, projectRoot });
+  log("spawned dev server", { pid: child.pid, cwd: projectRoot });
 
   return { started: true, pid: child.pid, startedAt };
 }
@@ -218,11 +228,13 @@ function stopServer() {
 function getStatus() {
   const state = readState();
   const running = isPidAlive(state.pid);
+  const { projectRoot, projectRootSource } = currentProjectRoot();
   return {
     running,
     pid: running ? state.pid : undefined,
     uptimeMs: running && state.startedAt ? Date.now() - state.startedAt : undefined,
-    projectRoot: PROJECT_ROOT,
+    projectRoot,
+    projectRootSource,
     port: PORT,
   };
 }
@@ -305,4 +317,4 @@ process.on("uncaughtException", (e) => {
   process.exit(1);
 });
 
-log("native host started", { node: process.version, root: PROJECT_ROOT });
+log("native host started", { node: process.version, ...currentProjectRoot() });

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-08
+
+### Added
+- **Native host project root** — `npm run install-native-host -- --project-root <abs-path>` writes `native-host.json` in the Transcriber state directory so Start launches `npm run dev` from a configured checkout instead of whichever tree last installed the host. `--clear-project-root` removes it. The host refuses to spawn when `.env`/`.env.local` (with `DATABASE_URL`), the SQLite file for a `file:` URL, or `node_modules` is missing.
+
+### Changed
+- Native host `status` now reports `projectRoot` and `projectRootSource` (`config` | `default`). The LOCAL side panel maps `project_not_configured` to a setup message (copy pending Design review).
+
 ## 2026-10-07
 
 ### Fixed

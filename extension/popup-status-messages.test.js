@@ -24,6 +24,13 @@ test("popup maps reason 'unauthorized' to exact status text", () => {
   );
 });
 
+test("popup maps reason 'project_not_configured' to setup copy", () => {
+  assert.match(
+    popup,
+    /reason === "project_not_configured".*Transcriber isn't set up in this folder yet\./s
+  );
+});
+
 test("popup shows generic error for other failures", () => {
   // Should have a fallback to "Couldn't send this URL."
   assert.match(popup, /Couldn't send this URL\./);

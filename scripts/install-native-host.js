@@ -5,6 +5,8 @@
  *
  * Usage:
  *   node scripts/install-native-host.js --ext-id <chrome-extension-id> [--remove]
+ *   node scripts/install-native-host.js --project-root <abs-path>
+ *   node scripts/install-native-host.js --clear-project-root
  *   EXTENSION_ID=<id> node scripts/install-native-host.js
  *
  * Multiple --ext-id flags or a comma-separated EXTENSION_ID env var are
@@ -24,18 +26,48 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { execSync } = require("child_process");
+const {
+  getStateDir,
+  defaultProjectRoot,
+  resolveProjectRoot,
+  writeProjectRootConfig,
+  clearProjectRootConfig,
+} = require("../tools/native-host/project-root.js");
 
 const HOST_NAME = "com.transcribed.host";
 const HOST_SCRIPT = path.resolve(__dirname, "..", "tools", "native-host", "transcriber-host.js");
 
+function takeFlagValue(argv, i, flag) {
+  const a = argv[i];
+  if (a.startsWith(flag + "=")) {
+    return { value: a.slice(flag.length + 1), next: i };
+  }
+  const value = argv[i + 1];
+  if (!value || value.startsWith("--")) {
+    console.error("");
+    console.error(`Missing path for ${flag}`);
+    console.error("");
+    process.exit(1);
+  }
+  return { value, next: i + 1 };
+}
+
 function parseArgs(argv) {
-  const args = { ids: [], remove: false, replace: false };
+  const args = { ids: [], remove: false, replace: false, projectRoot: null, clearProjectRoot: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--remove") args.remove = true;
     else if (a === "--replace") args.replace = true;
-    else if (a === "--ext-id") args.ids.push(argv[++i]);
-    else if (a.startsWith("--ext-id=")) args.ids.push(a.slice("--ext-id=".length));
+    else if (a === "--clear-project-root") args.clearProjectRoot = true;
+    else if (a === "--project-root" || a.startsWith("--project-root=")) {
+      const taken = takeFlagValue(argv, i, "--project-root");
+      args.projectRoot = taken.value;
+      i = taken.next;
+    } else if (a === "--ext-id" || a.startsWith("--ext-id=")) {
+      const taken = takeFlagValue(argv, i, "--ext-id");
+      args.ids.push(taken.value);
+      i = taken.next;
+    }
   }
   if (process.env.EXTENSION_ID) {
     args.ids.push(...process.env.EXTENSION_ID.split(",").map((s) => s.trim()).filter(Boolean));
@@ -169,11 +201,13 @@ function writeManifest({ ids, remove, replace }) {
   console.log("");
   console.log("To remove later: npm run uninstall-native-host");
   console.log("");
+  const { projectRoot, projectRootSource } = resolveEffectiveRoot();
   console.log("─────────────────────────────────────────────────────────");
   console.log("Details (for debugging):");
   console.log(`  Allowed extension IDs:  ${mergedIds.join(", ")}`);
   console.log(`  Manifest:               ${tildify(manifestPath)}`);
   console.log(`  Host script:            ${tildify(hostPath)}`);
+  console.log(`  Project root:           ${tildify(projectRoot)} (${rootSourceLabel(projectRootSource)})`);
   console.log("");
 
   if (process.platform === "win32") writeWindowsRegistry(manifestPath);
@@ -194,5 +228,69 @@ function removeWindowsRegistry() {
   }
 }
 
-const args = parseArgs(process.argv.slice(2));
-writeManifest(args);
+function resolveEffectiveRoot() {
+  return resolveProjectRoot({
+    stateDir: getStateDir(),
+    defaultRoot: defaultProjectRoot(),
+  });
+}
+
+function rootSourceLabel(source) {
+  return source === "config" ? "from config" : "default (this checkout)";
+}
+
+function printEffectiveRoot() {
+  const { projectRoot, projectRootSource } = resolveEffectiveRoot();
+  console.log(`Project root in effect: ${tildify(projectRoot)} (${rootSourceLabel(projectRootSource)})`);
+  console.log("");
+}
+
+function applyProjectRootFlags(args) {
+  if (args.projectRoot && args.clearProjectRoot) {
+    console.error("");
+    console.error("Use either --project-root or --clear-project-root, not both.");
+    console.error("");
+    process.exit(1);
+  }
+
+  if (args.projectRoot) {
+    try {
+      writeProjectRootConfig(args.projectRoot, getStateDir());
+    } catch (e) {
+      console.error("");
+      console.error(e.message || "Invalid --project-root.");
+      console.error("");
+      process.exit(1);
+    }
+    return;
+  }
+
+  if (args.clearProjectRoot) {
+    clearProjectRootConfig(getStateDir());
+  }
+}
+
+function main(argv) {
+  const args = parseArgs(argv);
+  applyProjectRootFlags(args);
+
+  const configOnly =
+    (args.projectRoot || args.clearProjectRoot) && !args.remove && args.ids.length === 0;
+
+  if (configOnly) {
+    console.log("");
+    if (args.projectRoot) {
+      console.log("Native host project root saved.");
+    } else {
+      console.log("Native host project root cleared.");
+    }
+    console.log("");
+    printEffectiveRoot();
+    return;
+  }
+
+  writeManifest(args);
+  if (args.remove) printEffectiveRoot();
+}
+
+main(process.argv.slice(2));

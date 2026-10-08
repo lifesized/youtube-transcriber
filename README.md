@@ -74,6 +74,22 @@ npm run install-native-host -- --ext-id=YOUR_EXTENSION_ID
 
 Find your extension ID at `chrome://extensions` (32-character string under the extension name when Developer mode is enabled).
 
+The native host starts `npm run dev` from a project root. By default that is the checkout you ran the installer from. If you installed from a build-only tree (no `.env`, `.venv`, or database), pin the real Transcriber folder:
+
+```bash
+npm run install-native-host -- --project-root /absolute/path/to/your/Transcriber
+```
+
+That writes `native-host.json` in the Transcriber state directory (`~/Library/Application Support/Transcriber/` on macOS; `~/.config/transcriber/` on Linux; `%APPDATA%/Transcriber/` on Windows). The host only reads `projectRoot` from that file — an absolute path to a directory that contains `package.json` — and uses it as `cwd` for `npm run dev`. Nothing else in the file is executed.
+
+Clear it with:
+
+```bash
+npm run install-native-host -- --clear-project-root
+```
+
+A SQLite database from an older checkout works as-is when the schema matches. Do **not** run `prisma migrate dev` against a real library database.
+
 Open `http://127.0.0.1:19720` to read the transcript.
 
 ### ENTERPRISE (Org-Hosted)
