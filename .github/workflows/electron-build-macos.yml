@@ -1246,7 +1246,13 @@ jobs:
       # Non-PR only. The sign job downloads the unsigned .app bytes.
       # It never executes anything from this artifact.
       - name: Stage unsigned app for signing
-        if: github.event_name != 'pull_request'
+        if: >
+          vars.SIGNING_ENABLED == 'true' &&
+          github.event_name != 'pull_request' &&
+          (
+            (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-beta.')) ||
+            (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/beta/electron-menubar')
+          )
         run: |
           set -euo pipefail
           rm -rf /tmp/unsigned-app-artifact
@@ -1255,7 +1261,13 @@ jobs:
           test -d /tmp/unsigned-app-artifact/Transcriber.app/Contents
 
       - name: Upload unsigned app for signing
-        if: github.event_name != 'pull_request'
+        if: >
+          vars.SIGNING_ENABLED == 'true' &&
+          github.event_name != 'pull_request' &&
+          (
+            (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-beta.')) ||
+            (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/beta/electron-menubar')
+          )
         uses: actions/upload-artifact@v4
         with:
           name: Transcriber-macOS-arm64-unsigned-app
@@ -1267,7 +1279,13 @@ jobs:
   sign:
     name: Sign and notarize
     needs: build
-    if: github.event_name != 'pull_request'
+    if: >
+      vars.SIGNING_ENABLED == 'true' &&
+      github.event_name != 'pull_request' &&
+      (
+        (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-beta.')) ||
+        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/beta/electron-menubar')
+      )
     environment: release
     runs-on: macos-14
     timeout-minutes: 40
@@ -1419,6 +1437,7 @@ jobs:
     needs: sign
     if: >
       needs.sign.outputs.notarized == 'true' &&
+      vars.SIGNING_ENABLED == 'true' &&
       github.event_name != 'pull_request' &&
       (
         (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-beta.')) ||
@@ -1444,7 +1463,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git -c "http.extraheader=AUTHORIZATION: bearer ${GH_TOKEN}" fetch origin beta/electron-menubar
           git merge-base --is-ancestor "$GITHUB_SHA" origin/beta/electron-menubar
           VERSION="$(node -p "require('./package.json').version")"
           echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$'
@@ -1457,10 +1475,14 @@ jobs:
             fi
           else
             TAG="$EXPECTED_TAG"
+            if ! git rev-parse --verify "refs/tags/${TAG}" >/dev/null 2>&1; then
+              echo "release: tag ${TAG} does not exist. Push it first; the tag ruleset blocks gh from creating it."
+              exit 1
+            fi
           fi
           echo "Creating draft $TAG at $GITHUB_SHA"
           shopt -s nullglob
-          FILES=(signed/*.dmg signed/*.zip signed/*.blockmap signed/latest-mac.yml signed/SHA256SUMS)
+          FILES=(signed/*.dmg signed/*.zip signed/latest-mac.yml signed/beta-mac.yml signed/SHA256SUMS)
           test "${#FILES[@]}" -ge 4
           gh release create "$TAG" \
             --repo lifesized/youtube-transcriber \

@@ -85,6 +85,7 @@ test("signing and notarization are gated on the exact secret names", () => {
     assert.ok(workflow.includes(`secrets.${name}`), name);
   }
   assert.match(workflow, /environment: release/);
+  assert.match(workflow, /vars\.SIGNING_ENABLED == 'true'/);
   assert.match(workflow, /github\.event_name != 'pull_request'/);
   const sign = workflow.slice(workflow.indexOf("\n  sign:"), workflow.indexOf("\n  unsigned-path-contract:"));
   assert.doesNotMatch(sign, /npm ci/);
@@ -113,11 +114,21 @@ test("release job is tag or dispatch only, contents write, no PAT", () => {
   assert.match(workflow, /tags:\n\s+- ["']v\*-beta\.\*["']/);
   assert.doesNotMatch(workflow, /beta-v\*/);
   assert.match(workflow, /publish_github_release/);
+  const sign = workflow.slice(workflow.indexOf("\n  sign:"), workflow.indexOf("\n  unsigned-path-contract:"));
   const release = workflow.slice(workflow.indexOf("name: Publish GitHub prerelease"));
+  for (const job of [sign, release]) {
+    assert.match(job, /vars\.SIGNING_ENABLED == 'true'/);
+    assert.match(job, /startsWith\(github\.ref, 'refs\/tags\/v'\) && contains\(github\.ref, '-beta\.'\)/);
+    assert.match(job, /workflow_dispatch.*github\.ref == 'refs\/heads\/beta\/electron-menubar'/s);
+  }
+  assert.doesNotMatch(sign, /event_name == 'push' && github\.ref == 'refs\/heads\/beta/);
   assert.match(release, /environment: release/);
   assert.match(release, /persist-credentials: false/);
   assert.match(release, /merge-base --is-ancestor/);
   assert.match(release, /refs\/heads\/beta\/electron-menubar/);
+  assert.match(release, /tag \$\{TAG\} does not exist\. Push it first/);
+  assert.doesNotMatch(release, /http\.extraheader/);
+  assert.doesNotMatch(release, /fetch origin/);
   assert.match(release, /--draft/);
   assert.match(release, /--target "\$GITHUB_SHA"/);
   assert.match(release, /permissions:\s*\n\s+contents: write/);
@@ -126,6 +137,7 @@ test("release job is tag or dispatch only, contents write, no PAT", () => {
   assert.doesNotMatch(release, /PAT/);
   assert.match(release, /--prerelease/);
   assert.match(release, /latest-mac\.yml/);
+  assert.match(release, /beta-mac\.yml/);
   assert.match(release, /SHA256SUMS/);
 });
 
