@@ -88,11 +88,12 @@ jobs:
       - name: Test packaged app (smoke test)
         run: |
           set -euo pipefail
-          APP_PATH="dist-electron/mac-arm64/Transcriber.app/Contents/MacOS/Transcriber"
-          SQLITE_PATH="dist-electron/mac-arm64/Transcriber.app/Contents/Resources/app.asar.unpacked/node_modules/better-sqlite3"
-          STANDALONE="dist-electron/mac-arm64/Transcriber.app/Contents/Resources/standalone"
+          ROOT="$PWD"
+          APP_PATH="$ROOT/dist-electron/mac-arm64/Transcriber.app/Contents/MacOS/Transcriber"
+          SQLITE_PATH="$ROOT/dist-electron/mac-arm64/Transcriber.app/Contents/Resources/app.asar.unpacked/node_modules/better-sqlite3"
+          STANDALONE="$ROOT/dist-electron/mac-arm64/Transcriber.app/Contents/Resources/standalone"
           SERVER_PATH="$STANDALONE/server.js"
-          BIN_DIR="dist-electron/mac-arm64/Transcriber.app/Contents/Resources/bin"
+          BIN_DIR="$ROOT/dist-electron/mac-arm64/Transcriber.app/Contents/Resources/bin"
           
           echo "Smoke test: verify packaging..."
           
@@ -115,7 +116,7 @@ jobs:
             exit 1
           fi
           
-          SQLITE_ADDON=$(find "$SQLITE_PATH" -name "*.node" | head -1)
+          SQLITE_ADDON=$(find "$SQLITE_PATH" -name "better_sqlite3.node" | head -1)
           if [ -z "$SQLITE_ADDON" ]; then
             echo "ERROR: better-sqlite3 native addon (.node) not found"
             exit 1
@@ -180,7 +181,7 @@ jobs:
           echo "✓ Prisma darwin-arm64 engine: $ENGINE_HIT"
           
           # Tray template PNGs must be packaged and non-empty (macOS menu bar)
-          TRAY_DIR="dist-electron/mac-arm64/Transcriber.app/Contents/Resources/app.asar.unpacked/electron/resources"
+          TRAY_DIR="$ROOT/dist-electron/mac-arm64/Transcriber.app/Contents/Resources/app.asar.unpacked/electron/resources"
           for png in trayTemplate.png trayTemplate@2x.png; do
             PNG_PATH="$TRAY_DIR/$png"
             if [ ! -f "$PNG_PATH" ]; then

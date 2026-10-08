@@ -4,6 +4,7 @@
 
 ### Fixed
 - **Packaged `@prisma/client`** — electron-builder extraResources skips a source-root `node_modules`, so afterPack now copies the staging standalone tree (including Prisma) into the `.app` before the payload check.
+- **CI packaged-server launch path** — the smoke test `cd`s into standalone, so `APP_PATH` is now absolute (`$PWD/...`) instead of `dist-electron/...`.
 
 ## 2026-10-07
 

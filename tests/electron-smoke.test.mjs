@@ -76,6 +76,19 @@ test("CI bundles static ffmpeg not Homebrew", () => {
   assert.ok(content.includes("/opt/homebrew"));
 });
 
+test("CI smoke test launches Electron with an absolute path after cd", () => {
+  // Regression: the launch subshell cds into standalone, so a relative
+  // APP_PATH ("dist-electron/.../Transcriber") becomes ENOENT.
+  const workflowPath = path.join(projectRoot, ".github", "workflows", "electron-build-macos.yml");
+  const content = fs.readFileSync(workflowPath, "utf8");
+  assert.match(
+    content,
+    /APP_PATH="\$\{?(PWD|ROOT|GITHUB_WORKSPACE)\}?\//,
+    "APP_PATH must be rooted at PWD/ROOT so it still works after cd standalone"
+  );
+  assert.ok(content.includes('cd "$STANDALONE"'));
+});
+
 test("beta install docs exist", () => {
   const docsPath = path.join(projectRoot, "docs", "beta-install-macos.md");
   assert.ok(fs.existsSync(docsPath), "beta-install-macos.md should exist");
