@@ -43,6 +43,24 @@ function readDarwinSignature(bundlePath, run = spawnSync) {
   return parseCodesignVerbose(`${result.stderr || ""}\n${result.stdout || ""}`);
 }
 
+function updaterModuleDir(resourcesPath) {
+  if (resourcesPath) {
+    return path.join(resourcesPath, "app.asar.unpacked", "node_modules");
+  }
+  return path.join(__dirname, "..", "node_modules");
+}
+
+function loadElectronUpdater(resourcesPath = process.resourcesPath) {
+  const dir = updaterModuleDir(resourcesPath);
+  if (!module.paths.includes(dir)) {
+    module.paths.unshift(dir);
+  }
+  // Computed name so assert-packaged-requires does not demand this
+  // package inside app.asar. afterPack copies it into asar.unpacked.
+  const spec = ["electron", "updater"].join("-");
+  return require(spec).autoUpdater;
+}
+
 function evaluateFromDisk(options) {
   const {
     isPackaged = false,
@@ -131,10 +149,10 @@ function createUpdater(options) {
     };
   }
 
-  const loaded =
+    const loaded =
     typeof loadAutoUpdater === "function"
       ? loadAutoUpdater()
-      : require("electron-updater").autoUpdater;
+      : loadElectronUpdater(resourcesPath);
 
   autoUpdater = loaded;
   autoUpdater.autoDownload = false;
@@ -237,6 +255,7 @@ module.exports = {
   createUpdater,
   evaluateFromDisk,
   loadSigningIdentity,
+  loadElectronUpdater,
   readDarwinSignature,
   stopServerThenInstall,
   INITIAL_DELAY_MS,

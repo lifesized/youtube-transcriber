@@ -175,6 +175,11 @@ test("main wires the updater gate and stops Next before quitAndInstall", () => {
   assert.ok(main.includes("installingUpdate"));
   assert.ok(main.includes("listExtensionIds"));
   assert.doesNotMatch(main, /require\(["']electron-updater["']\)/);
+  const updater = fs.readFileSync(path.join(root, "electron", "updater.js"), "utf8");
+  assert.doesNotMatch(updater, /require\(["']electron-updater["']\)/);
+  const afterPack = fs.readFileSync(path.join(root, "electron", "after-pack.js"), "utf8");
+  assert.ok(afterPack.includes("copyUpdaterModules"));
+  assert.ok(afterPack.includes("electron-updater"));
 });
 
 test("docs list every secret and the GitHub update call", () => {

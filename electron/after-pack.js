@@ -36,6 +36,7 @@ module.exports = async function(context) {
       path.join(process.cwd(), "electron", "resources", "standalone")
     );
     copyMainProcessNativeModules(path.join(appOutDir, "Transcriber.app"));
+    copyUpdaterModules(path.join(appOutDir, "Transcriber.app"));
     copyRebuiltSqliteIntoStandalone(context);
     copyLibJsIntoUnpacked(path.join(appOutDir, "Transcriber.app"));
     prunePackagedApp(path.join(appOutDir, "Transcriber.app"));
@@ -69,7 +70,28 @@ const MAIN_PROCESS_NATIVE_MODULES = [
   "file-uri-to-path",
 ];
 
-function copyMainProcessNativeModules(appPath) {
+// electron-builder's files filter does not copy these into asar (same
+// as better-sqlite3). Unpack so the gated updater can require them.
+const UPDATER_MODULES = [
+  "electron-updater",
+  "builder-util-runtime",
+  "fs-extra",
+  "jsonfile",
+  "universalify",
+  "graceful-fs",
+  "js-yaml",
+  "argparse",
+  "lazy-val",
+  "lodash.escaperegexp",
+  "lodash.isequal",
+  "semver",
+  "tiny-typed-emitter",
+  "sax",
+  "debug",
+  "ms",
+];
+
+function copyNodeModuleIntoUnpacked(appPath, name) {
   const destNm = path.join(
     appPath,
     "Contents",
@@ -78,15 +100,25 @@ function copyMainProcessNativeModules(appPath) {
     "node_modules"
   );
   fs.mkdirSync(destNm, { recursive: true });
+  const src = path.join(process.cwd(), "node_modules", name);
+  if (!fs.existsSync(src)) {
+    throw new Error(`main-process module missing in workspace: ${name}`);
+  }
+  const dest = path.join(destNm, name);
+  fs.rmSync(dest, { recursive: true, force: true });
+  fs.cpSync(src, dest, { recursive: true });
+  console.log(`  copied ${name} into app.asar.unpacked`);
+}
+
+function copyUpdaterModules(appPath) {
+  for (const name of UPDATER_MODULES) {
+    copyNodeModuleIntoUnpacked(appPath, name);
+  }
+}
+
+function copyMainProcessNativeModules(appPath) {
   for (const name of MAIN_PROCESS_NATIVE_MODULES) {
-    const src = path.join(process.cwd(), "node_modules", name);
-    if (!fs.existsSync(src)) {
-      throw new Error(`main-process module missing in workspace: ${name}`);
-    }
-    const dest = path.join(destNm, name);
-    fs.rmSync(dest, { recursive: true, force: true });
-    fs.cpSync(src, dest, { recursive: true });
-    console.log(`  copied ${name} into app.asar.unpacked`);
+    copyNodeModuleIntoUnpacked(appPath, name);
   }
 }
 
@@ -344,6 +376,8 @@ module.exports.flattenStandaloneDirSymlinks = flattenStandaloneDirSymlinks;
 module.exports.overlaySqliteNativeAddon = overlaySqliteNativeAddon;
 module.exports.copyLibJsIntoUnpacked = copyLibJsIntoUnpacked;
 module.exports.copyMainProcessNativeModules = copyMainProcessNativeModules;
+module.exports.copyUpdaterModules = copyUpdaterModules;
+module.exports.UPDATER_MODULES = UPDATER_MODULES;
 module.exports.prunePackagedApp = prunePackagedApp;
 module.exports.assertAsarHasNoServerTree = assertAsarHasNoServerTree;
 module.exports.applyElectronFuses = applyElectronFuses;
