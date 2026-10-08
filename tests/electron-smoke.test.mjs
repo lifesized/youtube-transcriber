@@ -116,3 +116,11 @@ test("tray manager falls back to title T", () => {
   assert.ok(content.includes("trayTemplate.png"));
   assert.ok(content.includes('setTitle("T")'));
 });
+
+test("native host install uses Notification not displayBalloon on macOS", () => {
+  const trayPath = path.join(projectRoot, "electron", "tray-manager.js");
+  const content = fs.readFileSync(trayPath, "utf8");
+  assert.ok(content.includes("new Notification"));
+  assert.ok(content.includes("showMessageBox"));
+  assert.match(content, /win32[\s\S]*displayBalloon/);
+});

@@ -9,7 +9,7 @@
  * - Quit
  */
 
-const { app, Tray, Menu, shell, nativeImage } = require("electron");
+const { app, Tray, Menu, shell, nativeImage, Notification, dialog } = require("electron");
 const path = require("path");
 const NativeHostInstaller = require("./native-host-installer.js");
 
@@ -165,25 +165,45 @@ class TrayManager {
     try {
       const result = await this.nativeHostInstaller.install();
       if (result.success) {
-        this.tray.displayBalloon({
-          title: "Browser Connection",
-          content: `Installed for ${result.browsers.join(", ")}`,
-        });
+        this._notify(
+          "Browser Connection",
+          `Installed for ${result.browsers.join(", ")}`
+        );
       } else {
-        this.tray.displayBalloon({
-          title: "Installation Failed",
-          content: result.error || "Unknown error",
-        });
+        this._notify("Installation Failed", result.error || "Unknown error");
       }
     } catch (error) {
       console.error("Failed to reinstall native host:", error);
-      this.tray.displayBalloon({
-        title: "Installation Failed",
-        content: error.message,
-      });
+      this._notify("Installation Failed", error.message);
     }
   }
   
+  _notify(title, body) {
+    // displayBalloon is Windows-only. Prefer a native Notification on macOS;
+    // fall back to a modal if notifications are unsupported.
+    if (typeof Notification === "function" && Notification.isSupported()) {
+      try {
+        new Notification({ title, body }).show();
+        return;
+      } catch (error) {
+        console.warn("Notification.show failed:", error.message);
+      }
+    }
+    if (process.platform === "win32" && this.tray) {
+      this.tray.displayBalloon({ title, content: body });
+      return;
+    }
+    dialog
+      .showMessageBox({
+        type: "info",
+        title,
+        message: title,
+        detail: body,
+        buttons: ["OK"],
+      })
+      .catch(() => {});
+  }
+
   _quit() {
     app.quit();
   }
