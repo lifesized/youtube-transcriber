@@ -95,3 +95,24 @@ test("packaged server path is extraResources/standalone", () => {
   assert.ok(content.includes('path.join(process.resourcesPath, "standalone")'));
   assert.ok(content.includes('path.join(appRoot, "server.js")'));
 });
+
+test("tray template PNGs exist and are non-empty", () => {
+  for (const name of ["trayTemplate.png", "trayTemplate@2x.png"]) {
+    const pngPath = path.join(projectRoot, "electron", "resources", name);
+    assert.ok(fs.existsSync(pngPath), `${name} should exist`);
+    const buf = fs.readFileSync(pngPath);
+    assert.ok(buf.length > 50, `${name} should not be empty`);
+    assert.deepEqual(
+      [...buf.subarray(0, 8)],
+      [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+      `${name} should be a PNG`
+    );
+  }
+});
+
+test("tray manager falls back to title T", () => {
+  const trayPath = path.join(projectRoot, "electron", "tray-manager.js");
+  const content = fs.readFileSync(trayPath, "utf8");
+  assert.ok(content.includes("trayTemplate.png"));
+  assert.ok(content.includes('setTitle("T")'));
+});

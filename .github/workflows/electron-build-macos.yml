@@ -147,6 +147,27 @@ jobs:
           fi
           echo "✓ Prisma darwin-arm64 engine: $ENGINE_HIT"
           
+          # Tray template PNGs must be packaged and non-empty (macOS menu bar)
+          TRAY_DIR="dist-electron/mac-arm64/Transcriber.app/Contents/Resources/app.asar.unpacked/electron/resources"
+          for png in trayTemplate.png trayTemplate@2x.png; do
+            PNG_PATH="$TRAY_DIR/$png"
+            if [ ! -f "$PNG_PATH" ]; then
+              echo "ERROR: packaged tray icon missing $PNG_PATH"
+              exit 1
+            fi
+            PNG_SIZE=$(wc -c < "$PNG_PATH" | tr -d ' ')
+            if [ "$PNG_SIZE" -lt 50 ]; then
+              echo "ERROR: packaged $png is empty ($PNG_SIZE bytes)"
+              exit 1
+            fi
+            file "$PNG_PATH" | grep -qi "PNG" || {
+              echo "ERROR: packaged $png is not a PNG"
+              file "$PNG_PATH"
+              exit 1
+            }
+            echo "✓ packaged $png ($PNG_SIZE bytes)"
+          done
+          
           echo ""
           echo "✓ Packaging checks passed — launching packaged server..."
           

@@ -3,6 +3,7 @@
 ## 2026-10-07
 
 ### Fixed
+- **Visible macOS tray icon** — Ships `trayTemplate.png` (16px) and `trayTemplate@2x.png` (32px): a black-on-transparent "T" glyph. The menu-bar item uses template rendering and falls back to title `T` if the image is empty.
 - **Packaged Electron server starts** — The Next.js standalone server, its `node_modules` (including `next` and Prisma), `.next/static`, `public/`, Prisma client + darwin-arm64 engines, and migrations are copied outside asar into `Contents/Resources/standalone`. The menu-bar app runs that `server.js` with `ELECTRON_RUN_AS_NODE=1`. Health checks send the loopback token (so they are not stuck on 401). Missing Python/Whisper is a warning, not a 503, because this beta is captions-first. CI launches the packaged server on a temp data dir, requires `/api/health` 200, then `GET /api/transcripts`.
 - **Extension side panel opens faster (YTT-456)** — The initial `chrome.tabs.query()` call is deferred with `requestIdleCallback` so the panel paints its skeleton loader immediately instead of blocking on service-worker wake (which can take hundreds of ms on cold start). The panel shows the loading state, then updates asynchronously when tab info arrives. Applies to both LOCAL and ENTERPRISE builds.
 

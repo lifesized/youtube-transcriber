@@ -56,24 +56,25 @@ class TrayManager {
   // Private methods
   
   _createTray() {
-    // Try to load icon, fall back to empty icon if not available
     let icon;
     try {
-      const iconPath = path.join(__dirname, "resources", "tray-icon-Template.png");
+      const iconPath = path.join(__dirname, "resources", "trayTemplate.png");
       icon = nativeImage.createFromPath(iconPath);
       if (icon.isEmpty()) {
         throw new Error("Icon is empty");
       }
+      icon.setTemplateImage(true);
     } catch (error) {
-      console.warn("Could not load tray icon, using default:", error.message);
-      // Create a minimal 16x16 icon
+      console.warn("Could not load tray icon, using title fallback:", error.message);
       icon = nativeImage.createEmpty();
     }
-    
+
     this.tray = new Tray(icon);
     this.tray.setToolTip("Transcriber");
-    
-    // Click to open
+    if (icon.isEmpty()) {
+      this.tray.setTitle("T");
+    }
+
     this.tray.on("click", () => {
       this._openTranscriber();
     });

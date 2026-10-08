@@ -6,7 +6,9 @@
   "asarUnpack": [
     "node_modules/better-sqlite3/**/*",
     "node_modules/@prisma/**/*",
-    "tools/**/*"
+    "tools/**/*",
+    "electron/resources/trayTemplate.png",
+    "electron/resources/trayTemplate@2x.png"
   ],
   "files": [
     "electron/**/*",
