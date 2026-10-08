@@ -70,10 +70,19 @@ test("GitHub Actions workflow exists", () => {
 test("CI bundles static ffmpeg not Homebrew", () => {
   const workflowPath = path.join(projectRoot, ".github", "workflows", "electron-build-macos.yml");
   const content = fs.readFileSync(workflowPath, "utf8");
-  assert.ok(content.includes("ffmpeg.martin-riedl.de"));
+  const lockPath = path.join(projectRoot, "electron", "ffmpeg.lock.json");
+  const lock = JSON.parse(fs.readFileSync(lockPath, "utf8"));
+  assert.ok(lock.version, "ffmpeg.lock.json needs version");
+  assert.match(lock.sha256, /^[a-f0-9]{64}$/);
+  assert.ok(lock.url.includes("ffmpeg.martin-riedl.de"));
+  assert.ok(!lock.url.includes("latest"), "lock URL must not use the latest redirect");
+  assert.ok(content.includes("ffmpeg.lock.json"));
+  assert.ok(!content.includes("/redirect/latest/"));
   assert.ok(!content.includes("brew install ffmpeg"));
   assert.ok(content.includes("otool -L"));
-  assert.ok(content.includes("/opt/homebrew"));
+  assert.ok(content.includes("ffmpeg -version"));
+  assert.ok(content.includes("sine=d=1"));
+  assert.ok(content.includes("yt-dlp") && content.includes("--version"));
 });
 
 test("CI smoke test launches Electron with an absolute path after cd", () => {

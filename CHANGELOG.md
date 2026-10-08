@@ -2,6 +2,9 @@
 
 ## 2026-10-08
 
+### Changed
+- **Pinned ffmpeg 9.0.2** — CI downloads a specific Martin Riedl macOS arm64 zip (`electron/ffmpeg.lock.json`) and fails if the SHA-256 does not match. Packaged `ffmpeg -version` plus a 1-second sine encode, and `yt-dlp --version`, must exit 0.
+
 ### Fixed
 - **Packaged `@prisma/client`** — electron-builder extraResources skips a source-root `node_modules`, so afterPack now copies the staging standalone tree (including Prisma) into the `.app` before the payload check.
 - **CI packaged-server launch path** — the smoke test `cd`s into standalone, so `APP_PATH` is now absolute (`$PWD/...`) instead of `dist-electron/...`.

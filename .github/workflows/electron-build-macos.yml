@@ -43,10 +43,22 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p electron/resources/bin
-          # Static arm64 build (no Homebrew dylibs). Homebrew ffmpeg links
-          # /opt/homebrew and will not run on friends' machines.
-          curl -L --fail -o /tmp/ffmpeg.zip \
-            "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip"
+          # Pinned Martin Riedl macOS arm64 release (no Homebrew dylibs).
+          LOCK=electron/ffmpeg.lock.json
+          URL=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["url"])' "$LOCK")
+          EXPECTED=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha256"])' "$LOCK")
+          VERSION=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$LOCK")
+          echo "Pinned ffmpeg $VERSION"
+          echo "URL $URL"
+          curl -L --fail -o /tmp/ffmpeg.zip "$URL"
+          ACTUAL=$(shasum -a 256 /tmp/ffmpeg.zip | awk '{print $1}')
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "ERROR: ffmpeg zip sha256 mismatch"
+            echo "expected $EXPECTED"
+            echo "got      $ACTUAL"
+            exit 1
+          fi
+          echo "✓ ffmpeg zip sha256 matches lock file"
           rm -rf /tmp/ffmpeg-extract
           mkdir -p /tmp/ffmpeg-extract
           unzip -o /tmp/ffmpeg.zip -d /tmp/ffmpeg-extract
@@ -154,6 +166,17 @@ jobs:
             fi
             echo "✓ $binary has no Homebrew /usr/local linkage"
           done
+
+          echo "----- ffmpeg -version -----"
+          "$BIN_DIR/ffmpeg" -version | tee /tmp/ffmpeg-version.txt
+          head -n 1 /tmp/ffmpeg-version.txt
+          ENCODE_OUT="$(mktemp /tmp/transcriber-ffmpeg-XXXXXX.m4a)"
+          "$BIN_DIR/ffmpeg" -nostdin -hide_banner -y -f lavfi -i sine=d=1 -ac 1 "$ENCODE_OUT"
+          test -s "$ENCODE_OUT"
+          echo "✓ ffmpeg -version and sine encode"
+          echo "----- yt-dlp --version -----"
+          "$BIN_DIR/yt-dlp" --version
+          echo "✓ yt-dlp --version"
           
           # 5. Standalone payload (outside asar) — server, node_modules, static, public, prisma
           for required in \
