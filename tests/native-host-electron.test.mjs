@@ -306,6 +306,18 @@ test("native-host.log is created 0600 and an existing 0644 is chmodded", () => {
   });
 });
 
+test("native host never calls the local API without a Bearer token", () => {
+  const src = fs.readFileSync(hostScript, "utf8");
+  const fn = src.slice(src.indexOf("function authHeaders"), src.indexOf("function probeOnce"));
+  assert.match(fn, /Authorization/);
+  assert.doesNotMatch(fn, /return \{\}/);
+  assert.equal(typeof host.authHeaders, "function");
+  withHostLogDir(() => {
+    const headers = host.authHeaders();
+    assert.match(headers.Authorization, /^Bearer \S+$/);
+  });
+});
+
 test("native-host.log rotates at about 5MB and keeps one .1", () => {
   assert.equal(host.LOG_MAX_BYTES, 5 * 1024 * 1024);
   withHostLogDir((_, logDir) => {

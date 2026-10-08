@@ -1,5 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const { buildLocalSendRequest, normalizePageUrl } = require("./send-url.js");
 
 const TOKEN = "a".repeat(64);
@@ -167,4 +169,11 @@ test("secret denylist matches x-api-*, X-Amz-*, x-goog-* patterns", () => {
   assert.equal(isSecretQueryKey("id"), false);
   assert.equal(isSecretQueryKey("timestamp"), false);
   assert.equal(isSecretQueryKey("user"), false);
+});
+
+test("send-url has no tokenless helper", () => {
+  const send = require("./send-url.js");
+  assert.equal(send.buildTokenlessDevSendRequest, undefined);
+  const src = fs.readFileSync(path.join(__dirname, "send-url.js"), "utf8");
+  assert.doesNotMatch(src, /buildTokenlessDevSendRequest/);
 });

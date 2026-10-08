@@ -237,24 +237,23 @@ test("the background clears the cached token when the target changes", () => {
   assert.match(body, /init\(\)/, "switching refreshes the list");
 });
 
-// --- Dev without a token ----------------------------------------------------
+// --- No tokenless path ------------------------------------------------------
 
-test("dev with a stale host (unknown_cmd) calls 19720 without Authorization", async () => {
+test("dev with a stale host (unknown_cmd) never calls the API", async () => {
   const world = fakeWorld({
     hosts: { [DEV.nativeHostName]: staleHost() },
     servers: { [DEV.apiBase]: () => response(200) },
   });
   const c = client(world);
   const r = await c.apiFetch(DEV, "/api/transcripts");
-  assert.equal(r.ok, true);
-  assert.equal(r.tokenless, true);
-  assert.equal(world.requests.length, 1);
-  assert.equal(world.requests[0].url, "http://127.0.0.1:19720/api/transcripts");
-  assert.equal(world.requests[0].init.headers.Authorization, undefined);
-  assert.equal(world.requests[0].init.credentials, "omit", "never rides the web UI's cookie");
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "unknown_cmd");
+  assert.equal(world.requests.length, 0);
+  assert.equal("tokenless" in r, false);
+  assert.equal(c.allowsTokenless, undefined);
 });
 
-test("every request omits cookies; a protocol-2 dev host's token is used first", async () => {
+test("every request omits cookies and requires the host's token", async () => {
   const stale = fakeWorld({
     hosts: { [DEV.nativeHostName]: { getLocalToken: { ok: false, error: "no_token" } } },
     servers: { [DEV.apiBase]: () => response(200) },
@@ -264,60 +263,61 @@ test("every request omits cookies; a protocol-2 dev host's token is used first",
     servers: { [DEV.apiBase]: authedServer(DEV_TOKEN), [APP.apiBase]: authedServer(APP_TOKEN) },
   });
   const a = client(stale);
-  await a.apiFetch(DEV, "/api/transcripts", { credentials: "include" });
+  const missing = await a.apiFetch(DEV, "/api/transcripts", { credentials: "include" });
+  assert.equal(missing.ok, false);
+  assert.equal(missing.reason, "no_token");
+  assert.equal(stale.requests.length, 0);
   await a.probe(DEV);
   await a.start(DEV, { timeoutMs: 0 });
   const b = client(current);
   const dev = await b.apiFetch(DEV, "/api/transcripts", { credentials: "include" });
   assert.equal(dev.ok, true);
-  assert.equal(dev.tokenless, false);
+  assert.equal("tokenless" in dev, false);
   await b.probe(APP);
   for (const req of [...stale.requests, ...current.requests]) {
     assert.equal(req.init.credentials, "omit", req.url);
+    assert.ok(req.init.headers.Authorization, req.url);
   }
-  assert.ok(current.requests.every((q) => q.init.headers.Authorization), "token sent");
-  assert.ok(stale.requests.length > 0);
 });
 
-test("dev with no_token also goes tokenless, and a 401 is an auth error", async () => {
-  const world = fakeWorld({
+test("dev with no_token never calls the API; a 401 is still an auth error", async () => {
+  const missing = fakeWorld({
     hosts: { [DEV.nativeHostName]: { getLocalToken: { ok: false, error: "no_token" } } },
+    servers: { [DEV.apiBase]: () => response(200) },
+  });
+  const noTok = await client(missing).apiFetch(DEV, "/api/transcripts");
+  assert.equal(noTok.ok, false);
+  assert.equal(noTok.reason, "no_token");
+  assert.equal(missing.requests.length, 0);
+
+  const world = fakeWorld({
+    hosts: { [DEV.nativeHostName]: currentHost(DEV, DEV_TOKEN) },
     servers: { [DEV.apiBase]: () => response(401) },
   });
   const r = await client(world).apiFetch(DEV, "/api/transcripts");
   assert.equal(r.ok, false);
   assert.equal(r.reason, "unauthorized");
-  assert.equal(r.tokenless, true);
   assert.notEqual(ConnectTarget.errorMessage(r.reason, "dev"), ConnectTarget.errorMessage("other", "dev"));
 });
 
-test("dev never goes tokenless for a missing, forbidden or unpaired host", async () => {
-  for (const host of [
-    undefined,
-    { getLocalToken: new Error("Access to the specified native messaging host is forbidden.") },
-    { getLocalToken: { ok: false, error: "extension_not_allowed" } },
-  ]) {
-    const world = fakeWorld({
-      hosts: host ? { [DEV.nativeHostName]: host } : {},
-      servers: { [DEV.apiBase]: () => response(200) },
-    });
-    const r = await client(world).apiFetch(DEV, "/api/transcripts");
-    assert.equal(r.ok, false);
-    assert.equal(world.requests.length, 0);
-  }
-});
-
-test("the app target always requires the token", async () => {
-  for (const reply of [{ ok: false, error: "unknown_cmd" }, { ok: false, error: "no_token" }, { ok: true }]) {
-    const world = fakeWorld({
-      hosts: { [APP.nativeHostName]: { getLocalToken: reply } },
-      servers: { [APP.apiBase]: () => response(200) },
-    });
-    const c = client(world);
-    assert.equal(c.allowsTokenless(APP, reply.error || "no_token"), false);
-    const r = await c.apiFetch(APP, "/api/transcripts");
-    assert.equal(r.ok, false);
-    assert.equal(world.requests.length, 0, "never contacts the app without a token");
+test("neither target calls the API without a token", async () => {
+  for (const target of [DEV, APP]) {
+    for (const host of [
+      undefined,
+      staleHost(),
+      { getLocalToken: { ok: false, error: "no_token" } },
+      { getLocalToken: { ok: true } },
+      { getLocalToken: new Error("Access to the specified native messaging host is forbidden.") },
+      { getLocalToken: { ok: false, error: "extension_not_allowed" } },
+    ]) {
+      const world = fakeWorld({
+        hosts: host ? { [target.nativeHostName]: host } : {},
+        servers: { [target.apiBase]: () => response(200) },
+      });
+      const r = await client(world).apiFetch(target, "/api/transcripts");
+      assert.equal(r.ok, false);
+      assert.equal(world.requests.length, 0, `${target.id}`);
+    }
   }
 });
 
@@ -406,19 +406,23 @@ test("status: running, stopped, needs permission, helper out of date", async () 
   }
 });
 
-test("a stale dev host is detected up front but a running dev server still shows Running", async () => {
+test("a stale dev host is helper out of date even when the server answers", async () => {
   const down = await client(fakeWorld({ hosts: { [DEV.nativeHostName]: staleHost() } })).probe(DEV);
   assert.equal(down.status, "helper_outdated");
   assert.equal(down.helperOutdated, true);
-  const up = await client(
-    fakeWorld({
-      hosts: { [DEV.nativeHostName]: staleHost() },
-      servers: { [DEV.apiBase]: () => response(200) },
-    })
-  ).probe(DEV);
-  assert.equal(up.status, "running");
-  assert.equal(up.tokenless, true);
+  const world = fakeWorld({
+    hosts: { [DEV.nativeHostName]: staleHost() },
+    servers: { [DEV.apiBase]: () => response(200) },
+  });
+  const up = await client(world).probe(DEV);
+  assert.equal(up.status, "helper_outdated");
   assert.equal(up.helperOutdated, true);
+  assert.equal("tokenless" in up, false);
+  assert.equal(
+    world.requests.filter((q) => q.url.includes("/api/")).length,
+    0,
+    "never contacts a no-auth server"
+  );
 });
 
 test("both targets stopped: every probe stays on loopback and reports stopped", async () => {
@@ -592,7 +596,7 @@ function loadBackground({ targetId, hosts = {}, servers = {} }) {
   return { send, world, listeners, store };
 }
 
-test("background: dev with a stale host still transcribes without a token", async () => {
+test("background: dev with a stale host never transcribes without a token", async () => {
   const posted = [];
   const bg = loadBackground({
     targetId: "dev",
@@ -605,23 +609,15 @@ test("background: dev with a stale host still transcribes without a token", asyn
     },
   });
   const r = await bg.send({ type: "TRANSCRIBE", url: WATCH, title: "Video" });
-  assert.equal(r.success, true, r.error);
-  assert.equal(r.data.id, "tx_123");
-  assert.equal(posted.length, 1);
-  assert.equal(posted[0].url, "http://127.0.0.1:19720/api/transcripts");
-  assert.equal(posted[0].init.method, "POST");
-  assert.equal(posted[0].init.headers.Authorization, undefined);
-  assert.equal(posted[0].init.credentials, "omit");
-  assert.equal(JSON.parse(posted[0].init.body).url, WATCH);
-  for (const req of bg.world.requests) {
-    assert.equal(new URL(req.url).origin, DEV.apiBase, "never another host");
-  }
+  assert.equal(r.success, false);
+  assert.equal(r.error, ConnectTarget.errorMessage("unknown_cmd", "dev"));
+  assert.equal(posted.length, 0);
 });
 
-test("background: dev tokenless 401 shows the auth message, not the generic failure", async () => {
+test("background: a 401 shows the auth message, not the generic failure", async () => {
   const bg = loadBackground({
     targetId: "dev",
-    hosts: { [DEV.nativeHostName]: staleHost() },
+    hosts: { [DEV.nativeHostName]: currentHost(DEV, DEV_TOKEN) },
     servers: { [DEV.apiBase]: () => response(401) },
   });
   const r = await bg.send({ type: "TRANSCRIBE", url: WATCH, title: "Video" });
@@ -670,30 +666,24 @@ test("background: a LinkedIn capture message reaches the panel, not the generic 
 
 test("background: a LinkedIn post on dev sends the host's token and never cookies", async () => {
   const post = "https://www.linkedin.com/feed/update/urn:li:activity:7016901149999955968/";
-  const cases = [
-    { name: "protocol-2 host", host: currentHost(DEV, DEV_TOKEN), auth: `Bearer ${DEV_TOKEN}` },
-    { name: "stale host, no-auth dev server", host: staleHost(), auth: undefined },
-  ];
-  for (const k of cases) {
-    const posted = [];
-    const bg = loadBackground({
-      targetId: "dev",
-      hosts: { [DEV.nativeHostName]: k.host },
-      servers: {
-        [DEV.apiBase]: (url, init) => {
-          posted.push({ url, init });
-          return response(200, { id: "tx_li" });
-        },
+  const posted = [];
+  const bg = loadBackground({
+    targetId: "dev",
+    hosts: { [DEV.nativeHostName]: currentHost(DEV, DEV_TOKEN) },
+    servers: {
+      [DEV.apiBase]: (url, init) => {
+        posted.push({ url, init });
+        return response(200, { id: "tx_li" });
       },
-    });
-    const r = await bg.send({ type: "TRANSCRIBE", url: post, title: "Post" });
-    assert.equal(r.success, true, `${k.name}: ${r.error}`);
-    assert.equal(posted.length, 1, k.name);
-    assert.equal(posted[0].url, "http://127.0.0.1:19720/api/transcripts");
-    assert.equal(posted[0].init.headers.Authorization, k.auth, k.name);
-    assert.equal(posted[0].init.credentials, "omit", k.name);
-    assert.equal(JSON.parse(posted[0].init.body).url, post);
-  }
+    },
+  });
+  const r = await bg.send({ type: "TRANSCRIBE", url: post, title: "Post" });
+  assert.equal(r.success, true, r.error);
+  assert.equal(posted.length, 1);
+  assert.equal(posted[0].url, "http://127.0.0.1:19720/api/transcripts");
+  assert.equal(posted[0].init.headers.Authorization, `Bearer ${DEV_TOKEN}`);
+  assert.equal(posted[0].init.credentials, "omit");
+  assert.equal(JSON.parse(posted[0].init.body).url, post);
 });
 
 test("background: a LinkedIn post on the app with no token never posts", async () => {

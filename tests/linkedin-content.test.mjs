@@ -220,13 +220,10 @@ test("LinkedIn loopback request carries page URL + media URL, never the token", 
   assert.equal(capture.buildLinkedInSendRequest(media, TOKEN, "https://cloud.example.com").ok, false);
 
   const tokenless = capture.buildLinkedInSendRequest(media, undefined, "http://127.0.0.1:19720");
-  assert.equal(tokenless.ok, true);
-  assert.equal(tokenless.url, "http://127.0.0.1:19720/api/transcripts");
-  assert.equal(tokenless.headers.Authorization, undefined);
-  assert.equal(JSON.parse(tokenless.body).mediaUrl, media.mediaUrl);
+  assert.equal(tokenless.ok, false);
 });
 
-test("LinkedIn page send prefers the token and goes tokenless only to the dev server", async () => {
+test("LinkedIn page send requires the token on both servers", async () => {
   const media = capture.parseLinkedInMedia({
     ok: true,
     pageUrl: EVENT_URL,
@@ -247,10 +244,7 @@ test("LinkedIn page send prefers the token and goes tokenless only to the dev se
       assert.equal("credentials" in withToken, false);
     }
     const dev = await build(undefined, "http://127.0.0.1:19720");
-    assert.equal(dev.ok, true, `${name}: dev without a token`);
-    assert.equal(dev.url, "http://127.0.0.1:19720/api/transcripts");
-    assert.equal(dev.headers.Authorization, undefined);
-    assert.equal("credentials" in dev, false);
+    assert.equal(dev.ok, false, `${name}: dev without a token`);
     for (const apiBase of ["http://127.0.0.1:19721", "https://cloud.example.com", undefined]) {
       assert.deepEqual(await build(undefined, apiBase), { ok: false }, `${name}: no token for ${apiBase}`);
       assert.deepEqual(await build(null, apiBase), { ok: false }, `${name}: null token for ${apiBase}`);
