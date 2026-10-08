@@ -251,6 +251,32 @@ test("dev with a stale host (unknown_cmd) calls 19720 without Authorization", as
   assert.equal(world.requests.length, 1);
   assert.equal(world.requests[0].url, "http://127.0.0.1:19720/api/transcripts");
   assert.equal(world.requests[0].init.headers.Authorization, undefined);
+  assert.equal(world.requests[0].init.credentials, "omit", "never rides the web UI's cookie");
+});
+
+test("every request omits cookies; a protocol-2 dev host's token is used first", async () => {
+  const stale = fakeWorld({
+    hosts: { [DEV.nativeHostName]: { getLocalToken: { ok: false, error: "no_token" } } },
+    servers: { [DEV.apiBase]: () => response(200) },
+  });
+  const current = fakeWorld({
+    hosts: { [DEV.nativeHostName]: currentHost(DEV, DEV_TOKEN), [APP.nativeHostName]: currentHost(APP, APP_TOKEN) },
+    servers: { [DEV.apiBase]: authedServer(DEV_TOKEN), [APP.apiBase]: authedServer(APP_TOKEN) },
+  });
+  const a = client(stale);
+  await a.apiFetch(DEV, "/api/transcripts", { credentials: "include" });
+  await a.probe(DEV);
+  await a.start(DEV, { timeoutMs: 0 });
+  const b = client(current);
+  const dev = await b.apiFetch(DEV, "/api/transcripts", { credentials: "include" });
+  assert.equal(dev.ok, true);
+  assert.equal(dev.tokenless, false);
+  await b.probe(APP);
+  for (const req of [...stale.requests, ...current.requests]) {
+    assert.equal(req.init.credentials, "omit", req.url);
+  }
+  assert.ok(current.requests.every((q) => q.init.headers.Authorization), "token sent");
+  assert.ok(stale.requests.length > 0);
 });
 
 test("dev with no_token also goes tokenless, and a 401 is an auth error", async () => {
@@ -585,6 +611,7 @@ test("background: dev with a stale host still transcribes without a token", asyn
   assert.equal(posted[0].url, "http://127.0.0.1:19720/api/transcripts");
   assert.equal(posted[0].init.method, "POST");
   assert.equal(posted[0].init.headers.Authorization, undefined);
+  assert.equal(posted[0].init.credentials, "omit");
   assert.equal(JSON.parse(posted[0].init.body).url, WATCH);
   for (const req of bg.world.requests) {
     assert.equal(new URL(req.url).origin, DEV.apiBase, "never another host");
