@@ -232,7 +232,7 @@ test("injected merge failure rolls back dest and leaves the backup", async () =>
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test("import backups chmod 0600 and keep only the last 5", async () => {
+test("import backups are created 0600 and keep only the last 5", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ytt-import-prune-"));
   const source = path.join(dir, "old.db");
   const dest = path.join(dir, "transcriber.db");
@@ -259,6 +259,12 @@ test("import backups chmod 0600 and keep only the last 5", async () => {
   if (process.platform !== "win32") {
     assert.equal(fs.statSync(path.join(backupsDir, "newest-stamp.db")).mode & 0o777, 0o600);
   }
+  const src = fs.readFileSync(
+    path.join(projectRoot, "lib", "import-library.js"),
+    "utf8"
+  );
+  assert.ok(src.includes("process.umask(0o077)"));
+  assert.equal(src.includes("chmodSync(backupPath"), false);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

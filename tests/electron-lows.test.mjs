@@ -53,7 +53,9 @@ test("writeTokenFile uses atomic replace", () => {
   assert.equal(src.includes("writeFileSync(filePath, token"), false);
 });
 
-test("writeFileAtomic renames then chmod 600", () => {
+test("writeFileAtomic opens the temp file with wx", () => {
+  const src = readFileSync(path.join(repoRoot, "lib/write-file-atomic.js"), "utf8");
+  assert.match(src, /flag:\s*["']wx["']/);
   const { writeFileAtomic } = require(path.join(repoRoot, "electron/utils.js"));
   const dir = mkdtempSync(path.join(tmpdir(), "ytt-atomic-"));
   const target = path.join(dir, "file.json");
