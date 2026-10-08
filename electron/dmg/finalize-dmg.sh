@@ -1,17 +1,16 @@
 #!/bin/bash
 # finalize-dmg.sh: post-process the DMG that electron-builder wrote.
 #   1. give "Install Transcriber.command" its custom Finder icon and hide its extension
-#   2. hide Transcriber.app (the helper still finds it by path)
+#   2. move Transcriber.app into .payload/, which Finder hides (the helper looks there first)
 #   3. drop the /Applications link if one is present
 # Must not modify Transcriber.app contents (no codesign, no copies into Contents/).
-# chflags hidden is a volume flag, not a sealed-resource change.
 # A custom file icon lives in the resource fork plus the FinderInfo kHasCustomIcon flag. Git doesn't keep
 # it, and electron-builder (dmgbuild) doesn't copy it into the image, so it has to be set on the built DMG.
 #
 # Destination in repo: electron/dmg/finalize-dmg.sh   (chmod +x)
 # Usage: electron/dmg/finalize-dmg.sh [dist-electron/Transcriber-x.y.z-arm64.dmg]
-# macOS only (hdiutil, osascript/JXA, SetFile, GetFileInfo, chflags). No Homebrew tools needed.
-# Uses only built-in macOS tools (hdiutil, JXA, SetFile, GetFileInfo, xattr, chflags).
+# macOS only (hdiutil, osascript/JXA, SetFile, GetFileInfo). No Homebrew tools needed.
+# Uses only built-in macOS tools (hdiutil, JXA, SetFile, GetFileInfo, xattr).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -19,6 +18,7 @@ DMG="${1:-$(ls "$ROOT"/dist-electron/*.dmg 2>/dev/null | head -1)}"
 ICON="$ROOT/electron/dmg/install-helper.icns"
 HELPER="Install Transcriber.command"
 APP="Transcriber.app"
+PAYLOAD=".payload"
 
 [ "$(uname)" = "Darwin" ] || { echo "finalize-dmg: macOS only"; exit 1; }
 [ -f "$DMG" ] || { echo "finalize-dmg: no DMG found (${DMG:-dist-electron/*.dmg})"; exit 1; }
@@ -78,13 +78,14 @@ if [ "$DATA_BEFORE" != "$DATA_AFTER" ]; then
   exit 1
 fi
 
-# Hide the .app on this RW image, then strip wrapper FinderInfo.
-# codesign --verify --deep --strict rejects FinderInfo on the bundle
-# directory; chflags hidden writes that xattr. Keep UF_HIDDEN if the
-# OS leaves it after the strip. Never touch Contents/.
-chflags hidden "$MNT/$APP"
-xattr -c "$MNT/$APP" 2>/dev/null || true
-xattr -d com.apple.FinderInfo "$MNT/$APP" 2>/dev/null || true
+# Hide the .app by folder, not by flag: Finder never shows a dot-folder, so
+# the bundle carries no hidden flag. Still strip wrapper FinderInfo: codesign
+# --verify --deep --strict rejects it, and the helper's ditto would carry it
+# into /Applications. Never touch Contents/.
+mkdir "$MNT/$PAYLOAD"
+mv "$MNT/$APP" "$MNT/$PAYLOAD/"
+xattr -c "$MNT/$PAYLOAD/$APP" 2>/dev/null || true
+xattr -d com.apple.FinderInfo "$MNT/$PAYLOAD/$APP" 2>/dev/null || true
 if [ -e "$MNT/Applications" ]; then rm -f "$MNT/Applications"; fi
 
 # Verify before sealing. Built-in macOS tools only — no Python xattr.
@@ -102,22 +103,19 @@ if command -v GetFileInfo >/dev/null 2>&1; then
   [ "$HAS_C" = "1" ] || { echo "finalize-dmg: custom-icon flag not set"; exit 1; }
   [ "$HAS_E" = "1" ] || { echo "finalize-dmg: extension-hidden flag not set"; exit 1; }
 fi
-if ls -lO "$MNT" | grep -q "hidden.*$APP"; then
-  echo "finalize-dmg: $APP has UF_HIDDEN"
-else
-  echo "finalize-dmg: $APP is off-canvas (UF_HIDDEN dropped with FinderInfo; --strict forbids FinderInfo)"
-fi
-if xattr -p com.apple.FinderInfo "$MNT/$APP" >/dev/null 2>&1; then
+[ ! -e "$MNT/$APP" ] || { echo "finalize-dmg: $APP still at the volume root"; exit 1; }
+[ -d "$MNT/$PAYLOAD/$APP" ] || { echo "finalize-dmg: $APP missing from $PAYLOAD/"; exit 1; }
+if xattr -p com.apple.FinderInfo "$MNT/$PAYLOAD/$APP" >/dev/null 2>&1; then
   echo "finalize-dmg: FinderInfo still on $APP after strip"
-  xattr -l "$MNT/$APP" || true
+  xattr -l "$MNT/$PAYLOAD/$APP" || true
   exit 1
 fi
 [ -x "$MNT/$HELPER" ] || { echo "finalize-dmg: helper lost its exec bit"; exit 1; }
 [ ! -e "$MNT/Applications" ] || { echo "finalize-dmg: Applications link still present"; exit 1; }
 if command -v codesign >/dev/null 2>&1; then
-  codesign --verify --deep --strict "$MNT/$APP" || {
+  codesign --verify --deep --strict "$MNT/$PAYLOAD/$APP" || {
     echo "finalize-dmg: codesign --verify --deep --strict failed for $APP"
-    xattr -l "$MNT/$APP" || true
+    xattr -l "$MNT/$PAYLOAD/$APP" || true
     exit 1
   }
 fi

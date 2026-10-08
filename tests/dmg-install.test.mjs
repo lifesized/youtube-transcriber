@@ -71,7 +71,7 @@ test("electron-builder packs the helper and background into the DMG, not asar", 
   assert.equal(appEntry.y, 560);
 });
 
-test("finalize-dmg.sh sets the helper icon and hides the app", () => {
+test("finalize-dmg.sh sets the helper icon and hides the app in .payload/", () => {
   const script = path.join(projectRoot, "electron", "dmg", "finalize-dmg.sh");
   assert.ok(fs.existsSync(script));
   assert.ok(fs.statSync(script).mode & 0o111, "finalize-dmg.sh must be executable");
@@ -80,13 +80,17 @@ test("finalize-dmg.sh sets the helper icon and hides the app", () => {
   assert.ok(text.includes("NSFileExtensionHidden"));
   assert.ok(text.includes("SetFile -a E"));
   assert.ok(text.includes("SetFile -a C"));
-  assert.ok(text.includes('chflags hidden "$MNT/$APP"'));
-  const hideAt = text.indexOf('chflags hidden "$MNT/$APP"');
-  const xattrAt = text.indexOf('xattr -c "$MNT/$APP"');
-  assert.ok(
-    hideAt > 0 && xattrAt > hideAt,
-    "chflags then strip FinderInfo so codesign --strict can pass"
-  );
+  assert.ok(text.includes('PAYLOAD=".payload"'));
+  const mkdirAt = text.indexOf('mkdir "$MNT/$PAYLOAD"');
+  const moveAt = text.indexOf('mv "$MNT/$APP" "$MNT/$PAYLOAD/"');
+  const xattrAt = text.indexOf('xattr -c "$MNT/$PAYLOAD/$APP"');
+  assert.ok(mkdirAt > 0 && moveAt > mkdirAt, "make .payload/ then move the app into it");
+  assert.ok(xattrAt > moveAt, "strip FinderInfo on the moved bundle so codesign --strict can pass");
+  assert.ok(text.includes('xattr -d com.apple.FinderInfo "$MNT/$PAYLOAD/$APP"'));
+  assert.ok(text.includes('[ ! -e "$MNT/$APP" ]'), "fail if the app is still at the root");
+  assert.ok(text.includes('codesign --verify --deep --strict "$MNT/$PAYLOAD/$APP"'));
+  assert.doesNotMatch(text, /chflags/);
+  assert.doesNotMatch(text, /off-canvas/);
   assert.ok(text.includes("com.apple.FinderInfo"));
   assert.ok(text.includes("-format UDZO"));
   assert.doesNotMatch(text, /os\.getxattr/);
@@ -162,10 +166,12 @@ test("CI mounts the DMG and checks for the helper", () => {
   assert.match(workflow, /GetFileInfo -aC/);
   assert.match(workflow, /GetFileInfo -ae/);
   assert.match(workflow, /assert-helper-icon\.py/);
-  assert.match(workflow, /hidden.*Transcriber\.app/);
+  assert.match(workflow, /test -d "\$MOUNT\/\.payload\/Transcriber\.app"/);
+  assert.match(workflow, /if \[ -e "\$MOUNT\/Transcriber\.app" \]; then/);
+  assert.doesNotMatch(workflow, /off-canvas/);
   assert.match(workflow, /com\.apple\.FinderInfo/);
   assert.match(workflow, /test ! -e "\$MOUNT\/Applications"/);
-  assert.match(workflow, /codesign --verify --deep --strict "\$MOUNT\/Transcriber\.app"/);
+  assert.match(workflow, /codesign --verify --deep --strict "\$MOUNT\/\.payload\/Transcriber\.app"/);
   assert.match(workflow, /screenshot-dmg-window\.py/);
   assert.match(workflow, /name: dmg-window/);
   const assertAt = workflow.indexOf("Assert DMG contains Install Transcriber.command");
@@ -259,6 +265,85 @@ exit 1`
   assert.doesNotMatch(calls, /^sudo /m);
   assert.match(result.stdout, /Done/);
   fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+function runHelperFromVolume(apps, extraEnv = {}) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dmg-install-src-"));
+  const volume = path.join(tmp, "Transcriber");
+  const dest = path.join(tmp, "Applications", "Transcriber.app");
+  const bin = path.join(tmp, "bin");
+  for (const [rel, marker] of Object.entries(apps)) {
+    fs.mkdirSync(path.join(volume, rel, "Contents"), { recursive: true });
+    fs.writeFileSync(path.join(volume, rel, "Contents", "marker"), marker);
+  }
+  fs.mkdirSync(volume, { recursive: true });
+  fs.copyFileSync(commandPath, path.join(volume, commandName));
+  fs.chmodSync(path.join(volume, commandName), 0o755);
+  fs.mkdirSync(bin, { recursive: true });
+  for (const [name, body] of [
+    ["ditto", 'mkdir -p "$2"\ncp -R "$1"/. "$2"'],
+    ["xattr", "exit 0"],
+    ["osascript", "exit 0"],
+  ]) {
+    fs.writeFileSync(path.join(bin, name), `#!/bin/bash\n${body}\n`);
+    fs.chmodSync(path.join(bin, name), 0o755);
+  }
+  const result = spawnSync("bash", [path.join(volume, commandName)], {
+    env: {
+      ...process.env,
+      PATH: `${bin}:/usr/bin:/bin`,
+      TRANSCRIBER_INSTALL_DEST: dest,
+      TRANSCRIBER_INSTALL_NONINTERACTIVE: "1",
+      TRANSCRIBER_QUIT_WAIT_SECS: "1",
+      TRANSCRIBER_INSTALL_SKIP_OPEN: "1",
+      ...extraEnv(volume),
+    },
+    encoding: "utf8",
+  });
+  const markerPath = path.join(dest, "Contents", "marker");
+  const copied = fs.existsSync(markerPath) ? fs.readFileSync(markerPath, "utf8") : null;
+  fs.rmSync(tmp, { recursive: true, force: true });
+  return { result, copied };
+}
+
+test("helper copies from .payload/Transcriber.app when the DMG has it", () => {
+  const { result, copied } = runHelperFromVolume(
+    { ".payload/Transcriber.app": "hidden" },
+    () => ({})
+  );
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  assert.equal(copied, "hidden");
+});
+
+test("helper prefers .payload/ over a Transcriber.app next to it", () => {
+  const { result, copied } = runHelperFromVolume(
+    { ".payload/Transcriber.app": "hidden", "Transcriber.app": "root" },
+    () => ({})
+  );
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  assert.equal(copied, "hidden");
+});
+
+test("helper falls back to Transcriber.app next to it when .payload/ is missing", () => {
+  const { result, copied } = runHelperFromVolume({ "Transcriber.app": "root" }, () => ({}));
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  assert.equal(copied, "root");
+});
+
+test("helper fails clearly when neither source exists", () => {
+  const { result, copied } = runHelperFromVolume({}, () => ({}));
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout, /Could not find Transcriber\.app/);
+  assert.equal(copied, null);
+});
+
+test("TRANSCRIBER_INSTALL_SRC still overrides the default source", () => {
+  const { result, copied } = runHelperFromVolume(
+    { ".payload/Transcriber.app": "hidden", "other/Transcriber.app": "override" },
+    (volume) => ({ TRANSCRIBER_INSTALL_SRC: path.join(volume, "other", "Transcriber.app") })
+  );
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  assert.equal(copied, "override");
 });
 
 function writeInfoPlist(appPath, bundleId) {

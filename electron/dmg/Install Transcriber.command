@@ -26,6 +26,16 @@ resolve_script_dir() {
   (cd "$(dirname "$script_path")" && pwd)
 }
 
+# The DMG keeps the app in a dot-folder so Finder never shows it.
+default_source() {
+  local dir="$1"
+  if [ -d "$dir/.payload/Transcriber.app" ]; then
+    printf '%s\n' "$dir/.payload/Transcriber.app"
+  else
+    printf '%s\n' "$dir/Transcriber.app"
+  fi
+}
+
 assert_transcriber_app_name() {
   local p="$1" label="$2"
   if [ "$(basename "$p")" != "Transcriber.app" ]; then
@@ -171,7 +181,7 @@ main() {
 
   local script_dir src
   script_dir="$(resolve_script_dir)"
-  src="${TRANSCRIBER_INSTALL_SRC:-$script_dir/Transcriber.app}"
+  src="${TRANSCRIBER_INSTALL_SRC:-$(default_source "$script_dir")}"
   assert_transcriber_app_name "$src" "source"
   assert_transcriber_app_name "$DEST" "destination"
 

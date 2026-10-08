@@ -158,10 +158,10 @@ jobs:
           echo "Mounted at $MOUNT"
           ls -la "$MOUNT"
           ls -lO "$MOUNT"
-          test -d "$MOUNT/Transcriber.app"
+          test -d "$MOUNT/.payload/Transcriber.app"
           test -f "$MOUNT/Install Transcriber.command"
           test -x "$MOUNT/Install Transcriber.command"
-          echo "✓ DMG contains Transcriber.app and Install Transcriber.command"
+          echo "✓ DMG contains .payload/Transcriber.app and Install Transcriber.command"
 
           HELPER="$MOUNT/Install Transcriber.command"
           RF_SIZE=$(stat -f%z "$HELPER/..namedfork/rsrc" 2>/dev/null || echo 0)
@@ -194,16 +194,15 @@ jobs:
           fi
           echo "✓ GetFileInfo extension-hidden flag (E) is set"
 
-          test -d "$MOUNT/Transcriber.app"
-          ls -lO "$MOUNT" || true
-          if ls -lO "$MOUNT" | grep -q 'hidden.*Transcriber.app'; then
-            echo "✓ Transcriber.app is present and hidden"
-          else
-            echo "✓ Transcriber.app is present (off-canvas at y=560). UF_HIDDEN does not survive UDZO without FinderInfo, and --strict forbids FinderInfo."
+          ls -lOa "$MOUNT/.payload" || true
+          if [ -e "$MOUNT/Transcriber.app" ]; then
+            echo "ERROR: Transcriber.app is still at the DMG root; it belongs in .payload/"
+            exit 1
           fi
-          if xattr -p com.apple.FinderInfo "$MOUNT/Transcriber.app" >/dev/null 2>&1; then
+          echo "✓ Transcriber.app is hidden in .payload/ (Finder hides dot-folders)"
+          if xattr -p com.apple.FinderInfo "$MOUNT/.payload/Transcriber.app" >/dev/null 2>&1; then
             echo "ERROR: mounted Transcriber.app still has FinderInfo (breaks codesign --strict and copies into /Applications)"
-            xattr -l "$MOUNT/Transcriber.app" || true
+            xattr -l "$MOUNT/.payload/Transcriber.app" || true
             exit 1
           fi
           echo "✓ mounted Transcriber.app has no FinderInfo"
@@ -212,7 +211,7 @@ jobs:
           echo "✓ no Applications symlink"
 
           echo "----- codesign --verify --deep --strict on mounted .app -----"
-          codesign --verify --deep --strict "$MOUNT/Transcriber.app"
+          codesign --verify --deep --strict "$MOUNT/.payload/Transcriber.app"
           echo "✓ mounted Transcriber.app codesign --verify --deep --strict"
 
           echo "----- fuses and CDHash of the mounted .app (what users install) -----"
