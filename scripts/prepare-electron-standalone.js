@@ -8,6 +8,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { pruneStandaloneTree, logPrune } = require("./prune-electron-payload.js");
 
 const ROOT = path.resolve(__dirname, "..");
 const STAGING = path.join(ROOT, "electron", "resources", "standalone");
@@ -130,6 +131,9 @@ function main() {
       console.log(`  prisma engine: ${path.relative(STAGING, hit)}`);
     }
   }
+
+  const pruned = pruneStandaloneTree(STAGING);
+  logPrune("standalone staging", pruned);
 
   console.log(`Prepared ${path.relative(ROOT, STAGING)}`);
 }

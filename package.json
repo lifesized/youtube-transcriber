@@ -38,7 +38,7 @@
     "test:provider-url": "node --test tests/provider-url-policy.test.mjs",
     "migrate:secrets": "tsx scripts/migrate-secrets.ts",
     "test:mcp-auth": "node --test tests/mcp-local-auth.test.mjs",
-    "test:electron": "node --test tests/electron-smoke.test.mjs tests/apply-migrations.test.mjs tests/native-host-pair.test.mjs tests/local-api-auth.test.mjs tests/native-host-electron.test.mjs tests/native-host-unpair.test.mjs tests/electron-lows.test.mjs tests/assert-packaged-requires.test.mjs tests/dmg-install.test.mjs",
+    "test:electron": "node --test tests/electron-smoke.test.mjs tests/apply-migrations.test.mjs tests/native-host-pair.test.mjs tests/local-api-auth.test.mjs tests/native-host-electron.test.mjs tests/native-host-unpair.test.mjs tests/electron-lows.test.mjs tests/assert-packaged-requires.test.mjs tests/dmg-install.test.mjs tests/prune-electron-payload.test.mjs",
     "test:cache": "tsx --test tests/transcript-cache-db.test.mjs",
     "test:llm": "tsx --test tests/summarize-llm.test.mjs && tsx --test tests/summarize-cache.test.mjs",
     "test:notion": "tsx --test tests/notion-save.test.mjs",

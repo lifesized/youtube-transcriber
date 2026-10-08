@@ -13,6 +13,11 @@ const { execSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 const { flipFuses, FuseV1Options, FuseVersion } = require("@electron/fuses");
+const {
+  pruneStandaloneTree,
+  pruneElectronLocales,
+  logPrune,
+} = require("../scripts/prune-electron-payload.js");
 
 module.exports = async function(context) {
   const { appOutDir, electronPlatformName } = context;
@@ -31,6 +36,7 @@ module.exports = async function(context) {
     );
     copyRebuiltSqliteIntoStandalone(context);
     copyLibJsIntoUnpacked(path.join(appOutDir, "Transcriber.app"));
+    prunePackagedApp(path.join(appOutDir, "Transcriber.app"));
     assertStandalonePayload(context);
     await applyElectronFuses(context);
     await adHocCodesign(context);
@@ -136,6 +142,14 @@ function overlaySqliteNativeAddon(standaloneDir, rebuiltAddonPath) {
   return targets.length;
 }
 
+function prunePackagedApp(appPath) {
+  const standalone = path.join(appPath, "Contents", "Resources", "standalone");
+  const pruned = pruneStandaloneTree(standalone);
+  logPrune("packaged standalone", pruned);
+  const locales = pruneElectronLocales(appPath);
+  logPrune("electron locales", locales);
+}
+
 function assertStandalonePayload(context) {
   const { appOutDir } = context;
   const standalone = path.join(
@@ -231,4 +245,5 @@ async function adHocCodesign(context) {
 module.exports.syncStandaloneFromStaging = syncStandaloneFromStaging;
 module.exports.overlaySqliteNativeAddon = overlaySqliteNativeAddon;
 module.exports.copyLibJsIntoUnpacked = copyLibJsIntoUnpacked;
+module.exports.prunePackagedApp = prunePackagedApp;
 module.exports.applyElectronFuses = applyElectronFuses;

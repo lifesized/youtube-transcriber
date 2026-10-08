@@ -11,6 +11,7 @@
 - **Native-host hardening** — Wrapper paths are single-quoted; Electron PATH is exactly Resources/bin, /usr/bin, /bin; stdin messages capped at 1 MiB. `extension-ids.json` and the secrets file are written atomically (mode 0600). Corrupt JSON is refused on append. Masked key detection is exact equality with the GET placeholder.
 
 ### Changed
+- **Smaller friends DMG** — keep darwin-arm64 Prisma engines only, drop `.next/cache` and `*.map`, keep Electron `en` locale, and stop packing unused `@prisma` into asar. CI prints `.app` / DMG sizes and uploads the DMG file itself (`compression-level: 0`), not a zip of the unpacked `mac-arm64` folder. Previous unpruned artifact was ~459 MB.
 - **Pinned ffmpeg 9.0.2** — CI downloads a specific Martin Riedl macOS arm64 zip (`electron/ffmpeg.lock.json`) and fails if the SHA-256 does not match. Packaged `ffmpeg -version` plus a 1-second sine encode, and `yt-dlp --version`, must exit 0. The lock records provenance: single-maintainer Martin Riedl build, re-signed ad-hoc in afterPack.
 - **Pinned yt-dlp 2026.08.19** — CI downloads `yt-dlp_macos` from that release (`electron/yt-dlp.lock.json`), checks SHA-256 against the lock and against yt-dlp's `SHA2-256SUMS`, and fails on mismatch. `curl --fail` with `set -o pipefail`.
 

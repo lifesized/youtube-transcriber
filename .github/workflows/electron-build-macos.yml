@@ -493,6 +493,36 @@ jobs:
           echo ""
           echo "✓ All smoke tests passed!"
       
+      - name: Report packaged size
+        run: |
+          set -euo pipefail
+          APP="$PWD/dist-electron/mac-arm64/Transcriber.app"
+          DMG=$(ls dist-electron/*.dmg | head -1)
+          echo "===== packaged size ====="
+          echo "App:"
+          du -sh "$APP"
+          echo "Resources:"
+          du -sh "$APP/Contents/Resources"/* | sort -hr
+          echo "standalone:"
+          du -sh "$APP/Contents/Resources/standalone"/* 2>/dev/null | sort -hr
+          echo "standalone/node_modules:"
+          du -sh "$APP/Contents/Resources/standalone/node_modules"/* 2>/dev/null | sort -hr
+          echo "Electron locales:"
+          du -sh "$APP/Contents/Frameworks/Electron Framework.framework/Resources"/*.lproj 2>/dev/null | sort -hr || true
+          echo "asar:"
+          du -sh "$APP/Contents/Resources/app.asar" "$APP/Contents/Resources/app.asar.unpacked" 2>/dev/null || true
+          echo "DMG:"
+          ls -lh "$DMG"
+          APP_SIZE=$(du -sh "$APP" | awk '{print $1}')
+          DMG_SIZE=$(ls -lh "$DMG" | awk '{print $5}')
+          {
+            echo "## Size"
+            echo ""
+            echo "- App: \`$APP_SIZE\`"
+            echo "- DMG: \`$DMG_SIZE\` (\`${DMG##*/}\`)"
+            echo "- Previous CI zip (unpruned): ~459 MB"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: DMG sha256
         run: |
           set -euo pipefail
@@ -511,6 +541,8 @@ jobs:
         with:
           name: Transcriber-macOS-arm64
           path: dist-electron/*.dmg
+          if-no-files-found: error
+          compression-level: 0
           retention-days: 30
       
       - name: Upload build info

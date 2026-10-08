@@ -309,6 +309,7 @@ test("packaged native host script path is app.asar.unpacked", () => {
   );
   assert.ok(builder.asarUnpack.includes("tools/**/*"));
   assert.equal(builder.asarUnpack.includes("lib/**/*"), false);
+  assert.equal(builder.asarUnpack.includes("node_modules/@prisma/**/*"), false);
   assert.ok(builder.files.includes("lib/**/*.js"));
 });
 
