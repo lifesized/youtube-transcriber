@@ -81,6 +81,23 @@ test("LinkedIn scripts make no network requests, store nothing, and don't touch 
   }
 });
 
+test("store justification and privacy policy describe LinkedIn capture as shipped", () => {
+  const doc = (name) => fs.readFileSync(path.join(projectRoot, "extension", name), "utf8");
+  const justification = doc("store-permission-justifications.md")
+    .split("### `https://www.linkedin.com/*`")[1]
+    .split("\n## ")[0];
+  assert.ok(
+    justification.includes(
+      "observes LinkedIn video URLs the tab loads, in memory only, and sends one only when you press Transcribe."
+    )
+  );
+
+  const policy = doc("privacy-policy.md");
+  const permissions = policy.split("\n## Permissions")[1].split("\n### ")[0];
+  for (const host of manifest.host_permissions) assert.ok(permissions.includes(host), host);
+  assert.match(policy, /fetches the public post page itself/);
+});
+
 test("no content script runs in the page's MAIN world", () => {
   for (const entry of manifest.content_scripts) {
     assert.ok(!("world" in entry) || entry.world === "ISOLATED", `${entry.js.join(", ")} world=${entry.world}`);
