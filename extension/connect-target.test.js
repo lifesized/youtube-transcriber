@@ -67,6 +67,139 @@ test("unreachable copy and Retry are per target", () => {
   );
 });
 
+test("header indicator reads App · 19721 / Dev · 19720 with a Settings tooltip", () => {
+  assert.equal(ConnectTarget.indicatorText("app"), "App · 19721");
+  assert.equal(ConnectTarget.indicatorText("dev"), "Dev · 19720");
+  assert.equal(
+    ConnectTarget.indicatorTitle("app", "running"),
+    "Library: Transcriber app · 19721, Running. Click to change in Settings."
+  );
+  assert.equal(
+    ConnectTarget.indicatorTitle("dev", "needs_permission"),
+    "Library: Dev server · 19720, Needs permission. Click to change in Settings."
+  );
+});
+
+test("dev setup command carries the extension ID", () => {
+  assert.equal(
+    ConnectTarget.devSetupCommand("abc"),
+    "npm run install-native-host -- --ext-id=abc"
+  );
+});
+
+const EXT = "kjbmhgfdlpoiacenbhgfmnmbcalkdefg";
+const row = (id, status, reason = null, opts = {}) =>
+  ConnectTarget.rowView(id, { status, reason }, { extId: EXT, ...opts });
+
+test("Settings row: Running, Checking and Starting", () => {
+  assert.deepEqual(row("app", "running"), { action: null, message: null, tone: null });
+  assert.deepEqual(row("dev", "unknown"), { action: null, message: null, tone: null });
+  assert.deepEqual(ConnectTarget.rowView("app", undefined), {
+    action: null,
+    message: null,
+    tone: null,
+  });
+  assert.deepEqual(row("app", "starting").action, {
+    kind: "start",
+    label: "Starting…",
+    busy: true,
+  });
+});
+
+test("Settings row: Stopped shows Start for app and Retry for dev, muted", () => {
+  assert.deepEqual(row("app", "stopped", "unreachable"), {
+    action: { kind: "start", label: "Start" },
+    message: "Transcriber app isn't running.",
+    tone: "muted",
+  });
+  assert.deepEqual(row("dev", "stopped", "unreachable"), {
+    action: { kind: "retry", label: "Retry" },
+    message: "Can't reach your dev server. Start it, then try again.",
+    tone: "muted",
+  });
+});
+
+test("Settings row: a failed Start is the only red line", () => {
+  const v = row("app", "stopped", "unreachable", { startFailure: "start_timeout" });
+  assert.equal(v.tone, "error");
+  assert.equal(v.message, "Transcriber didn't start. Open it from your Applications folder.");
+  assert.equal(v.action.kind, "start");
+  for (const [id, status, reason] of [
+    ["app", "needs_permission", "extension_not_allowed"],
+    ["app", "needs_permission", "unauthorized"],
+    ["dev", "needs_permission", "unauthorized"],
+    ["dev", "needs_permission", "host_forbidden"],
+    ["app", "helper_outdated", "unknown_cmd"],
+    ["dev", "helper_outdated", "unknown_cmd"],
+    ["dev", "stopped", "bad_project_root"],
+  ]) {
+    assert.notEqual(row(id, status, reason).tone, "error", `${id} ${status} ${reason}`);
+  }
+});
+
+test("Settings row: Needs permission, app offers Allow access for pairable reasons", () => {
+  for (const reason of ["extension_not_allowed", "unauthorized_caller", "host_forbidden"]) {
+    assert.deepEqual(row("app", "needs_permission", reason), {
+      action: { kind: "allowAccess", label: "Allow access" },
+      message:
+        "Transcriber needs your permission to connect. Click Allow in the Transcriber dialog on your Mac.",
+      tone: "warn",
+    });
+  }
+  const key = row("app", "needs_permission", "unauthorized");
+  assert.equal(key.action, null);
+  assert.equal(
+    key.message,
+    "Transcriber didn't accept this browser's access key. Quit and reopen Transcriber, then try again."
+  );
+});
+
+test("Settings row: Needs permission, dev shows the setup command or Open dev server", () => {
+  assert.deepEqual(row("dev", "needs_permission", "extension_not_allowed"), {
+    action: { kind: "command", command: `npm run install-native-host -- --ext-id=${EXT}` },
+    message:
+      "This extension isn't paired with the dev server. Run the setup command in your Transcriber folder, then try again.",
+    tone: "warn",
+  });
+  assert.deepEqual(row("dev", "needs_permission", "unauthorized"), {
+    action: { kind: "openDevServer", label: "Open dev server", url: "http://127.0.0.1:19720" },
+    message:
+      "The dev server didn't accept this browser. Open http://127.0.0.1:19720 once in this browser, then try again.",
+    tone: "warn",
+  });
+});
+
+test("Settings row: Helper out of date names the tray item (app) or the command (dev)", () => {
+  assert.deepEqual(row("app", "helper_outdated", "unknown_cmd"), {
+    action: {
+      kind: "note",
+      heading: "Update helper",
+      text: "In the Transcriber menu, choose Reinstall Browser Connection.",
+    },
+    message: null,
+    tone: null,
+  });
+  assert.deepEqual(row("dev", "helper_outdated", "unknown_cmd"), {
+    action: {
+      kind: "command",
+      heading: "Update helper",
+      command: `npm run install-native-host -- --ext-id=${EXT}`,
+    },
+    message: null,
+    tone: null,
+  });
+});
+
+test("Settings row: dev bad_project_root copies the --project-root command", () => {
+  const v = row("dev", "stopped", "bad_project_root");
+  assert.deepEqual(v.action, {
+    kind: "command",
+    command: "npm run install-native-host -- --project-root <path-to-your-Transcriber-folder>",
+  });
+  assert.match(v.message, /isn't linked to your Transcriber folder/);
+  assert.equal(v.tone, "warn");
+});
+
 test("user-facing copy is not Local server and Design strings are assigned via textContent", () => {
   const popupJs = fs.readFileSync(path.join(ROOT, "popup.js"), "utf8");
   const popupHtml = fs.readFileSync(path.join(ROOT, "popup.html"), "utf8");

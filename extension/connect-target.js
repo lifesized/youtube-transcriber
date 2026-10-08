@@ -26,6 +26,7 @@
     [APP]: {
       id: APP,
       label: "Transcriber app",
+      shortLabel: "App",
       apiBase: "http://127.0.0.1:19721",
       port: "19721",
       nativeHostName: "com.transcribed.app.host",
@@ -35,6 +36,7 @@
     [DEV]: {
       id: DEV,
       label: "Dev server",
+      shortLabel: "Dev",
       apiBase: "http://127.0.0.1:19720",
       port: "19720",
       nativeHostName: "com.transcribed.host",
@@ -59,12 +61,25 @@
   const FEATURES = Object.freeze({ stop: false });
 
   /**
-   * Every library-picker, status and connection-error string. Placeholder
-   * copy until Design supplies final strings. `{port}` is filled in at use.
+   * Every library-picker, status and connection-error string (Design's
+   * final copy). `{port}` and `{extId}` are filled in at use.
    */
   const STRINGS = Object.freeze({
     pickerAriaLabel: "Library",
     option: "{label} · {port}",
+    indicator: "{short} · {port}",
+    indicatorTitle: "Library: {label} · {port}, {status}. Click to change in Settings.",
+    action: Object.freeze({
+      allowAccess: "Allow access",
+      openDevServer: "Open dev server",
+      updateHelper: "Update helper",
+      copy: "Copy",
+      copied: "Copied",
+    }),
+    devSetupCommand: "npm run install-native-host -- --ext-id={extId}",
+    projectRootCommand:
+      "npm run install-native-host -- --project-root <path-to-your-Transcriber-folder>",
+    reinstallHint: "In the Transcriber menu, choose Reinstall Browser Connection.",
     status: Object.freeze({
       [STATUS.RUNNING]: "Running",
       [STATUS.STOPPED]: "Stopped",
@@ -180,6 +195,98 @@
     return normalize(currentId);
   }
 
+  function indicatorText(id) {
+    const t = getTarget(id);
+    return fill(STRINGS.indicator, { short: t.shortLabel, port: t.port });
+  }
+
+  function indicatorTitle(id, status) {
+    const t = getTarget(id);
+    return fill(STRINGS.indicatorTitle, {
+      label: t.label,
+      port: t.port,
+      status: statusLabel(status),
+    });
+  }
+
+  function devSetupCommand(extId) {
+    return fill(STRINGS.devSetupCommand, { extId });
+  }
+
+  // App reasons that pairing (the Allow dialog) can fix.
+  const ALLOW_ACCESS_REASONS = new Set([
+    "extension_not_allowed",
+    "unauthorized_caller",
+    "host_forbidden",
+  ]);
+
+  /**
+   * What the selected Settings › Library row shows for one probe result.
+   * `action.kind` is start | retry | allowAccess | openDevServer | command | note.
+   * `tone` colours the line under the rows: muted, warn (setup) or error.
+   * `startFailure` is the reason from this panel's last failed Start, if any.
+   */
+  function rowView(id, probe, { extId = "", startFailure = null } = {}) {
+    const t = getTarget(id);
+    const status = (probe && probe.status) || STATUS.UNKNOWN;
+    const reason = (probe && probe.reason) || null;
+    const none = { action: null, message: null, tone: null };
+
+    if (status === STATUS.STARTING) {
+      return { ...none, action: { kind: "start", label: STRINGS.starting, busy: true } };
+    }
+    if (status === STATUS.RUNNING || status === STATUS.UNKNOWN) return none;
+
+    if (status === STATUS.HELPER_OUTDATED) {
+      const heading = STRINGS.action.updateHelper;
+      return t.id === APP
+        ? { ...none, action: { kind: "note", heading, text: STRINGS.reinstallHint } }
+        : { ...none, action: { kind: "command", heading, command: devSetupCommand(extId) } };
+    }
+
+    if (status === STATUS.NEEDS_PERMISSION) {
+      if (t.id === APP) {
+        if (ALLOW_ACCESS_REASONS.has(reason)) {
+          return {
+            action: { kind: "allowAccess", label: STRINGS.action.allowAccess },
+            message: errorMessage("extension_not_allowed", APP),
+            tone: "warn",
+          };
+        }
+        return { action: null, message: errorMessage(reason || "unauthorized", APP), tone: "warn" };
+      }
+      if (reason === "unauthorized") {
+        return {
+          action: { kind: "openDevServer", label: STRINGS.action.openDevServer, url: t.apiBase },
+          message: errorMessage("unauthorized", DEV),
+          tone: "warn",
+        };
+      }
+      return {
+        action: { kind: "command", command: devSetupCommand(extId) },
+        message: errorMessage(reason || "extension_not_allowed", DEV),
+        tone: "warn",
+      };
+    }
+
+    const why = startFailure || reason;
+    if (t.id === DEV && why === "bad_project_root") {
+      return {
+        action: { kind: "command", command: STRINGS.projectRootCommand },
+        message: errorMessage("bad_project_root", DEV),
+        tone: "warn",
+      };
+    }
+    const action =
+      t.id === APP
+        ? { kind: "start", label: STRINGS.start }
+        : { kind: "retry", label: RETRY_LABEL };
+    if (startFailure) {
+      return { action, message: errorMessage(startFailure, t.id), tone: "error" };
+    }
+    return { action, message: unreachableMessage(t.id), tone: "muted" };
+  }
+
   const LOOPBACK_ORIGINS = Object.freeze(
     Object.values(TARGETS).map((t) => t.apiBase)
   );
@@ -206,5 +313,9 @@
     shouldShowRetry,
     shouldReuseStartTranscriber,
     nextTargetWhenUnreachable,
+    indicatorText,
+    indicatorTitle,
+    devSetupCommand,
+    rowView,
   };
 });
