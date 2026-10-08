@@ -179,7 +179,8 @@ class ServerManager extends EventEmitter {
       });
     } else {
       // In production, use Electron's Node to run the standalone server
-      // with ELECTRON_RUN_AS_NODE=1
+      // with ELECTRON_RUN_AS_NODE=1. IPC fd lets the server request a
+      // native pairing dialog from the main process.
       this.process = spawn(process.execPath, [
         this.standaloneServer,
         "-p", String(this.port),
@@ -190,9 +191,10 @@ class ServerManager extends EventEmitter {
           ...env,
           ELECTRON_RUN_AS_NODE: "1",
         },
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: ["ignore", "pipe", "pipe", "ipc"],
       });
     }
+    this.emit("spawned", this.process);
     
     this.process.stdout.on("data", (data) => {
       console.log("[server]", data.toString().trim());

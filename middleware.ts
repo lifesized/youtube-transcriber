@@ -30,6 +30,13 @@ export function middleware(request: NextRequest) {
 
   // Page navigations: mint/refresh httpOnly cookie so same-origin web UI
   // fetches succeed without putting the token in JS, chrome.storage, or URLs.
+  // Pairing authenticates via Origin: chrome-extension://<id>, not the
+  // loopback token — the extension does not have a token until the native
+  // host is installed.
+  if (pathname === "/api/native-host/pair") {
+    return NextResponse.next();
+  }
+
   if (!pathname.startsWith("/api/")) {
     if (!expected) return NextResponse.next();
     const res = NextResponse.next();

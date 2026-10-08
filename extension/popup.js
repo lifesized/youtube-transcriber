@@ -1666,6 +1666,17 @@ function loadCachedPath() {
 const NATIVE_HOST = "com.transcribed.host";
 let nativeHostAvailable = null; // null = unknown, true/false after first probe
 let nativeStartInFlight = false;
+let nativeHostPairAttempted = false;
+
+async function requestNativeHostPairOnce() {
+  if (nativeHostPairAttempted) return;
+  nativeHostPairAttempted = true;
+  try {
+    await fetch("http://127.0.0.1:19720/api/native-host/pair", { method: "POST" });
+  } catch {
+    // App may not be running yet.
+  }
+}
 
 function callNativeHost(cmd, payload = {}, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
@@ -1703,7 +1714,13 @@ async function detectNativeHost() {
     await callNativeHost("ping", {}, 2500);
     nativeHostAvailable = true;
   } catch {
-    nativeHostAvailable = false;
+    await requestNativeHostPairOnce();
+    try {
+      await callNativeHost("ping", {}, 2500);
+      nativeHostAvailable = true;
+    } catch {
+      nativeHostAvailable = false;
+    }
   }
   return nativeHostAvailable;
 }

@@ -2,6 +2,9 @@
 
 ## 2026-10-07
 
+### Added
+- **Extension pairing without Terminal** — `POST /api/native-host/pair` reads the extension ID only from `Origin: chrome-extension://<32 a-p>`. The Electron app shows a native Allow / Don't allow dialog; Allow appends the ID to `extension-ids.json` and rewrites browser manifests. The LOCAL extension calls this once when the native host is missing, then retries.
+
 ### Fixed
 - **Self-contained ffmpeg** — CI bundles a static macOS arm64 ffmpeg (Martin Riedl) instead of Homebrew's dylib-linked binary. Packaged `ffmpeg` and `yt-dlp` must be arm64 and `otool -L` must not show `/opt/homebrew` or `/usr/local`.
 - **Native-host install notifications on macOS** — Success and failure use Electron `Notification` (with `dialog.showMessageBox` fallback). `displayBalloon` is Windows-only and is no longer used on Mac.

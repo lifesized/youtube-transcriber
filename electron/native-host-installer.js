@@ -32,15 +32,37 @@ class NativeHostInstaller {
    * Example:
    * ["abcdefghijklmnopqrstuvwxyz123456", "anotherextensionid32chars"]
    */
-  _loadExtensionIds() {
+  _idsPath() {
     const home = os.homedir();
-    const configPath = path.join(
+    return path.join(
       home,
       "Library",
       "Application Support",
       "Transcriber",
       "extension-ids.json"
     );
+  }
+
+  appendExtensionId(id) {
+    if (typeof id !== "string" || !/^[a-p]{32}$/.test(id)) {
+      throw new Error("Invalid extension ID");
+    }
+    const ids = this._loadExtensionIds();
+    if (!ids.includes(id)) {
+      ids.push(id);
+    }
+    this.extensionIds = ids;
+    const configPath = this._idsPath();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify(ids, null, 2) + "\n", {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    return ids;
+  }
+
+  _loadExtensionIds() {
+    const configPath = this._idsPath();
     
     try {
       if (fs.existsSync(configPath)) {

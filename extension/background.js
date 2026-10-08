@@ -5,6 +5,18 @@ let _localTokenMemory = null;
 const NATIVE_HOST_NAME = "com.transcribed.host";
 const CAPTION_EXTRACT_TIMEOUT_MS = 2500;
 
+let _pairAttempted = false;
+
+async function requestNativeHostPairOnce() {
+  if (_pairAttempted) return;
+  _pairAttempted = true;
+  try {
+    await fetch("http://127.0.0.1:19720/api/native-host/pair", { method: "POST" });
+  } catch {
+    // App may not be running yet.
+  }
+}
+
 function callNativeHostCmd(cmd, payload = {}, timeoutMs = 5000) {
   return new Promise((resolve, reject) => {
     let port;
@@ -149,9 +161,13 @@ async function getLocalApiToken() {
   let res;
   try {
     res = await callNativeHostCmd("getLocalToken", {}, 5000);
-  } catch (err) {
-    // Native host unavailable, timeout, or disconnect
-    return { ok: false, reason: "unreachable" };
+  } catch {
+    await requestNativeHostPairOnce();
+    try {
+      res = await callNativeHostCmd("getLocalToken", {}, 5000);
+    } catch {
+      return { ok: false, reason: "unreachable" };
+    }
   }
   
   if (res?.ok && typeof res.token === "string" && res.token.length > 0) {

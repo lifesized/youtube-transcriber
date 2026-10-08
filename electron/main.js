@@ -14,6 +14,7 @@ const { app, powerSaveBlocker } = require("electron");
 const path = require("path");
 const ServerManager = require("./server-manager.js");
 const TrayManager = require("./tray-manager.js");
+const PairingBridge = require("./pairing-bridge.js");
 const { checkIfTranslocated } = require("./utils.js");
 
 const IS_DEV = process.env.NODE_ENV === "development";
@@ -21,6 +22,7 @@ const PORT = 19720;
 
 let serverManager = null;
 let trayManager = null;
+let pairingBridge = null;
 let powerSaveId = null;
 
 // Single-instance lock
@@ -97,6 +99,11 @@ app.whenReady().then(async () => {
     serverManager,
     isDev: IS_DEV,
   });
+
+  pairingBridge = new PairingBridge({
+    installer: trayManager.nativeHostInstaller,
+  });
+  serverManager.on("spawned", (child) => pairingBridge.attach(child));
   
   // Start power save blocker
   if (powerSaveBlocker.isStarted(powerSaveId)) {
