@@ -87,6 +87,12 @@ class TrayManager {
     this.tuskWorkspace = "";
     this._restarting = false;
     this._healthTimer = null;
+    this.updater = options.updater || null;
+    this.updaterState = {
+      enabled: !!(this.updater && this.updater.enabled),
+      status: "idle",
+      percent: 0,
+    };
 
     this._createTray();
     this._updateMenu();
@@ -361,6 +367,7 @@ class TrayManager {
         showImport: this._shouldShowImport(),
         tuskState: this.tuskState,
         tuskWorkspace: this.tuskWorkspace,
+        updater: this.updaterState,
       },
       {
         tryAgain: () => this._tryAgain(),
@@ -374,6 +381,9 @@ class TrayManager {
         showDataInFinder: () => this._showDataInFinder(),
         importLibrary: () => this._importExistingLibrary(),
         toggleLoginItem: () => this._toggleLoginItem(),
+        checkForUpdates: () => this._checkForUpdates(),
+        downloadUpdate: () => this._downloadUpdate(),
+        restartToUpdate: () => this._restartToUpdate(),
         quit: () => this._quit(),
       }
     );
@@ -616,6 +626,33 @@ class TrayManager {
         buttons: ["OK"],
       })
       .catch(() => {});
+  }
+
+  setUpdaterState(state) {
+    this.updaterState = {
+      enabled: !!(state && state.enabled),
+      status: (state && state.status) || "idle",
+      percent: state && Number.isFinite(state.percent) ? state.percent : 0,
+    };
+    this._updateMenu();
+  }
+
+  _checkForUpdates() {
+    if (this.updater && typeof this.updater.checkForUpdates === "function") {
+      this.updater.checkForUpdates();
+    }
+  }
+
+  _downloadUpdate() {
+    if (this.updater && typeof this.updater.downloadUpdate === "function") {
+      this.updater.downloadUpdate();
+    }
+  }
+
+  async _restartToUpdate() {
+    if (this.updater && typeof this.updater.quitAndInstall === "function") {
+      await this.updater.quitAndInstall();
+    }
   }
 
   _quit() {

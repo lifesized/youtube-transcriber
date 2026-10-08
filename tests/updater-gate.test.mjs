@@ -1,0 +1,253 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const require = createRequire(import.meta.url);
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const {
+  evaluateUpdaterGate,
+  readExpectedTeamId,
+  pinnedFeed,
+  feedFromEnvOrSettings,
+  UPDATE_FEED,
+} = require(path.join(root, "electron", "updater-gate.js"));
+const { parseCodesignVerbose, appBundleFromExecPath } = require(
+  path.join(root, "electron", "code-signature.js")
+);
+const {
+  createUpdater,
+  evaluateFromDisk,
+  stopServerThenInstall,
+  INITIAL_DELAY_MS,
+  INTERVAL_MS,
+} = require(path.join(root, "electron", "updater.js"));
+
+const TEAM = "ABCD123456";
+const developerId = {
+  identifier: "com.transcribed.app",
+  teamId: TEAM,
+  authorities: [`Developer ID Application: LifeSized (${TEAM})`],
+  adhoc: false,
+  developerId: true,
+  notSigned: false,
+};
+
+function enabledInput(extra = {}) {
+  return {
+    isPackaged: true,
+    isDev: false,
+    signature: developerId,
+    expectedTeamId: TEAM,
+    ...extra,
+  };
+}
+
+test("gate is off for dev, unpackaged, unsigned, ad-hoc, and team mismatch", () => {
+  assert.equal(evaluateUpdaterGate({ isDev: true, isPackaged: true }).enabled, false);
+  assert.equal(evaluateUpdaterGate({ isPackaged: false }).enabled, false);
+  assert.equal(
+    evaluateUpdaterGate({
+      isPackaged: true,
+      signature: { ...developerId, notSigned: true },
+      expectedTeamId: TEAM,
+    }).reason,
+    "unsigned"
+  );
+  assert.equal(
+    evaluateUpdaterGate({
+      isPackaged: true,
+      signature: { ...developerId, adhoc: true, developerId: false, teamId: "" },
+      expectedTeamId: TEAM,
+    }).reason,
+    "adhoc"
+  );
+  assert.equal(
+    evaluateUpdaterGate({
+      isPackaged: true,
+      signature: { ...developerId, teamId: "ZZZZZZZZZZ" },
+      expectedTeamId: TEAM,
+    }).reason,
+    "team-mismatch"
+  );
+  assert.equal(
+    evaluateUpdaterGate({
+      isPackaged: true,
+      signature: { ...developerId, developerId: false },
+      expectedTeamId: TEAM,
+    }).reason,
+    "not-developer-id"
+  );
+  assert.equal(evaluateUpdaterGate(enabledInput()).enabled, true);
+});
+
+test("feed is pinned to lifesized/youtube-transcriber and ignores env or settings", () => {
+  assert.deepEqual(UPDATE_FEED, {
+    provider: "github",
+    owner: "lifesized",
+    repo: "youtube-transcriber",
+  });
+  assert.deepEqual(pinnedFeed(), {
+    provider: "github",
+    owner: "lifesized",
+    repo: "youtube-transcriber",
+    private: false,
+  });
+  assert.deepEqual(
+    feedFromEnvOrSettings(
+      { UPDATE_URL: "https://evil.example/latest-mac.yml", GH_TOKEN: "nope" },
+      { feedUrl: "https://evil.example/latest-mac.yml" }
+    ),
+    pinnedFeed()
+  );
+});
+
+test("readExpectedTeamId accepts only a 10-character team id", () => {
+  assert.equal(readExpectedTeamId({ teamId: TEAM }), TEAM);
+  assert.equal(readExpectedTeamId({ teamId: "short" }), "");
+  assert.equal(readExpectedTeamId(null), "");
+});
+
+test("parseCodesignVerbose distinguishes ad-hoc from Developer ID", () => {
+  const adhoc = parseCodesignVerbose(
+    "Identifier=com.transcribed.app\nSignature=adhoc\nTeamIdentifier=not set\n"
+  );
+  assert.equal(adhoc.adhoc, true);
+  assert.equal(adhoc.developerId, false);
+  const signed = parseCodesignVerbose(
+    [
+      "Identifier=com.transcribed.app",
+      `Authority=Developer ID Application: LifeSized (${TEAM})`,
+      "Authority=Developer ID Certification Authority",
+      "Authority=Apple Root CA",
+      `TeamIdentifier=${TEAM}`,
+    ].join("\n")
+  );
+  assert.equal(signed.developerId, true);
+  assert.equal(signed.teamId, TEAM);
+  assert.equal(signed.adhoc, false);
+});
+
+test("appBundleFromExecPath walks up from Contents/MacOS", () => {
+  assert.equal(
+    appBundleFromExecPath("/Applications/Transcriber.app/Contents/MacOS/Transcriber"),
+    "/Applications/Transcriber.app"
+  );
+  assert.equal(appBundleFromExecPath("/usr/local/bin/electron"), "");
+});
+
+test("disabled updater never requires electron-updater and never starts timers or network", () => {
+  let loaded = 0;
+  let timeouts = 0;
+  let intervals = 0;
+  const updater = createUpdater({
+    isPackaged: false,
+    isDev: true,
+    resourcesPath: "/tmp/missing",
+    execPath: "/tmp/electron",
+    loadAutoUpdater() {
+      loaded += 1;
+      throw new Error("electron-updater must not load when disabled");
+    },
+    setTimeoutFn() {
+      timeouts += 1;
+      return 1;
+    },
+    setIntervalFn() {
+      intervals += 1;
+      return 2;
+    },
+  });
+  assert.equal(updater.enabled, false);
+  updater.startBackgroundChecks();
+  updater.checkForUpdates();
+  updater.downloadUpdate();
+  assert.equal(loaded, 0);
+  assert.equal(timeouts, 0);
+  assert.equal(intervals, 0);
+});
+
+test("enabled updater pins the GitHub feed and does not honor env overrides", () => {
+  const calls = [];
+  const fake = {
+    autoDownload: true,
+    autoInstallOnAppQuit: true,
+    allowDowngrade: true,
+    allowPrerelease: false,
+    forceDevUpdateConfig: true,
+    on() {},
+    setFeedURL(feed) {
+      calls.push(feed);
+    },
+    checkForUpdates() {
+      return Promise.resolve();
+    },
+    downloadUpdate() {
+      return Promise.resolve();
+    },
+    quitAndInstall() {},
+  };
+  process.env.UPDATE_URL = "https://evil.example/latest-mac.yml";
+  const dir = mkdtempSync(path.join(tmpdir(), "ytt-sign-id-"));
+  try {
+    writeFileSync(
+      path.join(dir, "signing-identity.json"),
+      JSON.stringify({ teamId: TEAM })
+    );
+    const updater = createUpdater({
+      isPackaged: true,
+      isDev: false,
+      resourcesPath: dir,
+      signature: developerId,
+      loadAutoUpdater: () => fake,
+    });
+    assert.equal(updater.enabled, true);
+    assert.deepEqual(calls[0], pinnedFeed());
+    assert.equal(fake.autoDownload, false);
+    assert.equal(fake.allowDowngrade, false);
+    assert.equal(fake.allowPrerelease, true);
+    assert.equal(fake.forceDevUpdateConfig, false);
+    assert.equal(updater.feed.owner, "lifesized");
+    assert.equal(updater.feed.repo, "youtube-transcriber");
+  } finally {
+    delete process.env.UPDATE_URL;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("evaluateFromDisk stays off when signing-identity.json is missing", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "ytt-no-id-"));
+  try {
+    const gate = evaluateFromDisk({
+      isPackaged: true,
+      isDev: false,
+      resourcesPath: dir,
+      signature: developerId,
+    });
+    assert.equal(gate.enabled, false);
+    assert.equal(gate.reason, "no-team-id");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("stopServerThenInstall stops Next before quitAndInstall", async () => {
+  const order = [];
+  await stopServerThenInstall(
+    {
+      async stop() {
+        order.push("stop");
+      },
+    },
+    () => order.push("install")
+  );
+  assert.deepEqual(order, ["stop", "install"]);
+});
+
+test("background cadence is 30s then 6h", () => {
+  assert.equal(INITIAL_DELAY_MS, 30_000);
+  assert.equal(INTERVAL_MS, 6 * 60 * 60 * 1000);
+});

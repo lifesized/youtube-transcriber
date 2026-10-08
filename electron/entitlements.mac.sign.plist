@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- V8 / Electron JIT. Required for Chromium and for ELECTRON_RUN_AS_NODE
+       (the packaged Next server and the native-host wrapper). -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+
+  <!-- V8 / wasm fallback when JIT cannot allocate executable pages.
+       ELECTRON_RUN_AS_NODE and better-sqlite3's native addon hit this
+       path on some macOS versions. -->
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+</dict>
+</plist>

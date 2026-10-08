@@ -14,7 +14,7 @@ const ACTIONS = new Proxy({}, { get: (_t, name) => () => name });
 
 function menu(status, extra = {}) {
   return buildTrayMenuTemplate(
-    { status, port: 19721, supportsSublabel: true, openAtLogin: true, showImport: false, ...extra },
+    { status, port: 19721, supportsSublabel: true, openAtLogin: true, showImport: false, updater: { enabled: false }, ...extra },
     ACTIONS
   );
 }
@@ -40,6 +40,7 @@ const BODY = [
   "---",
   "Advanced",
   "Start at Login",
+  "Check for Updates…",
   "Quit Transcriber",
 ];
 
@@ -154,4 +155,18 @@ test("Start at Login mirrors the login item and Quit keeps ⌘Q", () => {
   assert.equal(item(menu("running", { openAtLogin: false }), "Start at Login").checked, false);
   assert.equal(item(menu("running"), "Start at Login").type, "checkbox");
   assert.equal(item(menu("running"), "Quit Transcriber").accelerator, "Command+Q");
+});
+
+test("Check for Updates… is present and inactive when the updater is disabled", () => {
+  const t = menu("running");
+  const update = item(t, "Check for Updates…");
+  assert.equal(update.enabled, false);
+  assert.equal(labels(t).indexOf("Check for Updates…") > labels(t).indexOf("Start at Login"), true);
+});
+
+test("Restart to Update is active only when the updater is ready", () => {
+  const t = menu("running", { updater: { enabled: true, status: "ready" } });
+  const update = item(t, "Restart to Update");
+  assert.equal(update.enabled, true);
+  assert.equal(update.click(), "restartToUpdate");
 });

@@ -23,6 +23,7 @@ const { createTuskManager } = require("./tusk/manager.js");
 const { confirmTuskSensitiveChange } = require("./tusk/confirm.js");
 const { checkIfTranslocated } = require("./utils.js");
 const { launchedByNativeHost, shouldRevealOnLaunch } = require("../lib/launch-source.js");
+const { createUpdater } = require("./updater.js");
 
 const IS_DEV = process.env.NODE_ENV === "development";
 const PORT = config.port;
@@ -46,8 +47,10 @@ let trayManager = null;
 let pairingBridge = null;
 let secretsStore = null;
 let tuskManager = null;
+let updater = null;
 let powerSaveId = null;
 let pendingReveal = false;
+let installingUpdate = false;
 
 function revealRunningApp(reason) {
   console.log(`${reason}: revealing tray`);
@@ -94,6 +97,9 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", async (event) => {
+  if (installingUpdate) {
+    return;
+  }
   if ((tuskManager && tuskManager.getStatus().state !== "off") || (serverManager && serverManager.isRunning())) {
     event.preventDefault();
     if (tuskManager) await tuskManager.stop();
@@ -143,13 +149,36 @@ app.whenReady().then(async () => {
     installer: nativeHostInstaller,
   });
 
+  updater = createUpdater({
+    isPackaged: app.isPackaged,
+    isDev: IS_DEV,
+    resourcesPath: extraResources,
+    execPath: process.execPath,
+    serverManager,
+    onState: (state) => {
+      if (trayManager) trayManager.setUpdaterState(state);
+    },
+    onBeforeQuitAndInstall: () => {
+      installingUpdate = true;
+    },
+  });
+
   trayManager = new TrayManager({
     port: PORT,
     serverManager,
     isDev: IS_DEV,
     nativeHostInstaller,
     pairingBridge,
+    updater,
   });
+  trayManager.setUpdaterState({
+    enabled: updater.enabled,
+    status: "idle",
+    percent: 0,
+  });
+  if (updater.enabled) {
+    updater.startBackgroundChecks();
+  }
 
   tuskManager = createTuskManager({
     store: secretsStore,
@@ -177,6 +206,19 @@ app.whenReady().then(async () => {
       console.warn("App is running from a translocated path!");
       trayManager.showWrongLocation();
       return;
+    }
+  }
+
+  if (!IS_DEV) {
+    try {
+      if (nativeHostInstaller.listExtensionIds().length > 0) {
+        const result = await nativeHostInstaller.install();
+        if (!result.success) {
+          console.warn("native host first-launch install:", result.error);
+        }
+      }
+    } catch (error) {
+      console.warn("native host first-launch install failed:", error && error.message);
     }
   }
 

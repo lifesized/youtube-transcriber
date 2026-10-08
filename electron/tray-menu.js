@@ -6,6 +6,7 @@
  */
 
 const trayCopy = require("./tray-copy.js");
+const { updaterMenuItem } = require("./updater-menu.js");
 
 function transcriberUrl(port) {
   return `http://127.0.0.1:${port}`;
@@ -94,9 +95,20 @@ function buildTrayMenuTemplate(state, actions) {
       checked: !!state.openAtLogin,
       enabled: !wrongLocation,
       click: actions.toggleLoginItem,
-    },
-    { label: "Quit Transcriber", accelerator: "Command+Q", click: actions.quit }
+    }
   );
+  const update = updaterMenuItem(state.updater);
+  template.push({
+    label: update.label,
+    enabled: update.enabled && !wrongLocation,
+    click: () => {
+      if (update.action === "check" && actions.checkForUpdates) return actions.checkForUpdates();
+      if (update.action === "download" && actions.downloadUpdate) return actions.downloadUpdate();
+      if (update.action === "restart" && actions.restartToUpdate) return actions.restartToUpdate();
+      return undefined;
+    },
+  });
+  template.push({ label: "Quit Transcriber", accelerator: "Command+Q", click: actions.quit });
   return template;
 }
 

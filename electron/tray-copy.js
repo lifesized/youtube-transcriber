@@ -80,6 +80,7 @@ const OPEN_TRANSCRIBER = "Open Transcriber";
 const OPEN_LIBRARY = "Open Library";
 const ADVANCED = "Advanced";
 const SHOW_DATA_IN_FINDER = "Show Data in Finder";
+// DESIGN REVIEW: updater labels live in updater-menu.js (placeholders).
 
 module.exports = {
   runningStatus,
