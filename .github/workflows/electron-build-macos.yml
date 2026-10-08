@@ -302,6 +302,18 @@ jobs:
                 exit 1
               fi
               echo "✓ fake Host header returns 421"
+              echo "----- ps comm vs args for Transcriber -----"
+              COMM_LINE=$(ps -axo pid=,comm= | awk -v pid="$APP_PID" '$1==pid { $1=""; sub(/^ +/, ""); print }')
+              ARGS_LINE=$(ps -axo pid=,args= | awk -v pid="$APP_PID" '$1==pid { $1=""; sub(/^ +/, ""); print }')
+              echo "ps comm= [${COMM_LINE}]"
+              echo "ps args= [${ARGS_LINE}]"
+              MATCH=$(ps -axo pid=,args= | awk -v exe="$APP_PATH" '{pid=$1; $1=""; sub(/^ +/,""); if ($0==exe || index($0, exe " ")==1) print pid}' | awk -v pid="$APP_PID" '$1==pid { print }')
+              if [ -z "$MATCH" ]; then
+                echo "ERROR: install-helper args match did not find PID $APP_PID at $APP_PATH"
+                echo "comm was not the full executable path; helper uses args= prefix match"
+                exit 1
+              fi
+              echo "✓ install helper args match found PID $APP_PID"
               break
             fi
             echo "  launch wait $i/60 (http=${HEALTH:-curl-fail})"

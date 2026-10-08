@@ -71,7 +71,9 @@ assert_dest_is_ours() {
 
 pids_matching_exe() {
   local exe="$1"
-  ps -axo pid=,comm= 2>/dev/null | awk -v exe="$exe" '{pid=$1; $1=""; sub(/^ +/,""); if ($0==exe) print pid}'
+  # comm= is the 16-char basename on Darwin; args= is the full argv.
+  # Exact path, or that path as argv[0] followed by a space.
+  ps -axo pid=,args= 2>/dev/null | awk -v exe="$exe" '{pid=$1; $1=""; sub(/^ +/,""); if ($0==exe || index($0, exe " ")==1) print pid}'
 }
 
 quit_running() {

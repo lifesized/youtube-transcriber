@@ -377,6 +377,9 @@ test("CI launches the packaged Transcriber.app and checks asar requires", () => 
   assert.ok(content.includes("EnableNodeCliInspectArguments"));
   assert.ok(content.includes("fake Host header returns 421"));
   assert.ok(content.includes("Host: evil.example:19720"));
+  assert.ok(content.includes("ps -axo pid=,comm="));
+  assert.ok(content.includes("ps -axo pid=,args="));
+  assert.ok(content.includes("install helper args match found PID"));
 });
 
 test("CI fails outbound app symlinks and non-Electron sqlite addons", () => {

@@ -32,9 +32,12 @@ test("Install Transcriber.command exists and is executable", () => {
   assert.ok(text.includes("com.transcribed.app"));
   assert.ok(text.includes("/usr/libexec/PlistBuddy"));
   assert.ok(text.includes("Print :CFBundleIdentifier"));
-  assert.ok(text.includes("ps -axo pid=,comm="));
+  assert.ok(text.includes("ps -axo pid=,args="));
+  assert.doesNotMatch(text, /ps -axo pid=,comm=/);
   assert.ok(
-    text.includes('{pid=$1; $1=""; sub(/^ +/,""); if ($0==exe) print pid}')
+    text.includes(
+      '{pid=$1; $1=""; sub(/^ +/,""); if ($0==exe || index($0, exe " ")==1) print pid}'
+    )
   );
   assert.doesNotMatch(text, /python/i);
   assert.ok(text.includes('basename "$p"') || text.includes("Transcriber.app"));
@@ -263,13 +266,13 @@ test("helper treats a non-integer QUIT_WAIT as the default", () => {
 
 test("install helper awk matches executable paths that contain spaces", () => {
   const awk =
-    '{pid=$1; $1=""; sub(/^ +/,""); if ($0==exe) print pid}';
+    '{pid=$1; $1=""; sub(/^ +/,""); if ($0==exe || index($0, exe " ")==1) print pid}';
   const exe = "/tmp/My App/Transcriber.app/Contents/MacOS/Transcriber";
-  const input = ` 4242 ${exe}\n   7 /usr/bin/other\n`;
+  const input = ` 4242 ${exe}\n  99 ${exe} --helper\n   7 /usr/bin/other\n`;
   const result = spawnSync("awk", ["-v", `exe=${exe}`, awk], {
     input,
     encoding: "utf8",
   });
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stdout.trim(), "4242");
+  assert.equal(result.stdout.trim(), "4242\n99");
 });
