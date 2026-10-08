@@ -1727,6 +1727,24 @@ async function ensureNativeHostDetected() {
   return nativeHostAvailable;
 }
 
+const PROJECT_NOT_CONFIGURED_LEAD =
+  "Transcriber's browser connection isn't linked to your Transcriber folder. Run";
+const PROJECT_NOT_CONFIGURED_CMD =
+  "npm run install-native-host -- --project-root <path-to-your-Transcriber-folder>";
+const PROJECT_NOT_CONFIGURED_TAIL = "then try again.";
+
+function setProjectNotConfiguredError(el) {
+  if (!el) return;
+  el.replaceChildren();
+  el.append(document.createTextNode(PROJECT_NOT_CONFIGURED_LEAD));
+  const cmd = document.createElement("code");
+  cmd.className = "error-cmd";
+  cmd.textContent = PROJECT_NOT_CONFIGURED_CMD;
+  el.append(cmd);
+  el.append(document.createTextNode(PROJECT_NOT_CONFIGURED_TAIL));
+  el.hidden = false;
+}
+
 async function startTranscriberClicked() {
   if (nativeStartInFlight) return;
   nativeStartInFlight = true;
@@ -1750,9 +1768,7 @@ async function startTranscriberClicked() {
       stopOfflinePolling();
       init();
     } else if (res?.reason === "project_not_configured") {
-      el.offlineStartError.textContent =
-        "Transcriber isn't set up in this folder yet. Run `npm run install-native-host -- --project-root <your Transcriber folder>` and try again.";
-      el.offlineStartError.hidden = false;
+      setProjectNotConfiguredError(el.offlineStartError);
     } else {
       el.offlineStartError.textContent =
         res?.error || "Couldn't start the server. Check ~/Library/Logs/Transcriber/native-host.log";
@@ -3180,9 +3196,7 @@ async function startServerClicked() {
         `Close it (or change the port) and try again.`;
       el.stopServerHint.hidden = false;
     } else if (res?.reason === "project_not_configured") {
-      el.stopServerHint.textContent =
-        "Transcriber isn't set up in this folder yet. Run `npm run install-native-host -- --project-root <your Transcriber folder>` and try again.";
-      el.stopServerHint.hidden = false;
+      setProjectNotConfiguredError(el.stopServerHint);
     } else {
       el.stopServerHint.textContent =
         res?.error || "Couldn't start the server. Check ~/Library/Logs/Transcriber/native-host.log";

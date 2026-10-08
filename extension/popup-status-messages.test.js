@@ -24,11 +24,26 @@ test("popup maps reason 'unauthorized' to exact status text", () => {
   );
 });
 
-test("popup maps reason 'project_not_configured' to setup copy", () => {
+test("popup maps reason 'project_not_configured' to Design copy", () => {
+  assert.match(popup, /reason === "project_not_configured"/);
   assert.match(
     popup,
-    /reason === "project_not_configured".*Transcriber isn't set up in this folder yet\./s
+    /Transcriber's browser connection isn't linked to your Transcriber folder\. Run/
   );
+  assert.match(
+    popup,
+    /npm run install-native-host -- --project-root <path-to-your-Transcriber-folder>/
+  );
+  assert.match(popup, /then try again\./);
+  const helper = popup.match(
+    /function setProjectNotConfiguredError\([^)]*\) \{[\s\S]*?\n\}/
+  );
+  assert.ok(helper, "setProjectNotConfiguredError helper must exist");
+  assert.match(helper[0], /createTextNode\(PROJECT_NOT_CONFIGURED_LEAD\)/);
+  assert.match(helper[0], /cmd\.textContent = PROJECT_NOT_CONFIGURED_CMD/);
+  assert.doesNotMatch(helper[0], /innerHTML/);
+  const css = fs.readFileSync(path.join(__dirname, "popup.css"), "utf8");
+  assert.match(css, /\.error-cmd[\s\S]*?user-select:\s*text/);
 });
 
 test("popup shows generic error for other failures", () => {

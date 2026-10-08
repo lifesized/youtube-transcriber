@@ -724,6 +724,14 @@ body::-webkit-scrollbar-thumb:hover {
   margin: 6px auto 12px;
   line-height: 1.4;
 }
+.error-cmd {
+  display: block;
+  margin: 6px 0;
+  font-family: "SF Mono", "Menlo", monospace;
+  font-size: inherit;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
 /* Native disclosure — same chevron pattern as Obsidian Advanced toggle.
    Click anywhere on the summary expands/collapses; arrow rotates. */
 .setup-disclosure {
