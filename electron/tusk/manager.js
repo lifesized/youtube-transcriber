@@ -3,12 +3,17 @@
 const { validateBotToken, validateAppToken, looksMasked } = require("./tokens.js");
 const { parseChannelAllowlist } = require("./gates.js");
 const { createTuskRuntime } = require("./runtime.js");
+const { createPipeline } = require("./pipeline.js");
+const { createJobGate } = require("./jobs.js");
+const { createLocalClient } = require("./local-client.js");
 const slackApi = require("./slack-api.js");
 
 function createTuskManager(options = {}) {
   const store = options.store;
   const api = options.slackApi || slackApi;
   const createRuntime = options.createRuntime || createTuskRuntime;
+  const jobs = options.jobGate || createJobGate();
+  const localClient = options.localClient || createLocalClient();
   let runtime = null;
   let status = { state: "off", workspace: "" };
   let starting = null;
@@ -40,6 +45,12 @@ function createTuskManager(options = {}) {
       return publicView();
     }
     await stopRuntime();
+    const pipeline = createPipeline({
+      slackApi: api,
+      localClient,
+      botToken: cfg.botToken,
+      botUserId: cfg.botUserId,
+    });
     runtime = createRuntime({
       botToken: cfg.botToken,
       appToken: cfg.appToken,
@@ -67,16 +78,15 @@ function createTuskManager(options = {}) {
       },
       onSupportedLink: async (evt) => {
         if (!evt.ts || !evt.channel) return;
-        try {
-          await api.addReaction({
-            botToken: cfg.botToken,
-            channel: evt.channel,
-            timestamp: evt.ts,
-            name: "eyes",
-          });
-        } catch {
-          emitStatus({ state: status.state === "connected" ? "connected" : "error", workspace: status.workspace });
-        }
+        await jobs.run(`${evt.channel}:${evt.ts}`, (signal) =>
+          pipeline.handleSupportedLink(evt, signal)
+        );
+      },
+      onThreadQuestion: async (evt) => {
+        if (!evt.ts || !evt.channel || !evt.threadTs) return;
+        await jobs.run(`qa:${evt.channel}:${evt.threadTs}:${evt.ts}`, (signal) =>
+          pipeline.handleThreadQuestion(evt, signal)
+        );
       },
     });
     try {
@@ -210,6 +220,7 @@ function createTuskManager(options = {}) {
     sync,
     applyPatch,
     stop: async () => {
+      jobs.cancelAll();
       await stopRuntime();
       emitStatus({ state: "off", workspace: status.workspace || "" });
     },

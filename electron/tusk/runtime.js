@@ -3,6 +3,7 @@
 const { createDedupe, createRateLimiter, gateEvent, gateSlashCommand } = require("./gates.js");
 const { extractSupportedSlackUrls } = require("./detect.js");
 const { parseSlashText, slashReply } = require("./commands.js");
+const { isMentionTriggered } = require("./prompt.js");
 const slackApi = require("./slack-api.js");
 
 const BACKOFF_MS = [1000, 2000, 4000, 8000, 16000, 30000];
@@ -172,15 +173,34 @@ function createTuskRuntime(options = {}) {
     const gated = gateEvent(envelope, options, helpers);
     if (!gated.ok) return;
     const urls = extractSupportedSlackUrls(gated.text);
-    if (!urls.length) return;
-    if (typeof options.onSupportedLink === "function") {
-      await options.onSupportedLink({
+    const threadTs = gated.event.thread_ts || gated.ts;
+    const mentioned =
+      gated.event.type === "app_mention" || isMentionTriggered(gated.text, options.botUserId);
+    if (urls.length) {
+      if (typeof options.onSupportedLink === "function") {
+        await options.onSupportedLink({
+          channel: gated.channel,
+          ts: gated.ts,
+          threadTs,
+          text: gated.text,
+          urls,
+          teamId: gated.teamId,
+        });
+      }
+      return;
+    }
+    if (
+      mentioned &&
+      gated.event.thread_ts &&
+      typeof options.onThreadQuestion === "function"
+    ) {
+      await options.onThreadQuestion({
         channel: gated.channel,
         ts: gated.ts,
-        threadTs: gated.event.thread_ts || gated.ts,
+        threadTs: gated.event.thread_ts,
         text: gated.text,
-        urls,
         teamId: gated.teamId,
+        botUserId: options.botUserId,
       });
     }
   }

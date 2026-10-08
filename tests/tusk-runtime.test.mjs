@@ -175,6 +175,54 @@ test("lifecycle connects, acks, reacts to a supported link, and disconnects", as
   assert.equal(runtime.getStatus().state, "off");
 });
 
+test("in-thread @Tusk with no URL is a thread question, not a new job", async () => {
+  const questions = [];
+  const links = [];
+  const sockets = [];
+  const runtime = createTuskRuntime({
+    botToken: BOT,
+    appToken: APP,
+    teamId: "THOME",
+    botUserId: "Ubot",
+    slackApi: mockApi(),
+    WebSocket: class extends FakeSocket {
+      constructor(url) {
+        super(url);
+        sockets.push(this);
+      }
+    },
+    onSupportedLink: async (evt) => links.push(evt),
+    onThreadQuestion: async (evt) => questions.push(evt),
+  });
+  await runtime.start();
+  sockets[0].emit("message", {
+    data: JSON.stringify({
+      type: "events_api",
+      envelope_id: "q1",
+      payload: {
+        team_id: "THOME",
+        event_id: "EvQ",
+        event: {
+          type: "app_mention",
+          user: "Ujames",
+          channel: "C01234567",
+          channel_type: "channel",
+          ts: "1710000000.000300",
+          thread_ts: "1710000000.000100",
+          text: "<@Ubot> what was the decision?",
+          client_msg_id: "q1",
+        },
+      },
+    }),
+  });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(links.length, 0);
+  assert.equal(questions.length, 1);
+  assert.equal(questions[0].threadTs, "1710000000.000100");
+  assert.match(questions[0].text, /decision/);
+  await runtime.stop();
+});
+
 test("reconnect uses backoff and disable stops retries", async () => {
   const delays = [];
   let opens = 0;

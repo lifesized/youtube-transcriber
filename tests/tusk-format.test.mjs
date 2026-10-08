@@ -55,6 +55,18 @@ test("parses a typical LLM markdown response into structured sections", () => {
   ]);
 });
 
+test("escapes titles and model output before posting", () => {
+  const markdown = renderSlackArtifactMarkdown({
+    title: "A <script> & more",
+    sourceUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    tldr: "Uses <https://evil|click> and a & b.",
+    links: ["<https://evil|https://youtu.be/dQw4w9WgXcQ>"],
+  });
+  assert.match(markdown, /A &lt;script&gt; &amp; more/);
+  assert.match(markdown, /&lt;https:\/\/evil\|click&gt;/);
+  assert.doesNotMatch(markdown, /<https:\/\/evil/);
+});
+
 test("renders into Slack markdown ending up under the 3800-char ceiling", () => {
   const parsed = parseSlackArtifactMarkdown(`*✦ Summary*\n${"x".repeat(5000)}`, {
     title: "Long video",

@@ -10,13 +10,23 @@ export interface SlackArtifactSections {
   followUpQuestions?: string[];
 }
 
+export function escapeSlackMrkdwn(value: string | null | undefined): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 function bulletList(items: string[] | undefined): string {
-  return (items ?? []).filter(Boolean).map((item) => `• ${item}`).join("\n");
+  return (items ?? [])
+    .filter(Boolean)
+    .map((item) => `• ${escapeSlackMrkdwn(item)}`)
+    .join("\n");
 }
 
 function section(label: string, body: string | null | undefined): string | null {
   if (!body?.trim()) return null;
-  return `*${label}*\n${body.trim()}`;
+  return `*${label}*\n${escapeSlackMrkdwn(body.trim())}`;
 }
 
 function truncateSlackMarkdown(text: string, maxLength: number): string {
@@ -31,9 +41,13 @@ function truncateSlackMarkdown(text: string, maxLength: number): string {
 }
 
 export function renderSlackArtifactMarkdown(artifact: SlackArtifactSections): string {
-  const header = artifact.title?.trim()
-    ? `*${artifact.title.trim()}*${artifact.sourceUrl ? `\n${artifact.sourceUrl}` : ""}`
-    : artifact.sourceUrl ?? null;
+  const title = artifact.title?.trim();
+  const sourceUrl = artifact.sourceUrl?.trim() ?? "";
+  const header = title
+    ? `*${escapeSlackMrkdwn(title)}*${sourceUrl ? `\n${escapeSlackMrkdwn(sourceUrl)}` : ""}`
+    : sourceUrl
+      ? escapeSlackMrkdwn(sourceUrl)
+      : null;
 
   const sections = [
     header,

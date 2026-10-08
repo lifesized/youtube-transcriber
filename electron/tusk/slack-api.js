@@ -17,6 +17,15 @@ class SlackApiError extends Error {
   }
 }
 
+function isSlackFileUploadUrl(url) {
+  try {
+    const parsed = new URL(String(url || ""));
+    return parsed.protocol === "https:" && parsed.hostname === "files.slack.com";
+  } catch {
+    return false;
+  }
+}
+
 async function parseSlackResponse(res) {
   if (!res.ok) {
     let slackError;
@@ -72,8 +81,55 @@ async function postMessage(args) {
     channel: args.channel,
     text: args.text,
     thread_ts: args.threadTs,
+    blocks: args.blocks,
     unfurl_links: false,
     unfurl_media: false,
+  });
+}
+
+async function updateMessage(args) {
+  return slackJson("https://slack.com/api/chat.update", args.botToken, {
+    channel: args.channel,
+    ts: args.ts,
+    text: args.text,
+    blocks: args.blocks,
+    unfurl_links: false,
+    unfurl_media: false,
+  });
+}
+
+async function uploadThreadFile(args) {
+  const bytes = new TextEncoder().encode(args.content);
+  const uploadUrl = await slackForm(
+    "https://slack.com/api/files.getUploadURLExternal",
+    args.botToken,
+    {
+      filename: args.filename,
+      length: String(bytes.byteLength),
+    }
+  );
+  if (!uploadUrl.ok || !uploadUrl.upload_url || !uploadUrl.file_id) {
+    return { ok: false, error: uploadUrl.error || "slack_upload_url_failed" };
+  }
+  if (!isSlackFileUploadUrl(uploadUrl.upload_url)) {
+    return { ok: false, error: "invalid_upload_url" };
+  }
+  const upload = await fetch(uploadUrl.upload_url, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+    body: bytes,
+  });
+  if (!upload.ok) {
+    throw new SlackApiError({
+      status: upload.status,
+      message: `Slack file upload HTTP ${upload.status}`,
+    });
+  }
+  return slackForm("https://slack.com/api/files.completeUploadExternal", args.botToken, {
+    files: JSON.stringify([{ id: uploadUrl.file_id, title: args.title }]),
+    channel_id: args.channel,
+    thread_ts: args.threadTs,
+    ...(args.initialComment ? { initial_comment: args.initialComment } : {}),
   });
 }
 
@@ -119,6 +175,9 @@ module.exports = {
   authTest,
   addReaction,
   postMessage,
+  updateMessage,
+  uploadThreadFile,
   openSocketConnection,
   parseRetryAfterMs,
+  isSlackFileUploadUrl,
 };

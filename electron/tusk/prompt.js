@@ -1,18 +1,6 @@
-export type SlackPrimitivePreset =
-  | "general"
-  | "engineering"
-  | "sales"
-  | "support"
-  | "leadership"
-  | "custom";
+"use strict";
 
-export interface SlackPrimitivePromptOptions {
-  title: string;
-  preset: SlackPrimitivePreset;
-  customInstructions?: string | null;
-}
-
-const PRESET_INSTRUCTIONS: Record<Exclude<SlackPrimitivePreset, "custom">, string> = {
+const PRESET_INSTRUCTIONS = {
   general:
     "Create a concise summary first. Then extract only the useful outputs that are actually present: links/docs, decisions, action items, risks/blockers, and follow-up questions.",
   engineering:
@@ -25,16 +13,12 @@ const PRESET_INSTRUCTIONS: Record<Exclude<SlackPrimitivePreset, "custom">, strin
     "Create a concise executive summary first. Then extract only concrete outputs actually present: decisions, open asks, metrics, deadlines, risks, and owners.",
 };
 
-export function buildSlackPrimitivePrompt(
-  options: SlackPrimitivePromptOptions,
-): string {
+function buildSlackPrimitivePrompt(options) {
   const presetInstructions =
     options.preset === "custom"
-      ? options.customInstructions?.trim()
+      ? options.customInstructions && options.customInstructions.trim()
       : PRESET_INSTRUCTIONS[options.preset];
-
   const instructions = presetInstructions || PRESET_INSTRUCTIONS.general;
-
   return `Analyze this transcript from "${options.title}" and turn it into structured work primitives for Slack.
 
 Customer instructions:
@@ -59,3 +43,49 @@ Rules:
 - If a timestamp is useful, include it as [MM:SS].
 - Do not include preamble, caveats, or a closing note.`;
 }
+
+function resolvePreset(value) {
+  return ["general", "engineering", "sales", "support", "leadership", "custom"].includes(value)
+    ? value
+    : "engineering";
+}
+
+function resolveArtifactMode(text) {
+  if (/(?:^|\s)(?:summarize|summary|s)(?:\s|$)/i.test(text)) return "summary";
+  return /(?:^|\s)(?:transcript|transcribe|t)(?:\s|$)/i.test(text) ? "transcript" : "summary";
+}
+
+function isMentionTriggered(text, botUserId) {
+  return Boolean(botUserId && String(text || "").includes(`<@${botUserId}>`));
+}
+
+function stripMention(text, botUserId) {
+  let out = String(text || "");
+  if (botUserId) out = out.replaceAll(`<@${botUserId}>`, "");
+  return out.replace(/\s+/g, " ").trim();
+}
+
+function buildThreadQuestionPrompt(options) {
+  const title = options.title || "this video";
+  const question = String(options.question || "").trim() || "What were the key points?";
+  return `Answer this question using ONLY the transcript of "${title}".
+
+Question:
+${question}
+
+Rules:
+- Use only facts present in the transcript. If the transcript does not say, reply that you do not know.
+- Do not invent links, people, tools, channels, or URLs.
+- Do not use markdown links or Slack mrkdwn links like <url|label>. Write plain text and plain https URLs that already appear in the transcript.
+- Keep the answer under 1,200 characters. No preamble.`;
+}
+
+module.exports = {
+  buildSlackPrimitivePrompt,
+  buildThreadQuestionPrompt,
+  resolvePreset,
+  resolveArtifactMode,
+  isMentionTriggered,
+  stripMention,
+  PRESET_INSTRUCTIONS,
+};

@@ -149,6 +149,14 @@ export async function uploadSlackThreadFile(args: {
   if (!uploadUrl.ok || !uploadUrl.upload_url || !uploadUrl.file_id) {
     return { ok: false, error: uploadUrl.error ?? "slack_upload_url_failed" };
   }
+  try {
+    const parsed = new URL(uploadUrl.upload_url);
+    if (parsed.protocol !== "https:" || parsed.hostname !== "files.slack.com") {
+      return { ok: false, error: "invalid_upload_url" };
+    }
+  } catch {
+    return { ok: false, error: "invalid_upload_url" };
+  }
 
   const upload = await fetch(uploadUrl.upload_url, {
     method: "POST",

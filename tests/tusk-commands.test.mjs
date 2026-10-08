@@ -14,6 +14,7 @@ test("/tusk help and status copy", () => {
   assert.equal(commands.parseSlashText("help"), "help");
   assert.equal(commands.parseSlashText("status"), "status");
   assert.match(commands.slashReply("help"), /Paste a YouTube/);
+  assert.match(commands.slashReply("help"), /@Tusk/);
   assert.match(
     commands.slashReply("status", { state: "connected", workspace: "Personal", botName: "tusk" }),
     /Personal/
@@ -27,4 +28,9 @@ test("mention and summarize/transcript mode parsing from the old events route", 
   assert.equal(resolveArtifactMode("<@Ubot> summarize https://youtu.be/x"), "summary");
   assert.equal(resolveArtifactMode("<@Ubot> transcript https://youtu.be/x"), "transcript");
   assert.equal(resolveArtifactMode("https://youtu.be/x"), "summary");
+});
+
+test("stripMention leaves only the question", async () => {
+  const { stripMention } = await import("../lib/tusk/parse.ts");
+  assert.equal(stripMention("<@Ubot> what was the decision?", "Ubot"), "what was the decision?");
 });

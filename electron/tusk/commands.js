@@ -10,8 +10,8 @@ function parseSlashText(text) {
 function helpText() {
   return [
     "*Tusk* runs on this Mac inside Transcriber. No cloud bot.",
-    "Paste a YouTube, Spotify episode, or LinkedIn post/event link in this channel. Tusk adds 👀 when it recognizes the URL.",
-    "Threaded summaries and `@Tusk` questions come in a later update.",
+    "Paste a YouTube, Spotify episode, or LinkedIn post/event link in a public channel Tusk is in. Tusk adds 👀 and replies in the thread with a summary (or a transcript file).",
+    "In that thread, `@Tusk <question>` answers only from that video. Tusk does not search the rest of your library.",
     "`/tusk status` — connection",
     "`/tusk help` — this message",
   ].join("\n");
