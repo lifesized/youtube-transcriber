@@ -45,6 +45,7 @@
     "test:notion": "tsx --test tests/notion-save.test.mjs",
     "test:library-gate": "tsx --test tests/library-gate.test.mjs",
     "test:middleware": "tsx --test tests/middleware-auth.test.mjs",
+    "test:headers": "tsx --test tests/frame-headers.test.mjs",
     "electron:dev": "NODE_ENV=development electron .",
     "electron:prepare": "node scripts/prepare-electron-standalone.js",
     "electron:build": "npm run build && npm run electron:prepare && electron-builder --mac --arm64 && bash electron/dmg/finalize-dmg.sh",

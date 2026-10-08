@@ -54,6 +54,9 @@ jobs:
 
       - name: Local API cookie auth (middleware) tests
         run: npm run test:middleware
+
+      - name: Frame headers tests
+        run: npm run test:headers
       
       - name: Build Next.js
         run: npm run build
