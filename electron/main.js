@@ -21,9 +21,10 @@ const NativeHostInstaller = require("./native-host-installer.js");
 const { SecretsStore, attachSecretsIpc } = require("./secrets-store.js");
 const { createTuskManager } = require("./tusk/manager.js");
 const { confirmTuskSensitiveChange } = require("./tusk/confirm.js");
-const { checkIfTranslocated } = require("./utils.js");
+const { checkIfTranslocated, shouldRepointNativeHost } = require("./utils.js");
 const { launchedByNativeHost, shouldRevealOnLaunch } = require("../lib/launch-source.js");
 const { createUpdater } = require("./updater.js");
+const { appBundleFromExecPath } = require("./code-signature.js");
 
 const IS_DEV = process.env.NODE_ENV === "development";
 const PORT = config.port;
@@ -212,9 +213,18 @@ app.whenReady().then(async () => {
   if (!IS_DEV) {
     try {
       if (nativeHostInstaller.listExtensionIds().length > 0) {
-        const result = await nativeHostInstaller.install();
-        if (!result.success) {
-          console.warn("native host first-launch install:", result.error);
+        const bundlePath =
+          appBundleFromExecPath(process.execPath) || app.getAppPath();
+        const recorded = nativeHostInstaller.readRecordedBundlePath();
+        if (shouldRepointNativeHost(bundlePath, recorded)) {
+          const result = await nativeHostInstaller.install();
+          if (!result.success) {
+            console.warn("native host first-launch install:", result.error);
+          }
+        } else {
+          console.warn(
+            "native host first-launch install: skipped (not /Applications or recorded install)"
+          );
         }
       }
     } catch (error) {

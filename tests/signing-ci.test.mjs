@@ -176,6 +176,8 @@ test("main wires the updater gate and stops Next before quitAndInstall", () => {
   assert.ok(main.includes("createUpdater"));
   assert.ok(main.includes("installingUpdate"));
   assert.ok(main.includes("listExtensionIds"));
+  assert.ok(main.includes("shouldRepointNativeHost"));
+  assert.ok(main.includes("readRecordedBundlePath"));
   assert.doesNotMatch(main, /require\(["']electron-updater["']\)/);
   const updater = fs.readFileSync(path.join(root, "electron", "updater.js"), "utf8");
   assert.doesNotMatch(updater, /require\(["']electron-updater["']\)/);

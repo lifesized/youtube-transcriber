@@ -13,7 +13,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const { execFileSync } = require("child_process");
-const { checkIfTranslocated, writeFileAtomic } = require("./utils.js");
+const { checkIfTranslocated, recordedBundleFromWrapper, writeFileAtomic } = require("./utils.js");
 const { filterValidExtensionIds } = require("../lib/native-host-pair.js");
 const { getLogDir } = require("../lib/local-api-token.js");
 const config = require("./config.js");
@@ -341,6 +341,14 @@ class NativeHostInstaller {
     const dir = this.stateDir;
     fs.mkdirSync(dir, { recursive: true });
     return path.join(dir, "transcriber-app-host.sh");
+  }
+
+  readRecordedBundlePath() {
+    try {
+      return recordedBundleFromWrapper(fs.readFileSync(this._getWrapperPath(), "utf8"));
+    } catch {
+      return "";
+    }
   }
   
   _writeWrapperScript(wrapperPath) {

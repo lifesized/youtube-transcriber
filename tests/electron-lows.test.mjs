@@ -156,6 +156,47 @@ test("powerSaveBlocker.isStarted is never called with a null id", () => {
   );
 });
 
+test("native-host re-point is only /Applications or the recorded install", () => {
+  const {
+    shouldRepointNativeHost,
+    recordedBundleFromWrapper,
+  } = require(path.join(repoRoot, "electron/utils.js"));
+  const recorded = "/Users/james/Transcriber.app";
+  assert.equal(shouldRepointNativeHost("/Applications/Transcriber.app", ""), true);
+  assert.equal(
+    shouldRepointNativeHost(
+      "/Applications/Transcriber.app/Contents/Resources/app.asar",
+      recorded
+    ),
+    true
+  );
+  assert.equal(shouldRepointNativeHost(recorded, recorded), true);
+  assert.equal(
+    shouldRepointNativeHost("/Users/james/Downloads/Transcriber.app", recorded),
+    false
+  );
+  assert.equal(
+    shouldRepointNativeHost("/Volumes/Transcriber 0.2.0-beta.1/Transcriber.app", recorded),
+    false
+  );
+  assert.equal(
+    shouldRepointNativeHost(
+      "/private/var/folders/xx/yyyy/T/AppTranslocation/ABC/d/Transcriber.app",
+      recorded
+    ),
+    false
+  );
+  assert.equal(shouldRepointNativeHost("/Users/james/Desktop/Transcriber.app", recorded), false);
+  assert.equal(shouldRepointNativeHost("", recorded), false);
+  const wrapper = [
+    "#!/bin/sh",
+    "export ELECTRON_RUN_AS_NODE=1",
+    "exec '/Users/james/Transcriber.app/Contents/MacOS/Transcriber' '/Users/james/Transcriber.app/Contents/Resources/app.asar.unpacked/tools/native-host/transcriber-host.js' \"$@\"",
+    "",
+  ].join("\n");
+  assert.equal(recordedBundleFromWrapper(wrapper), recorded);
+});
+
 test("afterPack flips fuses and keeps RunAsNode", () => {
   const src = readFileSync(path.join(repoRoot, "electron/after-pack.js"), "utf8");
   assert.ok(src.includes("@electron/fuses"));
