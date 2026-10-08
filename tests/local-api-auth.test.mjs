@@ -109,6 +109,26 @@ test("unauthorizedJson shape", () => {
   assert.deepEqual(auth.unauthorizedJson(), { error: "unauthorized" });
 });
 
+test("getStateDir honors TRANSCRIBER_STATE_DIR and defaults to Transcriber", () => {
+  const prev = process.env.TRANSCRIBER_STATE_DIR;
+  try {
+    delete process.env.TRANSCRIBER_STATE_DIR;
+    const def = tokenMod.getStateDir();
+    if (process.platform === "darwin") {
+      assert.ok(def.endsWith(`${path.sep}Transcriber`));
+      assert.equal(def.includes("Transcriber App"), false);
+    } else {
+      assert.match(def, /transcriber/i);
+    }
+    process.env.TRANSCRIBER_STATE_DIR = "/tmp/ytt-app-state";
+    assert.equal(tokenMod.getStateDir(), "/tmp/ytt-app-state");
+    assert.equal(tokenMod.getLocalApiTokenPath(), path.join("/tmp/ytt-app-state", "local-api.token"));
+  } finally {
+    if (prev === undefined) delete process.env.TRANSCRIBER_STATE_DIR;
+    else process.env.TRANSCRIBER_STATE_DIR = prev;
+  }
+});
+
 /**
  * Middleware behavior unit-test without booting Next: same decision function.
  */

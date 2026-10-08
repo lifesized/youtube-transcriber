@@ -184,6 +184,15 @@ const el = {
   githubLink: document.getElementById("githubLink"),
   cloudLink: null,
   settingsPanel: document.getElementById("settingsPanel"),
+  connectTargetSection: document.getElementById("connectTargetSection"),
+  connectToLabel: document.getElementById("connectToLabel"),
+  connectTargetApp: document.getElementById("connectTargetApp"),
+  connectTargetDev: document.getElementById("connectTargetDev"),
+  connectTargetAppLabel: document.getElementById("connectTargetAppLabel"),
+  connectTargetDevLabel: document.getElementById("connectTargetDevLabel"),
+  connectHelper: document.getElementById("connectHelper"),
+  connectError: document.getElementById("connectError"),
+  connectRetry: document.getElementById("connectRetry"),
   btnModeLocal: null,
   btnModeCloud: null,
   cloudAccountSection: null,
@@ -1479,7 +1488,7 @@ async function copyTranscriptText(transcriptId) {
 
 async function downloadTranscriptMarkdown(transcriptId) {
   // LOCAL mode always uses 127.0.0.1 (CSP allows only this, not localhost)
-  const base = "http://127.0.0.1:19720";
+  const base = (await currentConnectTarget()).apiBase;
   const a = document.createElement("a");
   a.href = `${base}/api/transcripts/${encodeURIComponent(transcriptId)}/download`;
   a.rel = "noopener";
@@ -1658,31 +1667,113 @@ function loadCachedPath() {
 
 // ---------------------------------------------------------------------------
 // Native messaging host — one-click "Start Transcriber" button.
-// The host (com.transcribed.host) is a small node script installed via
+// The selected target's host (com.transcribed.app.host or
+// com.transcribed.host) is a small node script. Dev host is installed via
 // `npm run install-native-host`. If it isn't installed, the popup falls
 // back to the npm-run-dev copy/paste box.
 // ---------------------------------------------------------------------------
 
-const NATIVE_HOST = "com.transcribed.host";
 let nativeHostAvailable = null; // null = unknown, true/false after first probe
 let nativeStartInFlight = false;
 let nativeHostPairAttempted = false;
+let connectTargetPainted = false;
+
+function connectTargetApi() {
+  return globalThis.ConnectTarget;
+}
+
+async function currentConnectTarget() {
+  const T = connectTargetApi();
+  if (!T) return { apiBase: "http://127.0.0.1:19721", port: "19721", nativeHostName: "com.transcribed.app.host", id: "app" };
+  if (!HAS_EXTENSION_APIS) return T.getTarget(T.APP);
+  const stored = await chrome.storage.local.get(T.STORAGE_KEY);
+  if (stored[T.STORAGE_KEY] === undefined) {
+    await chrome.storage.local.set({ [T.STORAGE_KEY]: T.APP });
+    return T.getTarget(T.APP);
+  }
+  return T.getTarget(T.normalize(stored[T.STORAGE_KEY]));
+}
+
+function paintConnectTargetLabels() {
+  const T = connectTargetApi();
+  if (!T || connectTargetPainted) return;
+  if (el.connectToLabel) el.connectToLabel.textContent = T.CONNECT_TO_LABEL;
+  if (el.connectTargetAppLabel) el.connectTargetAppLabel.textContent = T.getTarget(T.APP).label;
+  if (el.connectTargetDevLabel) el.connectTargetDevLabel.textContent = T.getTarget(T.DEV).label;
+  if (el.connectHelper) el.connectHelper.textContent = T.CONNECT_HELPER;
+  if (el.connectRetry) el.connectRetry.textContent = T.RETRY_LABEL;
+  connectTargetPainted = true;
+}
+
+function hideConnectTargetError() {
+  if (el.connectError) {
+    el.connectError.hidden = true;
+    el.connectError.textContent = "";
+  }
+  if (el.connectRetry) el.connectRetry.hidden = true;
+}
+
+function showConnectTargetError(target) {
+  const T = connectTargetApi();
+  if (!T || !el.connectError) return;
+  el.connectError.textContent = T.unreachableMessage(target.id);
+  el.connectError.hidden = false;
+  if (el.connectRetry) {
+    el.connectRetry.hidden = !T.shouldShowRetry(target.id);
+  }
+}
+
+async function refreshConnectTargetError() {
+  const T = connectTargetApi();
+  if (!T) return;
+  const target = await currentConnectTarget();
+  if (el.connectTargetApp) el.connectTargetApp.checked = target.id === T.APP;
+  if (el.connectTargetDev) el.connectTargetDev.checked = target.id === T.DEV;
+  const serviceRes = await sendMsg({ type: "CHECK_SERVICE" });
+  const online = !!(serviceRes?.success && serviceRes.data?.online);
+  if (online) {
+    hideConnectTargetError();
+    return;
+  }
+  showConnectTargetError(target);
+}
+
+async function setConnectTarget(id) {
+  const T = connectTargetApi();
+  if (!T) return;
+  const next = T.normalize(id);
+  const current = await currentConnectTarget();
+  if (next === current.id) {
+    await refreshConnectTargetError();
+    return;
+  }
+  await chrome.storage.local.set({ [T.STORAGE_KEY]: next });
+  nativeHostAvailable = null;
+  await sendMsg({ type: "CLEAR_LOCAL_TOKEN" });
+  await detectNativeHost();
+  await refreshConnectTargetError();
+}
 
 async function requestNativeHostPairOnce() {
   if (nativeHostPairAttempted) return;
   nativeHostPairAttempted = true;
   try {
-    await fetch("http://127.0.0.1:19720/api/native-host/pair", { method: "POST" });
+    const T = connectTargetApi();
+    const pairUrl = T
+      ? T.getTarget(T.APP).pairUrl
+      : "http://127.0.0.1:19721/api/native-host/pair";
+    await fetch(pairUrl, { method: "POST" });
   } catch {
     // App may not be running yet.
   }
 }
 
-function callNativeHost(cmd, payload = {}, timeoutMs = 30000) {
+async function callNativeHost(cmd, payload = {}, timeoutMs = 30000) {
+  const hostName = (await currentConnectTarget()).nativeHostName;
   return new Promise((resolve, reject) => {
     let port;
     try {
-      port = chrome.runtime.connectNative(NATIVE_HOST);
+      port = chrome.runtime.connectNative(hostName);
     } catch (e) {
       reject(new Error("native_host_unavailable"));
       return;
@@ -1760,7 +1851,7 @@ async function startTranscriberClicked() {
       init();
     } else if (res?.reason === "port_conflict") {
       el.offlineStartError.textContent =
-        `Port ${res.port || 19720} is already in use by another app. ` +
+        `Port ${res.port || (await currentConnectTarget()).port} is already in use by another app. ` +
         `Close it (or change the port) and try again.`;
       el.offlineStartError.hidden = false;
     } else if (res?.reason === "already_running") {
@@ -2976,8 +3067,10 @@ async function showSettingsView() {
   el.settingsPanel.hidden = false;
   el.btnNavSettings.classList.add("active");
   el.btnNavLibrary.classList.remove("active");
+  paintConnectTargetLabels();
   // Re-probe native host on Settings open so fresh installs are detected
   await detectNativeHost();
+  await refreshConnectTargetError();
   loadSettings();
 }
 
@@ -3189,7 +3282,7 @@ async function startServerClicked() {
       init();
     } else if (res?.reason === "port_conflict") {
       el.stopServerHint.textContent =
-        `Port ${res.port || 19720} is already in use by another app. ` +
+        `Port ${res.port || (await currentConnectTarget()).port} is already in use by another app. ` +
         `Close it (or change the port) and try again.`;
       el.stopServerHint.hidden = false;
     } else {
@@ -3242,6 +3335,22 @@ async function stopServerClicked() {
 }
 
 el.btnStopServer.addEventListener("click", stopServerClicked);
+
+if (el.connectTargetApp) {
+  el.connectTargetApp.addEventListener("change", () => {
+    if (el.connectTargetApp.checked) setConnectTarget("app");
+  });
+}
+if (el.connectTargetDev) {
+  el.connectTargetDev.addEventListener("change", () => {
+    if (el.connectTargetDev.checked) setConnectTarget("dev");
+  });
+}
+if (el.connectRetry) {
+  el.connectRetry.addEventListener("click", () => {
+    refreshConnectTargetError();
+  });
+}
 
 // Footer right-side link: GitHub repo visible in LOCAL mode.
 async function applyFooterLink(modeOverride) {

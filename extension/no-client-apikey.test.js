@@ -105,6 +105,7 @@ test("YTT-445: extension never calls summarize with client-supplied key", () => 
 
   // Only endpoint is the local loopback
   assert.match(sendUrl, /LOCAL_SEND_ENDPOINT.*127\.0\.0\.1:19720/);
+  assert.match(sendUrl, /127\.0\.0\.1:19721/);
   assert.doesNotMatch(sources, /https:\/\/[^1]/);
 });
 

@@ -30,7 +30,7 @@ Keeps bundle smaller, ensures ABI compatibility across all components.
 ### ServerManager (`electron/server-manager.js`)
 - Spawns standalone server: `ELECTRON_RUN_AS_NODE=1 $electronBinary .next/standalone/server.js`
 - Health check polling (30s timeout)
-- Port conflict detection (shows error if dev server running on 19720)
+- Port conflict detection (packaged app listens on 19721 so a checkout on 19720 can stay up)
 - Auto-restart on crash (exponential backoff, max 3 attempts)
 - Sets `DATABASE_URL`, `TRANSCRIBER_LOCAL_TOKEN`, `PATH` with bundled bins
 
@@ -42,10 +42,11 @@ Keeps bundle smaller, ensures ABI compatibility across all components.
 ### NativeHostInstaller (`electron/native-host-installer.js`)
 - Detects installed browsers (Chrome, Brave, Arc, Edge)
 - Writes native messaging manifests to each browser's `NativeMessagingHosts/` dir
-- Creates wrapper script: `~/Library/Application Support/Transcriber/transcriber-host.sh`
+- Creates wrapper script: `~/Library/Application Support/Transcriber App/transcriber-app-host.sh`
   - Uses Electron binary with `ELECTRON_RUN_AS_NODE=1` to run host script
   - Absolute paths (no PATH dependence)
-- Extension IDs loaded from `~/Library/Application Support/Transcriber/extension-ids.json` (user-configurable)
+  - Host name `com.transcribed.app.host` (checkout host stays `com.transcribed.host`)
+- Extension IDs loaded from `~/Library/Application Support/Transcriber App/extension-ids.json`
 - Checks for translocation (refuses install if app not in /Applications)
 
 ---
@@ -144,7 +145,7 @@ Contents:
 
 Before shipping DMG:
 - [ ] App launches, tray icon visible
-- [ ] "Open Transcriber" opens browser to localhost:19720
+- [ ] "Open Transcriber" opens browser to localhost:19721
 - [ ] Web UI loads
 - [ ] "Start at Login" toggle works
 - [ ] Create `extension-ids.json`, install manifests

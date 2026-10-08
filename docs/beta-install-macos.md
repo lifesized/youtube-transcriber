@@ -32,7 +32,7 @@ open /Applications/Transcriber.app
 
 ## After it launches
 
-Menu bar icon → **Open Transcriber** (`http://127.0.0.1:19720`).
+Menu bar icon → **Open Transcriber** (`http://127.0.0.1:19721`). This beta uses 19721 so it can run beside `npm run dev` on 19720.
 
 Chrome extension: install the unlisted Web Store link, then menu bar → **Connect browser extension…** (or **Reinstall Browser Connection**). On a YouTube tab the side panel should show the server as running.
 
@@ -40,13 +40,13 @@ This beta uses YouTube captions. Whisper is optional if you already have Python 
 
 ## Update
 
-Quit Transcriber, download the new DMG, run the helper again. History stays in `~/Library/Application Support/Transcriber/`.
+Quit Transcriber, download the new DMG, run the helper again. The packaged app stores its library in `~/Library/Application Support/Transcriber App/`. A checkout's `npm run dev` still uses `~/Library/Application Support/Transcriber/`. Import stays manual.
 
 ## Troubleshooting
 
 **“Transcriber.app is damaged and can’t be opened”** — you opened the app instead of the helper, or skipped `xattr`. Run the helper, or the fallback command above.
 
-**Port 19720 in use** — quit another Transcriber / `next dev`, then reopen.
+**Port 19721 in use** — quit another copy of the packaged app, then reopen. `npm run dev` on 19720 is expected and does not block this beta.
 
 **Extension says server offline** — confirm the menu bar app is running, then **Reinstall Browser Connection**.
 
@@ -55,7 +55,7 @@ Quit Transcriber, download the new DMG, run the helper again. History stays in `
 Quit Transcriber, delete `/Applications/Transcriber.app`. Optional:
 
 ```bash
-rm -rf ~/Library/Application\ Support/Transcriber
+rm -rf ~/Library/Application\ Support/Transcriber\ App
 rm -rf ~/Library/Logs/Transcriber
 ```
 

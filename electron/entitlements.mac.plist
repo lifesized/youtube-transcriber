@@ -14,7 +14,7 @@
   <key>com.apple.security.cs.disable-library-validation</key>
   <true/>
   
-  <!-- Allow loopback HTTP server on port 19720 -->
+  <!-- Allow loopback HTTP server (port from electron/config.js) -->
   <key>com.apple.security.network.server</key>
   <true/>
   

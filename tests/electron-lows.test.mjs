@@ -70,6 +70,37 @@ test("writeFileAtomic opens the temp file with wx", () => {
   }
 });
 
+test("app native host wrapper sets PORT and TRANSCRIBER_STATE_DIR", () => {
+  const NativeHostInstaller = require(
+    path.join(repoRoot, "electron/native-host-installer.js")
+  );
+  const config = require(path.join(repoRoot, "electron/config.js"));
+  assert.equal(NativeHostInstaller.HOST_NAME, "com.transcribed.app.host");
+  assert.notEqual(NativeHostInstaller.HOST_NAME, "com.transcribed.host");
+  const dir = mkdtempSync(path.join(tmpdir(), "ytt-app-host-"));
+  const idsPath = path.join(dir, "extension-ids.json");
+  try {
+    const installer = new NativeHostInstaller({
+      idsPath,
+      browsers: [],
+      stateDir: dir,
+      port: config.port,
+    });
+    const wrapperPath = path.join(dir, "transcriber-app-host.sh");
+    installer._writeWrapperScript(wrapperPath);
+    const script = readFileSync(wrapperPath, "utf8");
+    assert.match(script, /export ELECTRON_RUN_AS_NODE=1/);
+    assert.match(script, new RegExp(`export PORT='${config.port}'`));
+    assert.match(script, /export TRANSCRIBER_STATE_DIR=/);
+    assert.ok(script.includes(dir));
+    assert.equal(installer._getManifestPath({ manifestDir: dir }), path.join(dir, "com.transcribed.app.host.json"));
+    assert.ok(config.resolveAppStateDir("/Users/james", "darwin").endsWith("Transcriber App"));
+    assert.equal(config.port, 19721);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("shSingleQuote escapes single quotes in wrapper paths", () => {
   const { shSingleQuote } = require(
     path.join(repoRoot, "electron/native-host-installer.js")

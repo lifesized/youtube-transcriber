@@ -30,9 +30,15 @@ const {
   filterValidExtensionIds,
   KNOWN_STORE_EXTENSION_IDS,
 } = require("../../lib/native-host-pair.js");
+const { configuredPort } = require("../../lib/local-api-auth.js");
 
-const PORT = 19720;
-const HEALTH_URL = `http://127.0.0.1:${PORT}/api/health`;
+function getPort() {
+  return configuredPort();
+}
+
+function healthUrl() {
+  return `http://127.0.0.1:${getPort()}/api/health`;
+}
 const IDENTITY_HEADER = "x-transcriber-service";
 const ELECTRON_BUNDLE_ID = "com.transcribed.app";
 const MAX_NATIVE_HOST_MESSAGE = 1024 * 1024;
@@ -40,29 +46,28 @@ const MAX_NATIVE_HOST_MESSAGE = 1024 * 1024;
 // Project root is two levels up from this file (tools/native-host/ → repo root).
 const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
 
-const STATE_DIR = (() => {
-  if (process.platform === "darwin") {
-    return path.join(os.homedir(), "Library", "Application Support", "Transcriber");
-  }
-  if (process.platform === "win32") {
-    return path.join(process.env.APPDATA || os.homedir(), "Transcriber");
-  }
-  return path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "transcriber");
-})();
+function stateDir() {
+  return getStateDir();
+}
 
-const LOG_DIR = (() => {
+function logDir() {
   if (process.platform === "darwin") {
     return path.join(os.homedir(), "Library", "Logs", "Transcriber");
   }
-  return STATE_DIR;
-})();
+  return stateDir();
+}
 
-const STATE_FILE = path.join(STATE_DIR, "native-host-state.json");
-const LOG_FILE = path.join(LOG_DIR, "native-host.log");
+function stateFile() {
+  return path.join(stateDir(), "native-host-state.json");
+}
+
+function logFile() {
+  return path.join(logDir(), "native-host.log");
+}
 
 function ensureDirs() {
-  fs.mkdirSync(STATE_DIR, { recursive: true });
-  fs.mkdirSync(LOG_DIR, { recursive: true });
+  fs.mkdirSync(stateDir(), { recursive: true });
+  fs.mkdirSync(logDir(), { recursive: true });
 }
 
 function log(...args) {
@@ -71,7 +76,7 @@ function log(...args) {
     const line = `[${new Date().toISOString()}] ${args.map((a) =>
       typeof a === "string" ? a : JSON.stringify(a)
     ).join(" ")}\n`;
-    fs.appendFileSync(LOG_FILE, line);
+    fs.appendFileSync(logFile(), line);
   } catch {
     // Logging must never throw — Chrome treats stderr writes as errors.
   }
@@ -79,7 +84,7 @@ function log(...args) {
 
 function readState() {
   try {
-    return JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+    return JSON.parse(fs.readFileSync(stateFile(), "utf8"));
   } catch {
     return {};
   }
@@ -87,7 +92,7 @@ function readState() {
 
 function writeState(state) {
   ensureDirs();
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+  fs.writeFileSync(stateFile(), JSON.stringify(state, null, 2));
 }
 
 function isPidAlive(pid) {
@@ -112,7 +117,7 @@ function authHeaders() {
 function probeOnce(timeoutMs = 1500) {
   return new Promise((resolve) => {
     const req = http.get(
-      HEALTH_URL,
+      healthUrl(),
       { timeout: timeoutMs, headers: authHeaders() },
       (res) => {
         const identity = res.headers[IDENTITY_HEADER];
@@ -263,7 +268,7 @@ function getStatus() {
     pid: running ? state.pid : undefined,
     uptimeMs: running && state.startedAt ? Date.now() - state.startedAt : undefined,
     projectRoot: PROJECT_ROOT,
-    port: PORT,
+    port: getPort(),
   };
 }
 
@@ -345,7 +350,7 @@ async function handleMessage(msg) {
         return { id, ok: true, pong: true };
       case "probe": {
         const r = await probeWithRetry(1, 0);
-        return { id, ok: true, ...r, port: PORT };
+        return { id, ok: true, ...r, port: getPort() };
       }
       case "start": {
         const r = await startServer();
@@ -447,4 +452,6 @@ module.exports = {
   authorizeNativeHostCaller,
   replyGetLocalToken,
   listen,
+  getPort,
+  healthUrl,
 };

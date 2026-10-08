@@ -66,6 +66,20 @@ async function spawnHost(args, env, msg) {
   };
 }
 
+test("native host port follows PORT env and defaults to 19720", () => {
+  const prev = process.env.PORT;
+  try {
+    delete process.env.PORT;
+    assert.equal(host.getPort(), 19720);
+    process.env.PORT = "19721";
+    assert.equal(host.getPort(), 19721);
+    assert.equal(host.healthUrl(), "http://127.0.0.1:19721/api/health");
+  } finally {
+    if (prev === undefined) delete process.env.PORT;
+    else process.env.PORT = prev;
+  }
+});
+
 test("Electron mode start launches the app by bundle id", () => {
   const launch = host.getStartLaunch(
     { ELECTRON_RUN_AS_NODE: "1" },
@@ -176,6 +190,7 @@ test("spawned host getLocalToken authorizes the origin argument", async () => {
   const env = { ...process.env, HOME: home };
   delete env.XDG_CONFIG_HOME;
   delete env.TRANSCRIBER_LOCAL_TOKEN;
+  delete env.TRANSCRIBER_STATE_DIR;
   try {
     const allowed = await spawnHost(
       [`chrome-extension://${paired}/`],
@@ -201,6 +216,34 @@ test("spawned host getLocalToken authorizes the origin argument", async () => {
     assert.notEqual(missing.status, 0);
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("getLocalToken reads token from TRANSCRIBER_STATE_DIR not the checkout dir", async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "ytt-nmh-home-"));
+  const appState = fs.mkdtempSync(path.join(os.tmpdir(), "ytt-nmh-app-"));
+  const checkoutState = stateDirForHome(home);
+  const paired = "abcdefghijklmnopabcdefghijklmnop";
+  const token = "d".repeat(64);
+  fs.mkdirSync(checkoutState, { recursive: true });
+  fs.writeFileSync(path.join(checkoutState, "extension-ids.json"), JSON.stringify([]));
+  fs.writeFileSync(path.join(checkoutState, "local-api.token"), "e".repeat(64), { mode: 0o600 });
+  fs.writeFileSync(path.join(appState, "extension-ids.json"), JSON.stringify([paired]));
+  fs.writeFileSync(path.join(appState, "local-api.token"), token, { mode: 0o600 });
+  const env = { ...process.env, HOME: home, TRANSCRIBER_STATE_DIR: appState };
+  delete env.XDG_CONFIG_HOME;
+  delete env.TRANSCRIBER_LOCAL_TOKEN;
+  try {
+    const allowed = await spawnHost(
+      [`chrome-extension://${paired}/`],
+      env,
+      { id: "tok", cmd: "getLocalToken" }
+    );
+    assert.equal(allowed.msg?.ok, true, allowed.stderr);
+    assert.equal(allowed.msg?.token, token);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(appState, { recursive: true, force: true });
   }
 });
 

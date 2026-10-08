@@ -248,7 +248,7 @@ jobs:
           mkdir -p "$DATA_DIR/Library/Application Support/Transcriber"
           TOKEN="$(openssl rand -hex 32)"
           LOG="$DATA_DIR/main.log"
-          PORT=19720
+          PORT=$(node -p "require('./electron/config.js').port")
 
           cleanup() {
             if [ -n "${APP_PID:-}" ]; then
@@ -293,7 +293,7 @@ jobs:
               set +e
               FAKE_HOST=$(curl -sS -o /tmp/packaged-host-pin.txt -w "%{http_code}" \
                 -H "Authorization: Bearer ${TOKEN}" \
-                -H "Host: evil.example:19720" \
+                -H "Host: evil.example:${PORT}" \
                 "http://127.0.0.1:${PORT}/api/health")
               set -e
               if [ "$FAKE_HOST" != "421" ]; then
@@ -568,7 +568,7 @@ jobs:
           TOKEN="$(openssl rand -hex 32)"
           DB_PATH="$DATA_DIR/Library/Application Support/Transcriber/transcriber.db"
           LOG_FILE="$DATA_DIR/server.log"
-          PORT=19721
+          PORT=$(node -p "require('./electron/config.js').port")
           
           cleanup() {
             if [ -n "${SERVER_PID:-}" ]; then

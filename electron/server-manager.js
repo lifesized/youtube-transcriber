@@ -145,6 +145,7 @@ class ServerManager extends EventEmitter {
       PORT: String(this.port),
       HOSTNAME: "127.0.0.1",
       TRANSCRIBER_LOCAL_TOKEN: process.env.TRANSCRIBER_LOCAL_TOKEN,
+      TRANSCRIBER_STATE_DIR: process.env.TRANSCRIBER_STATE_DIR || getStateDir(),
     };
     
     // Add paths to bundled binaries (ffmpeg, yt-dlp)

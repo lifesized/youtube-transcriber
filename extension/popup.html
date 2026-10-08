@@ -5,6 +5,7 @@
   <script defer src="panel-diagnostics.js"></script>
   <link rel="stylesheet" href="popup.css">
   <link rel="stylesheet" href="setup-link.css">
+  <script defer src="connect-target.js"></script>
   <script defer src="popup.js"></script>
 </head>
 <body>
@@ -150,6 +151,22 @@
     <!-- Settings Panel (exclusive view — hides all other content when open) -->
     <div id="settingsPanel" class="settings-panel" hidden>
       <div class="section-label">Settings</div>
+      <div id="connectTargetSection" class="settings-connect">
+        <div class="section-label section-label-subsection" id="connectToLabel"></div>
+        <div class="connect-segmented" role="radiogroup" aria-labelledby="connectToLabel">
+          <label class="connect-segment">
+            <input type="radio" name="connectTarget" value="app" id="connectTargetApp" />
+            <span class="connect-segment-text" id="connectTargetAppLabel"></span>
+          </label>
+          <label class="connect-segment">
+            <input type="radio" name="connectTarget" value="dev" id="connectTargetDev" />
+            <span class="connect-segment-text" id="connectTargetDevLabel"></span>
+          </label>
+        </div>
+        <p class="connect-helper" id="connectHelper"></p>
+        <p class="connect-error error-message" id="connectError" hidden></p>
+        <button type="button" class="connect-retry" id="connectRetry" hidden></button>
+      </div>
       <div id="serverSection" class="settings-server" hidden>
         <div class="section-label section-label-subsection">Server</div>
         <p class="settings-server-status" id="serverStatus" hidden></p>

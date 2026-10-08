@@ -1,27 +1,31 @@
-importScripts("local-auth-headers.js", "send-url.js");
+importScripts("local-auth-headers.js", "send-url.js", "connect-target.js");
 
 // In-memory only — never persist the loopback token (YTT-435 / YTT-442).
 let _localTokenMemory = null;
-const NATIVE_HOST_NAME = "com.transcribed.host";
 const CAPTION_EXTRACT_TIMEOUT_MS = 2500;
 
 let _pairAttempted = false;
+
+async function resolveTarget() {
+  const stored = await chrome.storage.local.get(ConnectTarget.STORAGE_KEY);
+  return ConnectTarget.getTarget(ConnectTarget.normalize(stored[ConnectTarget.STORAGE_KEY]));
+}
 
 async function requestNativeHostPairOnce() {
   if (_pairAttempted) return;
   _pairAttempted = true;
   try {
-    await fetch("http://127.0.0.1:19720/api/native-host/pair", { method: "POST" });
+    await fetch(ConnectTarget.getTarget(ConnectTarget.APP).pairUrl, { method: "POST" });
   } catch {
     // App may not be running yet.
   }
 }
 
-function callNativeHostCmd(cmd, payload = {}, timeoutMs = 5000) {
+function callNativeHostCmd(cmd, payload = {}, timeoutMs = 5000, hostName) {
   return new Promise((resolve, reject) => {
     let port;
     try {
-      port = chrome.runtime.connectNative(NATIVE_HOST_NAME);
+      port = chrome.runtime.connectNative(hostName);
     } catch {
       reject(new Error("native_host_unavailable"));
       return;
@@ -157,14 +161,15 @@ async function tryExtractCaptions(url, title) {
 
 async function getLocalApiToken() {
   if (_localTokenMemory) return { ok: true, token: _localTokenMemory };
-  
+
+  const hostName = (await resolveTarget()).nativeHostName;
   let res;
   try {
-    res = await callNativeHostCmd("getLocalToken", {}, 5000);
+    res = await callNativeHostCmd("getLocalToken", {}, 5000, hostName);
   } catch {
     await requestNativeHostPairOnce();
     try {
-      res = await callNativeHostCmd("getLocalToken", {}, 5000);
+      res = await callNativeHostCmd("getLocalToken", {}, 5000, hostName);
     } catch {
       return { ok: false, reason: "unreachable" };
     }
@@ -210,7 +215,8 @@ async function sendPageUrl(pageUrl, title) {
   const captions = youtubeVideoId(pageUrl) ? await tryExtractCaptions(pageUrl, title) : null;
   
   // Build request with token and optional segments
-  const request = buildLocalSendRequest(pageUrl, tokenResult.token, captions);
+  const target = await resolveTarget();
+  const request = buildLocalSendRequest(pageUrl, tokenResult.token, captions, target.apiBase);
   if (!request.ok) {
     // Token present but request build failed (bad URL etc.)
     return { ok: false, reason: "other" };
@@ -293,11 +299,13 @@ function setBadge(text, color) {
 // API helpers for LOCAL mode
 // ---------------------------------------------------------------------------
 
-const API_BASE = "http://127.0.0.1:19720";
+async function apiBase() {
+  return (await resolveTarget()).apiBase;
+}
 
 async function checkService() {
   try {
-    const res = await fetch(`${API_BASE}/api/health`, {
+    const res = await fetch(`${await apiBase()}/api/health`, {
       method: "GET",
       signal: AbortSignal.timeout(3000),
     });
@@ -314,14 +322,14 @@ async function checkService() {
 }
 
 async function getRecent() {
-  const res = await fetch(`${API_BASE}/api/transcripts`);
+  const res = await fetch(`${await apiBase()}/api/transcripts`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const all = await res.json();
   return all.slice(0, 5);
 }
 
 async function checkExisting(videoId) {
-  const res = await fetch(`${API_BASE}/api/transcripts`);
+  const res = await fetch(`${await apiBase()}/api/transcripts`);
   if (!res.ok) return null;
   const all = await res.json();
   return all.find((t) => t.videoId === videoId) || null;
@@ -509,12 +517,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (typeof transcriptId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(transcriptId)) {
           throw new Error("Invalid transcript id");
         }
-        const fullUrl = `${API_BASE}/?layout=list&id=${encodeURIComponent(transcriptId)}&t=${Date.now()}`;
+        const target = await resolveTarget();
+        const fullUrl = `${target.apiBase}/?layout=list&id=${encodeURIComponent(transcriptId)}&t=${Date.now()}`;
         const allTabs = await chrome.tabs.query({});
         const appTab = allTabs.find((t) => {
           try {
             const url = new URL(t.url || "");
-            return url.hostname === "127.0.0.1" && url.port === "19720";
+            return url.hostname === "127.0.0.1" && url.port === target.port;
           } catch {
             return false;
           }
@@ -543,7 +552,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case "GET_TRANSCRIPT": {
         const transcriptId = message.id;
-        const res = await fetch(`${API_BASE}/api/transcripts/${transcriptId}`);
+        const res = await fetch(`${await apiBase()}/api/transcripts/${transcriptId}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         return { transcript: data.transcript, title: data.title };
@@ -551,12 +560,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case "CALL_NATIVE_HOST": {
         try {
-          const result = await callNativeHostCmd(message.cmd, message.payload, message.timeoutMs || 5000);
+          const hostName = (await resolveTarget()).nativeHostName;
+          const result = await callNativeHostCmd(
+            message.cmd,
+            message.payload,
+            message.timeoutMs || 5000,
+            hostName
+          );
           return { ok: true, result };
         } catch (err) {
           return { ok: false, error: err.message };
         }
       }
+
+      case "CLEAR_LOCAL_TOKEN":
+        clearLocalTokenMemory();
+        return { ok: true };
 
       case "STASH_LLM_PROMPT": {
         if (typeof message.prompt !== "string" || !message.prompt.trim()) {
@@ -587,6 +606,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     .catch((err) => sendResponse({ success: false, error: err.message }));
 
   return true;
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes[ConnectTarget.STORAGE_KEY]) {
+    clearLocalTokenMemory();
+  }
 });
 
 chrome.sidePanel.setOptions({ path: "popup.html", enabled: true }).catch(() => {});

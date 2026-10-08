@@ -136,6 +136,7 @@ test('manifest should have LOCAL host permissions', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'dist', 'manifest.json'), 'utf8'));
   
   assert.ok(manifest.host_permissions.includes('http://127.0.0.1:19720/*'), 'must have localhost:19720 host permission');
+  assert.ok(manifest.host_permissions.includes('http://127.0.0.1:19721/*'), 'must have localhost:19721 host permission');
   
   const hostPerms = manifest.host_permissions.join(',');
   assert.ok(!hostPerms.includes('transcribed.dev'), 'must not have transcribed.dev host permission');

@@ -28,8 +28,8 @@ LOCAL build. Paste these into the Chrome Web Store developer console.
 
 ## Required host permissions
 
-### `http://127.0.0.1:19720/*`
-> The extension delivers the page URL only to Transcriber on the same computer. It does not contact a remote host.
+### `http://127.0.0.1:19721/*` and `http://127.0.0.1:19720/*`
+> The extension delivers the page URL only to Transcriber on the same computer: the packaged app (`127.0.0.1:19721`) or a checkout (`127.0.0.1:19720`). It does not contact a remote host.
 
 ## Optional host permissions
 

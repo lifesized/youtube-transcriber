@@ -8,9 +8,13 @@ const ROOT = __dirname;
 
 test("LOCAL manifest has loopback-only host_permissions", () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifests", "local.json"), "utf8"));
-  assert.deepEqual(manifest.host_permissions, ["http://127.0.0.1:19720/*"]);
+  assert.deepEqual(manifest.host_permissions, [
+    "http://127.0.0.1:19721/*",
+    "http://127.0.0.1:19720/*",
+  ]);
   assert.ok(manifest.permissions.includes("nativeMessaging"));
   assert.equal(manifest.name, "Transcriber for YouTube");
+  assert.match(manifest.content_security_policy.extension_pages, /connect-src[^;]*http:\/\/127\.0\.0\.1:19721/);
   assert.match(manifest.content_security_policy.extension_pages, /connect-src[^;]*http:\/\/127\.0\.0\.1:19720/);
 });
 
@@ -96,12 +100,17 @@ test("LOCAL build still works and produces loopback-only artifact", () => {
   assert.ok(fs.existsSync(distPath));
   
   const manifest = JSON.parse(fs.readFileSync(path.join(distPath, "manifest.json"), "utf8"));
-  assert.deepEqual(manifest.host_permissions, ["http://127.0.0.1:19720/*"]);
+  assert.deepEqual(manifest.host_permissions, [
+    "http://127.0.0.1:19721/*",
+    "http://127.0.0.1:19720/*",
+  ]);
   assert.ok(manifest.permissions.includes("nativeMessaging"));
   
   const sendUrl = fs.readFileSync(path.join(distPath, "send-url.js"), "utf8");
   assert.match(sendUrl, /http:\/\/127\.0\.0\.1:19720\/api\/transcripts/);
+  assert.match(sendUrl, /http:\/\/127\.0\.0\.1:19721/);
   assert.ok(fs.existsSync(path.join(distPath, "local-auth-headers.js")));
+  assert.ok(fs.existsSync(path.join(distPath, "connect-target.js")));
   
   // YTT-454: LOCAL background must use native messaging
   const background = fs.readFileSync(path.join(distPath, "background.js"), "utf8");
@@ -111,7 +120,7 @@ test("LOCAL build still works and produces loopback-only artifact", () => {
   const popup = fs.readFileSync(path.join(distPath, "popup.js"), "utf8");
   assert.match(popup, /Start the Transcriber app\./);
   assert.match(popup, /Token missing or out of date — restart Transcriber\./);
-  assert.match(popup, /http:\/\/127\.0\.0\.1:19720\/\?id=/);
+  assert.match(popup, /apiBase/);
   
   // YTT-455: LOCAL popup.html must keep LOCAL lead copy
   const popupHtml = fs.readFileSync(path.join(distPath, "popup.html"), "utf8");

@@ -4,7 +4,7 @@
   "version": "1.6.38",
   "description": "Send the current page URL to Transcriber on this computer.",
   "content_security_policy": {
-    "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:19720; object-src 'none'; base-uri 'none'; form-action 'none'"
+    "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:19721 http://127.0.0.1:19720; object-src 'none'; base-uri 'none'; form-action 'none'"
   },
   "permissions": [
     "activeTab",
@@ -15,6 +15,7 @@
     "scripting"
   ],
   "host_permissions": [
+    "http://127.0.0.1:19721/*",
     "http://127.0.0.1:19720/*"
   ],
   "optional_host_permissions": [

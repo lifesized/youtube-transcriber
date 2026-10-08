@@ -12,6 +12,7 @@
 
 const { app, powerSaveBlocker, safeStorage } = require("electron");
 const path = require("path");
+const config = require("./config.js");
 const ServerManager = require("./server-manager.js");
 const TrayManager = require("./tray-manager.js");
 const PairingBridge = require("./pairing-bridge.js");
@@ -20,7 +21,10 @@ const { SecretsStore, attachSecretsIpc } = require("./secrets-store.js");
 const { checkIfTranslocated } = require("./utils.js");
 
 const IS_DEV = process.env.NODE_ENV === "development";
-const PORT = 19720;
+const PORT = config.port;
+const APP_STATE_DIR = config.resolveAppStateDir();
+app.setPath("userData", APP_STATE_DIR);
+process.env.TRANSCRIBER_STATE_DIR = APP_STATE_DIR;
 
 let serverManager = null;
 let trayManager = null;
@@ -42,10 +46,13 @@ app.on("second-instance", () => {
   }
 });
 
-// Set app name for menu bar
+// Set app name for menu bar. Re-pin userData so setName does not
+// collide with the checkout's ~/Library/Application Support/Transcriber.
 if (process.platform === "darwin") {
   app.setName("Transcriber");
 }
+app.setPath("userData", APP_STATE_DIR);
+process.env.TRANSCRIBER_STATE_DIR = APP_STATE_DIR;
 
 // Quit when all windows are closed (but we don't use windows, just tray)
 app.on("window-all-closed", () => {

@@ -23,6 +23,33 @@ test("electron main file exists", () => {
   assert.ok(fs.existsSync(mainPath), "electron/main.js should exist");
 });
 
+test("packaged app port and host come from electron/config.js", () => {
+  const config = require(path.join(projectRoot, "electron", "config.js"));
+  const main = fs.readFileSync(path.join(projectRoot, "electron", "main.js"), "utf8");
+  const installer = fs.readFileSync(
+    path.join(projectRoot, "electron", "native-host-installer.js"),
+    "utf8"
+  );
+  const workflow = fs.readFileSync(
+    path.join(projectRoot, ".github", "workflows", "electron-build-macos.yml"),
+    "utf8"
+  );
+  const checkoutHost = fs.readFileSync(
+    path.join(projectRoot, "scripts", "install-native-host.js"),
+    "utf8"
+  );
+  assert.equal(config.port, 19721);
+  assert.equal(config.nativeHostName, "com.transcribed.app.host");
+  assert.ok(main.includes("config.port"));
+  assert.ok(main.includes("TRANSCRIBER_STATE_DIR"));
+  assert.equal(main.includes("const PORT = 19720"), false);
+  assert.ok(installer.includes("config.nativeHostName"));
+  assert.ok(installer.includes("transcriber-app-host.sh"));
+  assert.ok(checkoutHost.includes('const HOST_NAME = "com.transcribed.host"'));
+  assert.ok(workflow.includes("require('./electron/config.js').port"));
+  assert.equal(workflow.includes("PORT=19720"), false);
+});
+
 test("electron-builder config exists", () => {
   const configPath = path.join(projectRoot, "electron-builder.json");
   assert.ok(fs.existsSync(configPath), "electron-builder.json should exist");
@@ -410,7 +437,8 @@ test("CI launches the packaged Transcriber.app and checks asar requires", () => 
   assert.ok(content.includes("EnableNodeOptionsEnvironmentVariable"));
   assert.ok(content.includes("EnableNodeCliInspectArguments"));
   assert.ok(content.includes("fake Host header returns 421"));
-  assert.ok(content.includes("Host: evil.example:19720"));
+  assert.ok(content.includes("require('./electron/config.js').port"));
+  assert.ok(content.includes("Host: evil.example:${PORT}"));
   assert.ok(content.includes("ps -axo pid=,comm="));
   assert.ok(content.includes("ps -axo pid=,args="));
   assert.ok(content.includes("install helper args match found PID"));
@@ -445,8 +473,15 @@ test("CI pings the packaged native host wrapper", () => {
 test("LOCAL background pairs via /api/native-host/pair then retries", () => {
   const bgPath = path.join(projectRoot, "extension", "background.js");
   const content = fs.readFileSync(bgPath, "utf8");
-  assert.ok(content.includes("/api/native-host/pair"));
+  const targets = fs.readFileSync(
+    path.join(projectRoot, "extension", "connect-target.js"),
+    "utf8"
+  );
   assert.ok(content.includes("requestNativeHostPairOnce"));
+  assert.ok(content.includes("ConnectTarget.APP"));
+  assert.ok(content.includes("pairUrl"));
+  assert.ok(targets.includes("/api/native-host/pair"));
+  assert.ok(targets.includes("http://127.0.0.1:19721/api/native-host/pair"));
 });
 
 test("packaged server is spawned with IPC for pairing", () => {

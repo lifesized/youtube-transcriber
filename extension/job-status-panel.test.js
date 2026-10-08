@@ -43,21 +43,15 @@ test("panel shows Design-locked error strings", () => {
   );
 });
 
-test("deep-link uses correct transcript ID format", () => {
-  // Deep-link format: http://127.0.0.1:19720/?id={transcriptId}
-  const transcriptId = "abc123";
-  const expectedUrl = `http://127.0.0.1:19720/?id=${encodeURIComponent(transcriptId)}`;
-  
-  // Verify popup.js constructs this URL
+test("deep-link uses the selected target origin", () => {
   const fs = require("fs");
-  const popupCode = fs.readFileSync(__dirname + "/popup.js", "utf8");
-  
+  const bgCode = fs.readFileSync(__dirname + "/background.js", "utf8");
   assert.ok(
-    popupCode.includes("http://127.0.0.1:19720/?id="),
-    "Deep-link must use correct base URL and query param"
+    bgCode.includes("target.apiBase"),
+    "Deep-link must use the selected connect-target origin"
   );
   assert.ok(
-    popupCode.includes("encodeURIComponent(lastTranscriptId)"),
+    bgCode.includes("encodeURIComponent(transcriptId)"),
     "Deep-link must encode transcript ID"
   );
 });

@@ -29,6 +29,7 @@ const DEV_KEY_PATH = path.join(SRC, "dev-key.pem");
 const COPY_FILES = [
   "local-auth-headers.js",
   "send-url.js",
+  "connect-target.js",
   "background.js",
   "content.js",
   "content-llm-handoff.js",

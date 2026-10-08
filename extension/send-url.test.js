@@ -16,6 +16,14 @@ test("send request posts only the page URL to loopback", () => {
   assert.equal(request.url.includes(TOKEN), false);
 });
 
+test("send request can target the packaged app origin", () => {
+  const request = buildLocalSendRequest(WATCH, TOKEN, null, "http://127.0.0.1:19721");
+  assert.equal(request.ok, true);
+  assert.equal(request.url, "http://127.0.0.1:19721/api/transcripts");
+  assert.equal(buildLocalSendRequest(WATCH, TOKEN, null, "http://evil.example").ok, false);
+  assert.equal(buildLocalSendRequest(WATCH, TOKEN, null, "http://127.0.0.1:19722").ok, false);
+});
+
 test("secret query and hash params are removed before send", () => {
   const dirty =
     "https://www.youtube.com/watch?v=dQw4w9WgXcQ&token=" +
