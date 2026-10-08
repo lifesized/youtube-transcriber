@@ -17,7 +17,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.join(__dirname, "fixtures", "linkedin");
 
 const LinkedIn = require("../extension/content-linkedin.js");
-globalThis.buildLocalSendRequest = require("../extension/send-url.js").buildLocalSendRequest;
+const sendUrl = require("../extension/send-url.js");
+globalThis.buildLocalSendRequest = sendUrl.buildLocalSendRequest;
+globalThis.buildTokenlessDevSendRequest = sendUrl.buildTokenlessDevSendRequest;
 const capture = require("../extension/linkedin-capture.js");
 
 const VIEWPORT = { width: 1200, height: 900 };
@@ -194,6 +196,12 @@ test("LinkedIn loopback request carries page URL + media URL, never the token", 
   });
   assert.ok(!request.body.includes(TOKEN));
   assert.equal(capture.buildLinkedInSendRequest(media, TOKEN, "https://cloud.example.com").ok, false);
+
+  const tokenless = capture.buildLinkedInSendRequest(media, undefined, "http://127.0.0.1:19720");
+  assert.equal(tokenless.ok, true);
+  assert.equal(tokenless.url, "http://127.0.0.1:19720/api/transcripts");
+  assert.equal(tokenless.headers.Authorization, undefined);
+  assert.equal(JSON.parse(tokenless.body).mediaUrl, media.mediaUrl);
 });
 
 test("prepareLinkedInSend: asks the tab, injects the content script once if it isn't loaded", async () => {
