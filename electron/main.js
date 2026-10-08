@@ -178,15 +178,6 @@ app.whenReady().then(async () => {
     }
   }
 
-  // After the server is up: Notification + deferred menu pop so a
-  // notch-clipped icon still has visible feedback. Never block ready.
-  if (pendingReveal) {
-    pendingReveal = false;
-    trayManager.revealInMenuBar("second-instance-queued");
-  } else {
-    trayManager.revealInMenuBar("first-launch");
-  }
-  
   // Monitor server health
   serverManager.on("status-change", (status) => {
     console.log("Server status changed:", status);
@@ -206,7 +197,14 @@ app.whenReady().then(async () => {
         break;
     }
   });
-  
+
+  // After the server is up: Notification + menu pop so a notch-clipped
+  // icon still has visible feedback. popUpContextMenu does not return until
+  // the menu closes, so it runs last and off the ready path.
+  const revealReason = pendingReveal ? "second-instance-queued" : "first-launch";
+  pendingReveal = false;
+  setImmediate(() => trayManager.revealInMenuBar(revealReason));
+
   console.log("Transcriber ready");
 }).catch((error) => {
   console.error("Uncaught Exception", error);

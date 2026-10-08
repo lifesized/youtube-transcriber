@@ -475,6 +475,17 @@ test("tray manager uses template images and human status copy, not setTitle T", 
   assert.ok(content.includes("RUNNING_IN_MENU_BAR"));
 });
 
+test("launch reveal waits for the status listener and never blocks ready", () => {
+  const main = fs.readFileSync(path.join(projectRoot, "electron", "main.js"), "utf8");
+  const listener = main.indexOf('serverManager.on("status-change"');
+  const reveal = main.indexOf('"first-launch"');
+  assert.ok(listener > 0, "main.js should watch server status");
+  // popUpContextMenu does not return until the menu closes. Anything
+  // after it in whenReady would wait on the user.
+  assert.ok(reveal > listener, "status-change listener must be attached before the menu pops");
+  assert.match(main, /setImmediate\(\(\) => trayManager\.revealInMenuBar\(/);
+});
+
 test("afterSign is the last codesign of the .app; afterPack does not reseal it", () => {
   const afterPack = fs.readFileSync(
     path.join(projectRoot, "electron", "after-pack.js"),
