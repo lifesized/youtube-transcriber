@@ -19,6 +19,8 @@
 - **Design screenshots in CI** — the macOS job uploads `design-screenshots`: the real tray menu (best effort), every Settings › Library state rendered by `popup.js` (`scripts/capture-library-rows.js`), and the DMG window.
 
 ### Security
+- **Native-host log rotation keeps the `.1` private** — `rotateLogIfFull` chmods the live `native-host.log` to 0600 before rename and the `.1` after, so a leftover 0644 file does not stay world-readable as the archive.
+- **Packaged frame-header CI is stale-proof** — each curl writes a fresh header file, fails on unexpected HTTP status, and also checks unauthenticated `/api/health` (401, one CSP + one XFO) and a bad `Host` (421).
 - **Pages cannot be framed** — Every HTML/document response from the local app (Dev 19720 and App 19721 share `next.config.ts`) sends `Content-Security-Policy: frame-ancestors 'none'` and `X-Frame-Options: DENY`. Nothing in the app or extension iframes those pages; the side panel talks to the API with `fetch`. Packaged-app CI curls `/`, the Library tab, `/settings`, and a 404.
 - **Native-host log is private and capped** — `native-host.log` is created 0600 (an existing one is chmodded on write) and rotates at 5 MB, keeping one `native-host.log.1`.
 - **Tray errors go through app-log** — tray `_logError` writes one rotated `main.log` line via `app-log.error` and does not append the file itself.

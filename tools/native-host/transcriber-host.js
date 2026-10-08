@@ -94,9 +94,13 @@ function tightenLogMode(file = logFile()) {
 /** Keep one previous file: native-host.log.1 is replaced each time. */
 function rotateLogIfFull(file = logFile()) {
   try {
-    if (fs.statSync(file).size >= LOG_MAX_BYTES) fs.renameSync(file, `${file}.1`);
+    if (fs.statSync(file).size < LOG_MAX_BYTES) return;
+    tightenLogMode(file);
+    const rotated = `${file}.1`;
+    fs.renameSync(file, rotated);
+    tightenLogMode(rotated);
   } catch {
-    // No log yet.
+    // No log yet / chmod or rename race; never throw.
   }
 }
 

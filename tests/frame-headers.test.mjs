@@ -65,7 +65,7 @@ test("CI checks the packaged app's frame headers on its pages", () => {
   assert.match(framing, /rm -f \/tmp\/packaged-frame\.txt/);
   assert.match(framing, /%\{http_code\}/);
   assert.doesNotMatch(framing, /curl[^\n]*\|\| true/);
-  assert.match(framing, /"\/"[^;]*"\/\?layout=list&id=ci"/);
+  assert.match(framing, /"\/:200"[^;]*"\/\?layout=list&id=ci:200"/);
   assert.match(framing, /\/api\/health/);
   assert.match(framing, /401/);
   assert.match(framing, /421/);

@@ -475,16 +475,58 @@ jobs:
               fi
               echo "✓ a cross-site fetch of a page gets no cookie"
               echo "----- pages forbid framing -----"
-              for page in "/" "/?layout=list&id=ci" "/settings" "/does-not-exist"; do
-                curl -sS -o /dev/null -D /tmp/packaged-frame.txt "http://127.0.0.1:${PORT}${page}" || true
-                if ! grep -i '^content-security-policy:' /tmp/packaged-frame.txt | grep -q "frame-ancestors 'none'" \
-                  || ! grep -qiE '^x-frame-options: *DENY' /tmp/packaged-frame.txt; then
-                  echo "ERROR: ${page} must send CSP frame-ancestors 'none' and X-Frame-Options: DENY"
+              expect_frame_headers() {
+                local label="$1" file="$2" csp xfo
+                csp=$(grep -ci '^content-security-policy:' "$file" || true)
+                xfo=$(grep -ci '^x-frame-options:' "$file" || true)
+                if [ "$csp" != "1" ] || [ "$xfo" != "1" ] \
+                  || ! grep -i '^content-security-policy:' "$file" | grep -q "frame-ancestors 'none'" \
+                  || ! grep -qiE '^x-frame-options: *DENY' "$file"; then
+                  echo "ERROR: ${label} must send exactly one CSP frame-ancestors 'none' and one X-Frame-Options: DENY (csp=${csp} xfo=${xfo})"
+                  redact "$file" || true
+                  exit 1
+                fi
+              }
+              for spec in "/:200" "/?layout=list&id=ci:200" "/settings:200" "/does-not-exist:404"; do
+                page="${spec%%:*}"
+                want="${spec##*:}"
+                rm -f /tmp/packaged-frame.txt
+                set +e
+                CODE=$(curl -sS -o /dev/null -D /tmp/packaged-frame.txt -w "%{http_code}" \
+                  "http://127.0.0.1:${PORT}${page}")
+                set -e
+                if [ "$CODE" != "$want" ]; then
+                  echo "ERROR: ${page} expected HTTP ${want}, got ${CODE:-curl-fail}"
                   redact /tmp/packaged-frame.txt || true
                   exit 1
                 fi
-                echo "✓ ${page} sends frame-ancestors 'none' and X-Frame-Options: DENY"
+                expect_frame_headers "$page" /tmp/packaged-frame.txt
+                echo "✓ ${page} ${CODE} sends frame-ancestors 'none' and X-Frame-Options: DENY"
               done
+              rm -f /tmp/packaged-frame.txt
+              set +e
+              CODE=$(curl -sS -o /dev/null -D /tmp/packaged-frame.txt -w "%{http_code}" \
+                "http://127.0.0.1:${PORT}/api/health")
+              set -e
+              if [ "$CODE" != "401" ]; then
+                echo "ERROR: /api/health with no token expected 401, got ${CODE:-curl-fail}"
+                redact /tmp/packaged-frame.txt || true
+                exit 1
+              fi
+              expect_frame_headers "/api/health" /tmp/packaged-frame.txt
+              echo "✓ /api/health 401 sends exactly one frame-ancestors 'none' and X-Frame-Options: DENY"
+              rm -f /tmp/packaged-frame.txt
+              set +e
+              CODE=$(curl -sS -o /dev/null -D /tmp/packaged-frame.txt -w "%{http_code}" \
+                -H "Host: evil.example:${PORT}" \
+                "http://127.0.0.1:${PORT}/")
+              set -e
+              if [ "$CODE" != "421" ]; then
+                echo "ERROR: bad Host expected 421, got ${CODE:-curl-fail}"
+                redact /tmp/packaged-frame.txt || true
+                exit 1
+              fi
+              echo "✓ bad Host header returns 421"
               echo "----- ps comm vs args for Transcriber -----"
               COMM_LINE=$(ps -axo pid=,comm= | awk -v pid="$APP_PID" '$1==pid { sub(/^[ \t]*[0-9]+[ \t]+/, ""); print }')
               ARGS_LINE=$(ps -axo pid=,args= | awk -v pid="$APP_PID" '$1==pid { sub(/^[ \t]*[0-9]+[ \t]+/, ""); print }')
