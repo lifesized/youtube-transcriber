@@ -21,6 +21,8 @@ const { parseCodesignVerbose, appBundleFromExecPath } = require(
 const {
   createUpdater,
   evaluateFromDisk,
+  readDarwinSignature,
+  CODESIGN_BIN,
   stopServerThenInstall,
   INITIAL_DELAY_MS,
   INTERVAL_MS,
@@ -316,4 +318,37 @@ test("load or settings failure disables the updater and still builds the tray", 
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("codesign verify --strict runs on /usr/bin/codesign before Team ID and fails closed", () => {
+  assert.equal(CODESIGN_BIN, "/usr/bin/codesign");
+  const calls = [];
+  const unsigned = readDarwinSignature("/tmp/Transcriber.app", (bin, args) => {
+    calls.push([bin, ...args]);
+    return { status: 1, stdout: "", stderr: "code object is not signed at all" };
+  });
+  assert.deepEqual(calls[0], [
+    "/usr/bin/codesign",
+    "--verify",
+    "--strict",
+    "/tmp/Transcriber.app",
+  ]);
+  assert.equal(calls.length, 1);
+  assert.equal(unsigned.notSigned, true);
+
+  const dv = [
+    "Identifier=com.transcribed.app",
+    `Authority=Developer ID Application: LifeSized (${TEAM})`,
+    `TeamIdentifier=${TEAM}`,
+  ].join("\n");
+  const signed = readDarwinSignature("/Applications/Transcriber.app", (bin, args) => {
+    calls.push([bin, ...args]);
+    if (args[0] === "--verify") return { status: 0, stdout: "", stderr: "" };
+    return { status: 0, stdout: "", stderr: dv };
+  });
+  assert.equal(calls[1][0], "/usr/bin/codesign");
+  assert.deepEqual(calls[1].slice(1, 3), ["--verify", "--strict"]);
+  assert.deepEqual(calls[2].slice(1, 3), ["-dv", "--verbose=4"]);
+  assert.equal(signed.developerId, true);
+  assert.equal(signed.teamId, TEAM);
 });

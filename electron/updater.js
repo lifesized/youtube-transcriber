@@ -33,11 +33,20 @@ function loadSigningIdentity(resourcesPath) {
   }
 }
 
+const CODESIGN_BIN = "/usr/bin/codesign";
+
 function readDarwinSignature(bundlePath, run = spawnSync) {
   if (!bundlePath) {
     return parseCodesignVerbose("code object is not signed at all");
   }
-  const result = run("codesign", ["-dv", "--verbose=4", bundlePath], {
+  // Fail closed: verify the seal before trusting TeamIdentifier.
+  const verify = run(CODESIGN_BIN, ["--verify", "--strict", bundlePath], {
+    encoding: "utf8",
+  });
+  if (!verify || verify.status !== 0) {
+    return parseCodesignVerbose("code object is not signed at all");
+  }
+  const result = run(CODESIGN_BIN, ["-dv", "--verbose=4", bundlePath], {
     encoding: "utf8",
   });
   return parseCodesignVerbose(`${result.stderr || ""}\n${result.stdout || ""}`);
@@ -265,6 +274,7 @@ module.exports = {
   loadSigningIdentity,
   loadElectronUpdater,
   readDarwinSignature,
+  CODESIGN_BIN,
   stopServerThenInstall,
   INITIAL_DELAY_MS,
   INTERVAL_MS,
