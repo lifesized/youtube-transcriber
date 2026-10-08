@@ -201,12 +201,12 @@ test("CI reads the fuses and CDHash of the app inside the mounted DMG", () => {
     workflow.indexOf("- name: Upload DMG window screenshot")
   );
   const detachAt = step.indexOf('hdiutil detach "$MOUNT"');
-  const fusesAt = step.indexOf('@electron/fuses read --app "$MOUNT/Transcriber.app"');
+  const fusesAt = step.indexOf('@electron/fuses read --app "$MOUNT/.payload/Transcriber.app"');
   assert.ok(fusesAt > 0 && fusesAt < detachAt, "fuses are read from the mounted app");
   for (const fuse of ["EnableNodeOptionsEnvironmentVariable", "EnableNodeCliInspectArguments"]) {
     assert.ok(step.includes(fuse), fuse);
   }
-  const cdhashAt = step.indexOf('cdhash "$MOUNT/Transcriber.app"');
+  const cdhashAt = step.indexOf('cdhash "$MOUNT/.payload/Transcriber.app"');
   assert.ok(cdhashAt > 0 && cdhashAt < detachAt, "CDHash is read from the mounted app");
   assert.match(step, /cdhash dist-electron\/mac-arm64\/Transcriber\.app/);
   assert.match(step, /"\$MOUNTED_CDHASH" != "\$BUILT_CDHASH"/);

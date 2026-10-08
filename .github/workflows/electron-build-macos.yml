@@ -215,7 +215,7 @@ jobs:
           echo "✓ mounted Transcriber.app codesign --verify --deep --strict"
 
           echo "----- fuses and CDHash of the mounted .app (what users install) -----"
-          MOUNTED_FUSES=$(npx --no-install @electron/fuses read --app "$MOUNT/Transcriber.app")
+          MOUNTED_FUSES=$(npx --no-install @electron/fuses read --app "$MOUNT/.payload/Transcriber.app")
           echo "$MOUNTED_FUSES"
           for fuse in EnableNodeOptionsEnvironmentVariable EnableNodeCliInspectArguments; do
             echo "$MOUNTED_FUSES" | grep "$fuse" | grep -q Disabled || {
@@ -226,7 +226,7 @@ jobs:
           echo "✓ mounted Transcriber.app fuses NodeOptions and Inspect are off"
           cdhash() { codesign -dvvv "$1" 2>&1 | awk -F= '/^CDHash=/ { print $2; exit }'; }
           BUILT_CDHASH=$(cdhash dist-electron/mac-arm64/Transcriber.app)
-          MOUNTED_CDHASH=$(cdhash "$MOUNT/Transcriber.app")
+          MOUNTED_CDHASH=$(cdhash "$MOUNT/.payload/Transcriber.app")
           echo "CDHash dist-electron $BUILT_CDHASH"
           echo "CDHash mounted DMG   $MOUNTED_CDHASH"
           if [ -z "$MOUNTED_CDHASH" ] || [ "$MOUNTED_CDHASH" != "$BUILT_CDHASH" ]; then
