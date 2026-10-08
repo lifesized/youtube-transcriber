@@ -66,6 +66,11 @@ test("unsigned artifact name and glob are unchanged", () => {
     /name: Transcriber-macOS-arm64\n\s+path: dist-electron\/\*\.dmg/
   );
   assert.doesNotMatch(workflow, /pull_request_target/);
+  assert.doesNotMatch(workflow, /upload-artifact@v4\b/);
+  assert.match(
+    workflow,
+    /upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02/
+  );
   assert.match(workflow, /CSC_IDENTITY_AUTO_DISCOVERY: false/);
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   assert.match(pkg.scripts["electron:build"], /electron-builder[^&]*&& bash electron\/dmg\/finalize-dmg\.sh$/);

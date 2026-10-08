@@ -255,7 +255,7 @@ jobs:
 
       - name: Upload DMG window screenshot
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dmg-window
           path: |
@@ -1208,7 +1208,7 @@ jobs:
 
       - name: Upload Design screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: design-screenshots
           path: |
@@ -1254,7 +1254,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
       
       - name: Upload DMG artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: Transcriber-macOS-arm64
           path: dist-electron/*.dmg
@@ -1269,7 +1269,7 @@ jobs:
           echo "Commit: ${{ github.sha }}" >> dist-electron/build-info.txt
       
       - name: Upload build info artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: build-info
           path: dist-electron/build-info.txt
@@ -1300,7 +1300,7 @@ jobs:
             (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-beta.')) ||
             (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/beta/electron-menubar')
           )
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: Transcriber-macOS-arm64-unsigned-app
           path: /tmp/unsigned-app-artifact
