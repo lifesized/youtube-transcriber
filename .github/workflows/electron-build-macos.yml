@@ -661,12 +661,13 @@ jobs:
           const r = host.resolveStartLaunch({ ELECTRON_RUN_AS_NODE: "1" }, exe);
           console.log(JSON.stringify(r));
           if (!r.ok || r.bundle !== bundle) throw new Error("packaged bundle is not in the Start allowlist");
-          if (r.launch.command !== "/usr/bin/open" || r.launch.args.join(" ") !== "-a " + bundle) {
-            throw new Error("app Start must be /usr/bin/open -a <bundle>");
+          const expected = ["-a", bundle, "--args", "--launched-by=native-host"];
+          if (r.launch.command !== "/usr/bin/open" || JSON.stringify(r.launch.args) !== JSON.stringify(expected)) {
+            throw new Error("app Start must be /usr/bin/open -a <bundle> --args --launched-by=native-host");
           }
           JS
           ELECTRON_RUN_AS_NODE=1 "$APP_PATH" /tmp/ci-app-start.js "$HOST_JS" "$APP_PATH"
-          echo "✓ app Start resolves the packaged bundle with open -a"
+          echo "✓ app Start resolves the packaged bundle with open -a and the native-host launch flag"
 
           echo "----- native-host getLocalToken -----"
           PAIR_ID="abcdefghijklmnopabcdefghijklmnop"
