@@ -71,7 +71,7 @@ assert_dest_is_ours() {
 
 pids_matching_exe() {
   local exe="$1"
-  ps -axo pid=,comm= 2>/dev/null | awk -v exe="$exe" '$2 == exe { print $1 }'
+  ps -axo pid=,comm= 2>/dev/null | awk -v exe="$exe" '{pid=$1; $1=""; sub(/^ +/,""); if ($0==exe) print pid}'
 }
 
 quit_running() {
