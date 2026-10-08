@@ -7,6 +7,7 @@ const { isMentionTriggered } = require("./prompt.js");
 const slackApi = require("./slack-api.js");
 
 const BACKOFF_MS = [1000, 2000, 4000, 8000, 16000, 30000];
+const MAX_RETRY_AFTER_MS = 300_000;
 const AUTH_FATAL_ERRORS = new Set([
   "invalid_auth",
   "token_revoked",
@@ -80,11 +81,12 @@ function createTuskRuntime(options = {}) {
   }
 
   function reconnectDelay(retryAfterMs) {
-    if (retryAfterMs != null && Number.isFinite(Number(retryAfterMs)) && Number(retryAfterMs) >= 0) {
-      return Number(retryAfterMs);
-    }
     const base = BACKOFF_MS[Math.min(reconnectAttempt, BACKOFF_MS.length - 1)];
-    return base + Math.floor(random() * JITTER_MS);
+    const backoff = base + Math.floor(random() * JITTER_MS);
+    if (retryAfterMs != null && Number.isFinite(Number(retryAfterMs)) && Number(retryAfterMs) >= 0) {
+      return Math.max(backoff, Math.min(Number(retryAfterMs), MAX_RETRY_AFTER_MS));
+    }
+    return backoff;
   }
 
   function scheduleReconnect(retryAfterMs) {
@@ -393,6 +395,7 @@ function createTuskRuntime(options = {}) {
 module.exports = {
   createTuskRuntime,
   BACKOFF_MS,
+  MAX_RETRY_AFTER_MS,
   AUTH_FATAL_ERRORS,
   isSlackSocketUrl,
   isFatalAuthError,

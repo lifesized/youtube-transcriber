@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const { createTuskRuntime, BACKOFF_MS } = require(path.join(root, "electron/tusk/runtime.js"));
+const { createTuskRuntime, BACKOFF_MS, MAX_RETRY_AFTER_MS } = require(path.join(root, "electron/tusk/runtime.js"));
 const { createTuskManager } = require(path.join(root, "electron/tusk/manager.js"));
 const { SecretsStore } = require(path.join(root, "electron/secrets-store.js"));
 
@@ -546,4 +546,60 @@ test("reconnect honours Retry-After instead of the backoff table", async () => {
   await assert.rejects(() => runtime.start());
   assert.equal(delays[0], 7777);
   await runtime.stop();
+});
+
+test("Retry-After is clamped to 300s and never below backoff", async () => {
+  const huge = [];
+  let opens = 0;
+  const hugeRuntime = createTuskRuntime({
+    botToken: BOT,
+    appToken: APP,
+    slackApi: mockApi({
+      openSocketConnection: async () => {
+        opens += 1;
+        if (opens === 1) return { ok: false, error: "over_capacity", retryAfterMs: 999_999 };
+        return { ok: true, url: WSS };
+      },
+    }),
+    WebSocket: FakeSocket,
+    random: () => 0,
+    timers: {
+      setTimeout: (fn, ms) => {
+        huge.push(ms);
+        fn();
+        return huge.length;
+      },
+      clearTimeout: () => {},
+    },
+  });
+  await assert.rejects(() => hugeRuntime.start());
+  assert.equal(huge[0], MAX_RETRY_AFTER_MS);
+  await hugeRuntime.stop();
+
+  const tiny = [];
+  opens = 0;
+  const tinyRuntime = createTuskRuntime({
+    botToken: BOT,
+    appToken: APP,
+    slackApi: mockApi({
+      openSocketConnection: async () => {
+        opens += 1;
+        if (opens === 1) return { ok: false, error: "over_capacity", retryAfterMs: 10 };
+        return { ok: true, url: WSS };
+      },
+    }),
+    WebSocket: FakeSocket,
+    random: () => 0,
+    timers: {
+      setTimeout: (fn, ms) => {
+        tiny.push(ms);
+        fn();
+        return tiny.length;
+      },
+      clearTimeout: () => {},
+    },
+  });
+  await assert.rejects(() => tinyRuntime.start());
+  assert.equal(tiny[0], BACKOFF_MS[0]);
+  await tinyRuntime.stop();
 });
