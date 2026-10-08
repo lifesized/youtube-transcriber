@@ -63,10 +63,12 @@ var LinkedInUrl = (() => {
     return contentId(url) || (pageKind(url) === "feed" ? "linkedin:feed" : null);
   }
 
-  /** https URL on LinkedIn's media CDN (*.licdn.com). */
+  /** https URL on LinkedIn's media CDN (*.licdn.com), already in URL-parser form. */
   function isMediaCdnUrl(url) {
     try {
       const parsed = new URL(url);
+      // yt-dlp reads "https://a.licdn.com\@127.0.0.1/" as host 127.0.0.1; only parser-form input is safe to pass on.
+      if (parsed.href !== url) return false;
       if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.port) return false;
       return parsed.hostname === "licdn.com" || parsed.hostname.endsWith(".licdn.com");
     } catch {

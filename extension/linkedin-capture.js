@@ -73,9 +73,10 @@ function buildPageSendRequest(pageUrl, token, apiBase) {
  * checks and adding the LinkedIn fields to its body.
  */
 function buildLinkedInSendRequest(media, token, apiBase) {
+  if (!linkedInUrlApi().isMediaCdnUrl(media.mediaUrl)) return { ok: false };
   const base = buildPageSendRequest(media.pageUrl, token, apiBase);
   if (!base.ok) return { ok: false };
-  const payload = { ...JSON.parse(base.body), mediaUrl: media.mediaUrl };
+  const payload = { ...JSON.parse(base.body), mediaUrl: new URL(media.mediaUrl).href };
   if (media.title) payload.title = media.title;
   if (media.author) payload.author = media.author;
   const body = JSON.stringify(payload);
