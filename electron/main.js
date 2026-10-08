@@ -15,6 +15,7 @@ const path = require("path");
 const ServerManager = require("./server-manager.js");
 const TrayManager = require("./tray-manager.js");
 const PairingBridge = require("./pairing-bridge.js");
+const NativeHostInstaller = require("./native-host-installer.js");
 const { SecretsStore, attachSecretsIpc } = require("./secrets-store.js");
 const { checkIfTranslocated } = require("./utils.js");
 
@@ -103,16 +104,20 @@ app.whenReady().then(async () => {
     isDev: IS_DEV,
     secretEnv: secretsStore.envForSpawn(),
   });
-  
+
+  const nativeHostInstaller = new NativeHostInstaller();
+  pairingBridge = new PairingBridge({
+    installer: nativeHostInstaller,
+  });
+
   trayManager = new TrayManager({
     port: PORT,
     serverManager,
     isDev: IS_DEV,
+    nativeHostInstaller,
+    pairingBridge,
   });
 
-  pairingBridge = new PairingBridge({
-    installer: trayManager.nativeHostInstaller,
-  });
   serverManager.on("spawned", (child) => {
     pairingBridge.attach(child);
     attachSecretsIpc(child, secretsStore);

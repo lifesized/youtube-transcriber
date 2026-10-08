@@ -223,6 +223,21 @@ test("tray manager falls back to title T", () => {
   const content = fs.readFileSync(trayPath, "utf8");
   assert.ok(content.includes("trayTemplate.png"));
   assert.ok(content.includes('setTitle("T")'));
+  assert.ok(content.includes("Connect browser extension…"));
+  assert.ok(content.includes("_openPairingWindow"));
+});
+
+test("installer validates extension IDs when loading extension-ids.json", () => {
+  const installerPath = path.join(projectRoot, "electron", "native-host-installer.js");
+  const content = fs.readFileSync(installerPath, "utf8");
+  assert.ok(content.includes("filterValidExtensionIds"));
+});
+
+test("extension manifest has no Chrome Web Store public key", () => {
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(projectRoot, "extension", "manifest.json"), "utf8")
+  );
+  assert.equal(manifest.key, undefined);
 });
 
 test("Electron wrapper native host does not prepend Homebrew PATH", () => {

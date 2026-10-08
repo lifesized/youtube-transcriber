@@ -19,6 +19,77 @@ test("no Origin gives 403", async () => {
   assert.equal(sent.length, 0);
 });
 
+test("Origin with trailing slash, path, or port is rejected", async () => {
+  pair.resetPairingControllerForTests();
+  const sent = [];
+  for (const origin of [
+    `${VALID_ORIGIN}/`,
+    `${VALID_ORIGIN}/popup.html`,
+    `${VALID_ORIGIN}:443`,
+  ]) {
+    sent.length = 0;
+    const result = await pair.handlePairPost(origin, {
+      send: (msg) => sent.push(msg),
+      waitForResult: async () => true,
+    });
+    assert.equal(result.status, 403, origin);
+    assert.equal(sent.length, 0, origin);
+    assert.equal(pair.parseExtensionIdFromOrigin(origin), null, origin);
+  }
+  assert.equal(pair.parseExtensionIdFromOrigin(VALID_ORIGIN), VALID_ID);
+  assert.equal(pair.ORIGIN_RE.toString(), "/^chrome-extension:\\/\\/[a-p]{32}$/");
+});
+
+test("pair returns 403 with no dialog outside the pairing window", async () => {
+  pair.resetPairingControllerForTests({ pairingOpenUntil: 0, now: () => 1 });
+  const sent = [];
+  const result = await pair.handlePairPost(VALID_ORIGIN, {
+    send: (msg) => sent.push(msg),
+    waitForResult: async () => true,
+  });
+  assert.equal(result.status, 403);
+  assert.equal(result.body.error, "forbidden");
+  assert.equal(sent.length, 0);
+});
+
+test("IPC pairing-window message opens the server window", async () => {
+  pair.resetPairingControllerForTests({ pairingOpenUntil: 0, now: () => 1 });
+  assert.equal(pair.isPairingWindowOpen(1), false);
+  pair.applyPairingWindowMessage({
+    type: pair.PAIR_WINDOW_TYPE,
+    openUntil: 10_000,
+  });
+  assert.equal(pair.isPairingWindowOpen(1), true);
+  assert.equal(pair.isPairingWindowOpen(10_000), false);
+});
+
+test("filterValidExtensionIds keeps only 32-char a-p IDs", () => {
+  const ids = pair.filterValidExtensionIds([
+    VALID_ID,
+    "not-an-id",
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+    123,
+    `${VALID_ID}x`,
+    null,
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  ]);
+  assert.deepEqual(ids, [VALID_ID, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]);
+});
+
+test("known store ID omits the unknown-ID line", () => {
+  pair.KNOWN_STORE_EXTENSION_IDS.push(VALID_ID);
+  try {
+    const text = pair.pairingDetailText(VALID_ID);
+    assert.equal(
+      text,
+      `Extension ID: ${VALID_ID}. ${pair.PAIR_DETAIL_ACCESS}`
+    );
+    assert.equal(text.includes(pair.UNKNOWN_STORE_WARNING), false);
+  } finally {
+    pair.KNOWN_STORE_EXTENSION_IDS.length = 0;
+  }
+});
+
 test("https web origin gives 403", async () => {
   pair.resetPairingControllerForTests();
   const sent = [];
@@ -105,6 +176,7 @@ test("pairing dialog focuses the app and includes the extension ID", async () =>
   };
   let shown;
   const bridge = new PairingBridge({
+    now: () => 1_000,
     app,
     dialog: {
       showMessageBox: async (opts) => {
@@ -118,15 +190,192 @@ test("pairing dialog focuses the app and includes the extension ID", async () =>
       },
     },
   });
+  bridge.openWindow(1_000 + pair.PAIRING_WINDOW_MS);
   const replies = [];
   await bridge._onMessage(
     { send: (msg) => replies.push(msg) },
     { type: pair.PAIR_TYPE, extensionId: VALID_ID, requestId: "req-focus" }
   );
   assert.deepEqual(app.focusCalls, [{ steal: true }]);
-  assert.equal(shown.detail, pair.pairingDetailText(VALID_ID));
-  assert.ok(shown.detail.includes(pair.UNKNOWN_STORE_WARNING));
+  assert.equal(shown.message, pair.PAIR_MESSAGE);
+  assert.equal(shown.message, "An extension wants full access to Transcriber");
+  assert.equal(
+    shown.detail,
+    `Extension ID: ${VALID_ID}. Allowing it lets it read all your transcripts and change your settings.\n${pair.UNKNOWN_STORE_WARNING}`
+  );
   assert.equal(replies[0].allowed, false);
+});
+
+test("bridge refuses pairing with no dialog outside the window", async () => {
+  const PairingBridge = require("../electron/pairing-bridge.js");
+  let dialogs = 0;
+  const bridge = new PairingBridge({
+    now: () => 5_000,
+    dialog: {
+      showMessageBox: async () => {
+        dialogs += 1;
+        return { response: 0 };
+      },
+    },
+  });
+  const replies = [];
+  await bridge._onMessage(
+    { send: (msg) => replies.push(msg) },
+    { type: pair.PAIR_TYPE, extensionId: VALID_ID, requestId: "req-closed" }
+  );
+  assert.equal(dialogs, 0);
+  assert.equal(replies[0].allowed, false);
+  assert.equal(replies[0].reason, "closed");
+});
+
+test("Don't allow sets a global deny cooldown across IDs", async () => {
+  const PairingBridge = require("../electron/pairing-bridge.js");
+  let now = 1_000;
+  const dialogs = [];
+  const otherId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const bridge = new PairingBridge({
+    now: () => now,
+    denyTtlMs: 60_000,
+    app: { focus() {} },
+    dialog: {
+      showMessageBox: async () => {
+        dialogs.push(now);
+        return { response: 1 };
+      },
+    },
+  });
+  bridge.openWindow(now + 10 * 60 * 60 * 1000);
+  const replies = [];
+  const child = { send: (msg) => replies.push(msg) };
+
+  await bridge._onMessage(child, {
+    type: pair.PAIR_TYPE,
+    extensionId: VALID_ID,
+    requestId: "deny-1",
+  });
+  now = 2_000;
+  await bridge._onMessage(child, {
+    type: pair.PAIR_TYPE,
+    extensionId: otherId,
+    requestId: "deny-2",
+  });
+  assert.equal(dialogs.length, 1);
+  assert.equal(replies[1].reason, "cooldown");
+
+  now = 1_000 + 60_001;
+  await bridge._onMessage(child, {
+    type: pair.PAIR_TYPE,
+    extensionId: otherId,
+    requestId: "deny-3",
+  });
+  assert.equal(dialogs.length, 2);
+});
+
+test("never stacks a second dialog even after server timeout", async () => {
+  const PairingBridge = require("../electron/pairing-bridge.js");
+  let resolveFirst;
+  let dialogCount = 0;
+  const bridge = new PairingBridge({
+    now: () => 1_000,
+    app: { focus() {} },
+    dialog: {
+      showMessageBox() {
+        dialogCount += 1;
+        return new Promise((resolve) => {
+          resolveFirst = resolve;
+        });
+      },
+    },
+  });
+  bridge.openWindow(1_000 + pair.PAIRING_WINDOW_MS);
+  const replies = [];
+  const child = { send: (msg) => replies.push(msg) };
+
+  const first = bridge._onMessage(child, {
+    type: pair.PAIR_TYPE,
+    extensionId: VALID_ID,
+    requestId: "req-a",
+  });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(dialogCount, 1);
+  assert.equal(bridge.dialogOpen, true);
+
+  await bridge._onMessage(child, {
+    type: pair.PAIR_EXPIRED_TYPE,
+    requestId: "req-a",
+  });
+  await bridge._onMessage(child, {
+    type: pair.PAIR_TYPE,
+    extensionId: VALID_ID,
+    requestId: "req-b",
+  });
+  assert.equal(dialogCount, 1);
+  assert.equal(replies[0].reason, "busy");
+
+  resolveFirst({ response: 1 });
+  await first;
+});
+
+test("caps pairing dialogs at 3 per hour", async () => {
+  const PairingBridge = require("../electron/pairing-bridge.js");
+  let now = 0;
+  const shown = [];
+  const bridge = new PairingBridge({
+    now: () => now,
+    app: { focus() {} },
+    dialog: {
+      showMessageBox: async () => {
+        shown.push(now);
+        return { response: 0 };
+      },
+    },
+  });
+  bridge.openWindow(10 * 60 * 60 * 1000);
+  const replies = [];
+  const child = { send: (msg) => replies.push(msg) };
+
+  for (let i = 0; i < 3; i++) {
+    now = i * 1_000;
+    await bridge._onMessage(child, {
+      type: pair.PAIR_TYPE,
+      extensionId: VALID_ID,
+      requestId: `req-${i}`,
+    });
+  }
+  assert.equal(shown.length, 3);
+
+  now = 4_000;
+  await bridge._onMessage(child, {
+    type: pair.PAIR_TYPE,
+    extensionId: VALID_ID,
+    requestId: "req-4",
+  });
+  assert.equal(shown.length, 3);
+  assert.equal(replies.at(-1).reason, "rate_limit");
+
+  now = 60 * 60 * 1000 + 1;
+  await bridge._onMessage(child, {
+    type: pair.PAIR_TYPE,
+    extensionId: VALID_ID,
+    requestId: "req-5",
+  });
+  assert.equal(shown.length, 4);
+});
+
+test("attach resends an open pairing window to the server child", () => {
+  const PairingBridge = require("../electron/pairing-bridge.js");
+  const sent = [];
+  const bridge = new PairingBridge({ now: () => 1_000 });
+  bridge.openWindow(1_000 + pair.PAIRING_WINDOW_MS);
+  const child = {
+    on() {},
+    send(msg) {
+      sent.push(msg);
+    },
+  };
+  bridge.attach(child);
+  assert.equal(sent[0].type, pair.PAIR_WINDOW_TYPE);
+  assert.equal(sent[0].openUntil, 1_000 + pair.PAIRING_WINDOW_MS);
 });
 
 test("late Allow after expire does not write the extension ID", async () => {
@@ -134,6 +383,7 @@ test("late Allow after expire does not write the extension ID", async () => {
   const wrote = [];
   const replies = [];
   const bridge = new PairingBridge({
+    now: () => 1_000,
     app: { focus() {} },
     dialog: {
       showMessageBox: async () => ({ response: 0 }),
@@ -147,6 +397,7 @@ test("late Allow after expire does not write the extension ID", async () => {
       },
     },
   });
+  bridge.openWindow(1_000 + pair.PAIRING_WINDOW_MS);
   await bridge._onMessage(
     { send: (msg) => replies.push(msg) },
     { type: pair.PAIR_EXPIRED_TYPE, requestId: "req-late" }

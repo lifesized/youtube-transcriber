@@ -13,6 +13,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const { checkIfTranslocated } = require("./utils.js");
+const { filterValidExtensionIds } = require("../lib/native-host-pair.js");
 
 const HOST_NAME = "com.transcribed.host";
 
@@ -67,9 +68,10 @@ class NativeHostInstaller {
     try {
       if (fs.existsSync(configPath)) {
         const data = JSON.parse(fs.readFileSync(configPath, "utf8"));
-        if (Array.isArray(data) && data.every((id) => typeof id === "string")) {
-          console.log(`Loaded ${data.length} extension ID(s) from ${configPath}`);
-          return data;
+        if (Array.isArray(data)) {
+          const ids = filterValidExtensionIds(data);
+          console.log(`Loaded ${ids.length} extension ID(s) from ${configPath}`);
+          return ids;
         }
       }
     } catch (error) {

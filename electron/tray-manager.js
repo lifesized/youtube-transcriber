@@ -5,6 +5,7 @@
  * - Status line (Running / Starting / Error)
  * - Open Transcriber (opens in browser)
  * - Start at Login (toggle)
+ * - Connect browser extension… (2-minute pairing window)
  * - Reinstall browser connection (P1)
  * - Quit
  */
@@ -12,13 +13,15 @@
 const { app, Tray, Menu, shell, nativeImage, Notification, dialog } = require("electron");
 const path = require("path");
 const NativeHostInstaller = require("./native-host-installer.js");
+const { PAIRING_WINDOW_MS } = require("../lib/native-host-pair.js");
 
 class TrayManager {
   constructor(options) {
     this.port = options.port;
     this.serverManager = options.serverManager;
     this.isDev = options.isDev;
-    this.nativeHostInstaller = new NativeHostInstaller();
+    this.nativeHostInstaller = options.nativeHostInstaller || new NativeHostInstaller();
+    this.pairingBridge = options.pairingBridge || null;
     
     this.tray = null;
     this.status = "stopped";
@@ -106,6 +109,10 @@ class TrayManager {
         click: () => this._toggleLoginItem(),
       },
       {
+        label: "Connect browser extension…",
+        click: () => this._openPairingWindow(),
+      },
+      {
         label: "Reinstall Browser Connection",
         click: () => this._reinstallNativeHost(),
       },
@@ -150,6 +157,16 @@ class TrayManager {
   
   _openTranscriber() {
     shell.openExternal(`http://127.0.0.1:${this.port}`);
+  }
+
+  _openPairingWindow() {
+    if (!this.pairingBridge) return;
+    const openUntil = Date.now() + PAIRING_WINDOW_MS;
+    this.pairingBridge.openWindow(openUntil);
+    this._notify(
+      "Connect browser extension",
+      "Pairing is open for 2 minutes. Click the Transcriber extension in Chrome to connect."
+    );
   }
   
   _toggleLoginItem() {
