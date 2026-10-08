@@ -1,6 +1,6 @@
 # Privacy Policy — Transcriber for YouTube Chrome Extension
 
-**Last updated:** October 6, 2026
+**Last updated:** October 8, 2026
 
 ## Overview
 
@@ -17,6 +17,8 @@ When you click **Send this page**, the extension sends that page URL to your loc
 - The extension does not ask for or store provider API keys.
 
 **YouTube caption extraction (optional):** If you transcribe a YouTube video with captions, the extension may read those captions directly from YouTube's native transcript panel DOM and send the extracted segments to the local API (`127.0.0.1:19720`) instead of downloading audio. Content script is read-only — no cookies, no credentials, no external fetch.
+
+**LinkedIn posts and events:** When you press **Transcribe** on a LinkedIn post or a past LinkedIn Event, the extension finds that video's LinkedIn CDN (`licdn.com`) address in your open tab and sends the page URL, that address, and the post's title and author to your local Transcriber. Your local app then downloads the video from LinkedIn's CDN. The LinkedIn content script remembers up to 50 LinkedIn video addresses the tab has loaded, in that tab's memory only, and forgets them when you navigate. It doesn't read cookies or credentials, makes no network requests, and stores nothing.
 
 **Summarize (optional):** If you pick Claude or ChatGPT, the extension may open that site and place a prepared prompt (summarize instruction plus the full transcript) into the composer (content script on those hosts only, only during a handoff). Without your Summarize action, that script does nothing. Prompt text stays on your machine / in that provider tab — the extension does not upload it elsewhere.
 
@@ -36,6 +38,7 @@ The page URL is shown in the side panel only while that panel is open.
 - **`storage`** — save Settings (e.g. Summarize provider), Recent list metadata, and light panel diagnostics. Does not store API keys or the loopback auth token.
 - **`scripting`** — enables programmatic injection of content scripts as a fallback when a tab was opened before the extension loaded.
 - **`http://127.0.0.1:19720/*`** — deliver the page URL to Transcriber on this computer.
+- **`https://www.linkedin.com/*`** — find the video address of the LinkedIn post or event you transcribe (see above).
 
 ### Optional host permissions (requested only when used)
 
@@ -46,7 +49,7 @@ The page URL is shown in the side panel only while that panel is open.
 
 - We don't sell or share your data with advertisers.
 - We don't use cross-site tracking, remote telemetry, or analytics in the extension.
-- We don't read pages other than the URL of the tab you send.
+- We don't read pages other than the URL of the tab you send, except the YouTube captions and LinkedIn video details described above.
 - We don't store API keys, local auth tokens, or other secrets in the extension.
 
 ## Contact

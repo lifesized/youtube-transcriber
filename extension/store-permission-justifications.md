@@ -24,12 +24,15 @@ LOCAL build. Paste these into the Chrome Web Store developer console.
 > Saves Settings (e.g. Summarize provider), Recent list metadata, and light panel diagnostics in the browser. Does not store API keys or the loopback auth token.
 
 ### `scripting`
-> Enables programmatic injection of content scripts as a fallback when a tab was opened before the extension loaded (YouTube caption extraction, LLM handoff).
+> Enables programmatic injection of content scripts as a fallback when a tab was opened before the extension loaded (YouTube caption extraction, LinkedIn video lookup, LLM handoff).
 
 ## Required host permissions
 
 ### `http://127.0.0.1:19721/*` and `http://127.0.0.1:19720/*`
 > The extension delivers the page URL only to Transcriber on the same computer: the packaged app (`127.0.0.1:19721`) or a checkout (`127.0.0.1:19720`). It does not contact a remote host.
+
+### `https://www.linkedin.com/*`
+> Lets the user transcribe a LinkedIn post or a past LinkedIn Event they are viewing. LinkedIn only shows event recordings to signed-in members, so the local app can't fetch them by URL. A content script on `www.linkedin.com` finds the video's LinkedIn CDN (`licdn.com`) address in the open tab: from the page's own embedded data, the `<video>` element, or the tab's resource-timing list (kept in tab memory only, at most 50 LinkedIn video URLs, cleared on navigation). It reads this only when the user presses **Transcribe**, and sends the page URL, that CDN address, and the post's title and author only to Transcriber on `127.0.0.1`. The content script makes no network requests, doesn't read cookies or credentials, and doesn't write to extension storage. No other LinkedIn subdomain is requested.
 
 ## Optional host permissions
 
@@ -55,4 +58,4 @@ Not declared: `cookies`, `webRequest`, `identity`, `notifications`, `<all_urls>`
 | Location | No | |
 | Web history | No | Only the single page URL the user chooses to send is posted to local Transcriber. General history is not read. |
 | User activity | No | |
-| Website content | Yes | Optionally reads YouTube caption/transcript panel text when you transcribe a YouTube page (sent only to local Transcriber). Optionally places the summarize instruction plus the full transcript into Claude or ChatGPT when you use Summarize. Does not read other page content or browsing history. |
+| Website content | Yes | Optionally reads YouTube caption/transcript panel text when you transcribe a YouTube page (sent only to local Transcriber). When you transcribe a LinkedIn post or event, reads that video's LinkedIn CDN address, title, and author from the tab (sent only to local Transcriber). Optionally places the summarize instruction plus the full transcript into Claude or ChatGPT when you use Summarize. Does not read other page content or browsing history. |
