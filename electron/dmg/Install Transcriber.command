@@ -5,7 +5,11 @@
 set -euo pipefail
 
 DEST="${TRANSCRIBER_INSTALL_DEST:-/Applications/Transcriber.app}"
-QUIT_WAIT_SECS="${TRANSCRIBER_QUIT_WAIT_SECS:-20}"
+QUIT_WAIT_DEFAULT=20
+QUIT_WAIT_SECS="${TRANSCRIBER_QUIT_WAIT_SECS:-$QUIT_WAIT_DEFAULT}"
+case "$QUIT_WAIT_SECS" in
+  ''|*[!0-9]*) QUIT_WAIT_SECS="$QUIT_WAIT_DEFAULT" ;;
+esac
 NONINTERACTIVE="${TRANSCRIBER_INSTALL_NONINTERACTIVE:-}"
 SKIP_OPEN="${TRANSCRIBER_INSTALL_SKIP_OPEN:-}"
 BUNDLE_ID="com.transcribed.app"
@@ -35,12 +39,21 @@ read_bundle_id() {
   if [ ! -f "$plist" ]; then
     return 1
   fi
-  python3 - "$plist" <<'PY'
-import re, sys
-text = open(sys.argv[1], encoding="utf-8", errors="replace").read()
-m = re.search(r"<key>CFBundleIdentifier</key>\s*<string>([^<]+)</string>", text)
-print(m.group(1) if m else "")
-PY
+  if [ -x /usr/libexec/PlistBuddy ]; then
+    /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist" 2>/dev/null || return 1
+    return 0
+  fi
+  # XML plist fallback for test hosts without PlistBuddy. Binary plists
+  # require PlistBuddy (always present on macOS).
+  awk '
+    /<key>CFBundleIdentifier<\/key>/ { found=1; next }
+    found && /<string>/ {
+      sub(/.*<string>/, "")
+      sub(/<\/string>.*/, "")
+      print
+      exit
+    }
+  ' "$plist"
 }
 
 assert_dest_is_ours() {
@@ -56,59 +69,26 @@ assert_dest_is_ours() {
   fi
 }
 
+pids_matching_exe() {
+  local exe="$1"
+  ps -axo pid=,comm= 2>/dev/null | awk -v exe="$exe" '$2 == exe { print $1 }'
+}
+
 quit_running() {
   local exe="$DEST/Contents/MacOS/Transcriber"
   if command -v osascript >/dev/null 2>&1; then
     osascript -e 'tell application "Transcriber" to quit' >/dev/null 2>&1 || true
   fi
   local i=0
-  while [ -x "$exe" ] && python3 - "$exe" <<'PY'
-import os, sys
-exe = sys.argv[1]
-try:
-    out = os.popen("ps -ax -o pid=,command=").read()
-except Exception:
-    sys.exit(1)
-for line in out.splitlines():
-    line = line.strip()
-    if not line:
-        continue
-    pid_s, _, cmd = line.partition(" ")
-    try:
-        pid = int(pid_s)
-    except ValueError:
-        continue
-    if pid == os.getpid():
-        continue
-    parts = cmd.replace("'", " ").replace('"', " ").split()
-    if exe in parts:
-        sys.exit(0)
-sys.exit(1)
-PY
-  do
+  while [ -x "$exe" ] && [ -n "$(pids_matching_exe "$exe")" ]; do
     if [ "$i" -ge "$QUIT_WAIT_SECS" ]; then
-      python3 - "$exe" <<'PY' || true
-import os, signal, sys
-exe = sys.argv[1]
-out = os.popen("ps -ax -o pid=,command=").read()
-for line in out.splitlines():
-    line = line.strip()
-    if not line:
-        continue
-    pid_s, _, cmd = line.partition(" ")
-    try:
-        pid = int(pid_s)
-    except ValueError:
-        continue
-    if pid == os.getpid():
-        continue
-    parts = cmd.replace("'", " ").replace('"', " ").split()
-    if exe in parts:
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except OSError:
-            pass
-PY
+      local pid
+      for pid in $(pids_matching_exe "$exe"); do
+        case "$pid" in
+          ''|*[!0-9]*) continue ;;
+        esac
+        kill "$pid" >/dev/null 2>&1 || true
+      done
       sleep 1
       break
     fi

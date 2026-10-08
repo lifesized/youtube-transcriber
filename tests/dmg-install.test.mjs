@@ -30,6 +30,11 @@ test("Install Transcriber.command exists and is executable", () => {
   assert.doesNotMatch(text, /killall Transcriber/);
   assert.ok(text.includes("CFBundleIdentifier"));
   assert.ok(text.includes("com.transcribed.app"));
+  assert.ok(text.includes("/usr/libexec/PlistBuddy"));
+  assert.ok(text.includes("Print :CFBundleIdentifier"));
+  assert.ok(text.includes("ps -axo pid=,comm="));
+  assert.match(text, /\$2 == exe/);
+  assert.doesNotMatch(text, /python/i);
   assert.ok(text.includes('basename "$p"') || text.includes("Transcriber.app"));
   assert.ok(text.includes("Only run this from the DMG James sent"));
   const sudoLines = text.split("\n").filter((l) => /^\s*sudo\b/.test(l));
@@ -215,5 +220,41 @@ test("helper refuses to replace a dest with a different bundle id", () => {
   assert.notEqual(result.status, 0);
   assert.match(result.stdout, /CFBundleIdentifier/);
   assert.ok(fs.existsSync(path.join(dest, "Contents", "keep-me")));
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+test("helper treats a non-integer QUIT_WAIT as the default", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dmg-install-wait-"));
+  const volume = path.join(tmp, "Transcriber");
+  const destDir = path.join(tmp, "Applications");
+  const dest = path.join(destDir, "Transcriber.app");
+  const bin = path.join(tmp, "bin");
+  fs.mkdirSync(path.join(volume, "Transcriber.app", "Contents"), { recursive: true });
+  fs.writeFileSync(path.join(volume, "Transcriber.app", "Contents", "marker"), "payload");
+  fs.copyFileSync(commandPath, path.join(volume, commandName));
+  fs.chmodSync(path.join(volume, commandName), 0o755);
+  fs.mkdirSync(bin, { recursive: true });
+  const stub = (name, body) => {
+    const p = path.join(bin, name);
+    fs.writeFileSync(p, `#!/bin/bash\n${body}\n`);
+    fs.chmodSync(p, 0o755);
+  };
+  stub("ditto", `mkdir -p "$2"\ncp -R "$1"/. "$2"`);
+  stub("xattr", "exit 0");
+  stub("open", "exit 0");
+  stub("osascript", "exit 0");
+  const result = spawnSync("bash", [path.join(volume, commandName)], {
+    env: {
+      ...process.env,
+      PATH: `${bin}:/usr/bin:/bin`,
+      TRANSCRIBER_INSTALL_DEST: dest,
+      TRANSCRIBER_INSTALL_NONINTERACTIVE: "1",
+      TRANSCRIBER_QUIT_WAIT_SECS: "nope",
+      TRANSCRIBER_INSTALL_SKIP_OPEN: "1",
+    },
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  assert.ok(fs.existsSync(path.join(dest, "Contents", "marker")));
   fs.rmSync(tmp, { recursive: true, force: true });
 });
