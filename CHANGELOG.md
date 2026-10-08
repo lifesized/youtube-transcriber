@@ -2,6 +2,21 @@
 
 ## 2026-10-08
 
+### Changed
+- **Library indicator** — the panel header shows a status dot plus **App · 19721** or **Dev · 19720**. It is read-only: a click opens Settings › Library, with no menu or chevron. Tooltip: "Library: Transcriber app · 19721, Running. Click to change in Settings."
+- **Settings › Library radio rows** — **Transcriber app · 19721** and **Dev server · 19720** are stacked radio rows. Only the selected row shows its action: **Start** (app stopped), **Retry** (dev stopped), **Allow access** (app needs permission), **Open dev server** or the setup command with **Copy** (dev needs permission), **Update helper** (the tray item for the app, the setup command for dev). The Server section stays hidden while Stop is off, so Settings has one Start.
+- **Amber setup states** — Needs permission, Helper out of date and the dev project-folder message are amber. Stopped is muted. Red is only for a Start that failed.
+- **Tray status and order** — The status line always shows **Transcriber is running** or **Transcriber is stopped**, with **App library · Port 19721** under it (one line before macOS 14.4). Stopped adds **Start Transcriber**. Order: Open Transcriber, Open Library, then Connect Browser Extension… / Paired Extensions… / Reinstall Browser Connection, then Advanced ▸ Show Data in Finder (plus Import Existing Library… when offered), Start at Login, Quit Transcriber. **Open Library** opens the list view (`/?layout=list`) and is disabled while stopped.
+- **Launch pop only for a manual launch** — the menu pop and "running in the menu bar" notification are skipped for Start at Login and for starts from the browser extension (the native host launches the app with `--launched-by=native-host`). A manual launch, including the first after install or update, still pops.
+- **DMG hides the app in `.payload/`** — `finalize-dmg.sh` moves `Transcriber.app` into a dot-folder Finder never shows, instead of parking it off-canvas. Install Transcriber.command copies from `.payload/Transcriber.app` and falls back to `Transcriber.app` beside it.
+- **Final picker and tray strings** — Design's copy for the Library label, helper line, connection errors and tray status.
+
+### Removed
+- **Open Library Folder** and the separate **Serving: …** tray line, replaced by Advanced ▸ Show Data in Finder and the status sublabel.
+
+### Added
+- **Design screenshots in CI** — the macOS job uploads `design-screenshots`: the real tray menu (best effort), every Settings › Library state rendered by `popup.js` (`scripts/capture-library-rows.js`), and the DMG window.
+
 ### Security
 - **LinkedIn media URLs reach yt-dlp exactly as validated** — The server and the extension accept a LinkedIn media URL only if it equals `new URL(url).href`, and pass on only that href. Before this, `https://dms.licdn.com\@127.0.0.1:8443/x.mp4` passed the `*.licdn.com` check (Node reads the host as `dms.licdn.com`) but yt-dlp connected to `127.0.0.1:8443`. Backslashes, surrounding spaces, and look-alike characters such as `。` or `ⅼ` are rejected too. Both yt-dlp calls (info and download) now put `--` before the URL.
 - **LinkedIn page URLs are strict and stored canonically** — A LinkedIn page URL must be `https://` on `www.linkedin.com` or `linkedin.com` with no port and no username or password; anything else (e.g. `javascript://www.linkedin.com/…`) is not treated as LinkedIn. The library stores a URL rebuilt from the post or event ID (`https://www.linkedin.com/feed/update/urn:li:<type>:<id>/` or `https://www.linkedin.com/events/<id>/`), not the pasted text. yt-dlp gets the parsed URL, never the raw input.
