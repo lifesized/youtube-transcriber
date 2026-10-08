@@ -17,15 +17,13 @@
 
 ## 2026-10-08
 
-<<<<<<< HEAD
 ### Added
 - **Tusk v0 (milestones 1–3)** — a Slack Socket Mode bot inside the Electron menu-bar app. James pastes `xoxb` / `xapp` tokens in Settings › Slack (Tusk); they are encrypted with `safeStorage` and the page only shows `saved ••••last4`. Tray line: `Tusk: connected to <workspace>` / `off` / `error` (Design placeholders). `/tusk help`, `/tusk status`, a 👀 reaction plus a threaded summary (or transcript file) on a supported YouTube / Spotify episode / LinkedIn URL, and `@Tusk <question>` in that thread answering only from that video. No public endpoint. Manifest and setup: `docs/tusk/`.
-=======
+
 ### Security
 - **Apple secrets moved to Environment `release`** — signing and publishing are separate jobs with `environment: release` and `if: github.event_name != 'pull_request'`. The sign job does not run `npm ci`. Same-repo PRs no longer see Apple secrets and never produce a signed artifact. See `docs/signing-and-updates.md`.
 - **Draft, ref-gated releases** — the release job requires `$GITHUB_SHA` to be an ancestor of `beta/electron-menubar`, the tag to equal `v${package.json.version}` under `X.Y.Z-beta.N`, and creates a **draft** prerelease targeted at that SHA. `workflow_dispatch` publish is allowed only on `beta/electron-menubar`.
 - **Updater load failure cannot kill the tray** — `electron-updater` ships in `app.asar.unpacked`; a failed require or settings call returns `{enabled:false, reason:'load-failed'}`.
->>>>>>> 6e7c2bb (Move Apple secrets to Environment release and split sign/release jobs.)
 
 ### Changed
 - **Beta version scheme** — app releases use semver prereleases (`0.2.0-beta.1`, tag `v0.2.0-beta.1`, electron-updater channel `beta`) so a non-app GitHub Release cannot stall updates.

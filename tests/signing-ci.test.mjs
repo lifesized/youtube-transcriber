@@ -73,6 +73,7 @@ test("unsigned artifact name and glob are unchanged", () => {
   );
   assert.match(workflow, /CSC_IDENTITY_AUTO_DISCOVERY: false/);
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+  assert.equal(pkg.version, "0.2.0-beta.1");
   assert.match(pkg.scripts["electron:build"], /electron-builder[^&]*&& bash electron\/dmg\/finalize-dmg\.sh$/);
 });
 
