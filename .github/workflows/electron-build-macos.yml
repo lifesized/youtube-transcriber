@@ -165,6 +165,67 @@ jobs:
             console.log("✓ app.asar contains lib/local-api-token.js");
           ' "$ASAR"
 
+      - name: Assert no outbound app symlinks and Electron-ABI sqlite
+        run: |
+          set -euo pipefail
+          APP="$PWD/dist-electron/mac-arm64/Transcriber.app"
+          ELECTRON="$APP/Contents/MacOS/Transcriber"
+          APP_REAL=$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$APP")
+
+          echo "----- outbound symlink check -----"
+          FAIL=0
+          while IFS= read -r -d '' link; do
+            target=$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$link")
+            case "$target" in
+              "$APP_REAL"|"$APP_REAL"/*) ;;
+              *)
+                echo "ERROR: symlink escapes Transcriber.app"
+                echo "  link: $link"
+                echo "  target: $target"
+                FAIL=1
+                ;;
+            esac
+          done < <(find "$APP" -type l -print0)
+          if [ "$FAIL" -ne 0 ]; then
+            exit 1
+          fi
+          echo "✓ no symlink resolves outside Transcriber.app"
+
+          echo "----- better_sqlite3.node Electron ABI -----"
+          REBUILT=$(find "$APP/Contents/Resources/app.asar.unpacked/node_modules/better-sqlite3" -name better_sqlite3.node | head -1)
+          if [ -z "$REBUILT" ]; then
+            echo "ERROR: rebuilt better_sqlite3.node missing under app.asar.unpacked"
+            exit 1
+          fi
+          REBUILT_HASH=$(shasum -a 256 "$REBUILT" | awk '{print $1}')
+          echo "rebuilt $REBUILT"
+          echo "sha256 $REBUILT_HASH"
+          COUNT=0
+          while IFS= read -r addon; do
+            HASH=$(shasum -a 256 "$addon" | awk '{print $1}')
+            echo "  $HASH  $addon"
+            if [ "$HASH" != "$REBUILT_HASH" ]; then
+              echo "ERROR: $addon is not the Electron-ABI better_sqlite3.node"
+              exit 1
+            fi
+            python3 -c 'import json,sys; print("require(%s); console.log(\"ok\");" % json.dumps(sys.argv[1]))' "$addon" > /tmp/require-sqlite.js
+            set +e
+            OUTPUT=$(ELECTRON_RUN_AS_NODE=1 "$ELECTRON" /tmp/require-sqlite.js 2>&1)
+            STATUS=$?
+            set -e
+            if [ "$STATUS" -ne 0 ] || ! printf '%s\n' "$OUTPUT" | grep -qx 'ok'; then
+              echo "ERROR: require() failed for $addon"
+              echo "$OUTPUT"
+              exit 1
+            fi
+            COUNT=$((COUNT + 1))
+          done < <(find -P "$APP" -name better_sqlite3.node)
+          if [ "$COUNT" -lt 1 ]; then
+            echo "ERROR: no better_sqlite3.node found inside Transcriber.app"
+            exit 1
+          fi
+          echo "✓ $COUNT better_sqlite3.node file(s) match Electron ABI and load"
+
       - name: Launch packaged Transcriber.app
         run: |
           set -euo pipefail

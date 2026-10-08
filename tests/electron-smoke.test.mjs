@@ -228,6 +228,50 @@ test("afterPack overlays Electron ABI sqlite onto hashed Next copies", () => {
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
+test("afterPack flattens symlinked hashed sqlite dirs then overlays", () => {
+  // Next standalone keeps hashed better-sqlite3-* dirs as symlinks. Dirent.isDirectory()
+  // is false for those, so a walk that only descends real dirs skips them and the
+  // packaged server later loads the workspace Node-ABI .node.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "sqlite-symlink-"));
+  const workspacePkg = path.join(tmp, "workspace-better-sqlite3");
+  fs.mkdirSync(path.join(workspacePkg, "build", "Release"), { recursive: true });
+  fs.writeFileSync(path.join(workspacePkg, "package.json"), '{"name":"better-sqlite3"}');
+  fs.writeFileSync(
+    path.join(workspacePkg, "build", "Release", "better_sqlite3.node"),
+    "node-abi-127"
+  );
+
+  const standalone = path.join(tmp, "standalone");
+  const hashedParent = path.join(standalone, ".next", "node_modules");
+  fs.mkdirSync(hashedParent, { recursive: true });
+  const hashed = path.join(hashedParent, "better-sqlite3-deadbeef");
+  fs.symlinkSync(workspacePkg, hashed);
+
+  const top = path.join(standalone, "node_modules", "better-sqlite3", "build", "Release");
+  fs.mkdirSync(top, { recursive: true });
+  fs.writeFileSync(path.join(top, "better_sqlite3.node"), "node-abi-127");
+
+  const rebuilt = path.join(tmp, "rebuilt-better_sqlite3.node");
+  fs.writeFileSync(rebuilt, "electron-abi");
+
+  const afterPack = require(path.join(projectRoot, "electron", "after-pack.js"));
+  const n = afterPack.overlaySqliteNativeAddon(standalone, rebuilt);
+  assert.equal(n, 2);
+  assert.equal(fs.lstatSync(hashed).isSymbolicLink(), false);
+  assert.equal(
+    fs.readFileSync(path.join(hashed, "build", "Release", "better_sqlite3.node"), "utf8"),
+    "electron-abi"
+  );
+  assert.equal(fs.readFileSync(path.join(top, "better_sqlite3.node"), "utf8"), "electron-abi");
+  assert.equal(
+    fs.readFileSync(path.join(workspacePkg, "build", "Release", "better_sqlite3.node"), "utf8"),
+    "node-abi-127",
+    "workspace Node-ABI addon must not be overwritten through the symlink"
+  );
+
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
+
 test("afterPack copies lib/*.js into app.asar.unpacked", () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "lib-unpacked-"));
   const appPath = path.join(tmp, "Transcriber.app");
@@ -328,6 +372,17 @@ test("CI launches the packaged Transcriber.app and checks asar requires", () => 
   assert.ok(content.includes("Uncaught Exception"));
   assert.ok(content.includes("UnhandledPromiseRejectionWarning"));
   assert.ok(content.includes("packaged-launch health"));
+});
+
+test("CI fails outbound app symlinks and non-Electron sqlite addons", () => {
+  const workflowPath = path.join(projectRoot, ".github", "workflows", "electron-build-macos.yml");
+  const content = fs.readFileSync(workflowPath, "utf8");
+  assert.ok(content.includes("Assert no outbound app symlinks and Electron-ABI sqlite"));
+  assert.ok(content.includes("symlink escapes Transcriber.app"));
+  assert.ok(content.includes("no symlink resolves outside Transcriber.app"));
+  assert.ok(content.includes("better_sqlite3.node Electron ABI"));
+  assert.ok(content.includes("ELECTRON_RUN_AS_NODE=1"));
+  assert.ok(content.includes("is not the Electron-ABI better_sqlite3.node"));
 });
 
 test("CI pings the packaged native host wrapper", () => {

@@ -126,9 +126,60 @@ function findSqliteAddon(root) {
   return hits[0] || null;
 }
 
+function replaceSymlinkDirWithCopy(linkPath) {
+  const real = fs.realpathSync(linkPath);
+  const tmp = `${linkPath}.deref-${process.pid}`;
+  fs.cpSync(real, tmp, { recursive: true, dereference: true, force: true });
+  fs.rmSync(linkPath, { force: true });
+  fs.renameSync(tmp, linkPath);
+}
+
+/**
+ * Dirent.isDirectory() is false for symlink-to-dir entries, so a naive walk
+ * skips Next's hashed `better-sqlite3-*` copies and they keep pointing at the
+ * workspace Node-ABI build. Replace those link dirs with real copies first.
+ */
+function flattenStandaloneDirSymlinks(root) {
+  let flattened = 0;
+  const visit = (dir) => {
+    if (!fs.existsSync(dir)) return;
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isSymbolicLink()) {
+        let st;
+        try {
+          st = fs.statSync(full);
+        } catch {
+          continue;
+        }
+        if (!st.isDirectory()) continue;
+        // Flatten every dir symlink so overlay never writes through a link
+        // back to the workspace (parents of better-sqlite3-* can be links too).
+        replaceSymlinkDirWithCopy(full);
+        flattened += 1;
+        visit(full);
+      } else if (entry.isDirectory()) {
+        visit(full);
+      }
+    }
+  };
+  visit(root);
+  return flattened;
+}
+
 function overlaySqliteNativeAddon(standaloneDir, rebuiltAddonPath) {
   if (!fs.existsSync(rebuiltAddonPath)) {
     throw new Error(`Rebuilt better_sqlite3.node missing: ${rebuiltAddonPath}`);
+  }
+  const flattened = flattenStandaloneDirSymlinks(standaloneDir);
+  if (flattened > 0) {
+    console.log(`  flattened ${flattened} standalone symlink dir(s)`);
   }
   const targets = [];
   const walk = (dir) => {
@@ -141,6 +192,9 @@ function overlaySqliteNativeAddon(standaloneDir, rebuiltAddonPath) {
   };
   walk(standaloneDir);
   for (const target of targets) {
+    if (fs.lstatSync(target).isSymbolicLink()) {
+      fs.rmSync(target);
+    }
     fs.copyFileSync(rebuiltAddonPath, target);
   }
   return targets.length;
@@ -247,6 +301,7 @@ async function adHocCodesign(context) {
 }
 
 module.exports.syncStandaloneFromStaging = syncStandaloneFromStaging;
+module.exports.flattenStandaloneDirSymlinks = flattenStandaloneDirSymlinks;
 module.exports.overlaySqliteNativeAddon = overlaySqliteNativeAddon;
 module.exports.copyLibJsIntoUnpacked = copyLibJsIntoUnpacked;
 module.exports.prunePackagedApp = prunePackagedApp;
