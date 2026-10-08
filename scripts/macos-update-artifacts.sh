@@ -15,6 +15,7 @@ VERSION="$(node -p "require('$ROOT/package.json').version")"
 ZIP_NAME="Transcriber-${VERSION}-arm64-mac.zip"
 ZIP="$OUT_DIR/$ZIP_NAME"
 YML="$OUT_DIR/latest-mac.yml"
+BETA_YML="$OUT_DIR/beta-mac.yml"
 SUMS="$OUT_DIR/SHA256SUMS"
 
 [ -d "$APP" ] || { echo "update-artifacts: missing $APP"; exit 1; }
@@ -36,13 +37,14 @@ if [ -n "$APP_BUILDER" ]; then
   BLOCKMAP="$ZIP.blockmap"
 fi
 
-ZIP="$ZIP" YML="$YML" VERSION="$VERSION" ZIP_NAME="$ZIP_NAME" node --input-type=module <<'NODE'
+ZIP="$ZIP" YML="$YML" BETA_YML="$BETA_YML" VERSION="$VERSION" ZIP_NAME="$ZIP_NAME" node --input-type=module <<'NODE'
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 
 const zip = process.env.ZIP;
 const yml = process.env.YML;
+const betaYml = process.env.BETA_YML;
 const version = process.env.VERSION;
 const zipName = process.env.ZIP_NAME;
 const buf = fs.readFileSync(zip);
@@ -60,12 +62,14 @@ const lines = [
   `releaseDate: '${releaseDate}'`,
   "",
 ];
-fs.writeFileSync(yml, lines.join("\n"));
-console.log("update-artifacts: wrote", path.basename(yml));
+const body = lines.join("\n");
+fs.writeFileSync(yml, body);
+fs.writeFileSync(betaYml, body);
+console.log("update-artifacts: wrote", path.basename(yml), "and", path.basename(betaYml));
 NODE
 
 {
-  (cd "$OUT_DIR" && shasum -a 256 "$(basename "$ZIP")" "$(basename "$YML")")
+  (cd "$OUT_DIR" && shasum -a 256 "$(basename "$ZIP")" "$(basename "$YML")" "$(basename "$BETA_YML")")
   if [ -f "$DMG" ]; then
     (cd "$(dirname "$DMG")" && shasum -a 256 "$(basename "$DMG")")
   fi

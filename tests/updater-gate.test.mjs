@@ -23,6 +23,8 @@ const {
   evaluateFromDisk,
   readDarwinSignature,
   CODESIGN_BIN,
+  configureAutoUpdater,
+  isBetaPrereleaseVersion,
   stopServerThenInstall,
   INITIAL_DELAY_MS,
   INTERVAL_MS,
@@ -215,7 +217,10 @@ test("enabled updater pins the GitHub feed and does not honor env overrides", ()
     assert.equal(fake.allowDowngrade, false);
     assert.equal(fake.allowPrerelease, true);
     assert.equal(fake.channel, "beta");
+    assert.equal(fake.autoInstallOnAppQuit, false);
     assert.equal(fake.forceDevUpdateConfig, false);
+    assert.equal(fake.isUpdateSupported({ version: "0.2.0-beta.2" }), true);
+    assert.equal(fake.isUpdateSupported({ version: "1.0.0" }), false);
     assert.equal(updater.feed.owner, "lifesized");
     assert.equal(updater.feed.repo, "youtube-transcriber");
   } finally {
@@ -319,6 +324,36 @@ test("load or settings failure disables the updater and still builds the tray", 
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("real AppUpdater channel setter then allowDowngrade stays false", () => {
+  const { AppUpdater } = require("electron-updater");
+  const stubApp = {
+    version: "0.2.0-beta.1",
+    name: "Transcriber",
+    isPackaged: true,
+    appUpdateConfigPath: path.join(tmpdir(), "no-app-update.yml"),
+    userDataPath: tmpdir(),
+    baseCachePath: tmpdir(),
+    whenReady: async () => {},
+    quit() {},
+    relaunch() {},
+    onQuit() {},
+  };
+  const real = new AppUpdater(null, stubApp);
+  real.allowDowngrade = false;
+  real.channel = "beta";
+  assert.equal(real.channel, "beta");
+  assert.equal(real.allowDowngrade, true, "channel setter must flip allowDowngrade");
+  configureAutoUpdater(real);
+  assert.equal(real.channel, "beta");
+  assert.equal(real.allowDowngrade, false);
+  assert.equal(real.autoInstallOnAppQuit, false);
+  assert.equal(real.autoDownload, false);
+  assert.equal(real.isUpdateSupported({ version: "0.2.1-beta.1" }), true);
+  assert.equal(real.isUpdateSupported({ version: "1.0.0" }), false);
+  assert.equal(isBetaPrereleaseVersion("0.2.0-beta.1"), true);
+  assert.equal(isBetaPrereleaseVersion("1.0.0"), false);
 });
 
 test("codesign verify --strict runs on /usr/bin/codesign before Team ID and fails closed", () => {

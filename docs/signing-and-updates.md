@@ -145,7 +145,7 @@ The packaged app initializes `electron-updater` only when all of these hold:
 - That JSON is absent on ad-hoc builds, so those builds never load the updater
 - If `electron-updater` fails to load, the tray still starts (`reason: load-failed`)
 
-Feed is pinned to `lifesized/youtube-transcriber` on GitHub. There is no env or Settings override. `allowDowngrade` is false. Channel is `beta`. macOS signature validation (Squirrel.Mac designated requirement) is left enabled.
+Feed is pinned to `lifesized/youtube-transcriber` on GitHub. There is no env or Settings override. Channel is set to `beta` first (electron-updater 6.8.9's setter flips `allowDowngrade` to true), then `allowDowngrade` is set back to `false`. Beta clients follow the beta channel only — a future plain `vX.Y.Z` is rejected. `autoInstallOnAppQuit` is false. macOS signature validation (Squirrel.Mac designated requirement) is left enabled.
 
 When the updater is enabled it checks `releases.atom` and `latest-mac.yml` on GitHub Releases for this repo 30 seconds after launch and then every 6 hours. A found update zip downloads automatically; installing it needs a click on **Restart to Update**. Documented in `extension/privacy-policy.md`. Disabled builds make no GitHub calls.
 

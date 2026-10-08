@@ -92,6 +92,29 @@ function evaluateFromDisk(options) {
   });
 }
 
+function isBetaPrereleaseVersion(version) {
+  const pre = String(version || "").split("-")[1] || "";
+  return pre === "beta" || pre.startsWith("beta.");
+}
+
+/**
+ * electron-updater 6.8.9's `channel` setter sets allowDowngrade = true.
+ * Set channel first, then pin allowDowngrade false. Beta clients only
+ * follow the beta channel (reject a future plain vX.Y.Z).
+ */
+function configureAutoUpdater(autoUpdater) {
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.allowPrerelease = true;
+  autoUpdater.channel = "beta";
+  autoUpdater.allowDowngrade = false;
+  autoUpdater.forceDevUpdateConfig = false;
+  autoUpdater.setFeedURL(pinnedFeed());
+  autoUpdater.isUpdateSupported = (updateInfo) =>
+    isBetaPrereleaseVersion(updateInfo && updateInfo.version);
+  return autoUpdater;
+}
+
 async function stopServerThenInstall(serverManager, install) {
   if (serverManager && typeof serverManager.stop === "function") {
     try {
@@ -167,14 +190,7 @@ function createUpdater(options) {
         ? loadAutoUpdater()
         : loadElectronUpdater(resourcesPath);
 
-    autoUpdater = loaded;
-    autoUpdater.autoDownload = false;
-    autoUpdater.autoInstallOnAppQuit = false;
-    autoUpdater.allowDowngrade = false;
-    autoUpdater.allowPrerelease = true;
-    autoUpdater.channel = "beta";
-    autoUpdater.forceDevUpdateConfig = false;
-    autoUpdater.setFeedURL(pinnedFeed());
+    autoUpdater = configureAutoUpdater(loaded);
   } catch (error) {
     console.warn("updater: load failed:", error && error.message);
     return disabled("load-failed");
@@ -276,6 +292,8 @@ module.exports = {
   loadElectronUpdater,
   readDarwinSignature,
   CODESIGN_BIN,
+  configureAutoUpdater,
+  isBetaPrereleaseVersion,
   stopServerThenInstall,
   INITIAL_DELAY_MS,
   INTERVAL_MS,
