@@ -2,6 +2,9 @@
 
 ## 2026-10-08
 
+### Added
+- **Tusk v0 (milestone 1)** — a Slack Socket Mode bot inside the Electron menu-bar app. James pastes `xoxb` / `xapp` tokens in Settings › Slack (Tusk); they are encrypted with `safeStorage` and the page only shows `saved ••••last4`. Tray line: `Tusk: connected to <workspace>` / `off` / `error` (Design placeholders). `/tusk help`, `/tusk status`, and a 👀 reaction on a supported YouTube / Spotify episode / LinkedIn URL. No public endpoint, no processing yet. Manifest and setup: `docs/tusk/`.
+
 ### Changed
 - **Library indicator** — the panel header shows a status dot plus **App · 19721** or **Dev · 19720**. It is read-only: a click opens Settings › Library, with no menu or chevron. Tooltip: "Library: Transcriber app · 19721, Running. Click to change in Settings."
 - **Settings › Library radio rows** — **Transcriber app · 19721** and **Dev server · 19720** are stacked radio rows. Only the selected row shows its action: **Start** (app stopped), **Retry** (dev stopped), **Allow access** (app needs permission), the setup command with **Copy** (dev needs permission), **Update helper** (the tray item for the app, the setup command for dev, and a dev 401). The Server section stays hidden while Stop is off, so Settings has one Start.
