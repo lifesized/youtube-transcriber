@@ -168,9 +168,14 @@ test("helper icon is one replaceable icns and CI stamps it into the DMG", () => 
   assert.ok(assertAt < shaAt, "helper assert must run before sha256");
   assert.match(workflow, /namedfork\/rsrc/);
   assert.match(workflow, /GetFileInfo -a/);
-  assert.match(workflow, /kHasCustomIcon|custom-icon flag/);
+  assert.match(workflow, /assert-helper-icon\.py/);
+  assert.match(workflow, /screenshot-dmg-window\.py/);
   assert.match(workflow, /name: dmg-window/);
-  assert.match(workflow, /screencapture/);
+  const shot = fs.readFileSync(
+    path.join(projectRoot, "electron", "dmg", "screenshot-dmg-window.py"),
+    "utf8"
+  );
+  assert.match(shot, /screencapture/);
 });
 
 test("helper copies the app, clears quarantine, and does not sudo on success", () => {

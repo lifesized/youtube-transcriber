@@ -177,59 +177,11 @@ jobs:
               exit 1
             fi
           else
-            python3 - "$HELPER" <<'PY'
-import os, sys
-path = sys.argv[1]
-try:
-    data = os.getxattr(path, "com.apple.FinderInfo", follow_symlinks=True)
-except OSError as e:
-    print("ERROR: com.apple.FinderInfo missing:", e)
-    sys.exit(1)
-if len(data) < 10:
-    print("ERROR: FinderInfo too short", len(data))
-    sys.exit(1)
-flags = (data[8] << 8) | data[9]
-print(f"FinderInfo flags=0x{flags:04x}")
-if not (flags & 0x0400):
-    print("ERROR: kHasCustomIcon (0x0400) not set")
-    sys.exit(1)
-print("✓ FinderInfo custom-icon bit is set")
-PY
+            python3 electron/dmg/assert-helper-icon.py "$HELPER"
           fi
 
           # Best-effort screenshot of the mounted DMG window. Do not fail the job.
-          python3 - "$MOUNT" dist-electron/dmg-window.png <<'PY' || true
-import subprocess, sys, time
-mount, out = sys.argv[1], sys.argv[2]
-try:
-    subprocess.run(["open", mount], check=False, timeout=10)
-    time.sleep(2)
-    as_path = mount.replace("\\", "\\\\").replace('"', '\\"')
-    script = f'''
-tell application "Finder"
-  activate
-  try
-    open POSIX file "{as_path}"
-  end try
-  delay 1
-  set w to window 1
-  set toolbar visible of w to false
-  set sidebar width of w to 0
-  set current view of w to icon view
-  set bounds of w to {{80, 80, 700, 520}}
-end tell
-'''
-    subprocess.run(["osascript", "-e", script], check=False, timeout=20)
-    time.sleep(1)
-    subprocess.run(
-        ["screencapture", "-x", "-R80,80,620,440", out],
-        check=False,
-        timeout=15,
-    )
-    print("screenshot wrote", out)
-except Exception as e:
-    print("screenshot skipped:", e)
-PY
+          python3 electron/dmg/screenshot-dmg-window.py "$MOUNT" dist-electron/dmg-window.png || true
 
           hdiutil detach "$MOUNT"
 
