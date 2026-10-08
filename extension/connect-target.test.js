@@ -95,6 +95,29 @@ test("panel header is a read-only indicator that opens Settings › Library", ()
   );
 });
 
+test("Settings › Library rows are radios and only the selected row gets the action", () => {
+  const popupJs = fs.readFileSync(path.join(ROOT, "popup.js"), "utf8");
+  const popupHtml = fs.readFileSync(path.join(ROOT, "popup.html"), "utf8");
+  const labels = popupHtml.match(/<label class="connect-segment-line">[\s\S]*?<\/label>/g);
+  assert.equal(labels.length, 2);
+  for (const label of labels) {
+    assert.match(label, /type="radio"/);
+    assert.match(label, /class="connect-ring"/);
+    assert.doesNotMatch(label, /<button/, "no button inside a radio's label");
+  }
+  assert.match(popupJs, /T\.rowView\(/);
+  assert.match(popupJs, /row\.appendChild\(el\.connectAction\)/);
+  assert.match(popupJs, /connectError\.dataset\.tone = view\.tone/);
+  assert.doesNotMatch(popupHtml, /id="connectError"[^>]*error-message|error-message[^>]*id="connectError"/);
+  assert.match(popupJs, /requestNativeHostPair\(\)/);
+  assert.match(
+    popupJs,
+    /mode !== "local" \|\| !connectTargetApi\(\)\?\.FEATURES\.stop/,
+    "Settings has one Start: the Server section stays hidden while Stop is off"
+  );
+  assert.doesNotMatch(popupJs, /"Run: npm run install-native-host/);
+});
+
 test("dev setup command carries the extension ID", () => {
   assert.equal(
     ConnectTarget.devSetupCommand("abc"),

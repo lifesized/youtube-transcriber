@@ -202,6 +202,15 @@ const el = {
   targetPickerTrigger: document.getElementById("targetPickerTrigger"),
   targetPickerDot: document.getElementById("targetPickerDot"),
   targetPickerName: document.getElementById("targetPickerName"),
+  connectRowApp: document.getElementById("connectRowApp"),
+  connectRowDev: document.getElementById("connectRowDev"),
+  connectAction: document.getElementById("connectAction"),
+  connectActionHeading: document.getElementById("connectActionHeading"),
+  connectActionText: document.getElementById("connectActionText"),
+  connectStart: document.getElementById("connectStart"),
+  connectCommand: document.getElementById("connectCommand"),
+  connectCommandText: document.getElementById("connectCommandText"),
+  connectCopy: document.getElementById("connectCopy"),
   connectHelper: document.getElementById("connectHelper"),
   connectError: document.getElementById("connectError"),
   connectRetry: document.getElementById("connectRetry"),
@@ -1699,7 +1708,6 @@ function paintConnectTargetLabels() {
   if (el.connectTargetAppLabel) el.connectTargetAppLabel.textContent = T.optionLabel(T.APP);
   if (el.connectTargetDevLabel) el.connectTargetDevLabel.textContent = T.optionLabel(T.DEV);
   if (el.connectHelper) el.connectHelper.textContent = T.CONNECT_HELPER;
-  if (el.connectRetry) el.connectRetry.textContent = T.RETRY_LABEL;
   connectTargetPainted = true;
 }
 
@@ -1735,6 +1743,7 @@ async function paintTargetStatuses() {
     if (dot) dot.dataset.status = targetStatusFor(id);
     if (text) text.textContent = T.statusLabel(targetStatusFor(id));
   }
+  paintSelectedRow(current.id);
   const trigger = el.targetPickerTrigger;
   if (!trigger) return;
   const title = T.indicatorTitle(current.id, targetStatusFor(current.id));
@@ -1773,37 +1782,135 @@ if (el.targetPickerTrigger) {
   el.targetPickerTrigger.addEventListener("click", openLibrarySettings);
 }
 
-function hideConnectTargetError() {
-  if (el.connectError) {
-    el.connectError.hidden = true;
-    el.connectError.textContent = "";
-  }
-  if (el.connectRetry) el.connectRetry.hidden = true;
-}
+// Reason from this panel's last failed row Start, per target.
+const rowStartFailures = {};
+let allowAccessPending = false;
+let copyResetTimer = null;
 
-function showConnectTargetError(target) {
+/** Only the selected Settings › Library row shows an action (ConnectTarget.rowView). */
+function paintSelectedRow(currentId) {
   const T = connectTargetApi();
-  if (!T || !el.connectError) return;
-  el.connectError.textContent = T.unreachableMessage(target.id);
-  el.connectError.hidden = false;
-  if (el.connectRetry) {
-    el.connectRetry.hidden = !T.shouldShowRetry(target.id);
+  if (!T || !el.connectAction) return;
+  const status = targetStatusFor(currentId);
+  if (status === T.STATUS.RUNNING) delete rowStartFailures[currentId];
+  const view = T.rowView(
+    currentId,
+    { ...targetStatuses[currentId], status },
+    {
+      extId: HAS_EXTENSION_APIS ? chrome.runtime.id : "",
+      startFailure: rowStartFailures[currentId] || null,
+    }
+  );
+  const row = currentId === T.DEV ? el.connectRowDev : el.connectRowApp;
+  if (el.connectAction.parentElement !== row) row.appendChild(el.connectAction);
+
+  const a = view.action;
+  const kind = a?.kind;
+  el.connectAction.hidden = !a;
+  el.connectActionHeading.hidden = !a?.heading;
+  el.connectActionHeading.textContent = a?.heading || "";
+  el.connectActionText.hidden = kind !== "note";
+  el.connectActionText.textContent = kind === "note" ? a.text : "";
+
+  const button = kind === "start" || kind === "allowAccess";
+  el.connectStart.hidden = !button;
+  if (button) {
+    el.connectStart.textContent = a.label;
+    el.connectStart.dataset.kind = kind;
+    el.connectStart.disabled = !!a.busy || (kind === "allowAccess" && allowAccessPending);
   }
+
+  const link = kind === "retry" || kind === "openDevServer";
+  el.connectRetry.hidden = !link;
+  if (link) {
+    el.connectRetry.textContent = a.label;
+    el.connectRetry.dataset.kind = kind;
+    el.connectRetry.dataset.url = a.url || "";
+  }
+
+  el.connectCommand.hidden = kind !== "command";
+  if (kind === "command") {
+    el.connectCommandText.textContent = a.command;
+    if (!copyResetTimer) el.connectCopy.textContent = T.STRINGS.action.copy;
+  }
+
+  el.connectError.hidden = !view.message;
+  el.connectError.textContent = view.message || "";
+  el.connectError.dataset.tone = view.tone || "";
 }
 
-async function refreshConnectTargetError() {
+async function refreshLibraryRows() {
   const T = connectTargetApi();
   if (!T) return;
   const target = await currentConnectTarget();
   if (el.connectTargetApp) el.connectTargetApp.checked = target.id === T.APP;
   if (el.connectTargetDev) el.connectTargetDev.checked = target.id === T.DEV;
-  const serviceRes = await sendMsg({ type: "CHECK_SERVICE" });
-  const online = !!(serviceRes?.success && serviceRes.data?.online);
-  if (online) {
-    hideConnectTargetError();
+  await refreshTargetStatuses();
+}
+
+async function rowStartClicked() {
+  if (el.connectStart.dataset.kind === "allowAccess") {
+    allowAccessClicked();
     return;
   }
-  showConnectTargetError(target);
+  if (nativeStartInFlight) return;
+  nativeStartInFlight = true;
+  const target = await currentConnectTarget();
+  delete rowStartFailures[target.id];
+  try {
+    const res = await startSelectedTarget();
+    if (res.ok) {
+      // Stay in Settings; offline polling would call init() and close it.
+      stopOfflinePolling();
+    } else {
+      rowStartFailures[target.id] = res.reason || "start_timeout";
+    }
+  } finally {
+    nativeStartInFlight = false;
+    paintTargetStatuses();
+  }
+}
+
+/** Ask the app for the Allow dialog. The row's line tells the user to click Allow. */
+async function allowAccessClicked() {
+  if (allowAccessPending) return;
+  allowAccessPending = true;
+  el.connectStart.disabled = true;
+  try {
+    await requestNativeHostPair();
+  } finally {
+    allowAccessPending = false;
+    refreshTargetStatuses();
+  }
+}
+
+if (el.connectStart) el.connectStart.addEventListener("click", rowStartClicked);
+
+if (el.connectRetry) {
+  el.connectRetry.addEventListener("click", () => {
+    if (el.connectRetry.dataset.kind === "openDevServer") {
+      openNextToCurrentTab(el.connectRetry.dataset.url);
+      return;
+    }
+    refreshTargetStatuses();
+  });
+}
+
+if (el.connectCopy) {
+  el.connectCopy.addEventListener("click", async () => {
+    const T = connectTargetApi();
+    try {
+      await navigator.clipboard.writeText(el.connectCommandText.textContent);
+    } catch {
+      return;
+    }
+    el.connectCopy.textContent = T.STRINGS.action.copied;
+    clearTimeout(copyResetTimer);
+    copyResetTimer = setTimeout(() => {
+      copyResetTimer = null;
+      el.connectCopy.textContent = T.STRINGS.action.copy;
+    }, 1500);
+  });
 }
 
 async function setConnectTarget(id) {
@@ -1812,7 +1919,7 @@ async function setConnectTarget(id) {
   const next = T.normalize(id);
   const current = await currentConnectTarget();
   if (next === current.id) {
-    await refreshConnectTargetError();
+    await refreshLibraryRows();
     return;
   }
   await chrome.storage.local.set({ [T.STORAGE_KEY]: next });
@@ -1824,12 +1931,12 @@ async function setConnectTarget(id) {
   if (el.connectTargetApp) el.connectTargetApp.checked = next === T.APP;
   if (el.connectTargetDev) el.connectTargetDev.checked = next === T.DEV;
   await paintTargetStatuses();
-  refreshTargetStatuses();
   if (isSettingsOpen()) {
+    await refreshLibraryRows();
     await detectNativeHost();
-    await refreshConnectTargetError();
     refreshServerSection(currentSettingsMode);
   } else {
+    refreshTargetStatuses();
     init();
   }
 }
@@ -1851,6 +1958,10 @@ function classifyNativeHostError(err) {
 async function requestNativeHostPairOnce() {
   if (nativeHostPairAttempted || (await currentConnectTarget()).id !== "app") return false;
   nativeHostPairAttempted = true;
+  return requestNativeHostPair();
+}
+
+async function requestNativeHostPair() {
   try {
     const T = connectTargetApi();
     const pairUrl = T
@@ -1932,7 +2043,7 @@ async function detectNativeHost() {
 }
 
 function paintSetupCommand() {
-  const cmd = `npm run install-native-host -- --ext-id=${chrome.runtime.id}`;
+  const cmd = connectTargetApi().devSetupCommand(chrome.runtime.id);
   el.setupCommand.textContent = cmd;
   el.setupCommand.dataset.fullCmd = cmd;
 }
@@ -3161,8 +3272,7 @@ async function showSettingsView() {
   el.btnNavLibrary.classList.remove("active");
   paintConnectTargetLabels();
   // Re-probe native host on Settings open so fresh installs are detected
-  await detectNativeHost();
-  await refreshConnectTargetError();
+  await Promise.all([refreshLibraryRows(), detectNativeHost()]);
   loadSettings();
 }
 
@@ -3324,12 +3434,12 @@ function setModeUI(mode) {
 }
 
 async function refreshServerSection(mode) {
-  if (mode !== "local") {
+  // Start and setup live on the selected Settings › Library row. This
+  // section only matters once Stop is enabled.
+  if (mode !== "local" || !connectTargetApi()?.FEATURES.stop) {
     el.serverSection.hidden = true;
     return;
   }
-  
-  // Always show Server section in LOCAL mode
   el.serverSection.hidden = false;
   
   // Need native host to actually start/stop. If we don't know yet, probe.
@@ -3345,8 +3455,7 @@ async function refreshServerSection(mode) {
     el.btnStartServer.hidden = true;
     el.btnStopServer.hidden = true;
     if (target.id === "dev") {
-      el.stopServerHint.textContent =
-        "Run: npm run install-native-host -- --ext-id=" + chrome.runtime.id;
+      el.stopServerHint.textContent = connectTargetApi().devSetupCommand(chrome.runtime.id);
     } else {
       el.stopServerHint.textContent =
         "Transcriber can't talk to this browser yet. In the Transcriber menu, choose Reinstall Browser Connection.";
@@ -3441,12 +3550,6 @@ if (el.connectTargetDev) {
     if (el.connectTargetDev.checked) setConnectTarget("dev");
   });
 }
-if (el.connectRetry) {
-  el.connectRetry.addEventListener("click", () => {
-    refreshConnectTargetError();
-  });
-}
-
 // Friends build: hide the footer GitHub link. Settings is the place
 // for developer-facing links.
 async function applyFooterLink(modeOverride) {

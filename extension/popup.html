@@ -168,27 +168,44 @@
       <div class="section-label">Settings</div>
       <div id="connectTargetSection" class="settings-connect">
         <div class="section-label section-label-subsection" id="connectToLabel"></div>
+        <!-- Stacked radio rows. popup.js moves #connectAction into the
+             selected row; buttons can't live inside the radio's <label>. -->
         <div class="connect-segmented" role="radiogroup" aria-labelledby="connectToLabel">
-          <label class="connect-segment">
-            <input type="radio" name="connectTarget" value="app" id="connectTargetApp" />
-            <span class="connect-segment-row">
-              <span class="target-dot" id="connectTargetAppDot" data-status="unknown"></span>
-              <span class="connect-segment-text" id="connectTargetAppLabel"></span>
-            </span>
-            <span class="connect-segment-status" id="connectTargetAppStatus"></span>
-          </label>
-          <label class="connect-segment">
-            <input type="radio" name="connectTarget" value="dev" id="connectTargetDev" />
-            <span class="connect-segment-row">
-              <span class="target-dot" id="connectTargetDevDot" data-status="unknown"></span>
-              <span class="connect-segment-text" id="connectTargetDevLabel"></span>
-            </span>
-            <span class="connect-segment-status" id="connectTargetDevStatus"></span>
-          </label>
+          <div class="connect-segment" id="connectRowApp">
+            <label class="connect-segment-line">
+              <input type="radio" name="connectTarget" value="app" id="connectTargetApp" />
+              <span class="connect-ring"></span>
+              <span class="connect-segment-row">
+                <span class="target-dot" id="connectTargetAppDot" data-status="unknown"></span>
+                <span class="connect-segment-text" id="connectTargetAppLabel"></span>
+              </span>
+              <span class="connect-segment-status" id="connectTargetAppStatus"></span>
+            </label>
+          </div>
+          <div class="connect-segment" id="connectRowDev">
+            <label class="connect-segment-line">
+              <input type="radio" name="connectTarget" value="dev" id="connectTargetDev" />
+              <span class="connect-ring"></span>
+              <span class="connect-segment-row">
+                <span class="target-dot" id="connectTargetDevDot" data-status="unknown"></span>
+                <span class="connect-segment-text" id="connectTargetDevLabel"></span>
+              </span>
+              <span class="connect-segment-status" id="connectTargetDevStatus"></span>
+            </label>
+          </div>
+        </div>
+        <div class="connect-action" id="connectAction" hidden>
+          <span class="connect-action-heading" id="connectActionHeading" hidden></span>
+          <span class="connect-action-text" id="connectActionText" hidden></span>
+          <button type="button" class="connect-start" id="connectStart" hidden></button>
+          <button type="button" class="connect-retry" id="connectRetry" hidden></button>
+          <span class="connect-command" id="connectCommand" hidden>
+            <code id="connectCommandText"></code>
+            <button type="button" class="connect-copy" id="connectCopy"></button>
+          </span>
         </div>
         <p class="connect-helper" id="connectHelper"></p>
-        <p class="connect-error error-message" id="connectError" hidden></p>
-        <button type="button" class="connect-retry" id="connectRetry" hidden></button>
+        <p class="connect-error" id="connectError" hidden></p>
       </div>
       <div id="serverSection" class="settings-server" hidden>
         <div class="section-label section-label-subsection">Server</div>
