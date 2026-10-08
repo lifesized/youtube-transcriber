@@ -273,6 +273,36 @@ test("afterPack flattens symlinked hashed sqlite dirs then overlays", () => {
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
+test("afterPack copies better-sqlite3 into app.asar.unpacked", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "sqlite-unpacked-"));
+  const cwd = process.cwd();
+  const fakeRoot = path.join(tmp, "workspace");
+  for (const name of ["better-sqlite3", "bindings", "file-uri-to-path"]) {
+    const dir = path.join(fakeRoot, "node_modules", name);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "package.json"), `{"name":"${name}"}`);
+  }
+  const appPath = path.join(tmp, "Transcriber.app");
+  const afterPack = require(path.join(projectRoot, "electron", "after-pack.js"));
+  try {
+    process.chdir(fakeRoot);
+    afterPack.copyMainProcessNativeModules(appPath);
+  } finally {
+    process.chdir(cwd);
+  }
+  const dest = path.join(
+    appPath,
+    "Contents",
+    "Resources",
+    "app.asar.unpacked",
+    "node_modules",
+    "better-sqlite3",
+    "package.json"
+  );
+  assert.ok(fs.existsSync(dest));
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
+
 test("afterPack copies lib/*.js into app.asar.unpacked", () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "lib-unpacked-"));
   const appPath = path.join(tmp, "Transcriber.app");

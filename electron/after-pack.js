@@ -35,6 +35,7 @@ module.exports = async function(context) {
       path.join(appOutDir, "Transcriber.app"),
       path.join(process.cwd(), "electron", "resources", "standalone")
     );
+    copyMainProcessNativeModules(path.join(appOutDir, "Transcriber.app"));
     copyRebuiltSqliteIntoStandalone(context);
     copyLibJsIntoUnpacked(path.join(appOutDir, "Transcriber.app"));
     prunePackagedApp(path.join(appOutDir, "Transcriber.app"));
@@ -57,6 +58,33 @@ function syncStandaloneFromStaging(appPath, stagingPath) {
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   fs.cpSync(stagingPath, dest, { recursive: true, dereference: true, force: true });
   console.log("  copied staging standalone (including node_modules) into extraResources");
+}
+
+const MAIN_PROCESS_NATIVE_MODULES = [
+  "better-sqlite3",
+  "bindings",
+  "file-uri-to-path",
+];
+
+function copyMainProcessNativeModules(appPath) {
+  const destNm = path.join(
+    appPath,
+    "Contents",
+    "Resources",
+    "app.asar.unpacked",
+    "node_modules"
+  );
+  fs.mkdirSync(destNm, { recursive: true });
+  for (const name of MAIN_PROCESS_NATIVE_MODULES) {
+    const src = path.join(process.cwd(), "node_modules", name);
+    if (!fs.existsSync(src)) {
+      throw new Error(`main-process module missing in workspace: ${name}`);
+    }
+    const dest = path.join(destNm, name);
+    fs.rmSync(dest, { recursive: true, force: true });
+    fs.cpSync(src, dest, { recursive: true });
+    console.log(`  copied ${name} into app.asar.unpacked`);
+  }
 }
 
 function copyLibJsIntoUnpacked(appPath) {
@@ -99,8 +127,7 @@ function copyRebuiltSqliteIntoStandalone(context) {
     "better-sqlite3"
   );
   if (!fs.existsSync(rebuilt)) {
-    console.warn("  rebuilt better-sqlite3 not found at", rebuilt);
-    return;
+    throw new Error(`rebuilt better-sqlite3 not found at ${rebuilt}`);
   }
   fs.cpSync(rebuilt, dest, { recursive: true });
   console.log("  copied Electron-ABI better-sqlite3 into standalone");
@@ -333,6 +360,7 @@ module.exports.syncStandaloneFromStaging = syncStandaloneFromStaging;
 module.exports.flattenStandaloneDirSymlinks = flattenStandaloneDirSymlinks;
 module.exports.overlaySqliteNativeAddon = overlaySqliteNativeAddon;
 module.exports.copyLibJsIntoUnpacked = copyLibJsIntoUnpacked;
+module.exports.copyMainProcessNativeModules = copyMainProcessNativeModules;
 module.exports.prunePackagedApp = prunePackagedApp;
 module.exports.assertAsarHasNoServerTree = assertAsarHasNoServerTree;
 module.exports.applyElectronFuses = applyElectronFuses;
