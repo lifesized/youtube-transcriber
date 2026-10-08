@@ -202,18 +202,20 @@ async function transcribeAudio(
 }
 
 export async function getGenericTranscript(
-  url: string
+  url: string,
+  options: { canonicalVideoId?: string; platform?: string } = {}
 ): Promise<VideoTranscriptResult & { source: string; platform: string; videoUrl: string }> {
   transcriptionProgress.emit("progress", {
     stage: "fetching_captions",
     progress: 5,
     statusText: "Looking up video info...",
-    videoId: url,
+    videoId: options.canonicalVideoId ?? url,
   });
 
   const info = await fetchVideoInfo(url);
-  const platform = platformFromInfo(info);
+  const platform = options.platform || platformFromInfo(info);
   const metadata = metadataFromInfo(info, platform);
+  if (options.canonicalVideoId) metadata.videoId = options.canonicalVideoId;
 
   console.log(`[generic] Platform=${platform} id=${info.id} title="${metadata.title}"`);
 

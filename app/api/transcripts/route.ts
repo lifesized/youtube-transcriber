@@ -9,7 +9,13 @@ import {
   NoCaptionsError,
 } from "@/lib/transcript";
 import { isTranscriptionInProgress } from "@/lib/whisper";
-import { getOrCreateTranscript } from "@/lib/transcript-cache";
+import { getOrCreateTranscript, type TranscriptFetcher } from "@/lib/transcript-cache";
+import {
+  cleanLinkedInText,
+  getLinkedInTranscript,
+  isLinkedInMediaUrl,
+  LinkedInMediaError,
+} from "@/lib/linkedin";
 
 type ClientSegment = { start: number; duration?: number; text: string };
 
@@ -30,6 +36,9 @@ export async function POST(request: NextRequest) {
     lang?: string;
     segments?: unknown;
     title?: string;
+    /** LinkedIn only: signed CDN URL the extension read from the user's tab. */
+    mediaUrl?: unknown;
+    author?: unknown;
   };
   try {
     body = await request.json();
@@ -57,6 +66,25 @@ export async function POST(request: NextRequest) {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Invalid URL";
     return NextResponse.json({ error: message }, { status: 400 });
+  }
+
+  let fetcher: TranscriptFetcher | undefined;
+  if (platform === "linkedin") {
+    const mediaUrl = body.mediaUrl;
+    if (mediaUrl !== undefined && !isLinkedInMediaUrl(mediaUrl)) {
+      return NextResponse.json(
+        { error: "mediaUrl must be an https LinkedIn CDN (licdn.com) URL" },
+        { status: 400 }
+      );
+    }
+    const source = {
+      videoId,
+      pageUrl: url,
+      mediaUrl,
+      title: cleanLinkedInText(body.title, 512),
+      author: cleanLinkedInText(body.author, 256),
+    };
+    fetcher = () => getLinkedInTranscript(source);
   }
 
   // Client-supplied segments (extension panel-scrape fast path). Skip
@@ -125,9 +153,13 @@ export async function POST(request: NextRequest) {
 
   try {
     // Use cache-aware transcript lookup/creation
-    const video = await getOrCreateTranscript(videoId, url, lang, platform);
+    const video = await getOrCreateTranscript(videoId, url, lang, platform, { fetcher });
     return NextResponse.json(video, { status: 201 });
   } catch (err: unknown) {
+    if (err instanceof LinkedInMediaError) {
+      return NextResponse.json({ error: err.message }, { status: 422 });
+    }
+
     if (err instanceof RateLimitError) {
       return NextResponse.json(
         {

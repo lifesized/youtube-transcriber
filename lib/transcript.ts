@@ -7,6 +7,7 @@ import { extractVideoId } from "./youtube";
 import { parseContentUrl } from "./url-parser";
 import { getSpotifyTranscript } from "./spotify";
 import { getGenericTranscript } from "./generic-video";
+import { getLinkedInTranscript } from "./linkedin";
 import { transcribeWithWhisper, downloadAudio, type ProgressCallback, getYtdlpPath } from "./whisper";
 import { transcribeWithCloudWhisper, getCloudWhisperConfig } from "./whisper-cloud";
 import { isWhisperEnabled, getWhisperPriority, getEnabledProviders, transcribeWithProvider } from "./providers";
@@ -929,6 +930,10 @@ export async function getVideoTranscript(
 
   if (parsed.platform === "generic") {
     return getGenericTranscript(parsed.originalUrl);
+  }
+
+  if (parsed.platform === "linkedin") {
+    return getLinkedInTranscript({ videoId: parsed.contentId, pageUrl: parsed.originalUrl });
   }
 
   const videoId = parsed.contentId;

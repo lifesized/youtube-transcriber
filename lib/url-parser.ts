@@ -1,6 +1,6 @@
 import { extractVideoId } from "./youtube";
 
-export type Platform = "youtube" | "spotify" | "generic";
+export type Platform = "youtube" | "spotify" | "linkedin" | "generic";
 
 export interface ParsedUrl {
   platform: Platform;
@@ -10,9 +10,50 @@ export interface ParsedUrl {
 
 const SPOTIFY_EPISODE_REGEX = /^[a-zA-Z0-9]{22}$/;
 
+// LinkedIn snowflake IDs are 19 digits. Event slugs end with the ID
+// ("...energyclub7295762520814874625"), so take the trailing 19 digits.
+const LINKEDIN_EVENT_PATH = /^\/events\/[^/]*?(\d{19})(?:\/|$)/;
+const LINKEDIN_ACTIVITY = /(?:activity|ugcPost|share)[-:]([0-9]+)/;
+const LINKEDIN_POST_PATH = /^\/(?:feed\/update|posts)\//;
+
+/**
+ * LinkedIn post or event page → `linkedin:<activityId>` / `linkedin:event-<eventId>`.
+ * Keep in sync with extension/linkedin-url.js.
+ */
+export function extractLinkedInContentId(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsed.hostname.replace(/^www\./, "") !== "linkedin.com") return null;
+
+  let path = parsed.pathname;
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    // keep the raw path
+  }
+
+  const event = path.match(LINKEDIN_EVENT_PATH);
+  if (event) return `linkedin:event-${event[1]}`;
+
+  const highlighted = parsed.searchParams
+    .get("highlightedUpdateUrn")
+    ?.match(LINKEDIN_ACTIVITY);
+  if (highlighted) return `linkedin:${highlighted[1]}`;
+
+  if (LINKEDIN_POST_PATH.test(path)) {
+    const activity = path.match(LINKEDIN_ACTIVITY);
+    if (activity) return `linkedin:${activity[1]}`;
+  }
+  return null;
+}
+
 /**
  * Parse a content URL and detect the platform.
- * Supports YouTube and Spotify episode URLs.
+ * Supports YouTube, Spotify episodes, and LinkedIn posts/events.
  */
 export function parseContentUrl(url: string): ParsedUrl {
   if (!url || typeof url !== "string") {
@@ -47,6 +88,11 @@ export function parseContentUrl(url: string): ParsedUrl {
   ) {
     const videoId = extractVideoId(url);
     return { platform: "youtube", contentId: videoId, originalUrl: url };
+  }
+
+  const linkedInId = extractLinkedInContentId(parsed.href);
+  if (linkedInId) {
+    return { platform: "linkedin", contentId: linkedInId, originalUrl: url };
   }
 
   // Fall back to generic yt-dlp handler (Twitch, Vimeo, TikTok, Twitter/X,
