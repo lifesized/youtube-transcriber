@@ -4,16 +4,20 @@
  * then rewrites native messaging manifests.
  */
 
-const { dialog } = require("electron");
-const { PAIR_TYPE, PAIR_RESULT_TYPE } = require("../lib/native-host-pair.js");
-
-const PAIR_MESSAGE =
-  "Allow the Transcriber browser extension to connect to this app?";
+const {
+  PAIR_TYPE,
+  PAIR_RESULT_TYPE,
+  PAIR_EXPIRED_TYPE,
+  PAIR_MESSAGE,
+  pairingDetailText,
+} = require("../lib/native-host-pair.js");
 
 class PairingBridge {
   constructor(options = {}) {
     this.installer = options.installer;
-    this.dialog = options.dialog || dialog;
+    this.dialog = options.dialog;
+    this.app = options.app;
+    this.expiredIds = new Set();
   }
 
   attach(child) {
@@ -23,17 +27,43 @@ class PairingBridge {
     });
   }
 
+  _electron() {
+    return require("electron");
+  }
+
+  _dialogApi() {
+    return this.dialog || this._electron().dialog;
+  }
+
+  _appApi() {
+    return this.app || this._electron().app;
+  }
+
   async _onMessage(child, msg) {
-    if (!msg || msg.type !== PAIR_TYPE) return;
+    if (!msg) return;
+    if (msg.type === PAIR_EXPIRED_TYPE && msg.requestId) {
+      this.expiredIds.add(msg.requestId);
+      return;
+    }
+    if (msg.type !== PAIR_TYPE) return;
     let allowed = false;
     try {
-      const result = await this.dialog.showMessageBox({
+      const app = this._appApi();
+      if (app && typeof app.focus === "function") {
+        app.focus({ steal: true });
+      }
+      const result = await this._dialogApi().showMessageBox({
         type: "question",
         buttons: ["Allow", "Don't allow"],
         defaultId: 1,
         cancelId: 1,
         message: PAIR_MESSAGE,
+        detail: pairingDetailText(msg.extensionId),
       });
+      if (this.expiredIds.has(msg.requestId)) {
+        // Timed out in the server. A late Allow must not write the ID.
+        return;
+      }
       allowed = result.response === 0;
       if (allowed && this.installer) {
         this.installer.appendExtensionId(msg.extensionId);
@@ -42,6 +72,9 @@ class PairingBridge {
     } catch (error) {
       console.error("Pairing dialog failed:", error);
       allowed = false;
+    }
+    if (this.expiredIds.has(msg.requestId)) {
+      return;
     }
     if (typeof child.send === "function") {
       child.send({
