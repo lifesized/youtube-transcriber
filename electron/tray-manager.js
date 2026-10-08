@@ -83,12 +83,20 @@ class TrayManager {
     this.status = "stopped";
     this.errorMessage = "";
     this.portHolder = null;
+    this.tuskState = "off";
+    this.tuskWorkspace = "";
     this._restarting = false;
     this._healthTimer = null;
 
     this._createTray();
     this._updateMenu();
     this._startHealthWatch();
+  }
+
+  setTuskStatus(next = {}) {
+    this.tuskState = next.state || "off";
+    this.tuskWorkspace = next.workspace || "";
+    this._updateMenu();
   }
 
   showRunning() {
@@ -351,6 +359,8 @@ class TrayManager {
         portHolder: this.portHolder,
         openAtLogin: app.getLoginItemSettings().openAtLogin,
         showImport: this._shouldShowImport(),
+        tuskState: this.tuskState,
+        tuskWorkspace: this.tuskWorkspace,
       },
       {
         tryAgain: () => this._tryAgain(),

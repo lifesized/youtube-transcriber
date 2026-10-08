@@ -285,19 +285,61 @@ export function SettingsPanel() {
   const [notionHasToken, setNotionHasToken] = useState(false);
   const [notionSaving, setNotionSaving] = useState(false);
   const [notionError, setNotionError] = useState("");
+  const [tuskBotToken, setTuskBotToken] = useState("");
+  const [tuskAppToken, setTuskAppToken] = useState("");
+  const [tuskAllowlist, setTuskAllowlist] = useState("");
+  const [tuskEnabled, setTuskEnabled] = useState(false);
+  const [tuskHasBotToken, setTuskHasBotToken] = useState(false);
+  const [tuskHasAppToken, setTuskHasAppToken] = useState(false);
+  const [tuskBotMasked, setTuskBotMasked] = useState("");
+  const [tuskAppMasked, setTuskAppMasked] = useState("");
+  const [tuskTeamName, setTuskTeamName] = useState("");
+  const [tuskBotName, setTuskBotName] = useState("");
+  const [tuskConnection, setTuskConnection] = useState("");
+  const [tuskSaving, setTuskSaving] = useState(false);
+  const [tuskError, setTuskError] = useState("");
 
   // Drag state
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
 
+  function applyTuskPublic(data: {
+    hasBotToken?: boolean;
+    hasAppToken?: boolean;
+    botTokenMasked?: string;
+    appTokenMasked?: string;
+    enabled?: boolean;
+    teamName?: string;
+    botName?: string;
+    channelAllowlist?: string[];
+    connection?: { state?: string; workspace?: string };
+  }) {
+    setTuskHasBotToken(!!data.hasBotToken);
+    setTuskHasAppToken(!!data.hasAppToken);
+    setTuskBotMasked(data.botTokenMasked || "");
+    setTuskAppMasked(data.appTokenMasked || "");
+    setTuskEnabled(!!data.enabled);
+    setTuskTeamName(data.teamName || "");
+    setTuskBotName(data.botName || "");
+    setTuskAllowlist((data.channelAllowlist || []).join(", "));
+    setTuskBotToken("");
+    setTuskAppToken("");
+    const conn = data.connection?.state || "";
+    const workspace = data.connection?.workspace || data.teamName || "";
+    if (conn === "connected" && workspace) setTuskConnection(`connected to ${workspace}`);
+    else if (conn === "error") setTuskConnection("error");
+    else setTuskConnection(conn || (data.enabled ? "off" : "off"));
+  }
+
   const loadSettings = useCallback(async () => {
     try {
-      const [settingsRes, providersRes, usageRes, llmRes, notionRes] = await Promise.all([
+      const [settingsRes, providersRes, usageRes, llmRes, notionRes, tuskRes] = await Promise.all([
         fetch("/api/settings"),
         fetch("/api/settings/providers"),
         fetch("/api/usage"),
         fetch("/api/settings/llm"),
         fetch("/api/settings/notion"),
+        fetch("/api/settings/tusk"),
       ]);
 
       if (settingsRes.ok) {
@@ -359,6 +401,11 @@ export function SettingsPanel() {
         setNotionHasToken(!!data.hasToken);
         setNotionToken(data.tokenMasked || "");
         setNotionDatabaseId(data.databaseId || "");
+      }
+
+      if (tuskRes.ok) {
+        const data = await tuskRes.json();
+        applyTuskPublic(data);
       }
     } catch {
       // Settings may not exist yet
@@ -656,6 +703,115 @@ export function SettingsPanel() {
         ) : notionHasToken ? (
           <p className="text-sm text-white/30">Token is stored in the app Keychain.</p>
         ) : null}
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-white/80">Slack (Tusk)</h2>
+          <Toggle
+            checked={tuskEnabled}
+            disabled={!tuskHasBotToken || !tuskHasAppToken || tuskSaving}
+            onChange={(val) => {
+              void (async () => {
+                setTuskSaving(true);
+                setTuskError("");
+                try {
+                  const res = await fetch("/api/settings/tusk", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ enabled: val }),
+                  });
+                  const data = await res.json().catch(() => ({}));
+                  if (!res.ok) {
+                    setTuskError(data.error || "Could not update Tusk");
+                    return;
+                  }
+                  applyTuskPublic(data);
+                } catch {
+                  setTuskError("Could not update Tusk");
+                } finally {
+                  setTuskSaving(false);
+                }
+              })();
+            }}
+          />
+        </div>
+        <p className="text-sm text-white/40">
+          Socket Mode bot for #youtube-notes. Paste the bot token (xoxb) and app-level token (xapp). After save the page only shows saved ••••last4 — never the token again.
+        </p>
+        <input
+          type="password"
+          value={tuskBotToken}
+          onChange={(e) => setTuskBotToken(e.target.value)}
+          placeholder={tuskHasBotToken ? "Bot token saved" : "Bot token (xoxb-…)"}
+          autoComplete="off"
+          className="h-11 w-full rounded-md bg-[hsl(var(--panel-2))] px-3 py-3 text-sm text-white/90 placeholder:text-[hsl(var(--muted-2))] shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)]"
+        />
+        <input
+          type="password"
+          value={tuskAppToken}
+          onChange={(e) => setTuskAppToken(e.target.value)}
+          placeholder={tuskHasAppToken ? "App-level token saved" : "App-level token (xapp-…)"}
+          autoComplete="off"
+          className="h-11 w-full rounded-md bg-[hsl(var(--panel-2))] px-3 py-3 text-sm text-white/90 placeholder:text-[hsl(var(--muted-2))] shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)]"
+        />
+        <input
+          type="text"
+          value={tuskAllowlist}
+          onChange={(e) => setTuskAllowlist(e.target.value)}
+          placeholder="Channel IDs (C…), empty = every channel Tusk is invited to"
+          autoComplete="off"
+          className="h-11 w-full rounded-md bg-[hsl(var(--panel-2))] px-3 py-3 text-sm text-white/90 placeholder:text-[hsl(var(--muted-2))] shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)]"
+        />
+        <button
+          type="button"
+          onClick={async () => {
+            setTuskSaving(true);
+            setTuskError("");
+            try {
+              const res = await fetch("/api/settings/tusk", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  botToken: tuskBotToken,
+                  appToken: tuskAppToken,
+                  enabled: tuskEnabled || Boolean(tuskBotToken && tuskAppToken),
+                  channelAllowlist: tuskAllowlist,
+                }),
+              });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok) {
+                setTuskError(data.error || "Could not save");
+                return;
+              }
+              applyTuskPublic(data);
+            } catch {
+              setTuskError("Could not save");
+            } finally {
+              setTuskSaving(false);
+            }
+          }}
+          disabled={tuskSaving}
+          aria-busy={tuskSaving}
+          className="h-11 rounded-md bg-[hsl(var(--accent))] px-4 py-3 text-sm font-semibold text-black shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] disabled:cursor-not-allowed disabled:text-[hsl(var(--muted-2))] disabled:hover:bg-[hsl(var(--accent))]"
+        >
+          {tuskSaving ? "Saving…" : "Save Tusk"}
+        </button>
+        {tuskError ? (
+          <p className="text-sm text-red-400">{tuskError}</p>
+        ) : (
+          <div className="space-y-1 text-sm text-white/30">
+            {tuskHasBotToken ? <p>Bot token {tuskBotMasked || "saved ••••"}</p> : null}
+            {tuskHasAppToken ? <p>App-level token {tuskAppMasked || "saved ••••"}</p> : null}
+            {tuskTeamName || tuskBotName ? (
+              <p>
+                {tuskBotName ? `@${tuskBotName.replace(/^@/, "")}` : "Bot"}
+                {tuskTeamName ? ` in ${tuskTeamName}` : ""}
+              </p>
+            ) : null}
+            <p>Status: {tuskConnection || "off"}</p>
+          </div>
+        )}
       </div>
 
       {/* Fallback order summary */}

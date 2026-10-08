@@ -53,7 +53,13 @@ function buildTrayMenuTemplate(state, actions) {
   const wrongLocation = state.status === "wrong-location";
   const status = statusItem(state);
 
-  const template = [{ label: status.label, sublabel: status.sublabel, enabled: false }];
+  const template = [
+    { label: status.label, sublabel: status.sublabel, enabled: false },
+    {
+      label: trayCopy.tuskStatusLine(state.tuskState, state.tuskWorkspace),
+      enabled: false,
+    },
+  ];
   const recovery = recoveryItem(state.status, actions);
   if (recovery) template.push(recovery);
 

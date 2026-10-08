@@ -64,6 +64,14 @@ function trayImageName(state) {
   }
 }
 
+function tuskStatusLine(state, workspace) {
+  if (state === "connected") {
+    return workspace ? `Tusk: connected to ${workspace}` : "Tusk: connected";
+  }
+  if (state === "error") return "Tusk: error";
+  return "Tusk: off";
+}
+
 const TRY_AGAIN = "Try Again";
 const RESTART = "Start Transcriber";
 const MOVE_TO_APPLICATIONS = "Move to Applications and Reopen";
@@ -90,4 +98,5 @@ module.exports = {
   OPEN_LIBRARY,
   ADVANCED,
   SHOW_DATA_IN_FINDER,
+  tuskStatusLine,
 };

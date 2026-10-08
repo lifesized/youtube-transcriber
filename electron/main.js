@@ -19,6 +19,7 @@ const TrayManager = require("./tray-manager.js");
 const PairingBridge = require("./pairing-bridge.js");
 const NativeHostInstaller = require("./native-host-installer.js");
 const { SecretsStore, attachSecretsIpc } = require("./secrets-store.js");
+const { createTuskManager } = require("./tusk/manager.js");
 const { checkIfTranslocated } = require("./utils.js");
 const { launchedByNativeHost, shouldRevealOnLaunch } = require("../lib/launch-source.js");
 
@@ -43,6 +44,7 @@ let serverManager = null;
 let trayManager = null;
 let pairingBridge = null;
 let secretsStore = null;
+let tuskManager = null;
 let powerSaveId = null;
 let pendingReveal = false;
 
@@ -91,9 +93,10 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", async (event) => {
-  if (serverManager && serverManager.isRunning()) {
+  if ((tuskManager && tuskManager.getStatus().state !== "off") || (serverManager && serverManager.isRunning())) {
     event.preventDefault();
-    await serverManager.stop();
+    if (tuskManager) await tuskManager.stop();
+    if (serverManager && serverManager.isRunning()) await serverManager.stop();
     app.exit(0);
   }
 });
@@ -147,6 +150,12 @@ app.whenReady().then(async () => {
     pairingBridge,
   });
 
+  tuskManager = createTuskManager({
+    store: secretsStore,
+    onStatus: (next) => trayManager.setTuskStatus(next),
+  });
+  trayManager.setTuskStatus(tuskManager.getStatus());
+
   if (process.platform === "darwin") {
     const translocated = checkIfTranslocated(app.getAppPath());
     if (translocated) {
@@ -159,6 +168,7 @@ app.whenReady().then(async () => {
   serverManager.on("spawned", (child) => {
     pairingBridge.attach(child);
     attachSecretsIpc(child, secretsStore);
+    tuskManager.attachIpc(child);
   });
   
   // Start power save blocker. isStarted() rejects null; id is null until first start.
@@ -181,6 +191,12 @@ app.whenReady().then(async () => {
     } else {
       trayManager.showError(error && error.message);
     }
+  }
+
+  try {
+    await tuskManager.sync();
+  } catch (error) {
+    console.error("Failed to start Tusk:", error && error.message);
   }
 
   // Monitor server health
