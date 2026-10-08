@@ -43,7 +43,7 @@ setup() {
 
   security import "$CERT_PATH" \
     -P "$MACOS_CERT_PASSWORD" \
-    -A -t cert -f pkcs12 \
+    -t cert -f pkcs12 \
     -k "$KEYCHAIN_PATH" \
     -T /usr/bin/codesign
 

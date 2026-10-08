@@ -134,6 +134,7 @@ test("signing scripts never echo secrets and write decoded files under RUNNER_TE
   assert.match(keychain, /chmod 600/);
   assert.match(keychain, /-T \/usr\/bin\/codesign/);
   assert.match(keychain, /set-key-partition-list/);
+  assert.doesNotMatch(keychain, /security import[\s\S]*\s-A\s/);
   assert.match(keychain, /openssl rand/);
   assert.match(keychain, /Developer ID Application/);
   const sign = files[1];
