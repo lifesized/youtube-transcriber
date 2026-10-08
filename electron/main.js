@@ -10,7 +10,7 @@
  * - Native messaging host installation
  */
 
-const { app, powerSaveBlocker, safeStorage } = require("electron");
+const { app, dialog, powerSaveBlocker, safeStorage } = require("electron");
 const path = require("path");
 const config = require("./config.js");
 const appLog = require("./app-log.js");
@@ -20,6 +20,7 @@ const PairingBridge = require("./pairing-bridge.js");
 const NativeHostInstaller = require("./native-host-installer.js");
 const { SecretsStore, attachSecretsIpc } = require("./secrets-store.js");
 const { createTuskManager } = require("./tusk/manager.js");
+const { confirmTuskSensitiveChange } = require("./tusk/confirm.js");
 const { checkIfTranslocated } = require("./utils.js");
 const { launchedByNativeHost, shouldRevealOnLaunch } = require("../lib/launch-source.js");
 
@@ -153,6 +154,7 @@ app.whenReady().then(async () => {
   tuskManager = createTuskManager({
     store: secretsStore,
     onStatus: (next) => trayManager.setTuskStatus(next),
+    confirmSensitiveChange: (info) => confirmTuskSensitiveChange(dialog, info),
   });
   trayManager.setTuskStatus(tuskManager.getStatus());
 

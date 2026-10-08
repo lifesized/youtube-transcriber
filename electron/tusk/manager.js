@@ -6,6 +6,7 @@ const { createTuskRuntime } = require("./runtime.js");
 const { createPipeline } = require("./pipeline.js");
 const { createJobGate } = require("./jobs.js");
 const { createLocalClient } = require("./local-client.js");
+const { cancelledError } = require("./confirm.js");
 const slackApi = require("./slack-api.js");
 
 function createTuskManager(options = {}) {
@@ -138,8 +139,10 @@ function createTuskManager(options = {}) {
 
     const tokensChanged =
       next.botToken !== current.botToken || next.appToken !== current.appToken;
+    const resetWorkspace = Boolean(patch.resetWorkspace);
+    let auth = null;
     if (tokensChanged && next.botToken) {
-      const auth = await api.authTest(next.botToken);
+      auth = await api.authTest(next.botToken);
       if (!auth || !auth.ok) {
         throw new Error((auth && auth.error) || "Slack auth.test failed");
       }
@@ -147,17 +150,30 @@ function createTuskManager(options = {}) {
       if (!newTeam) {
         throw new Error("auth.test did not return a team_id");
       }
-      if (current.teamId && newTeam !== current.teamId && !patch.resetWorkspace) {
+      if (current.teamId && newTeam !== current.teamId && !resetWorkspace) {
         throw new Error(
           "This token belongs to a different Slack workspace. Click Reset workspace in Settings to pin the new team."
         );
       }
+    }
+
+    if (tokensChanged || resetWorkspace) {
+      const confirm = options.confirmSensitiveChange;
+      if (typeof confirm !== "function") {
+        throw cancelledError("Tusk token changes need confirmation in the menu-bar app.");
+      }
+      const workspace = (auth && auth.team) || current.teamName || "";
+      const ok = await confirm({ workspace, resetWorkspace, tokensChanged });
+      if (!ok) throw cancelledError();
+    }
+
+    if (tokensChanged && next.botToken) {
       store.setSlack({
         botToken: next.botToken,
         appToken: next.appToken,
         enabled: next.enabled,
         channelAllowlist: next.channelAllowlist,
-        teamId: newTeam,
+        teamId: auth.team_id || "",
         teamName: auth.team || "",
         botUserId: auth.user_id || "",
         botName: auth.user || "",
@@ -210,6 +226,7 @@ function createTuskManager(options = {}) {
               type: "tusk-set-result",
               requestId: msg.requestId,
               error: error.message,
+              status: error.status,
             });
           });
       }

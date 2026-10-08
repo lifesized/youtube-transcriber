@@ -282,6 +282,7 @@ test("manager saves public view only and starts when enabled", async () => {
       slackApi: mockApi(),
       WebSocket: FakeSocket,
       onStatus: (s) => statuses.push(s.state),
+      confirmSensitiveChange: async () => true,
     });
     const publicView = await manager.applyPatch({
       botToken: BOT,
@@ -321,6 +322,7 @@ test("token change to another workspace is refused until Reset workspace", async
         authTest: async () => ({ ok: true, user: "tusk", user_id: "Ubot", ...team }),
       }),
       WebSocket: FakeSocket,
+      confirmSensitiveChange: async () => true,
     });
     await manager.applyPatch({ botToken: BOT, appToken: APP, enabled: true });
     assert.equal(store.getSlackPublic().teamId, "THOME");

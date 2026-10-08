@@ -41,6 +41,18 @@ test("PUT /api/settings/tusk rejects bearer-only and accepts Settings same-origi
     const cookieNone = await PUT(fakeRequest({ cookie: COOKIE, secFetchSite: "none" }));
     assert.equal(cookieNone.status, 401);
 
+    const cookiePlusAuth = await PUT(
+      fakeRequest(
+        {
+          authorization: `Bearer ${TOKEN}`,
+          cookie: COOKIE,
+          secFetchSite: "same-origin",
+        },
+        { enabled: false }
+      )
+    );
+    assert.equal(cookiePlusAuth.status, 401);
+
     const settings = await PUT(
       fakeRequest({ cookie: COOKIE, secFetchSite: "same-origin" }, { enabled: false })
     );

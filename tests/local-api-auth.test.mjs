@@ -257,8 +257,16 @@ test("Tusk settings writes need the port cookie and same-origin, not Bearer", ()
         secFetchSite: "same-origin",
       }
     ),
-    true,
-    "Settings may also send Bearer; cookie + same-origin is what counts"
+    false,
+    "any Authorization header is rejected, even with a Settings cookie"
+  );
+  assert.equal(
+    call({
+      authorization: "Basic not-even-bearer",
+      cookie,
+      secFetchSite: "same-origin",
+    }),
+    false
   );
   assert.equal(call({ cookie, secFetchSite: "same-origin" }, 19720), false);
 });
