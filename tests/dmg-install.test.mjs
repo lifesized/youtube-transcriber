@@ -169,6 +169,11 @@ test("CI mounts the DMG and checks for the helper", () => {
   assert.match(shot, /screencapture/);
   assert.match(shot, /660/);
   assert.match(shot, /420/);
+  const assertPy = fs.readFileSync(
+    path.join(projectRoot, "electron", "dmg", "assert-helper-icon.py"),
+    "utf8"
+  );
+  assert.match(assertPy, /\.\.namedfork\/rsrc/);
 });
 
 test("helper copies the app, clears quarantine, and does not sudo on success", () => {

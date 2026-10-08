@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Assert Finder custom-icon metadata on Install Transcriber.command.
 
-macOS only. Uses GetFileInfo / xattr / namedfork — never os.getxattr
-(Linux-only; CPython on macos-14 does not have it).
+macOS only. Uses GetFileInfo, xattr, and the Apple named-fork path.
 """
 
 import subprocess
@@ -24,7 +23,8 @@ def main() -> int:
         print("ERROR: helper missing:", path)
         return 1
 
-    rsrc = helper / ".." / "namedfork" / "rsrc"
+    # Apple's named-fork path is "<file>/..namedfork/rsrc", not parent/namedfork.
+    rsrc = Path(f"{path}/..namedfork/rsrc")
     try:
         rf_size = rsrc.stat().st_size
     except OSError as e:
