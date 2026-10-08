@@ -164,6 +164,13 @@ test("afterPack flips fuses and keeps RunAsNode", () => {
   assert.ok(src.includes("[FuseV1Options.RunAsNode]: true"));
 });
 
+test("afterSign ad-hoc re-signs the app after fuses and sqlite copies", () => {
+  const sign = readFileSync(path.join(repoRoot, "electron/after-sign.js"), "utf8");
+  assert.match(sign, /codesign --force --deep --sign -/);
+  assert.match(sign, /codesign --verify --deep --strict/);
+  assert.ok(sign.includes("adHocResignApp"));
+});
+
 test("workflow has least-privilege permissions and prints the DMG sha256", () => {
   const src = readFileSync(
     path.join(repoRoot, ".github/workflows/electron-build-macos.yml"),

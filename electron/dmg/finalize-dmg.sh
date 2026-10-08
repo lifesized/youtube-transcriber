@@ -3,6 +3,8 @@
 #   1. give "Install Transcriber.command" its custom Finder icon and hide its extension
 #   2. hide Transcriber.app (the helper still finds it by path)
 #   3. drop the /Applications link if one is present
+# Must not modify Transcriber.app contents (no codesign, no copies into Contents/).
+# chflags hidden is a volume flag, not a sealed-resource change.
 # A custom file icon lives in the resource fork plus the FinderInfo kHasCustomIcon flag. Git doesn't keep
 # it, and electron-builder (dmgbuild) doesn't copy it into the image, so it has to be set on the built DMG.
 #

@@ -190,6 +190,10 @@ jobs:
           test ! -e "$MOUNT/Applications"
           echo "✓ no Applications symlink"
 
+          echo "----- codesign --verify --deep --strict on mounted .app -----"
+          codesign --verify --deep --strict "$MOUNT/Transcriber.app"
+          echo "✓ mounted Transcriber.app codesign --verify --deep --strict"
+
           # Best-effort screenshot of the mounted DMG window. Do not fail the job.
           python3 electron/dmg/screenshot-dmg-window.py "$MOUNT" dist-electron/dmg-window.png || true
 
@@ -304,6 +308,7 @@ jobs:
           APP_PATH="$ROOT/dist-electron/mac-arm64/Transcriber.app/Contents/MacOS/Transcriber"
           DATA_DIR="$(mktemp -d /tmp/transcriber-launch-XXXXXX)"
           APP_STATE=$(HOME="$DATA_DIR" node -p "require('./electron/config.js').resolveAppStateDir()")
+          APP_LOG=$(HOME="$DATA_DIR" node -p "require('./electron/config.js').resolveAppLogDir()")
           CHECKOUT_STATE=$(HOME="$DATA_DIR" node -p "require('./electron/config.js').resolveCheckoutStateDir()")
           mkdir -p "$APP_STATE" "$CHECKOUT_STATE"
           printf 'checkout-sentinel\n' > "$CHECKOUT_STATE/.keep"
@@ -350,6 +355,26 @@ jobs:
               cat /tmp/packaged-health.json
               echo ""
               echo "✓ packaged Transcriber.app /api/health 200"
+              echo "----- unauthenticated /api/health must stay 401 -----"
+              set +e
+              NOAUTH=$(curl -sS -o /tmp/packaged-health-noauth.txt -w "%{http_code}" \
+                "http://127.0.0.1:${PORT}/api/health")
+              set -e
+              if [ "$NOAUTH" != "401" ]; then
+                echo "ERROR: unauthenticated /api/health expected 401, got ${NOAUTH:-curl-fail}"
+                cat /tmp/packaged-health-noauth.txt || true
+                exit 1
+              fi
+              echo "✓ unauthenticated /api/health returns 401"
+              echo "----- packaged main file log -----"
+              MAIN_LOG="$APP_LOG/main.log"
+              if [ ! -s "$MAIN_LOG" ]; then
+                echo "ERROR: packaged app did not write $MAIN_LOG"
+                ls -la "$APP_LOG" || true
+                find "$DATA_DIR/Library/Logs" -type f || true
+                exit 1
+              fi
+              echo "✓ packaged main log $MAIN_LOG"
               echo "----- Host pin 421 -----"
               set +e
               FAKE_HOST=$(curl -sS -o /tmp/packaged-host-pin.txt -w "%{http_code}" \
@@ -406,6 +431,27 @@ jobs:
                 exit 1
               fi
               echo "✓ packaged app state stayed out of checkout Transcriber/"
+              echo "----- second-instance handoff -----"
+              set +e
+              HOME="$DATA_DIR" \
+              TRANSCRIBER_LOCAL_TOKEN="$TOKEN" \
+              "$APP_PATH" > "$DATA_DIR/second-instance.log" 2>&1
+              SECOND_STATUS=$?
+              set -e
+              if ! kill -0 "$APP_PID" 2>/dev/null; then
+                echo "ERROR: primary died after second launch (exit $SECOND_STATUS)"
+                cat "$DATA_DIR/second-instance.log" || true
+                cat "$LOG" || true
+                exit 1
+              fi
+              echo "✓ primary still running after second launch (exit $SECOND_STATUS)"
+              if ! grep -q "second-instance" "$MAIN_LOG"; then
+                echo "ERROR: main.log missing second-instance event"
+                cat "$MAIN_LOG" || true
+                cat "$DATA_DIR/second-instance.log" || true
+                exit 1
+              fi
+              echo "✓ file log recorded second-instance"
               break
             fi
             echo "  launch wait $i/60 (http=${HEALTH:-curl-fail})"

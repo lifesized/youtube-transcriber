@@ -13,6 +13,7 @@
 const { app, powerSaveBlocker, safeStorage } = require("electron");
 const path = require("path");
 const config = require("./config.js");
+const appLog = require("./app-log.js");
 const ServerManager = require("./server-manager.js");
 const TrayManager = require("./tray-manager.js");
 const PairingBridge = require("./pairing-bridge.js");
@@ -35,25 +36,39 @@ function pinAppPaths() {
 }
 
 pinAppPaths();
+appLog.install();
 
 let serverManager = null;
 let trayManager = null;
 let pairingBridge = null;
 let secretsStore = null;
 let powerSaveId = null;
+let pendingReveal = false;
 
-// Single-instance lock
+function revealRunningApp(reason) {
+  console.log(`${reason}: revealing tray`);
+  if (trayManager) {
+    trayManager.revealInMenuBar(reason);
+    return;
+  }
+  pendingReveal = true;
+}
+
+// Single-instance lock. The handoff to the primary happens inside
+// requestSingleInstanceLock() before it returns false.
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
-  console.log("Another instance is already running. Exiting.");
+  console.log("Another instance is already running. Exiting after handoff.");
   app.quit();
   process.exit(0);
 }
 
 app.on("second-instance", () => {
-  if (trayManager) {
-    trayManager.showRunning();
-  }
+  revealRunningApp("second-instance");
+});
+
+app.on("activate", () => {
+  revealRunningApp("activate");
 });
 
 // Set app name for menu bar. Re-pin paths so setName does not
@@ -125,6 +140,10 @@ app.whenReady().then(async () => {
     nativeHostInstaller,
     pairingBridge,
   });
+  if (pendingReveal) {
+    pendingReveal = false;
+    trayManager.revealInMenuBar("second-instance-queued");
+  }
 
   if (process.platform === "darwin") {
     const translocated = checkIfTranslocated(app.getAppPath());

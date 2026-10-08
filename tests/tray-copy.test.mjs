@@ -52,4 +52,5 @@ test("tooltips and template image names follow spec §4.3", () => {
   assert.equal(copy.trayImageName("stopped"), "trayAlertTemplate.png");
   assert.equal(copy.TRY_AGAIN, "Try Again");
   assert.equal(copy.RESTART, "Restart Transcriber");
+  assert.equal(copy.RUNNING_IN_MENU_BAR, "Transcriber is running in the menu bar");
 });

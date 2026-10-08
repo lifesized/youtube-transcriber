@@ -446,6 +446,36 @@ test("tray manager uses template images and human status copy, not setTitle T", 
   assert.ok(main.includes("app.dock.hide()"));
   assert.ok(main.includes("showWrongLocation"));
   assert.match(main, /process\.platform === ["']darwin["']/);
+  assert.ok(main.includes("app.on(\"second-instance\""));
+  assert.ok(main.includes("app.on(\"activate\""));
+  assert.ok(main.includes("revealInMenuBar"));
+  assert.ok(main.includes("app-log.js"));
+  assert.ok(main.includes("appLog.install()"));
+  assert.ok(main.includes("Exiting after handoff"));
+  assert.ok(content.includes("popUpContextMenu"));
+  assert.ok(content.includes("ensureTray"));
+  assert.ok(content.includes("isTrayHealthy"));
+  assert.ok(content.includes("getBounds"));
+  assert.ok(content.includes("tray recreate:"));
+  assert.ok(content.includes("display-added"));
+  assert.ok(content.includes("powerMonitor"));
+  assert.ok(content.includes("RUNNING_IN_MENU_BAR"));
+});
+
+test("afterSign is the last codesign of the .app; afterPack does not reseal it", () => {
+  const afterPack = fs.readFileSync(
+    path.join(projectRoot, "electron", "after-pack.js"),
+    "utf8"
+  );
+  const afterSign = fs.readFileSync(
+    path.join(projectRoot, "electron", "after-sign.js"),
+    "utf8"
+  );
+  assert.ok(afterSign.includes("codesign --force --deep --sign -"));
+  assert.ok(afterSign.includes("codesign --verify --deep --strict"));
+  assert.doesNotMatch(afterPack, /codesign --sign - --force --deep/);
+  assert.ok(afterPack.includes("adHocCodesignNestedBinaries"));
+  assert.ok(afterPack.includes("app seal is afterSign"));
 });
 
 test("installer validates extension IDs when loading extension-ids.json", () => {
@@ -525,6 +555,10 @@ test("CI launches the packaged Transcriber.app and checks asar requires", () => 
   assert.ok(content.includes("trayAlertTemplate.png"));
   assert.ok(content.includes("Print :LSUIElement"));
   assert.ok(content.includes("Print :CFBundleIconFile"));
+  assert.ok(content.includes("unauthenticated /api/health must stay 401"));
+  assert.ok(content.includes("packaged main file log"));
+  assert.ok(content.includes("second-instance handoff"));
+  assert.ok(content.includes("codesign --verify --deep --strict"));
 });
 
 test("CI fails outbound app symlinks and non-Electron sqlite addons", () => {

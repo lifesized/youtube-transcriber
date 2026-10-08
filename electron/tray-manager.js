@@ -12,7 +12,7 @@
  * - Quit
  */
 
-const { app, Tray, Menu, shell, nativeImage, Notification, dialog } = require("electron");
+const { app, Tray, Menu, shell, nativeImage, Notification, dialog, screen, powerMonitor } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const NativeHostInstaller = require("./native-host-installer.js");
@@ -77,9 +77,11 @@ class TrayManager {
     this.errorMessage = "";
     this.portHolder = null;
     this._restarting = false;
+    this._healthTimer = null;
 
     this._createTray();
     this._updateMenu();
+    this._startHealthWatch();
   }
 
   showRunning() {
@@ -148,6 +150,74 @@ class TrayManager {
       this.tray.setImage(icon);
     }
     this.tray.setToolTip(trayCopy.tooltipFor(this.status, this.port));
+  }
+
+  isTrayHealthy() {
+    if (!this.tray) return false;
+    try {
+      if (typeof this.tray.isDestroyed === "function" && this.tray.isDestroyed()) {
+        return false;
+      }
+      const bounds = this.tray.getBounds();
+      if (!bounds || !bounds.width || !bounds.height) return false;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  ensureTray(reason = "health-check") {
+    if (this.isTrayHealthy()) return this.tray;
+    console.log(`tray recreate: ${reason}`);
+    try {
+      if (this.tray && typeof this.tray.isDestroyed === "function" && !this.tray.isDestroyed()) {
+        this.tray.destroy();
+      }
+    } catch {
+      // Native item may already be gone (FBScene disconnect).
+    }
+    this.tray = null;
+    this._createTray();
+    this._updateMenu();
+    return this.tray;
+  }
+
+  revealInMenuBar(reason = "second-instance") {
+    this.ensureTray(reason);
+    try {
+      if (this.tray && typeof this.tray.popUpContextMenu === "function") {
+        this.tray.popUpContextMenu();
+      }
+    } catch (error) {
+      console.warn("popUpContextMenu failed:", error && error.message);
+    }
+    this._notify("Transcriber", trayCopy.RUNNING_IN_MENU_BAR);
+  }
+
+  _startHealthWatch() {
+    const tick = (reason) => {
+      try {
+        this.ensureTray(reason);
+      } catch (error) {
+        console.warn("tray health check failed:", error && error.message);
+      }
+    };
+    if (this._healthTimer) clearInterval(this._healthTimer);
+    this._healthTimer = setInterval(() => tick("interval"), 15000);
+    if (this._healthTimer.unref) this._healthTimer.unref();
+    try {
+      if (screen && typeof screen.on === "function") {
+        screen.on("display-added", () => tick("display-added"));
+        screen.on("display-removed", () => tick("display-removed"));
+        screen.on("display-metrics-changed", () => tick("display-metrics"));
+      }
+      if (powerMonitor && typeof powerMonitor.on === "function") {
+        powerMonitor.on("resume", () => tick("resume"));
+        powerMonitor.on("unlock-screen", () => tick("unlock-screen"));
+      }
+    } catch (error) {
+      console.warn("tray health watch attach failed:", error && error.message);
+    }
   }
 
   _createTray() {

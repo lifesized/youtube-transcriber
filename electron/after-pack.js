@@ -42,7 +42,10 @@ module.exports = async function(context) {
     assertStandalonePayload(context);
     assertAsarHasNoServerTree(path.join(appOutDir, "Transcriber.app"));
     await applyElectronFuses(context);
-    await adHocCodesign(context);
+    // Sign nested binaries only. The app seal is applied last in afterSign
+    // (`codesign --force --deep --sign -`). Signing the .app here, then
+    // touching ffmpeg/yt-dlp, is what made `codesign --verify --strict` fail.
+    adHocCodesignNestedBinaries(context);
   }
 };
 
@@ -317,42 +320,22 @@ async function applyElectronFuses(context) {
   console.log("  fuses: RunAsNode ON, NODE_OPTIONS OFF, inspect args OFF");
 }
 
-async function adHocCodesign(context) {
+function adHocCodesignNestedBinaries(context) {
   const { appOutDir } = context;
-  
-  console.log("Ad-hoc codesigning bundled binaries...");
-  
-  try {
-    const appName = "Transcriber.app";
-    const appPath = path.join(appOutDir, appName);
-    const resourcesPath = path.join(appPath, "Contents", "Resources");
-    const binPath = path.join(resourcesPath, "bin");
-    
-    // Ad-hoc codesign the entire app with entitlements
-    const entitlementsPath = path.join(process.cwd(), "electron", "entitlements.mac.plist");
-    
-    console.log(`  Codesigning app: ${appPath}`);
-    execSync(
-      `codesign --sign - --force --deep --entitlements "${entitlementsPath}" "${appPath}"`,
-      { stdio: "inherit" }
-    );
-    
-    // Codesign bundled binaries if they exist
-    if (fs.existsSync(binPath)) {
-      const binaries = ["ffmpeg", "yt-dlp"];
-      for (const binary of binaries) {
-        const binaryPath = path.join(binPath, binary);
-        if (fs.existsSync(binaryPath)) {
-          console.log(`  Codesigning binary: ${binary}`);
-          execSync(`codesign --sign - --force "${binaryPath}"`, { stdio: "inherit" });
-        }
-      }
-    }
-    
-    console.log("Ad-hoc codesigning completed");
-  } catch (error) {
-    console.error("Failed to ad-hoc codesign:", error);
-    // Don't throw - this is a best-effort operation
+  const binPath = path.join(
+    appOutDir,
+    "Transcriber.app",
+    "Contents",
+    "Resources",
+    "bin"
+  );
+  if (!fs.existsSync(binPath)) return;
+  console.log("Ad-hoc codesigning nested binaries (app seal is afterSign)...");
+  for (const binary of ["ffmpeg", "yt-dlp"]) {
+    const binaryPath = path.join(binPath, binary);
+    if (!fs.existsSync(binaryPath)) continue;
+    console.log(`  Codesigning binary: ${binary}`);
+    execSync(`codesign --sign - --force "${binaryPath}"`, { stdio: "inherit" });
   }
 }
 
@@ -364,3 +347,4 @@ module.exports.copyMainProcessNativeModules = copyMainProcessNativeModules;
 module.exports.prunePackagedApp = prunePackagedApp;
 module.exports.assertAsarHasNoServerTree = assertAsarHasNoServerTree;
 module.exports.applyElectronFuses = applyElectronFuses;
+module.exports.adHocCodesignNestedBinaries = adHocCodesignNestedBinaries;

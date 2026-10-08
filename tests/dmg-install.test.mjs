@@ -87,6 +87,9 @@ test("finalize-dmg.sh sets the helper icon and hides the app", () => {
   assert.ok(text.includes('chflags hidden "$MNT/$APP"'));
   assert.ok(text.includes("-format UDZO"));
   assert.doesNotMatch(text, /os\.getxattr/);
+  assert.doesNotMatch(text, /^\s*codesign\b/m);
+  assert.doesNotMatch(text, /\$MNT\/\$APP\/Contents/);
+  assert.ok(text.includes("Must not modify Transcriber.app contents"));
   assert.ok(text.includes("install-helper.icns"));
   const icns = path.join(projectRoot, "electron", "dmg", "install-helper.icns");
   assert.ok(fs.existsSync(icns), "electron/dmg/install-helper.icns is Design's helper icon");
@@ -157,6 +160,7 @@ test("CI mounts the DMG and checks for the helper", () => {
   assert.match(workflow, /assert-helper-icon\.py/);
   assert.match(workflow, /hidden.*Transcriber\.app/);
   assert.match(workflow, /test ! -e "\$MOUNT\/Applications"/);
+  assert.match(workflow, /codesign --verify --deep --strict "\$MOUNT\/Transcriber\.app"/);
   assert.match(workflow, /screenshot-dmg-window\.py/);
   assert.match(workflow, /name: dmg-window/);
   const assertAt = workflow.indexOf("Assert DMG contains Install Transcriber.command");

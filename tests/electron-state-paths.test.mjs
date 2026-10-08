@@ -194,3 +194,30 @@ test("electron main pins userData/logs off the checkout Transcriber dirs", () =>
   assert.match(installerSrc, /\$\{this\.hostName\}\.json/);
   assert.match(installerSrc, /export TRANSCRIBER_LOG_DIR=/);
 });
+
+test("app-log creates ~/Library/Logs/Transcriber App/main.log and tees console", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "ytt-app-log-"));
+  const prevHome = process.env.HOME;
+  process.env.HOME = dir;
+  try {
+    const appLog = require(path.join(repoRoot, "electron/app-log.js"));
+    const expectedDir = config.resolveAppLogDir(dir);
+    assert.equal(appLog.resolveLogDir(), expectedDir);
+    const fake = {
+      log: () => {},
+      warn: () => {},
+      error: () => {},
+    };
+    const file = appLog.install(fake);
+    assert.equal(file, path.join(expectedDir, "main.log"));
+    assert.equal(existsSync(file), true);
+    fake.log("second-instance: revealing tray");
+    const body = readFileSync(file, "utf8");
+    assert.match(body, /file log opened/);
+    assert.match(body, /second-instance: revealing tray/);
+  } finally {
+    if (prevHome === undefined) delete process.env.HOME;
+    else process.env.HOME = prevHome;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

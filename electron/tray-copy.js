@@ -63,6 +63,7 @@ function trayImageName(state) {
 const TRY_AGAIN = "Try Again";
 const RESTART = "Restart Transcriber";
 const MOVE_TO_APPLICATIONS = "Move to Applications and Reopen";
+const RUNNING_IN_MENU_BAR = "Transcriber is running in the menu bar";
 
 module.exports = {
   runningStatus,
@@ -75,4 +76,5 @@ module.exports = {
   TRY_AGAIN,
   RESTART,
   MOVE_TO_APPLICATIONS,
+  RUNNING_IN_MENU_BAR,
 };
