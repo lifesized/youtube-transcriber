@@ -11,10 +11,10 @@ const copy = require(path.join(root, "electron", "tray-copy.js"));
 test("running uses a sentence and Port {port}, or a fallback without sublabel", () => {
   assert.deepEqual(copy.runningStatus(19721, true), {
     label: "Transcriber is running",
-    sublabel: "Port 19721",
+    sublabel: "App library · Port 19721",
   });
   assert.deepEqual(copy.runningStatus(19721, false), {
-    label: "Running on port 19721",
+    label: "Transcriber is running · App library · Port 19721",
   });
 });
 
@@ -33,7 +33,7 @@ test("starting uses a real ellipsis and portInUse never embeds a raw exception",
     }
   );
   const stopped = copy.stoppedStatus().label;
-  assert.equal(stopped, "Transcriber stopped unexpectedly");
+  assert.equal(stopped, "Transcriber is stopped");
   assert.doesNotMatch(stopped, /Error:|exception|timeout/i);
 });
 
@@ -51,11 +51,11 @@ test("tooltips and template image names follow spec §4.3", () => {
   assert.equal(copy.trayImageName("error"), "trayAlertTemplate.png");
   assert.equal(copy.trayImageName("stopped"), "trayAlertTemplate.png");
   assert.equal(copy.TRY_AGAIN, "Try Again");
-  assert.equal(copy.RESTART, "Restart Transcriber");
+  assert.equal(copy.RESTART, "Start Transcriber");
   assert.equal(copy.RUNNING_IN_MENU_BAR, "Transcriber is running in the menu bar");
 });
 
 test("menu names the library it serves and offers its folder", () => {
-  assert.equal(copy.servingLabel(19721), "Serving: Transcriber app library · 19721");
+  assert.equal(copy.servingLabel(19721), "App library · Port 19721");
   assert.equal(copy.OPEN_LIBRARY_FOLDER, "Open Library Folder");
 });

@@ -7,9 +7,9 @@
 
 function runningStatus(port, supportsSublabel) {
   if (supportsSublabel) {
-    return { label: "Transcriber is running", sublabel: `Port ${port}` };
+    return { label: "Transcriber is running", sublabel: `App library · Port ${port}` };
   }
-  return { label: `Running on port ${port}` };
+  return { label: `Transcriber is running · App library · Port ${port}` };
 }
 
 function startingStatus() {
@@ -27,7 +27,7 @@ function portInUseStatus(port, holder, supportsSublabel) {
 }
 
 function stoppedStatus() {
-  return { label: "Transcriber stopped unexpectedly" };
+  return { label: "Transcriber is stopped" };
 }
 
 function wrongLocationStatus() {
@@ -50,7 +50,7 @@ function tooltipFor(state, port) {
 }
 
 function servingLabel(port) {
-  return `Serving: Transcriber app library · ${port}`;
+  return `App library · Port ${port}`;
 }
 
 function trayImageName(state) {
@@ -65,7 +65,7 @@ function trayImageName(state) {
 }
 
 const TRY_AGAIN = "Try Again";
-const RESTART = "Restart Transcriber";
+const RESTART = "Start Transcriber";
 const MOVE_TO_APPLICATIONS = "Move to Applications and Reopen";
 const RUNNING_IN_MENU_BAR = "Transcriber is running in the menu bar";
 const OPEN_LIBRARY_FOLDER = "Open Library Folder";

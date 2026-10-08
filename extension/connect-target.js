@@ -17,9 +17,9 @@
   const APP = "app";
   const DEV = "dev";
 
-  const CONNECT_TO_LABEL = "Connect to";
+  const CONNECT_TO_LABEL = "Library";
   const CONNECT_HELPER =
-    "Use Dev server only if you run Transcriber from a code checkout.";
+    "Two separate libraries. Transcribe saves to the one selected.";
   const RETRY_LABEL = "Retry";
 
   const TARGETS = {
@@ -77,35 +77,35 @@
     starting: "Starting…",
     errors: Object.freeze({
       unknown_cmd: {
-        [APP]: "Transcriber's browser helper is out of date. In the Transcriber menu, choose Reinstall Browser Connection.",
-        [DEV]: "The dev server helper is out of date. Re-run setup.",
+        [APP]: "Transcriber's browser connection is out of date. In the Transcriber menu, choose Reinstall Browser Connection.",
+        [DEV]: "The dev server's browser helper is out of date. Run the setup command in your Transcriber folder, then try again.",
       },
       no_token: {
-        [APP]: "Transcriber hasn't given this browser an access key. Quit and reopen Transcriber.",
-        [DEV]: "The dev server helper has no access key. Re-run setup.",
+        [APP]: "Transcriber didn't give this browser an access key. Quit and reopen Transcriber, then try again.",
+        [DEV]: "The dev server's browser helper has no access key for this browser. Run the setup command in your Transcriber folder, then try again.",
       },
       host_not_found: {
         [APP]: "Transcriber can't talk to this browser yet. In the Transcriber menu, choose Reinstall Browser Connection.",
-        [DEV]: "The dev server helper isn't installed. Re-run setup.",
+        [DEV]: "The dev server's browser helper isn't installed. Run the setup command in your Transcriber folder, then try again.",
       },
       host_forbidden: {
-        [APP]: "This extension isn't allowed to use Transcriber's browser helper. In the Transcriber menu, choose Reinstall Browser Connection.",
-        [DEV]: "This extension isn't paired with the dev server. Re-run setup.",
+        [APP]: "This browser isn't allowed to use Transcriber yet. In the Transcriber menu, choose Reinstall Browser Connection.",
+        [DEV]: "The dev server's browser helper doesn't allow this extension. Run the setup command in your Transcriber folder, then try again.",
       },
       extension_not_allowed: {
-        [APP]: "This extension isn't paired with Transcriber. Click Allow in the Transcriber dialog on your Mac.",
-        [DEV]: "This extension isn't paired with the dev server. Re-run setup.",
+        [APP]: "Transcriber needs your permission to connect. Click Allow in the Transcriber dialog on your Mac.",
+        [DEV]: "This extension isn't paired with the dev server. Run the setup command in your Transcriber folder, then try again.",
       },
       unauthorized_caller: {
-        [APP]: "This extension isn't paired with Transcriber. Click Allow in the Transcriber dialog on your Mac.",
-        [DEV]: "This extension isn't paired with the dev server. Re-run setup.",
+        [APP]: "Transcriber needs your permission to connect. Click Allow in the Transcriber dialog on your Mac.",
+        [DEV]: "This extension isn't paired with the dev server. Run the setup command in your Transcriber folder, then try again.",
       },
       bad_project_root: {
-        [DEV]: "The dev server helper doesn't know where your checkout is. Re-run setup from your checkout folder.",
+        [DEV]: "Transcriber's browser connection isn't linked to your Transcriber folder. Run npm run install-native-host -- --project-root <path-to-your-Transcriber-folder>, then try again.",
       },
       unauthorized: {
         [APP]: "Transcriber didn't accept this browser's access key. Quit and reopen Transcriber, then try again.",
-        [DEV]: "The dev server didn't accept this request. Re-run setup, or open http://127.0.0.1:{port} once in this browser.",
+        [DEV]: "The dev server didn't accept this browser. Open http://127.0.0.1:{port} once in this browser, then try again.",
       },
       unreachable: {
         [APP]: "Transcriber app isn't running.",
@@ -114,15 +114,15 @@
       app_not_found: {
         [APP]: "Transcriber isn't in your Applications folder. Move it there, then try again.",
       },
-      port_conflict: "Port {port} is already in use by another app. Close it, then try again.",
+      port_conflict: "Port {port} is in use by another app. Quit that app, then try again.",
       start_timeout: {
         [APP]: "Transcriber didn't start. Open it from your Applications folder.",
-        [DEV]: "The dev server didn't start. Check ~/Library/Logs/Transcriber/native-host.log.",
+        [DEV]: "The dev server didn't start. Run npm run dev in your Transcriber folder, then try again.",
       },
-      host_timeout: "The browser helper didn't answer. Try again.",
-      host_exited: "The browser helper stopped unexpectedly. Re-run setup.",
-      stop_disabled: "Stop isn't available.",
-      other: "Transcription failed. Please try again.",
+      host_timeout: "Transcriber's browser connection didn't respond. Try again.",
+      host_exited: "Transcriber's browser connection closed unexpectedly. Try again.",
+      stop_disabled: "Stop isn't available in this beta.",
+      other: "Transcription failed. Try again.",
     }),
   });
 

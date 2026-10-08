@@ -134,7 +134,7 @@ const HOST_AND_AUTH_REASONS = [
 
 test("host and auth reasons never map to the generic failure", () => {
   const generic = ConnectTarget.errorMessage("other", "app");
-  assert.equal(generic, "Transcription failed. Please try again.");
+  assert.equal(generic, "Transcription failed. Try again.");
   for (const id of ["app", "dev"]) {
     for (const reason of HOST_AND_AUTH_REASONS) {
       const msg = ConnectTarget.errorMessage(reason, id);
@@ -148,14 +148,14 @@ test("host and auth reasons never map to the generic failure", () => {
 test("each reason has its own human message per target", () => {
   assert.equal(
     ConnectTarget.errorMessage("extension_not_allowed", "dev"),
-    "This extension isn't paired with the dev server. Re-run setup."
+    "This extension isn't paired with the dev server. Run the setup command in your Transcriber folder, then try again."
   );
   assert.match(ConnectTarget.errorMessage("unknown_cmd", "app"), /out of date/);
   assert.match(ConnectTarget.errorMessage("unknown_cmd", "dev"), /out of date/);
   assert.match(ConnectTarget.errorMessage("no_token", "app"), /access key/);
   assert.match(ConnectTarget.errorMessage("host_not_found", "app"), /Reinstall Browser Connection/);
-  assert.match(ConnectTarget.errorMessage("host_not_found", "dev"), /Re-run setup/);
-  assert.match(ConnectTarget.errorMessage("bad_project_root", "dev"), /checkout/);
+  assert.match(ConnectTarget.errorMessage("host_not_found", "dev"), /setup command/);
+  assert.match(ConnectTarget.errorMessage("bad_project_root", "dev"), /--project-root/);
   assert.match(ConnectTarget.errorMessage("unauthorized", "app"), /access key/);
   assert.match(ConnectTarget.errorMessage("unauthorized", "dev"), /127\.0\.0\.1:19720/);
   assert.equal(ConnectTarget.errorMessage("unreachable", "app"), "Transcriber app isn't running.");
@@ -651,7 +651,7 @@ test("background: an unpaired dev extension gets the paired-with-dev message", a
     servers: { [DEV.apiBase]: () => response(200, { id: "tx_1" }) },
   });
   const r = await bg.send({ type: "TRANSCRIBE", url: WATCH, title: "Video" });
-  assert.equal(r.error, "This extension isn't paired with the dev server. Re-run setup.");
+  assert.equal(r.error, "This extension isn't paired with the dev server. Run the setup command in your Transcriber folder, then try again.");
   assert.equal(bg.world.requests.length, 0);
 });
 

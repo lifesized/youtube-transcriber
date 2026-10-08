@@ -60,10 +60,10 @@ test("unreachable copy and Retry are per target", () => {
   assert.equal(ConnectTarget.shouldReuseStartTranscriber("app"), true);
   assert.equal(ConnectTarget.shouldReuseStartTranscriber("dev"), false);
   assert.equal(ConnectTarget.RETRY_LABEL, "Retry");
-  assert.equal(ConnectTarget.CONNECT_TO_LABEL, "Connect to");
+  assert.equal(ConnectTarget.CONNECT_TO_LABEL, "Library");
   assert.equal(
     ConnectTarget.CONNECT_HELPER,
-    "Use Dev server only if you run Transcriber from a code checkout."
+    "Two separate libraries. Transcribe saves to the one selected."
   );
 });
 
