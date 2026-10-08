@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - beta/electron-menubar
+  pull_request:
+    branches:
+      - beta/electron-menubar
 
 jobs:
   build:
