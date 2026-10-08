@@ -98,3 +98,4 @@ The existing `.glass-card` class (`globals.css`) has `border: none; box-shadow: 
 - 2026-05-19 — Initial seed adapted from Cartewei VISUAL-RULES.md. Translated to HSL Shadcn token format; dark-only.
 - 2026-05-25 — Button press/hover scaling is banned globally. Buttons should not change size; use color/shadow/overlay feedback instead.
 - 2026-05-25 — Button state coverage is mandatory: default, hover, focus-visible, active, disabled, loading, offline/no-internet, and skeleton/loading-placeholder.
+- 2026-10-08 — Gold accent buttons must not use `hover:bg-white/[0.04]`. That overlay replaces the gold fill and leaves black text on a dark panel. Use `hover:brightness-110` only.

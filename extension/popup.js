@@ -3326,11 +3326,18 @@ async function refreshServerSection(mode) {
   
   // If native host missing, show install hint instead of hiding section
   if (!nativeHostAvailable) {
-    el.serverStatus.textContent = "Native host not installed";
+    const target = await currentConnectTarget();
+    el.serverStatus.textContent = "Stopped";
     el.serverStatus.hidden = false;
     el.btnStartServer.hidden = true;
     el.btnStopServer.hidden = true;
-    el.stopServerHint.textContent = "Run: npm run install-native-host -- --ext-id=" + chrome.runtime.id;
+    if (target.id === "dev") {
+      el.stopServerHint.textContent =
+        "Run: npm run install-native-host -- --ext-id=" + chrome.runtime.id;
+    } else {
+      el.stopServerHint.textContent =
+        "Transcriber can't talk to this browser yet. In the Transcriber menu, choose Reinstall Browser Connection.";
+    }
     el.stopServerHint.hidden = false;
     return;
   }
@@ -3340,7 +3347,7 @@ async function refreshServerSection(mode) {
   // Probe server state. Cheap — bg already polls and caches the result.
   const serviceRes = await sendMsg({ type: "CHECK_SERVICE" });
   const serverOnline = !!(serviceRes?.success && serviceRes.data?.online);
-  el.serverStatus.textContent = serverOnline ? "Server running" : "Server stopped";
+  el.serverStatus.textContent = serverOnline ? "Running" : "Stopped";
   el.serverStatus.hidden = false;
   el.btnStartServer.hidden = serverOnline;
   el.btnStopServer.hidden = !serverOnline;

@@ -434,13 +434,17 @@ test("tray manager uses template images and human status copy, not setTitle T", 
   assert.ok(copySrc.includes("Restart Transcriber"));
   assert.ok(content.includes("TRY_AGAIN"));
   assert.ok(content.includes("RESTART"));
-  assert.ok(content.includes("Connect browser extension…"));
+  assert.ok(content.includes("Connect Browser Extension…"));
   assert.ok(content.includes("_openPairingWindow"));
-  assert.ok(content.includes("Paired extensions…"));
-  assert.ok(content.includes("Import existing library…"));
+  assert.ok(content.includes("Paired Extensions…"));
+  assert.ok(content.includes("Import Existing Library…"));
   assert.ok(content.includes("_showPairedExtensions"));
   assert.ok(content.includes("_logError"));
+  assert.ok(content.includes("Command+Q"));
+  assert.ok(content.includes("showWrongLocation"));
+  assert.ok(content.includes("moveToApplicationsFolder"));
   assert.ok(main.includes("app.dock.hide()"));
+  assert.ok(main.includes("showWrongLocation"));
   assert.match(main, /process\.platform === ["']darwin["']/);
 });
 

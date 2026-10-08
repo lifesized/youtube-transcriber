@@ -11,11 +11,15 @@
 - **Electron fuses** — afterPack turns off `EnableNodeOptionsEnvironmentVariable` and `EnableNodeCliInspectArguments`, keeps `RunAsNode` on.
 - **Native-host hardening** — Wrapper paths are single-quoted; Electron PATH is exactly Resources/bin, /usr/bin, /bin; stdin messages capped at 1 MiB. `extension-ids.json` and the secrets file are written atomically (mode 0600). Corrupt JSON is refused on append. Masked key detection is exact equality with the GET placeholder.
 
+### Fixed
+- **Gold Save hover** — Settings → Summaries Save no longer uses `hover:bg-white/[0.04]`, which wiped the accent fill.
+
 ### Added
 - **Friends-beta P0 visuals** — Design's Oct 8 review: friendly extension first screens, Transcriber app icon, hidden Dock (`LSUIElement` + `app.dock.hide()`), per-state tray template icons, a light-warm DMG background with an arrow to Applications, and human tray status copy (`Transcriber is running` / `Starting…` / `Port {port} is in use` / `Transcriber stopped unexpectedly`) with **Try Again** / **Restart Transcriber**. Raw exceptions go to the app log, not the menu. CI checks Info.plist `LSUIElement`, the packaged icon, and all six tray template PNGs.
 - **Flip-ready product defaults** — `electron/product-defaults.js` holds one constant each for: no auto-save after Transcribe, Obsidian writes Markdown into the vault, re-save updates the same note, port conflict names the holder and does not offer to quit it, the dark app icon, and Import Existing Library… only when a checkout library is detected.
 
 ### Changed
+- **Tray menu casing and grouping** — Title case: Connect Browser Extension…, Paired Extensions…, Import Existing Library…. Start at Login sits in its own group above Quit. Quit has ⌘Q. Connect / Paired / Import are disabled while the server is not running. A translocated launch shows **Move to Applications and Reopen**. Left-click on the macOS tray icon no longer opens the browser.
 - **Extension first screen** — Offline no longer auto-opens Settings or the npm setup box. App target: **Transcriber isn't running** + Start, or **Open Transcriber from your Applications folder** + Check Again, or **Allow Transcriber to connect** while pairing. Dev server still sees **Dev server setup**. Auth: **Reconnect to Transcriber**. Footer GitHub link is hidden. A `Connected to: … · Change` line opens Settings › Connect to.
 - **DMG window** — Light `#f4f1ea` background at 1x and @2x, `#1a1a1a` text, 80 px icons, a gold arrow from the app to Applications. No baked-in "run this" box.
 - **Packaged app ~510 MB / DMG ~227 MB** — Next standalone is the only server tree; asar/unpacked keep Electron main deps (`better-sqlite3` + bindings). Prisma ships the wasm compiler, not native engines. Unused `@img/sharp`, extra locales, maps, `.d.ts`, READMEs, tests, and docs are pruned. CI fails if the `.app` exceeds 576 MiB or the DMG exceeds 256 MiB, and prints a per-directory size table. Baseline at fb85bea was ~1.1G `.app` / ~393 MB DMG.

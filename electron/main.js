@@ -86,14 +86,6 @@ app.whenReady().then(async () => {
   console.log("User data:", app.getPath("userData"));
   console.log("Is dev:", IS_DEV);
   
-  // Check if app is translocated on macOS
-  if (process.platform === "darwin") {
-    const translocated = checkIfTranslocated(app.getAppPath());
-    if (translocated) {
-      console.warn("App is running from a translocated path!");
-    }
-  }
-  
   // Determine paths. Packaged server lives in extraResources (outside asar)
   // because ELECTRON_RUN_AS_NODE cannot read asar archives.
   const appRoot = IS_DEV
@@ -133,6 +125,15 @@ app.whenReady().then(async () => {
     nativeHostInstaller,
     pairingBridge,
   });
+
+  if (process.platform === "darwin") {
+    const translocated = checkIfTranslocated(app.getAppPath());
+    if (translocated) {
+      console.warn("App is running from a translocated path!");
+      trayManager.showWrongLocation();
+      return;
+    }
+  }
 
   serverManager.on("spawned", (child) => {
     pairingBridge.attach(child);

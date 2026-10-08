@@ -5,10 +5,10 @@
  * - Status line (human sentences from Design spec §8.5)
  * - Open Transcriber (opens in browser)
  * - Start at Login (toggle)
- * - Connect browser extension… (2-minute pairing window)
- * - Paired extensions… (list + remove, rotates local API token)
- * - Reinstall browser connection (P1)
- * - Import existing library… (backup-first merge from a .db)
+ * - Connect Browser Extension… (2-minute pairing window)
+ * - Paired Extensions… (list + remove, rotates local API token)
+ * - Reinstall Browser Connection
+ * - Import Existing Library… (backup-first merge from a .db)
  * - Quit
  */
 
@@ -110,6 +110,11 @@ class TrayManager {
     this._updateMenu();
   }
 
+  showWrongLocation() {
+    this.status = "wrong-location";
+    this._updateMenu();
+  }
+
   // Private methods
 
   _logError(message) {
@@ -150,9 +155,11 @@ class TrayManager {
     this.tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
     this.tray.setToolTip(trayCopy.tooltipFor(this.status, this.port));
 
-    this.tray.on("click", () => {
-      this._openTranscriber();
-    });
+    if (process.platform !== "darwin") {
+      this.tray.on("click", () => {
+        this._openTranscriber();
+      });
+    }
   }
 
   _statusItem() {
@@ -164,6 +171,8 @@ class TrayManager {
         return trayCopy.startingStatus();
       case "port-conflict":
         return trayCopy.portInUseStatus(this.port, this.portHolder, sub);
+      case "wrong-location":
+        return trayCopy.wrongLocationStatus();
       default:
         return trayCopy.stoppedStatus();
     }
@@ -180,7 +189,8 @@ class TrayManager {
     const openAtLogin = loginSettings.openAtLogin;
 
     const statusItem = this._statusItem();
-    const canOpen = this.status === "running";
+    const running = this.status === "running";
+    const wrongLocation = this.status === "wrong-location";
     const showImport = this._shouldShowImport();
 
     const template = [
@@ -201,6 +211,11 @@ class TrayManager {
         label: trayCopy.RESTART,
         click: () => this._restartServer(),
       });
+    } else if (wrongLocation) {
+      template.push({
+        label: trayCopy.MOVE_TO_APPLICATIONS,
+        click: () => this._moveToApplications(),
+      });
     }
 
     if (productDefaults.PORT_CONFLICT_OFFER_QUIT) {
@@ -211,33 +226,31 @@ class TrayManager {
       { type: "separator" },
       {
         label: "Open Transcriber",
-        enabled: canOpen,
+        enabled: running,
         click: () => this._openTranscriber(),
       },
       { type: "separator" },
       {
-        label: "Start at Login",
-        type: "checkbox",
-        checked: openAtLogin,
-        click: () => this._toggleLoginItem(),
-      },
-      {
-        label: "Connect browser extension…",
+        label: "Connect Browser Extension…",
+        enabled: running,
         click: () => this._openPairingWindow(),
       },
       {
-        label: "Paired extensions…",
+        label: "Paired Extensions…",
+        enabled: running,
         click: () => this._showPairedExtensions(),
       },
       {
         label: "Reinstall Browser Connection",
+        enabled: !wrongLocation,
         click: () => this._reinstallNativeHost(),
       }
     );
 
     if (showImport) {
       template.push({
-        label: "Import existing library…",
+        label: "Import Existing Library…",
+        enabled: running,
         click: () => this._importExistingLibrary(),
       });
     }
@@ -245,7 +258,16 @@ class TrayManager {
     template.push(
       { type: "separator" },
       {
+        label: "Start at Login",
+        type: "checkbox",
+        checked: openAtLogin,
+        enabled: !wrongLocation,
+        click: () => this._toggleLoginItem(),
+      },
+      { type: "separator" },
+      {
         label: "Quit Transcriber",
+        accelerator: "Command+Q",
         click: () => this._quit(),
       }
     );
@@ -283,6 +305,12 @@ class TrayManager {
       else this.showError(error && error.message);
     } finally {
       this._restarting = false;
+    }
+  }
+
+  _moveToApplications() {
+    if (typeof app.moveToApplicationsFolder === "function") {
+      app.moveToApplicationsFolder();
     }
   }
 

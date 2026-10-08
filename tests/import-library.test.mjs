@@ -270,11 +270,11 @@ test("import backups are created 0600 and keep only the last 5", async () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test("tray offers Import existing library…", () => {
+test("tray offers Import Existing Library…", () => {
   const tray = fs.readFileSync(
     path.join(projectRoot, "electron", "tray-manager.js"),
     "utf8"
   );
-  assert.ok(tray.includes("Import existing library…"));
+  assert.ok(tray.includes("Import Existing Library…"));
   assert.ok(tray.includes("importLibrary"));
 });

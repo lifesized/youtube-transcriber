@@ -41,6 +41,14 @@ test("offline screens use Design's exact strings", () => {
   assert.match(html, /id="btnOfflineChangeTarget"/);
 });
 
+test("Settings server copy stays human and keeps npm only for Dev server", () => {
+  assert.match(
+    popup,
+    /Transcriber can't talk to this browser yet\. In the Transcriber menu, choose Reinstall Browser Connection\./
+  );
+  assert.match(popup, /serverOnline \? "Running" : "Stopped"/);
+});
+
 test("friends build hides the footer GitHub link and pairing does not fall through to setup", () => {
   assert.match(popup, /githubLink\.hidden = true/);
   assert.match(html, /id="githubLink"[^>]*hidden/);
