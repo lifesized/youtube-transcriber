@@ -372,6 +372,11 @@ test("CI launches the packaged Transcriber.app and checks asar requires", () => 
   assert.ok(content.includes("Uncaught Exception"));
   assert.ok(content.includes("UnhandledPromiseRejectionWarning"));
   assert.ok(content.includes("packaged-launch health"));
+  assert.ok(content.includes("@electron/fuses read"));
+  assert.ok(content.includes("EnableNodeOptionsEnvironmentVariable"));
+  assert.ok(content.includes("EnableNodeCliInspectArguments"));
+  assert.ok(content.includes("fake Host header returns 421"));
+  assert.ok(content.includes("Host: evil.example:19720"));
 });
 
 test("CI fails outbound app symlinks and non-Electron sqlite addons", () => {

@@ -5,7 +5,8 @@
 ### Security
 - **Loopback Host pin** — Requests whose `Host` is not `127.0.0.1:<port>` or `localhost:<port>` (port from `PORT`, default 19720) return 421. The local-token cookie is minted only when `Sec-Fetch-Site` is `none` or `same-origin`.
 - **Pairing opt-in** — Tray **Connect browser extension…** opens a 2-minute window. Outside it, `/api/native-host/pair` returns 403 and no dialog is shown. Origin must match `^chrome-extension://[a-p]{32}$`. Deny is a global cooldown; main never stacks a second dialog and caps about 3 dialogs per hour.
-- **Unpair** — Tray **Paired extensions…** lists paired IDs. Removing one rewrites native-host manifests, rotates the local API token, and restarts the server.
+- **Unpair** — Tray **Paired extensions…** lists paired IDs. Removing one rewrites native-host manifests, rotates the local API token, kills native-host processes whose command line contains the exact host script path, and restarts the server. `getLocalToken` requires `argv[1]` to be a paired `chrome-extension://<id>/`.
+- **Pairing window closes on Allow** — main sets `openUntil` to 0 and sends that close over IPC so a second extension cannot get a dialog for the rest of the 2 minutes.
 - **Secrets over IPC** — The packaged server no longer inherits LLM/Notion keys via `secretEnv` at spawn. In Electron they are fetched from main over IPC, so a key cleared in Settings stops working immediately.
 - **Electron fuses** — afterPack turns off `EnableNodeOptionsEnvironmentVariable` and `EnableNodeCliInspectArguments`, keeps `RunAsNode` on.
 - **Native-host hardening** — Wrapper paths are single-quoted; Electron PATH is exactly Resources/bin, /usr/bin, /bin; stdin messages capped at 1 MiB. `extension-ids.json` and the secrets file are written atomically (mode 0600). Corrupt JSON is refused on append. Masked key detection is exact equality with the GET placeholder.
@@ -17,7 +18,7 @@
 
 ### Added
 - **Import existing library…** — Tray item opens a `.db` file read-only, confirms `Import N transcripts? Your current library will be backed up first.`, online-backups the app DB to `~/Library/Application Support/Transcriber/backups/<timestamp>.db`, copies the source with `.backup()` to a temp file, migrates that copy (extra `_prisma_migrations` / indexes are tolerated), and merges Video rows in one transaction. Dedupes on `(videoId, captionLanguage, pipelineVersion)` with old rows as `en`/1; existing rows win. Any error rolls back; the source file is never modified.
-- **Install Transcriber.command** — the DMG includes a helper that copies Transcriber to `/Applications`, clears `com.apple.quarantine`, and opens the app. A DMG background tells friends to run it. First launch of the helper needs right-click → Open (or Privacy & Security → Open Anyway) once. Docs: `docs/beta-install-macos.md`.
+- **Install Transcriber.command** — the DMG includes a helper that copies Transcriber to `/Applications`, clears `com.apple.quarantine`, and opens the app. Source/dest basename must be `Transcriber.app`; an existing dest is replaced only when `CFBundleIdentifier` is `com.transcribed.app`; quit targets that bundle executable. First launch of the helper: System Settings → Privacy & Security → **Open Anyway** (macOS 15 dropped right-click → Open). Docs ask friends to `shasum -a 256` the DMG against a hash James sends separately. Docs: `docs/beta-install-macos.md`.
 
 ### Fixed
 - **Packaged launch power-save id** — `powerSaveBlocker.isStarted(null)` threw on first ready (`conversion failure from null`), so the Next server never started and CI waited 60s for `/api/health`. Guard the id the same way `will-quit` already did; CI now fails immediately on `UnhandledPromiseRejectionWarning` too.

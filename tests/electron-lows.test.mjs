@@ -42,6 +42,15 @@ test("server spawn does not inject secretEnv", () => {
   const main = readFileSync(path.join(repoRoot, "electron/main.js"), "utf8");
   assert.equal(main.includes("secretEnv"), false);
   assert.equal(main.includes("envForSpawn"), false);
+  const store = readFileSync(path.join(repoRoot, "electron/secrets-store.js"), "utf8");
+  assert.equal(store.includes("envForSpawn"), false);
+  assert.equal(store.includes("this.onChange"), false);
+});
+
+test("writeTokenFile uses atomic replace", () => {
+  const src = readFileSync(path.join(repoRoot, "lib/local-api-token.js"), "utf8");
+  assert.ok(src.includes("writeFileAtomic"));
+  assert.equal(src.includes("writeFileSync(filePath, token"), false);
 });
 
 test("writeFileAtomic renames then chmod 600", () => {

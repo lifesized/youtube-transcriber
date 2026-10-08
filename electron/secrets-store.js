@@ -43,7 +43,6 @@ function writeFile(data) {
 class SecretsStore {
   constructor(options = {}) {
     this.safeStorage = options.safeStorage || null;
-    this.onChange = options.onChange || null;
   }
 
   _encrypt(plain) {
@@ -135,25 +134,7 @@ class SecretsStore {
       stored.notionDatabaseId = String(patch.notionDatabaseId || "");
     }
     writeFile(stored);
-    if (typeof this.onChange === "function") {
-      this.onChange(this.envForSpawn());
-    }
     return this.getPublic();
-  }
-
-  envForSpawn() {
-    const plain = this.getPlain();
-    const env = {};
-    if (plain.llmProvider) env.LLM_PROVIDER = plain.llmProvider;
-    if (plain.llmProvider === "anthropic" && plain.llmApiKey) {
-      env.ANTHROPIC_API_KEY = plain.llmApiKey;
-    }
-    if (plain.llmProvider === "openai" && plain.llmApiKey) {
-      env.OPENAI_API_KEY = plain.llmApiKey;
-    }
-    if (plain.notionToken) env.NOTION_TOKEN = plain.notionToken;
-    if (plain.notionDatabaseId) env.NOTION_DATABASE_ID = plain.notionDatabaseId;
-    return env;
   }
 }
 

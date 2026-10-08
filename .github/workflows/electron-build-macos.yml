@@ -226,6 +226,19 @@ jobs:
           fi
           echo "✓ $COUNT better_sqlite3.node file(s) match Electron ABI and load"
 
+          echo "----- electron fuses -----"
+          FUSES=$(npx --no-install @electron/fuses read --app "$APP")
+          echo "$FUSES"
+          echo "$FUSES" | grep EnableNodeOptionsEnvironmentVariable | grep -q Disabled || {
+            echo "ERROR: NODE_OPTIONS fuse is not off"
+            exit 1
+          }
+          echo "$FUSES" | grep EnableNodeCliInspectArguments | grep -q Disabled || {
+            echo "ERROR: inspect fuse is not off"
+            exit 1
+          }
+          echo "✓ fuses NodeOptions and Inspect are off"
+
       - name: Launch packaged Transcriber.app
         run: |
           set -euo pipefail
@@ -276,6 +289,19 @@ jobs:
               cat /tmp/packaged-health.json
               echo ""
               echo "✓ packaged Transcriber.app /api/health 200"
+              echo "----- Host pin 421 -----"
+              set +e
+              FAKE_HOST=$(curl -sS -o /tmp/packaged-host-pin.txt -w "%{http_code}" \
+                -H "Authorization: Bearer ${TOKEN}" \
+                -H "Host: evil.example:19720" \
+                "http://127.0.0.1:${PORT}/api/health")
+              set -e
+              if [ "$FAKE_HOST" != "421" ]; then
+                echo "ERROR: fake Host expected 421, got ${FAKE_HOST:-curl-fail}"
+                cat /tmp/packaged-host-pin.txt || true
+                exit 1
+              fi
+              echo "✓ fake Host header returns 421"
               break
             fi
             echo "  launch wait $i/60 (http=${HEALTH:-curl-fail})"

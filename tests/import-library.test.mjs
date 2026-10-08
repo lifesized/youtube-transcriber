@@ -175,6 +175,9 @@ test("import merges old init-schema rows, extra index/history tolerated, existin
   const backup = new Database(result.backupPath, { readonly: true });
   assert.equal(backup.prepare("SELECT COUNT(*) AS n FROM Video").get().n, 1);
   backup.close();
+  if (process.platform !== "win32") {
+    assert.equal(fs.statSync(result.backupPath).mode & 0o777, 0o600);
+  }
 
   const again = await importLibrary({
     sourcePath: source,
@@ -226,6 +229,36 @@ test("injected merge failure rolls back dest and leaves the backup", async () =>
   assert.ok(fs.existsSync(path.join(backupsDir, "fail-stamp.db")));
   assert.equal(videoTitles(dest).length, 1);
 
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("import backups chmod 0600 and keep only the last 5", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ytt-import-prune-"));
+  const source = path.join(dir, "old.db");
+  const dest = path.join(dir, "transcriber.db");
+  const backupsDir = path.join(dir, "backups");
+  buildOldSourceDb(source);
+  buildAppDb(dest);
+  fs.mkdirSync(backupsDir, { recursive: true });
+  for (let i = 0; i < 5; i++) {
+    const p = path.join(backupsDir, `old-${i}.db`);
+    fs.writeFileSync(p, "old");
+    fs.utimesSync(p, new Date(1_000 + i), new Date(1_000 + i));
+  }
+  await importLibrary({
+    sourcePath: source,
+    destPath: dest,
+    backupsDir,
+    migrationsDir,
+    timestamp: "newest-stamp",
+  });
+  const left = fs.readdirSync(backupsDir).filter((n) => n.endsWith(".db")).sort();
+  assert.equal(left.length, 5);
+  assert.ok(left.includes("newest-stamp.db"));
+  assert.equal(left.includes("old-0.db"), false);
+  if (process.platform !== "win32") {
+    assert.equal(fs.statSync(path.join(backupsDir, "newest-stamp.db")).mode & 0o777, 0o600);
+  }
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
