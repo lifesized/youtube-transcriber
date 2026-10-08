@@ -24,8 +24,14 @@ test("Install Transcriber.command exists and is executable", () => {
   assert.ok(text.includes("xattr -dr com.apple.quarantine"));
   assert.ok(text.includes("/Applications/Transcriber.app"));
   assert.ok(text.includes("tell application \"Transcriber\" to quit"));
-  assert.match(text, /right-click/i);
+  assert.match(text, /Privacy & Security/);
   assert.match(text, /Open Anyway/);
+  assert.doesNotMatch(text, /Right-click/);
+  assert.doesNotMatch(text, /killall Transcriber/);
+  assert.ok(text.includes("CFBundleIdentifier"));
+  assert.ok(text.includes("com.transcribed.app"));
+  assert.ok(text.includes('basename "$p"') || text.includes("Transcriber.app"));
+  assert.ok(text.includes("Only run this from the DMG James sent"));
   const sudoLines = text.split("\n").filter((l) => /^\s*sudo\b/.test(l));
   assert.ok(sudoLines.length > 0, "sudo is allowed as a fallback");
   const sudoGuarded = text.includes("Need permission");
@@ -75,6 +81,10 @@ test("beta install docs lead with the helper and xattr fallback", () => {
   const xattrIdx = docs.indexOf("xattr -dr");
   assert.ok(helperIdx > 0 && helperIdx < xattrIdx, "helper must be the primary path");
   assert.ok(!/NEVER run `xattr/.test(docs));
+  assert.ok(docs.includes("shasum -a 256"));
+  assert.ok(docs.includes("Only run this from the DMG James sent; it turns off macOS's download check for this app."));
+  assert.ok(docs.includes("System Settings → Privacy & Security → Open Anyway"));
+  assert.ok(docs.includes("macOS 15 removed right-click → Open"));
 });
 
 test("CI mounts the DMG and checks for the helper", () => {
@@ -138,5 +148,72 @@ exit 1`
   assert.match(calls, /open /);
   assert.doesNotMatch(calls, /^sudo /m);
   assert.match(result.stdout, /Done/);
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+function writeInfoPlist(appPath, bundleId) {
+  fs.mkdirSync(path.join(appPath, "Contents"), { recursive: true });
+  fs.writeFileSync(
+    path.join(appPath, "Contents", "Info.plist"),
+    `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key>
+  <string>${bundleId}</string>
+</dict>
+</plist>
+`
+  );
+}
+
+test("helper refuses a destination not named Transcriber.app", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dmg-install-name-"));
+  const volume = path.join(tmp, "Transcriber");
+  fs.mkdirSync(path.join(volume, "Transcriber.app", "Contents"), { recursive: true });
+  fs.writeFileSync(path.join(volume, "Transcriber.app", "Contents", "marker"), "payload");
+  fs.copyFileSync(commandPath, path.join(volume, commandName));
+  fs.chmodSync(path.join(volume, commandName), 0o755);
+  const result = spawnSync("bash", [path.join(volume, commandName)], {
+    env: {
+      ...process.env,
+      PATH: "/usr/bin:/bin",
+      TRANSCRIBER_INSTALL_DEST: path.join(tmp, "Evil.app"),
+      TRANSCRIBER_INSTALL_NONINTERACTIVE: "1",
+      TRANSCRIBER_QUIT_WAIT_SECS: "1",
+      TRANSCRIBER_INSTALL_SKIP_OPEN: "1",
+    },
+    encoding: "utf8",
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout, /must be named Transcriber\.app/);
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+test("helper refuses to replace a dest with a different bundle id", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dmg-install-id-"));
+  const volume = path.join(tmp, "Transcriber");
+  const destDir = path.join(tmp, "Applications");
+  const dest = path.join(destDir, "Transcriber.app");
+  fs.mkdirSync(path.join(volume, "Transcriber.app", "Contents"), { recursive: true });
+  fs.writeFileSync(path.join(volume, "Transcriber.app", "Contents", "marker"), "payload");
+  writeInfoPlist(dest, "com.example.not-transcriber");
+  fs.writeFileSync(path.join(dest, "Contents", "keep-me"), "foreign");
+  fs.copyFileSync(commandPath, path.join(volume, commandName));
+  fs.chmodSync(path.join(volume, commandName), 0o755);
+  const result = spawnSync("bash", [path.join(volume, commandName)], {
+    env: {
+      ...process.env,
+      PATH: "/usr/bin:/bin",
+      TRANSCRIBER_INSTALL_DEST: dest,
+      TRANSCRIBER_INSTALL_NONINTERACTIVE: "1",
+      TRANSCRIBER_QUIT_WAIT_SECS: "1",
+      TRANSCRIBER_INSTALL_SKIP_OPEN: "1",
+    },
+    encoding: "utf8",
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout, /CFBundleIdentifier/);
+  assert.ok(fs.existsSync(path.join(dest, "Contents", "keep-me")));
   fs.rmSync(tmp, { recursive: true, force: true });
 });

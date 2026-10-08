@@ -4,11 +4,20 @@ Unsigned friends build. Apple Silicon (M1+) only.
 
 ## Install (use the helper)
 
-1. Download the DMG and double-click it.
-2. Double-click **Install Transcriber.command**.
-3. The helper itself is quarantined the first time (the app would show as “damaged” with no Open Anyway). Right-click the helper → **Open**, or System Settings → Privacy & Security → **Open Anyway**, once.
+1. Download the DMG. In Terminal, check it against the SHA-256 James sent separately from the download link (not in the same message or page as the file):
+
+```bash
+shasum -a 256 <dmg>
+```
+
+The hashes must match. If they do not, stop and tell James.
+
+2. Double-click the DMG, then double-click **Install Transcriber.command**.
+3. The helper itself is quarantined the first time (the app would show as “damaged” with no Open Anyway). Open **System Settings → Privacy & Security → Open Anyway**, once. (macOS 15 removed right-click → Open for this case.)
 4. It quits an older Transcriber if needed, copies `Transcriber.app` to `/Applications`, runs `xattr -dr com.apple.quarantine` on that copy, and opens it.
 5. Look for Transcriber in the menu bar (top right). Eject the disk image.
+
+Only run this from the DMG James sent; it turns off macOS's download check for this app.
 
 Do not open Transcriber from the DMG.
 
