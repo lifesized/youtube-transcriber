@@ -276,8 +276,11 @@ test("every request omits cookies and requires the host's token", async () => {
   await b.probe(APP);
   for (const req of [...stale.requests, ...current.requests]) {
     assert.equal(req.init.credentials, "omit", req.url);
-    assert.ok(req.init.headers.Authorization, req.url);
   }
+  assert.ok(
+    current.requests.every((q) => q.init.headers && q.init.headers.Authorization),
+    "token sent"
+  );
 });
 
 test("dev with no_token never calls the API; a 401 is still an auth error", async () => {

@@ -193,9 +193,7 @@ async function sendPageUrl(pageUrl, title) {
   } else {
     // Try caption extraction for YouTube URLs
     const captions = youtubeVideoId(pageUrl) ? await tryExtractCaptions(pageUrl, title) : null;
-    request = auth.token
-      ? buildLocalSendRequest(pageUrl, auth.token, captions, target.apiBase)
-      : buildTokenlessDevSendRequest(pageUrl, captions);
+    request = buildLocalSendRequest(pageUrl, auth.token, captions, target.apiBase);
   }
   if (!request.ok) {
     // Request build failed (bad URL etc.)
@@ -301,7 +299,7 @@ async function checkService() {
     }
   }
   const online = res.ok || res.status === 503;
-  return { online, mode, reason: online ? null : "unreachable", tokenless: r.tokenless };
+  return { online, mode, reason: online ? null : "unreachable" };
 }
 
 async function apiJson(path) {

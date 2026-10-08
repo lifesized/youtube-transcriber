@@ -139,19 +139,20 @@ function isPidAlive(pid) {
 }
 
 function authHeaders() {
-  try {
-    const token = ensureLocalApiToken();
-    return { Authorization: `Bearer ${token}` };
-  } catch {
-    return {};
-  }
+  return { Authorization: `Bearer ${ensureLocalApiToken()}` };
 }
 
 function probeOnce(timeoutMs = 1500) {
+  let headers;
+  try {
+    headers = authHeaders();
+  } catch {
+    return Promise.resolve({ status: "down" });
+  }
   return new Promise((resolve) => {
     const req = http.get(
       healthUrl(),
-      { timeout: timeoutMs, headers: authHeaders() },
+      { timeout: timeoutMs, headers },
       (res) => {
         const identity = res.headers[IDENTITY_HEADER];
         // Drain body so the socket closes cleanly.
@@ -637,5 +638,6 @@ module.exports = {
   logDir,
   logFile,
   log,
+  authHeaders,
   stateFile,
 };

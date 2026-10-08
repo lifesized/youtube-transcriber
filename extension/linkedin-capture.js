@@ -57,15 +57,12 @@ function parseLinkedInMedia(response) {
 }
 
 /**
- * The getLocalToken token when there is one. Without it, only the dev server
- * (a no-auth one) can take the request, so any other target is refused.
- * Cookies are never sent: background.js posts through targetClient.send.
+ * The getLocalToken token is required. Cookies are never sent:
+ * background.js posts through targetClient.send.
  */
 function buildPageSendRequest(pageUrl, token, apiBase) {
-  if (token) return buildLocalSendRequest(pageUrl, token, null, apiBase);
-  const request = buildTokenlessDevSendRequest(pageUrl, null);
-  if (!request.ok || new URL(request.url).origin !== apiBase) return { ok: false };
-  return request;
+  if (!token) return { ok: false };
+  return buildLocalSendRequest(pageUrl, token, null, apiBase);
 }
 
 /**

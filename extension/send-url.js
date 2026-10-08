@@ -214,23 +214,6 @@ function sendBody(url, captions) {
   return body;
 }
 
-/**
- * Dev server only, for a stale or tokenless dev host. No Authorization
- * header, and the endpoint is fixed to 127.0.0.1:19720.
- */
-function buildTokenlessDevSendRequest(pageUrl, captions) {
-  const url = normalizePageUrl(pageUrl);
-  if (!url) return { ok: false };
-  const body = sendBody(url, captions);
-  if (!body) return { ok: false };
-  return {
-    ok: true,
-    url: LOCAL_SEND_ENDPOINT,
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body,
-  };
-}
-
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     LOCAL_SEND_ENDPOINT,
@@ -238,6 +221,5 @@ if (typeof module !== "undefined" && module.exports) {
     normalizePageUrl,
     validateSegments,
     buildLocalSendRequest,
-    buildTokenlessDevSendRequest,
   };
 }

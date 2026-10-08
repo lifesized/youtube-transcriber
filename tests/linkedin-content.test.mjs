@@ -19,7 +19,6 @@ const FIXTURES = path.join(__dirname, "fixtures", "linkedin");
 const LinkedIn = require("../extension/content-linkedin.js");
 const sendUrl = require("../extension/send-url.js");
 globalThis.buildLocalSendRequest = sendUrl.buildLocalSendRequest;
-globalThis.buildTokenlessDevSendRequest = sendUrl.buildTokenlessDevSendRequest;
 const capture = require("../extension/linkedin-capture.js");
 
 const VIEWPORT = { width: 1200, height: 900 };

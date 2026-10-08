@@ -5,10 +5,9 @@
  * handshake, loopback token, authed fetches, status, and Start.
  *
  * Tokens live in memory only, per target. Requests only ever go to the
- * target's own 127.0.0.1 origin and never carry cookies. The dev target may
- * fall back to a request without Authorization when its host is stale
- * (unknown_cmd) or has no token (no_token); that only works against a dev
- * server running without auth. The app target always needs the token.
+ * target's own 127.0.0.1 origin, always with Authorization, and never
+ * carry cookies. A missing token is an error, not a no-auth fallback.
+ * Page routes on the Dev server stay token-optional in middleware.
  */
 
 (function (root, factory) {
@@ -24,7 +23,6 @@
     "extension_not_allowed",
     "unauthorized_caller",
   ]);
-  const TOKENLESS_REASONS = new Set(["unknown_cmd", "no_token"]);
   const PERMISSION_REASONS = new Set([
     "unauthorized",
     "extension_not_allowed",
@@ -99,17 +97,10 @@
       return r;
     }
 
-    function allowsTokenless(target, reason) {
-      return target.id === T.DEV && TOKENLESS_REASONS.has(reason);
-    }
-
-    /** { ok, token } or, dev only, { ok, token: null, tokenless: true }. */
+    /** { ok, token } or { ok: false, reason }. Never a tokenless fallback. */
     async function authFor(target) {
       const tok = await getToken(target);
-      if (tok.ok) return { ok: true, token: tok.token, tokenless: false };
-      if (allowsTokenless(target, tok.reason)) {
-        return { ok: true, token: null, tokenless: true, hostReason: tok.reason };
-      }
+      if (tok.ok) return { ok: true, token: tok.token };
       return { ok: false, reason: tok.reason };
     }
 
@@ -122,22 +113,22 @@
     }
 
     async function send(target, pathOrUrl, init, auth) {
+      if (!auth || !auth.token) return { ok: false, reason: (auth && auth.reason) || "no_token" };
       const url = targetUrl(target, pathOrUrl);
       const headers = { ...((init && init.headers) || {}) };
       delete headers.Authorization;
-      if (auth.token) headers.Authorization = `Bearer ${auth.token}`;
+      headers.Authorization = `Bearer ${auth.token}`;
       let res;
       try {
-        // Never send cookies: tokenless only reaches a dev server without auth.
         res = await fetchImpl(url, { ...init, headers, credentials: "omit" });
       } catch {
         return { ok: false, reason: "unreachable" };
       }
       if (res.status === 401) {
         clearTokens(target.id);
-        return { ok: false, reason: "unauthorized", tokenless: !!auth.tokenless };
+        return { ok: false, reason: "unauthorized" };
       }
-      return { ok: true, res, tokenless: !!auth.tokenless };
+      return { ok: true, res };
     }
 
     async function apiFetch(target, path, init = {}) {
@@ -178,7 +169,7 @@
         helperOutdated: !!hs.outdated,
       };
       if (health.ok && isHealthy(health.res)) {
-        return { ...base, status: T.STATUS.RUNNING, reason: null, tokenless: health.tokenless };
+        return { ...base, status: T.STATUS.RUNNING, reason: null };
       }
       const reason = health.ok ? "unreachable" : health.reason;
       if (PERMISSION_REASONS.has(reason)) {
@@ -229,7 +220,6 @@
     return {
       clearTokens,
       getToken,
-      allowsTokenless,
       authFor,
       send,
       apiFetch,
