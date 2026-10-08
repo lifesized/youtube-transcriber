@@ -9,10 +9,15 @@ on:
     branches:
       - beta/electron-menubar
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Build macOS DMG (arm64)
     runs-on: macos-14  # macOS arm64 runner
+    timeout-minutes: 25
     permissions:
       contents: read
     
@@ -309,6 +314,7 @@ jobs:
           echo "✓ fuses NodeOptions and Inspect are off"
 
       - name: Launch packaged Transcriber.app
+        timeout-minutes: 4
         run: |
           set -euo pipefail
           ROOT="$PWD"
