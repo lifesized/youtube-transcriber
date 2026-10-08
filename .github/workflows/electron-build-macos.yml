@@ -48,6 +48,9 @@ jobs:
       
       - name: LinkedIn capture tests
         run: npm run test:linkedin
+
+      - name: Home page library gate tests
+        run: npm run test:library-gate
       
       - name: Build Next.js
         run: npm run build
