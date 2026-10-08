@@ -361,8 +361,9 @@ test("packaged native host script path is app.asar.unpacked", () => {
   assert.equal(builder.asarUnpack.includes("lib/**/*"), false);
   assert.equal(builder.asarUnpack.includes("node_modules/@prisma/**/*"), false);
   assert.ok(builder.files.includes("lib/**/*.js"));
-  assert.ok(builder.files.includes("!node_modules/**"));
   assert.ok(builder.files.includes("node_modules/better-sqlite3/**/*"));
+  assert.ok(builder.files.includes("node_modules/bindings/**/*"));
+  assert.equal(builder.files.includes("!node_modules/**"), false);
 });
 
 test("CI launches the packaged Transcriber.app and checks asar requires", () => {

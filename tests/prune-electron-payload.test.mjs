@@ -139,7 +139,7 @@ test("electron-builder keeps only en locales and does not asar-pack prisma", () 
   assert.deepEqual(builder.mac.electronLanguages, ["en"]);
   assert.equal(builder.asarUnpack.includes("node_modules/@prisma/**/*"), false);
   assert.equal(builder.files.includes("node_modules/@prisma/**/*"), false);
-  assert.ok(builder.files.includes("!node_modules/**"));
+  assert.equal(builder.files.includes("!node_modules/**"), false);
   assert.ok(builder.files.includes("node_modules/better-sqlite3/**/*"));
   assert.ok(builder.files.includes("node_modules/bindings/**/*"));
   assert.equal(builder.beforeBuild, "./electron/before-build.js");
