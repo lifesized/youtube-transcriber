@@ -21,11 +21,28 @@ module.exports = async function(context) {
   console.log("  Output dir:", appOutDir);
   
   if (electronPlatformName === "darwin") {
+    // electron-builder extraResources skips the source root node_modules
+    // (createFilter returns false when relative === "node_modules"). Copy the
+    // staging tree so @prisma/client and Next's standalone deps actually land.
+    syncStandaloneFromStaging(
+      path.join(appOutDir, "Transcriber.app"),
+      path.join(process.cwd(), "electron", "resources", "standalone")
+    );
     copyRebuiltSqliteIntoStandalone(context);
     assertStandalonePayload(context);
     await adHocCodesign(context);
   }
 };
+
+function syncStandaloneFromStaging(appPath, stagingPath) {
+  const dest = path.join(appPath, "Contents", "Resources", "standalone");
+  if (!fs.existsSync(stagingPath)) {
+    throw new Error(`Staging standalone missing: ${stagingPath}`);
+  }
+  fs.mkdirSync(dest, { recursive: true });
+  fs.cpSync(stagingPath, dest, { recursive: true, dereference: true });
+  console.log("  copied staging standalone (including node_modules) into extraResources");
+}
 
 function copyRebuiltSqliteIntoStandalone(context) {
   const { appOutDir } = context;
@@ -122,3 +139,5 @@ async function adHocCodesign(context) {
     // Don't throw - this is a best-effort operation
   }
 }
+
+module.exports.syncStandaloneFromStaging = syncStandaloneFromStaging;

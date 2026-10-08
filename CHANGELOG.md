@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-08
+
+### Fixed
+- **Packaged `@prisma/client`** — electron-builder extraResources skips a source-root `node_modules`, so afterPack now copies the staging standalone tree (including Prisma) into the `.app` before the payload check.
+
 ## 2026-10-07
 
 ### Added

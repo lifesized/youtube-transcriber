@@ -8,8 +8,12 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+
+const require = createRequire(import.meta.url);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
@@ -103,6 +107,50 @@ test("packaged server path is extraResources/standalone", () => {
   const content = fs.readFileSync(mainPath, "utf8");
   assert.ok(content.includes('path.join(process.resourcesPath, "standalone")'));
   assert.ok(content.includes('path.join(appRoot, "server.js")'));
+});
+
+test("afterPack restores standalone node_modules skipped by extraResources", () => {
+  // electron-builder createFilter() returns false for extraResources root
+  // node_modules, so @prisma/client never lands in the .app. afterPack must
+  // copy the staging tree (including node_modules) on top of that copy.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "afterpack-"));
+  const staging = path.join(tmp, "staging");
+  const appPath = path.join(tmp, "Transcriber.app");
+  const dest = path.join(appPath, "Contents", "Resources", "standalone");
+
+  fs.mkdirSync(path.join(staging, "node_modules", "@prisma", "client"), { recursive: true });
+  fs.mkdirSync(path.join(staging, ".next", "static"), { recursive: true });
+  fs.mkdirSync(path.join(staging, "prisma", "migrations"), { recursive: true });
+  fs.writeFileSync(path.join(staging, "server.js"), "ok");
+  fs.writeFileSync(path.join(staging, "node_modules", "@prisma", "client", "index.js"), "ok");
+  fs.writeFileSync(path.join(staging, ".next", "static", "chunk.js"), "ok");
+
+  fs.mkdirSync(dest, { recursive: true });
+  fs.copyFileSync(path.join(staging, "server.js"), path.join(dest, "server.js"));
+  fs.cpSync(path.join(staging, ".next"), path.join(dest, ".next"), { recursive: true });
+  fs.cpSync(path.join(staging, "prisma"), path.join(dest, "prisma"), { recursive: true });
+  fs.mkdirSync(path.join(dest, "node_modules", "better-sqlite3"), { recursive: true });
+  fs.writeFileSync(path.join(dest, "node_modules", "better-sqlite3", "package.json"), "{}");
+
+  assert.equal(
+    fs.existsSync(path.join(dest, "node_modules", "@prisma", "client")),
+    false,
+    "precondition: extraResources-like copy omitted root node_modules"
+  );
+
+  const afterPack = require(path.join(projectRoot, "electron", "after-pack.js"));
+  afterPack.syncStandaloneFromStaging(appPath, staging);
+
+  assert.ok(
+    fs.existsSync(path.join(dest, "node_modules", "@prisma", "client", "index.js")),
+    "@prisma/client must be restored from staging"
+  );
+  assert.ok(
+    fs.existsSync(path.join(dest, "node_modules", "better-sqlite3", "package.json")),
+    "already-copied better-sqlite3 must remain"
+  );
+
+  fs.rmSync(tmp, { recursive: true, force: true });
 });
 
 test("tray template PNGs exist and are non-empty", () => {
