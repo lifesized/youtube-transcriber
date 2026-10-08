@@ -255,7 +255,8 @@ function pruneBetterSqliteBuild(root) {
   return bytes;
 }
 
-function pruneAsarUnpackedModules(appPath) {
+function pruneAsarUnpackedModules(appPath, extraKeep = []) {
+  const keep = new Set([...ASAR_UNPACKED_KEEP_MODULES, ...extraKeep]);
   const nm = path.join(
     appPath,
     "Contents",
@@ -266,7 +267,7 @@ function pruneAsarUnpackedModules(appPath) {
   if (!fs.existsSync(nm)) return 0;
   let bytes = 0;
   for (const name of fs.readdirSync(nm)) {
-    if (ASAR_UNPACKED_KEEP_MODULES.has(name)) continue;
+    if (keep.has(name)) continue;
     bytes += removePath(path.join(nm, name));
   }
   bytes += pruneBetterSqliteBuild(

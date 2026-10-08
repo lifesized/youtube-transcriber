@@ -65,7 +65,9 @@ function loadElectronUpdater(resourcesPath = process.resourcesPath) {
     module.paths.unshift(dir);
   }
   // Computed name so assert-packaged-requires does not demand this
-  // package inside app.asar. afterPack copies it into asar.unpacked.
+  // package inside app.asar. afterPack copies it into asar.unpacked;
+  // CI asserts every UPDATER_MODULES entry is there and that
+  // ELECTRON_RUN_AS_NODE can require electron-updater from the binary.
   const spec = ["electron", "updater"].join("-");
   return require(spec).autoUpdater;
 }

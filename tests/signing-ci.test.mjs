@@ -229,6 +229,9 @@ test("main wires the updater gate and stops Next before quitAndInstall", () => {
   const afterPack = fs.readFileSync(path.join(root, "electron", "after-pack.js"), "utf8");
   assert.ok(afterPack.includes("copyUpdaterModules"));
   assert.ok(afterPack.includes("electron-updater"));
+  assert.match(workflow, /require\.resolve\(["']electron-updater["']/);
+  assert.match(workflow, /ELECTRON_RUN_AS_NODE=1 "\$APP_PATH" \/tmp\/require-updater\.js/);
+  assert.match(workflow, /UPDATER_MODULES missing under unpacked/);
   const fuses = fs.readFileSync(path.join(root, "scripts", "read-electron-fuses.js"), "utf8");
   assert.match(fuses, /dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX/);
   assert.doesNotMatch(fuses, /@electron\/fuses/);

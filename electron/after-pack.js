@@ -270,7 +270,7 @@ function prunePackagedApp(appPath) {
   logPrune("packaged standalone", pruned);
   const locales = pruneElectronLocales(appPath);
   logPrune("electron locales", locales);
-  const unpacked = pruneAsarUnpackedModules(appPath);
+  const unpacked = pruneAsarUnpackedModules(appPath, UPDATER_MODULES);
   logPrune("asar unpacked modules", unpacked);
 }
 

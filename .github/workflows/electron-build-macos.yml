@@ -666,6 +666,38 @@ jobs:
           fi
           echo "✓ ELECTRON_RUN_AS_NODE works"
 
+          # 3c. Every UPDATER_MODULES entry is under unpacked, and the
+          # packaged binary can require electron-updater (N4).
+          UNPACKED_NM="$ROOT/dist-electron/mac-arm64/Transcriber.app/Contents/Resources/app.asar.unpacked/node_modules"
+          node -e '
+            const fs = require("fs");
+            const path = require("path");
+            const { UPDATER_MODULES } = require("./electron/after-pack.js");
+            const dir = process.argv[1];
+            for (const name of UPDATER_MODULES) {
+              const hit = path.join(dir, name);
+              if (!fs.existsSync(hit)) {
+                console.error("ERROR: UPDATER_MODULES missing under unpacked:", name);
+                process.exit(1);
+              }
+              console.log("✓ unpacked", name);
+            }
+            const resolved = require.resolve("electron-updater", { paths: [dir] });
+            console.log("✓ require.resolve electron-updater ->", resolved);
+          ' "$UNPACKED_NM"
+          cat > /tmp/require-updater.js <<'JS'
+          const dir = process.argv[1];
+          require(require.resolve("electron-updater", { paths: [dir] }));
+          console.log("OK");
+          JS
+          UPDATER_OUT=$(ELECTRON_RUN_AS_NODE=1 "$APP_PATH" /tmp/require-updater.js "$UNPACKED_NM" 2>&1)
+          if [ "$UPDATER_OUT" != "OK" ]; then
+            echo "ERROR: packaged require of electron-updater failed"
+            echo "Output: $UPDATER_OUT"
+            exit 1
+          fi
+          echo "✓ ELECTRON_RUN_AS_NODE require(electron-updater) from packaged binary"
+
           # 3b. Native-host wrapper target exists under app.asar.unpacked, then ping it
           RESOURCES="$ROOT/dist-electron/mac-arm64/Transcriber.app/Contents/Resources"
           HOST_JS="$RESOURCES/app.asar.unpacked/tools/native-host/transcriber-host.js"

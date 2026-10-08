@@ -112,6 +112,22 @@ test("prune drops cache, sourcemaps, native prisma engines, sharp, docs; keeps s
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test("pruneAsarUnpackedModules keeps updater modules when extraKeep is passed", () => {
+  const app = fs.mkdtempSync(path.join(os.tmpdir(), "prune-unpacked-"));
+  const nm = path.join(app, "Contents", "Resources", "app.asar.unpacked", "node_modules");
+  write(path.join(nm, "better-sqlite3", "index.js"), "sqlite");
+  write(path.join(nm, "electron-updater", "index.js"), "updater");
+  write(path.join(nm, "semver", "index.js"), "semver");
+  write(path.join(nm, "leftpad", "index.js"), "junk");
+  const { UPDATER_MODULES } = require(path.join(projectRoot, "electron", "after-pack.js"));
+  prune.pruneAsarUnpackedModules(app, UPDATER_MODULES);
+  assert.equal(fs.existsSync(path.join(nm, "better-sqlite3")), true);
+  assert.equal(fs.existsSync(path.join(nm, "electron-updater")), true);
+  assert.equal(fs.existsSync(path.join(nm, "semver")), true);
+  assert.equal(fs.existsSync(path.join(nm, "leftpad")), false);
+  fs.rmSync(app, { recursive: true, force: true });
+});
+
 test("pruneElectronLocales keeps en and drops other lproj", () => {
   const app = fs.mkdtempSync(path.join(os.tmpdir(), "prune-locales-"));
   const res = path.join(
