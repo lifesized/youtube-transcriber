@@ -20,6 +20,7 @@
     "!electron/dmg/**",
     "tools/**/*",
     "lib/**/*.js",
+    "extension/local-auth-headers.js",
     "package.json",
     "node_modules/better-sqlite3/**/*",
     "node_modules/bindings/**/*",
