@@ -685,14 +685,13 @@ jobs:
             const resolved = require.resolve("electron-updater", { paths: [dir] });
             console.log("✓ require.resolve electron-updater ->", resolved);
           ' "$UNPACKED_NM"
-          cat > /tmp/require-updater.js <<'JS'
-          const dir = process.argv[1];
-          require(require.resolve("electron-updater", { paths: [dir] }));
-          console.log("OK");
-          JS
-          UPDATER_OUT=$(ELECTRON_RUN_AS_NODE=1 "$APP_PATH" /tmp/require-updater.js "$UNPACKED_NM" 2>&1)
-          if [ "$UPDATER_OUT" != "OK" ]; then
-            echo "ERROR: packaged require of electron-updater failed"
+          python3 -c 'import json,sys; print("require(require.resolve(%s,{paths:[%s]})); console.log(\"OK\");" % (json.dumps("electron-updater"), json.dumps(sys.argv[1])))' "$UNPACKED_NM" > /tmp/require-updater.js
+          set +e
+          UPDATER_OUT=$(ELECTRON_RUN_AS_NODE=1 "$APP_PATH" /tmp/require-updater.js 2>&1)
+          UPDATER_STATUS=$?
+          set -e
+          if [ "$UPDATER_STATUS" -ne 0 ] || [ "$UPDATER_OUT" != "OK" ]; then
+            echo "ERROR: packaged require of electron-updater failed (status=$UPDATER_STATUS)"
             echo "Output: $UPDATER_OUT"
             exit 1
           fi
