@@ -69,6 +69,48 @@ function copyRebuiltSqliteIntoStandalone(context) {
   }
   fs.cpSync(rebuilt, dest, { recursive: true });
   console.log("  copied Electron-ABI better-sqlite3 into standalone");
+  const addon = findSqliteAddon(rebuilt);
+  if (!addon) {
+    console.warn("  rebuilt better_sqlite3.node not found under", rebuilt);
+    return;
+  }
+  const standalone = path.join(appPath, "Contents", "Resources", "standalone");
+  const replaced = overlaySqliteNativeAddon(standalone, addon);
+  console.log(`  overlaid Electron-ABI better_sqlite3.node onto ${replaced} cop(y/ies)`);
+}
+
+function findSqliteAddon(root) {
+  const hits = [];
+  const walk = (dir) => {
+    if (!fs.existsSync(dir)) return;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name === "better_sqlite3.node") hits.push(full);
+    }
+  };
+  walk(root);
+  return hits[0] || null;
+}
+
+function overlaySqliteNativeAddon(standaloneDir, rebuiltAddonPath) {
+  if (!fs.existsSync(rebuiltAddonPath)) {
+    throw new Error(`Rebuilt better_sqlite3.node missing: ${rebuiltAddonPath}`);
+  }
+  const targets = [];
+  const walk = (dir) => {
+    if (!fs.existsSync(dir)) return;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name === "better_sqlite3.node") targets.push(full);
+    }
+  };
+  walk(standaloneDir);
+  for (const target of targets) {
+    fs.copyFileSync(rebuiltAddonPath, target);
+  }
+  return targets.length;
 }
 
 function assertStandalonePayload(context) {
@@ -141,3 +183,4 @@ async function adHocCodesign(context) {
 }
 
 module.exports.syncStandaloneFromStaging = syncStandaloneFromStaging;
+module.exports.overlaySqliteNativeAddon = overlaySqliteNativeAddon;

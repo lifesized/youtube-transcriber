@@ -166,6 +166,35 @@ test("afterPack restores standalone node_modules skipped by extraResources", () 
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
+test("afterPack overlays Electron ABI sqlite onto hashed Next copies", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "sqlite-overlay-"));
+  const standalone = path.join(tmp, "standalone");
+  const hashed = path.join(
+    standalone,
+    ".next",
+    "node_modules",
+    "better-sqlite3-deadbeef",
+    "build",
+    "Release"
+  );
+  const top = path.join(standalone, "node_modules", "better-sqlite3", "build", "Release");
+  fs.mkdirSync(hashed, { recursive: true });
+  fs.mkdirSync(top, { recursive: true });
+  fs.writeFileSync(path.join(hashed, "better_sqlite3.node"), "node20");
+  fs.writeFileSync(path.join(top, "better_sqlite3.node"), "node20");
+
+  const rebuilt = path.join(tmp, "rebuilt-better_sqlite3.node");
+  fs.writeFileSync(rebuilt, "electron-abi");
+
+  const afterPack = require(path.join(projectRoot, "electron", "after-pack.js"));
+  const n = afterPack.overlaySqliteNativeAddon(standalone, rebuilt);
+  assert.equal(n, 2);
+  assert.equal(fs.readFileSync(path.join(hashed, "better_sqlite3.node"), "utf8"), "electron-abi");
+  assert.equal(fs.readFileSync(path.join(top, "better_sqlite3.node"), "utf8"), "electron-abi");
+
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
+
 test("tray template PNGs exist and are non-empty", () => {
   for (const name of ["trayTemplate.png", "trayTemplate@2x.png"]) {
     const pngPath = path.join(projectRoot, "electron", "resources", name);

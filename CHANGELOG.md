@@ -5,6 +5,7 @@
 ### Fixed
 - **Packaged `@prisma/client`** — electron-builder extraResources skips a source-root `node_modules`, so afterPack now copies the staging standalone tree (including Prisma) into the `.app` before the payload check.
 - **CI packaged-server launch path** — the smoke test `cd`s into standalone, so `APP_PATH` is now absolute (`$PWD/...`) instead of `dist-electron/...`.
+- **Electron-ABI better-sqlite3** — Next standalone keeps a hashed Node-20 copy under `.next/node_modules/better-sqlite3-*`. afterPack now overlays the Electron-rebuilt `better_sqlite3.node` onto every copy in the packaged tree.
 
 ## 2026-10-07
 
