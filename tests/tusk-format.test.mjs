@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseSlackArtifactMarkdown, renderSlackArtifactMarkdown } from "../lib/tusk/format.ts";
+
+const { parseSlackArtifactMarkdown, renderSlackArtifactMarkdown } = await import(
+  "../lib/tusk/format.ts"
+);
 
 test("renders structured primitives into Slack markdown", () => {
   const markdown = renderSlackArtifactMarkdown({

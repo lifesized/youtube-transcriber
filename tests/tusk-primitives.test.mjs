@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildSlackPrimitivePrompt } from "../lib/tusk/primitives.ts";
+
+const { buildSlackPrimitivePrompt } = await import("../lib/tusk/primitives.ts");
 
 test("builds an engineering primitive prompt", () => {
   const prompt = buildSlackPrimitivePrompt({

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { authTest, postSlackThreadReply, addSlackReaction } from "../lib/tusk/web-api.ts";
+
+const { authTest, postSlackThreadReply, addSlackReaction } = await import(
+  "../lib/tusk/web-api.ts"
+);
 
 function jsonResponse(body, status = 200) {
   return {
