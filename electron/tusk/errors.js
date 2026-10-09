@@ -60,6 +60,16 @@ function classifyLocalFailure(err) {
   if (status === 413 || /too long|too large|payload/i.test(raw)) {
     return { code: "too_long", message: COPY.too_long };
   }
+  const payloadCode =
+    err.code || (err.payload && typeof err.payload.code === "string" ? err.payload.code : "");
+  const combined = `${raw} ${bodyError(err.payload)}`;
+  if (
+    payloadCode === "llm_hourly_cap" ||
+    payloadCode === "override_hourly_cap" ||
+    /override cap|prompt-override cap|hourly summary cap/i.test(combined)
+  ) {
+    return { code: "llm_hourly_cap", message: COPY.llm_hourly_cap };
+  }
   if (status === 429 || /rate.?limit/i.test(raw)) {
     return { code: "rate_limit", message: COPY.rate_limit };
   }

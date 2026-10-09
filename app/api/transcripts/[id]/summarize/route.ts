@@ -96,7 +96,10 @@ export async function POST(
       takeOverrideSlot();
     } catch (error) {
       if (error instanceof OverrideCapError) {
-        return NextResponse.json({ error: error.message }, { status: 429 });
+        return NextResponse.json(
+          { error: error.message, code: "llm_hourly_cap" },
+          { status: 429 }
+        );
       }
       throw error;
     }
