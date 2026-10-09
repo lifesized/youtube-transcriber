@@ -1,12 +1,15 @@
 "use strict";
 
 const { validateBotToken, validateAppToken, looksMasked } = require("./tokens.js");
-const { parseChannelAllowlist } = require("./gates.js");
+const { parseChannelAllowlist, normalizeChannelId } = require("./gates.js");
 const { createTuskRuntime } = require("./runtime.js");
 const { createPipeline } = require("./pipeline.js");
 const { createJobGate } = require("./jobs.js");
 const { createLocalClient } = require("./local-client.js");
 const { cancelledError, busyError, allowlistIdsAdded } = require("./confirm.js");
+const { parseWatchlistText } = require("./watch-feeds.js");
+const { createWatchSeen } = require("./watch-seen.js");
+const { createWatchDigest } = require("./watch-digest.js");
 const slackApi = require("./slack-api.js");
 
 function createTuskManager(options = {}) {
@@ -30,6 +33,7 @@ function createTuskManager(options = {}) {
     },
   };
   let runtime = null;
+  let watch = null;
   let status = { state: "off", workspace: "" };
   let starting = null;
   let confirmOpen = false;
@@ -48,6 +52,10 @@ function createTuskManager(options = {}) {
   }
 
   async function stopRuntime() {
+    if (watch && typeof watch.stop === "function") {
+      watch.stop();
+    }
+    watch = null;
     if (runtime && typeof runtime.stop === "function") {
       await runtime.stop();
     }
@@ -108,6 +116,27 @@ function createTuskManager(options = {}) {
     });
     try {
       await runtime.start();
+      if (cfg.watchFeeds && cfg.watchFeeds.length) {
+        watch = createWatchDigest({
+          getConfig: () => {
+            const live = store.getSlackPlain();
+            return {
+              enabled: live.enabled,
+              botToken: live.botToken,
+              watchFeeds: live.watchFeeds,
+              digestChannel: live.digestChannel,
+              channelAllowlist: live.channelAllowlist,
+            };
+          },
+          seen: options.watchSeen || createWatchSeen(),
+          slackApi: api,
+          localClient,
+          WebSocket: options.WebSocket,
+          timers: options.timers,
+          fetchImpl: options.fetchImpl,
+        });
+        watch.start();
+      }
     } catch {
       emitStatus({ state: "error", workspace: store.getSlackPublic().teamName || "" });
     }
@@ -131,6 +160,20 @@ function createTuskManager(options = {}) {
           : current.channelAllowlist,
       botToken: current.botToken,
       appToken: current.appToken,
+      watchFeeds:
+        patch.watchlist !== undefined
+          ? parseWatchlistText(patch.watchlist).slice(0, 10)
+          : patch.watchFeeds !== undefined
+            ? parseWatchlistText(
+                (Array.isArray(patch.watchFeeds) ? patch.watchFeeds : [])
+                  .map((feed) => (feed && feed.url) || "")
+                  .join("\n")
+              ).slice(0, 10)
+            : current.watchFeeds,
+      digestChannel:
+        patch.digestChannel !== undefined
+          ? normalizeChannelId(patch.digestChannel)
+          : current.digestChannel,
     };
 
     if (patch.botToken !== undefined && !looksMasked(patch.botToken)) {
@@ -183,6 +226,8 @@ function createTuskManager(options = {}) {
         appToken: next.appToken,
         enabled: next.enabled,
         channelAllowlist: next.channelAllowlist,
+        watchFeeds: next.watchFeeds,
+        digestChannel: next.digestChannel,
         teamId: auth.team_id || "",
         teamName: auth.team || "",
         botUserId: auth.user_id || "",
@@ -196,6 +241,8 @@ function createTuskManager(options = {}) {
         appToken: next.appToken,
         enabled: next.enabled,
         channelAllowlist: next.channelAllowlist,
+        watchFeeds: next.watchFeeds,
+        digestChannel: next.digestChannel,
         teamId: "",
         teamName: "",
         botUserId: "",
@@ -208,6 +255,8 @@ function createTuskManager(options = {}) {
       appToken: next.appToken,
       enabled: next.enabled,
       channelAllowlist: next.channelAllowlist,
+      watchFeeds: next.watchFeeds,
+      digestChannel: next.digestChannel,
     });
   }
 

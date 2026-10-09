@@ -44,6 +44,9 @@ export async function PUT(request: NextRequest) {
     appToken?: string;
     enabled?: boolean;
     channelAllowlist?: string | string[];
+    watchlist?: string;
+    watchFeeds?: Array<{ kind?: string; id?: string; url?: string }>;
+    digestChannel?: string;
     resetWorkspace?: boolean;
   };
   try {
@@ -57,6 +60,9 @@ export async function PUT(request: NextRequest) {
       appToken: body.appToken,
       enabled: body.enabled,
       channelAllowlist: body.channelAllowlist,
+      watchlist: body.watchlist,
+      watchFeeds: body.watchFeeds,
+      digestChannel: body.digestChannel,
       resetWorkspace: body.resetWorkspace,
     });
     return NextResponse.json(payload);

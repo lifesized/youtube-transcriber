@@ -126,6 +126,10 @@ class SecretsStore {
       channelAllowlist: Array.isArray(stored.slackChannelAllowlist)
         ? stored.slackChannelAllowlist.filter((id) => typeof id === "string")
         : [],
+      watchFeeds: Array.isArray(stored.slackWatchFeeds)
+        ? stored.slackWatchFeeds.filter((feed) => feed && typeof feed === "object" && typeof feed.url === "string")
+        : [],
+      digestChannel: typeof stored.slackDigestChannel === "string" ? stored.slackDigestChannel : "",
     };
   }
 
@@ -141,6 +145,8 @@ class SecretsStore {
       teamName: plain.teamName,
       botName: plain.botName,
       channelAllowlist: plain.channelAllowlist,
+      watchFeeds: plain.watchFeeds,
+      digestChannel: plain.digestChannel,
     };
   }
 
@@ -162,6 +168,21 @@ class SecretsStore {
       stored.slackChannelAllowlist = Array.isArray(patch.channelAllowlist)
         ? patch.channelAllowlist.map(String)
         : [];
+    }
+    if (patch.watchFeeds !== undefined) {
+      stored.slackWatchFeeds = Array.isArray(patch.watchFeeds)
+        ? patch.watchFeeds
+            .filter((feed) => feed && typeof feed.url === "string")
+            .map((feed) => ({
+              kind: String(feed.kind || ""),
+              id: String(feed.id || ""),
+              url: String(feed.url),
+            }))
+            .slice(0, 10)
+        : [];
+    }
+    if (patch.digestChannel !== undefined) {
+      stored.slackDigestChannel = String(patch.digestChannel || "");
     }
     writeFile(stored);
     return this.getSlackPublic();

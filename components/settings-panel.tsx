@@ -288,6 +288,8 @@ export function SettingsPanel() {
   const [tuskBotToken, setTuskBotToken] = useState("");
   const [tuskAppToken, setTuskAppToken] = useState("");
   const [tuskAllowlist, setTuskAllowlist] = useState("");
+  const [tuskWatchlist, setTuskWatchlist] = useState("");
+  const [tuskDigestChannel, setTuskDigestChannel] = useState("");
   const [tuskEnabled, setTuskEnabled] = useState(false);
   const [tuskHasBotToken, setTuskHasBotToken] = useState(false);
   const [tuskHasAppToken, setTuskHasAppToken] = useState(false);
@@ -313,6 +315,8 @@ export function SettingsPanel() {
     teamName?: string;
     botName?: string;
     channelAllowlist?: string[];
+    watchFeeds?: Array<{ url?: string }>;
+    digestChannel?: string;
     connection?: { state?: string; workspace?: string };
   }) {
     setTuskHasBotToken(!!data.hasBotToken);
@@ -323,6 +327,8 @@ export function SettingsPanel() {
     setTuskTeamName(data.teamName || "");
     setTuskBotName(data.botName || "");
     setTuskAllowlist((data.channelAllowlist || []).join(", "));
+    setTuskWatchlist((data.watchFeeds || []).map((feed) => feed.url).filter(Boolean).join("\n"));
+    setTuskDigestChannel(data.digestChannel || "");
     setTuskBotToken("");
     setTuskAppToken("");
     setTuskResetWorkspace(false);
@@ -765,6 +771,22 @@ export function SettingsPanel() {
           autoComplete="off"
           className="h-11 w-full rounded-md bg-[hsl(var(--panel-2))] px-3 py-3 text-sm text-white/90 placeholder:text-[hsl(var(--muted-2))] shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)]"
         />
+        <textarea
+          value={tuskWatchlist}
+          onChange={(e) => setTuskWatchlist(e.target.value)}
+          placeholder="Watchlist: YouTube channel IDs, playlist IDs, or videos.xml URLs (one per line)"
+          autoComplete="off"
+          rows={3}
+          className="w-full rounded-md bg-[hsl(var(--panel-2))] px-3 py-3 text-sm text-white/90 placeholder:text-[hsl(var(--muted-2))] shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)]"
+        />
+        <input
+          type="text"
+          value={tuskDigestChannel}
+          onChange={(e) => setTuskDigestChannel(e.target.value)}
+          placeholder="Digest channel ID (C…), must be on the allowlist"
+          autoComplete="off"
+          className="h-11 w-full rounded-md bg-[hsl(var(--panel-2))] px-3 py-3 text-sm text-white/90 placeholder:text-[hsl(var(--muted-2))] shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)]"
+        />
         <button
           type="button"
           onClick={async () => {
@@ -779,6 +801,8 @@ export function SettingsPanel() {
                   appToken: tuskAppToken,
                   enabled: tuskEnabled || Boolean(tuskBotToken && tuskAppToken),
                   channelAllowlist: tuskAllowlist,
+                  watchlist: tuskWatchlist,
+                  digestChannel: tuskDigestChannel,
                   resetWorkspace: tuskResetWorkspace,
                 }),
               });

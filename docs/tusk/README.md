@@ -2,7 +2,7 @@
 
 Tusk is a Socket Mode Slack bot that runs inside the Transcriber Electron menu-bar app. No public request URL, tunnel, or cloud worker.
 
-What ships today: `/tusk help`, `/tusk status`, a 👀 reaction plus a threaded summary (or transcript file) on a supported YouTube URL in an allowlisted channel, and `@Tusk <question>` in that thread answering only from that video.
+What ships today: `/tusk help`, `/tusk status`, a 👀 reaction plus a threaded summary (or transcript file) on a supported YouTube URL in an allowlisted channel, `@Tusk <question>` in that thread answering only from that video, and an optional YouTube watchlist digest (public `videos.xml` only) posted to one allowlisted channel.
 
 - **Manifest:** [slack-app-manifest.yaml](./slack-app-manifest.yaml) (same content as [slack-app-manifest.json](./slack-app-manifest.json))
 - **Setup for James:** [setup.md](./setup.md)

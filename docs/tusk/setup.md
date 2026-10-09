@@ -33,9 +33,10 @@ Tusk talks to Slack over Socket Mode from Transcriber on this Mac. There is no p
 2. Find **Slack (Tusk)**.
 3. Paste the bot token and the app-level token.
 4. Type Slack channel IDs (`C…`), comma-separated. An empty allowlist denies every channel, including public ones. A missing `channel_type` is treated as unknown. `/tusk` also uses `channel_name` (`privategroup`, `directmessage`, `mpdm-*`) to deny private, DM, and MPDM conversations unless that ID is on the list.
-5. Turn **Enable Tusk** on and save.
-6. After save the fields show only `saved ••••last4`. The app calls `auth.test` and should show the workspace name and bot name.
-7. The menu-bar status should read **Tusk: connected to &lt;workspace&gt;** (placeholder copy for Design).
+5. Optional watchlist: one YouTube channel ID, playlist ID, or `https://www.youtube.com/feeds/videos.xml?channel_id=…` per line, plus a digest channel ID that is already on the allowlist. Tusk polls that public Atom feed (ETag / If-Modified-Since), transcribes new videos locally, and posts one digest to that channel. The first poll only seeds seen-state so existing videos are not dumped into Slack. LinkedIn and library items captured while signed in are never posted.
+6. Turn **Enable Tusk** on and save.
+7. After save the fields show only `saved ••••last4`. The app calls `auth.test` and should show the workspace name and bot name.
+8. The menu-bar status should read **Tusk: connected to &lt;workspace&gt;** (placeholder copy for Design).
 
 Tokens are encrypted with Electron `safeStorage` (macOS Keychain), same as the LLM and Notion keys. They are never written to SQLite in plaintext, never logged, and never sent back to the Settings page after save.
 
@@ -55,7 +56,7 @@ in **#youtube-notes**. Tusk only receives `message.channels` for public channels
 | --- | --- |
 | `/tusk help` in #youtube-notes | Help text (no processing). |
 | `/tusk status` | Connected, workspace name, bot name. |
-| Paste `https://www.youtube.com/watch?v=jNQXAC9IVRw` (no mention) | Tusk adds 👀. Milestone 1 does **not** transcribe or summarize. |
+| Paste `https://www.youtube.com/watch?v=jNQXAC9IVRw` (no mention) | Tusk adds 👀, then a threaded summary (or a transcript file). |
 | An unsupported or non-http URL | No reaction. Tusk never fetches arbitrary URLs from Slack text. |
 
 ## Troubleshooting

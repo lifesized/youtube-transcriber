@@ -57,6 +57,13 @@ test("Slack tokens are encrypted on disk and public view is saved ••••la
     assert.equal(store.getPlain().llmApiKey, "");
     assert.equal("botToken" in store.getPlain(), false);
     assert.equal(store.getSlackPlain().botToken, BOT);
+    store.setSlack({
+      watchFeeds: [{ kind: "channel", id: "UCuAXFkgsw1L7xaCfnd5JJOw", url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCuAXFkgsw1L7xaCfnd5JJOw" }],
+      digestChannel: "C01234567",
+    });
+    assert.equal(store.getSlackPublic().digestChannel, "C01234567");
+    assert.equal(store.getSlackPublic().watchFeeds[0].kind, "channel");
+    assert.equal(JSON.stringify(store.getSlackPublic()).includes(BOT), false);
     const joined = lines.join("\n");
     assert.equal(joined.includes(BOT), false);
     assert.equal(joined.includes(APP), false);
