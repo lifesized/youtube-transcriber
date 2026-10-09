@@ -10,7 +10,7 @@
  * - Native messaging host installation
  */
 
-const { app, dialog, powerSaveBlocker, safeStorage } = require("electron");
+const { app, dialog, BrowserWindow, powerSaveBlocker, safeStorage } = require("electron");
 const path = require("path");
 const config = require("./config.js");
 const appLog = require("./app-log.js");
@@ -154,7 +154,20 @@ app.whenReady().then(async () => {
   tuskManager = createTuskManager({
     store: secretsStore,
     onStatus: (next) => trayManager.setTuskStatus(next),
-    confirmSensitiveChange: (info) => confirmTuskSensitiveChange(dialog, info),
+    confirmSensitiveChange: (info) =>
+      confirmTuskSensitiveChange(
+        {
+          dialog,
+          app,
+          getParentWindow: () => {
+            const focused = BrowserWindow.getFocusedWindow();
+            if (focused && !focused.isDestroyed()) return focused;
+            const open = BrowserWindow.getAllWindows().find((win) => win && !win.isDestroyed());
+            return open || null;
+          },
+        },
+        info
+      ),
   });
   trayManager.setTuskStatus(tuskManager.getStatus());
 

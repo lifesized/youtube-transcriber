@@ -6,7 +6,7 @@ const { createTuskRuntime } = require("./runtime.js");
 const { createPipeline } = require("./pipeline.js");
 const { createJobGate } = require("./jobs.js");
 const { createLocalClient } = require("./local-client.js");
-const { cancelledError } = require("./confirm.js");
+const { cancelledError, busyError, allowlistIdsAdded } = require("./confirm.js");
 const slackApi = require("./slack-api.js");
 
 function createTuskManager(options = {}) {
@@ -18,6 +18,8 @@ function createTuskManager(options = {}) {
   let runtime = null;
   let status = { state: "off", workspace: "" };
   let starting = null;
+  let confirmOpen = false;
+  const cancelledRequestIds = new Set();
 
   function emitStatus(next) {
     status = { ...status, ...next };
@@ -106,8 +108,7 @@ function createTuskManager(options = {}) {
     return starting;
   }
 
-  async function applyPatch(patch) {
-    const current = store.getSlackPlain();
+  function buildNext(current, patch) {
     const next = {
       enabled: patch.enabled !== undefined ? Boolean(patch.enabled) : current.enabled,
       channelAllowlist:
@@ -136,37 +137,32 @@ function createTuskManager(options = {}) {
         next.appToken = check.value;
       }
     }
+    return next;
+  }
 
+  async function resolveAuth(current, next, resetWorkspace) {
     const tokensChanged =
       next.botToken !== current.botToken || next.appToken !== current.appToken;
-    const resetWorkspace = Boolean(patch.resetWorkspace);
-    let auth = null;
-    if (tokensChanged && next.botToken) {
-      auth = await api.authTest(next.botToken);
-      if (!auth || !auth.ok) {
-        throw new Error((auth && auth.error) || "Slack auth.test failed");
-      }
-      const newTeam = auth.team_id || "";
-      if (!newTeam) {
-        throw new Error("auth.test did not return a team_id");
-      }
-      if (current.teamId && newTeam !== current.teamId && !resetWorkspace) {
-        throw new Error(
-          "This token belongs to a different Slack workspace. Click Reset workspace in Settings to pin the new team."
-        );
-      }
+    if (!tokensChanged || !next.botToken) return null;
+    const auth = await api.authTest(next.botToken);
+    if (!auth || !auth.ok) {
+      throw new Error((auth && auth.error) || "Slack auth.test failed");
     }
-
-    if (tokensChanged || resetWorkspace) {
-      const confirm = options.confirmSensitiveChange;
-      if (typeof confirm !== "function") {
-        throw cancelledError("Tusk token changes need confirmation in the menu-bar app.");
-      }
-      const workspace = (auth && auth.team) || current.teamName || "";
-      const ok = await confirm({ workspace, resetWorkspace, tokensChanged });
-      if (!ok) throw cancelledError();
+    const newTeam = auth.team_id || "";
+    if (!newTeam) {
+      throw new Error("auth.test did not return a team_id");
     }
+    if (current.teamId && newTeam !== current.teamId && !resetWorkspace) {
+      throw new Error(
+        "This token belongs to a different Slack workspace. Click Reset workspace in Settings to pin the new team."
+      );
+    }
+    return auth;
+  }
 
+  function writeSlack(current, next, auth) {
+    const tokensChanged =
+      next.botToken !== current.botToken || next.appToken !== current.appToken;
     if (tokensChanged && next.botToken) {
       store.setSlack({
         botToken: next.botToken,
@@ -178,7 +174,9 @@ function createTuskManager(options = {}) {
         botUserId: auth.user_id || "",
         botName: auth.user || "",
       });
-    } else if (tokensChanged && !next.botToken) {
+      return;
+    }
+    if (tokensChanged && !next.botToken) {
       store.setSlack({
         botToken: "",
         appToken: next.appToken,
@@ -189,13 +187,72 @@ function createTuskManager(options = {}) {
         botUserId: "",
         botName: "",
       });
-    } else {
-      store.setSlack({
-        botToken: next.botToken,
-        appToken: next.appToken,
-        enabled: next.enabled,
-        channelAllowlist: next.channelAllowlist,
-      });
+      return;
+    }
+    store.setSlack({
+      botToken: next.botToken,
+      appToken: next.appToken,
+      enabled: next.enabled,
+      channelAllowlist: next.channelAllowlist,
+    });
+  }
+
+  async function applyPatch(patch, meta = {}) {
+    const requestId = meta.requestId;
+    const isCancelled = () =>
+      Boolean(
+        (typeof meta.isCancelled === "function" && meta.isCancelled()) ||
+          (requestId && cancelledRequestIds.has(requestId))
+      );
+
+    let current = store.getSlackPlain();
+    let next = buildNext(current, patch);
+    const tokensChanged =
+      next.botToken !== current.botToken || next.appToken !== current.appToken;
+    const resetWorkspace = Boolean(patch.resetWorkspace);
+    const allowlistAdded = allowlistIdsAdded(current.channelAllowlist, next.channelAllowlist);
+    const enabledOn = Boolean(next.enabled && !current.enabled);
+    const needsConfirm = tokensChanged || resetWorkspace || allowlistAdded || enabledOn;
+
+    if (needsConfirm && confirmOpen) {
+      throw busyError();
+    }
+
+    let auth = null;
+    if (needsConfirm) confirmOpen = true;
+    try {
+      auth = await resolveAuth(current, next, resetWorkspace);
+      if (isCancelled()) throw cancelledError();
+
+      if (needsConfirm) {
+        const confirm = options.confirmSensitiveChange;
+        if (typeof confirm !== "function") {
+          throw cancelledError("Tusk settings changes need confirmation in the menu-bar app.");
+        }
+        const ok = await confirm({
+          workspace: (auth && auth.team) || current.teamName || "",
+          resetWorkspace,
+          tokensChanged,
+          allowlistAdded,
+          enabledOn,
+          teamId: current.teamId || (auth && auth.team_id) || "",
+          authUrl: (auth && auth.url) || "",
+          currentPin: current.teamId || "",
+          newPin: (auth && auth.team_id) || current.teamId || "",
+        });
+        if (!ok) throw cancelledError();
+        if (isCancelled()) throw cancelledError();
+
+        current = store.getSlackPlain();
+        next = buildNext(current, patch);
+        auth = await resolveAuth(current, next, resetWorkspace);
+      }
+
+      if (isCancelled()) throw cancelledError();
+      writeSlack(current, next, auth);
+    } finally {
+      if (needsConfirm) confirmOpen = false;
+      if (requestId) cancelledRequestIds.delete(requestId);
     }
     return sync();
   }
@@ -212,8 +269,12 @@ function createTuskManager(options = {}) {
         });
         return;
       }
+      if (msg.type === "tusk-set-cancel" && msg.requestId) {
+        cancelledRequestIds.add(msg.requestId);
+        return;
+      }
       if (msg.type === "tusk-set") {
-        applyPatch(msg.payload || {})
+        applyPatch(msg.payload || {}, { requestId: msg.requestId })
           .then((payload) => {
             child.send({
               type: "tusk-set-result",
