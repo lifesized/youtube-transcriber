@@ -222,6 +222,34 @@ test("a revoked token pauses the digest after one summary and does not call the 
   }
 });
 
+test("tick always clears the running flag after a thrown poll", async () => {
+  const { seen, cleanup } = seenInDir();
+  try {
+    let polls = 0;
+    const digest = createWatchDigest({
+      seen,
+      timers: { setTimeout: () => 1, clearTimeout: () => {} },
+      fetchFeed: async () => {
+        polls += 1;
+        throw new Error("boom");
+      },
+      config: {
+        enabled: true,
+        watchFeeds: [{ url: FEED }],
+        digestChannel: "C01234567",
+        channelAllowlist: ["C01234567"],
+      },
+    });
+    digest.start();
+    await assert.rejects(() => digest.tick(), /boom/);
+    await assert.rejects(() => digest.tick(), /boom/);
+    assert.equal(polls, 2, "running must reset so the next tick can run");
+    digest.stop();
+  } finally {
+    cleanup();
+  }
+});
+
 test("digest refuses to post when the destination is not allowlisted", async () => {
   const { seen, cleanup } = seenInDir();
   try {

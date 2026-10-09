@@ -4,6 +4,7 @@ const { isValidFeedUrl, parseFeedUrl, parseYoutubeAtom } = require("./watch-feed
 
 const MAX_FEED_BYTES = 512 * 1024;
 const MAX_REDIRECTS = 2;
+const FETCH_TIMEOUT_MS = 15_000;
 const USER_AGENT = "Transcriber-Tusk/0.4 (local watchlist)";
 
 function headerValue(headers, name) {
@@ -37,6 +38,36 @@ async function readCappedBody(res, maxBytes) {
   if (Number.isFinite(declared) && declared > maxBytes) {
     return { ok: false, error: "too_large" };
   }
+  const body = res && res.body;
+  if (body && typeof body.getReader === "function") {
+    const reader = body.getReader();
+    const chunks = [];
+    let size = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = Buffer.from(value);
+        size += chunk.length;
+        if (size > maxBytes) {
+          try {
+            await reader.cancel();
+          } catch {
+            // cancelled
+          }
+          return { ok: false, error: "too_large" };
+        }
+        chunks.push(chunk);
+      }
+      return { ok: true, text: Buffer.concat(chunks).toString("utf8") };
+    } finally {
+      try {
+        if (typeof reader.releaseLock === "function") reader.releaseLock();
+      } catch {
+        // already released by cancel()
+      }
+    }
+  }
   if (typeof res.arrayBuffer === "function") {
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.length > maxBytes) return { ok: false, error: "too_large" };
@@ -65,6 +96,7 @@ async function fetchYoutubeFeed(url, options = {}) {
       method: "GET",
       headers,
       redirect: "manual",
+      signal: options.signal || AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     const status = res.status;
     if (status === 304) {
@@ -95,8 +127,10 @@ async function fetchYoutubeFeed(url, options = {}) {
 
 module.exports = {
   MAX_FEED_BYTES,
+  FETCH_TIMEOUT_MS,
   USER_AGENT,
   fetchYoutubeFeed,
   resolveRedirect,
+  readCappedBody,
   isValidFeedUrl,
 };

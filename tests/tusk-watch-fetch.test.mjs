@@ -52,6 +52,7 @@ test("fetchYoutubeFeed sends ETag / If-Modified-Since and treats 304 as not modi
   assert.equal(result.ok, true);
   assert.equal(result.notModified, true);
   assert.equal(calls[0].init.redirect, "manual");
+  assert.ok(calls[0].init.signal, "fetch must time out");
   assert.equal(calls[0].init.headers["If-None-Match"], '"abc"');
   assert.equal(calls[0].init.headers["If-Modified-Since"], "Wed, 21 Oct 2015 07:28:00 GMT");
 });
@@ -88,6 +89,35 @@ test("fetchYoutubeFeed refuses a Content-Length over the size cap", async () => 
   });
   assert.equal(result.ok, false);
   assert.equal(result.error, "too_large");
+});
+
+test("readCappedBody cancels a streaming reader past 512 KB", async () => {
+  const { readCappedBody } = require(path.join(root, "electron/tusk/watch-fetch.js"));
+  let cancelled = false;
+  const chunk = Buffer.alloc(200 * 1024, 97);
+  let reads = 0;
+  const res = {
+    headers: { get: () => null },
+    body: {
+      getReader() {
+        return {
+          async read() {
+            reads += 1;
+            if (reads > 4) return { done: true, value: undefined };
+            return { done: false, value: chunk };
+          },
+          async cancel() {
+            cancelled = true;
+          },
+          releaseLock() {},
+        };
+      },
+    },
+  };
+  const result = await readCappedBody(res, 512 * 1024);
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "too_large");
+  assert.equal(cancelled, true);
 });
 
 test("fetchYoutubeFeed refuses a non-feed URL", async () => {
