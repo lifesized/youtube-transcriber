@@ -6,7 +6,7 @@ const { createTuskRuntime } = require("./runtime.js");
 const { createPipeline } = require("./pipeline.js");
 const { createJobGate } = require("./jobs.js");
 const { createLocalClient } = require("./local-client.js");
-const { cancelledError, busyError, allowlistIdsAdded } = require("./confirm.js");
+const { cancelledError, busyError, allowlistIdsAdded, watchFeedsChanged, feedUrls } = require("./confirm.js");
 const { parseWatchlistText } = require("./watch-feeds.js");
 const { createWatchSeen } = require("./watch-seen.js");
 const { createWatchDigest } = require("./watch-digest.js");
@@ -292,7 +292,15 @@ function createTuskManager(options = {}) {
       const resetWorkspace = Boolean(patch.resetWorkspace);
       const allowlistAdded = allowlistIdsAdded(current.channelAllowlist, next.channelAllowlist);
       const enabledOn = Boolean(next.enabled && !current.enabled);
-      needsConfirm = tokensChanged || resetWorkspace || allowlistAdded || enabledOn;
+      const watchlistChanged = watchFeedsChanged(current.watchFeeds, next.watchFeeds);
+      const digestChannelChanged = (current.digestChannel || "") !== (next.digestChannel || "");
+      needsConfirm =
+        tokensChanged ||
+        resetWorkspace ||
+        allowlistAdded ||
+        enabledOn ||
+        watchlistChanged ||
+        digestChannelChanged;
 
       if (needsConfirm && confirmOpen) {
         throw busyError();
@@ -317,10 +325,16 @@ function createTuskManager(options = {}) {
           tokensChanged,
           allowlistAdded,
           enabledOn,
+          watchlistChanged,
+          digestChannelChanged,
           teamId: (auth && auth.team_id) || "",
           authUrl: (auth && auth.url) || "",
           currentPin: current.teamId || "",
           newPin: (auth && auth.team_id) || "",
+          oldDigestChannel: current.digestChannel || "",
+          newDigestChannel: next.digestChannel || "",
+          oldWatchlist: feedUrls(current.watchFeeds),
+          newWatchlist: feedUrls(next.watchFeeds),
         });
         if (!ok) throw cancelledError();
         if (isCancelled()) throw cancelledError();

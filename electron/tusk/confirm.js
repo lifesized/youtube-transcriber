@@ -10,23 +10,44 @@ function cleanDialogField(value, max = 80) {
     .slice(0, max);
 }
 
+function feedUrls(feeds) {
+  return (feeds || [])
+    .map((feed) => (feed && feed.url) || "")
+    .filter(Boolean)
+    .join("\n");
+}
+
+function watchFeedsChanged(currentFeeds, nextFeeds) {
+  return feedUrls(currentFeeds) !== feedUrls(nextFeeds);
+}
+
 function tuskConfirmDialogOptions({
   workspace,
   resetWorkspace,
   tokensChanged,
   allowlistAdded,
   enabledOn,
+  watchlistChanged,
+  digestChannelChanged,
   teamId,
   authUrl,
   currentPin,
   newPin,
+  oldDigestChannel,
+  newDigestChannel,
+  oldWatchlist,
+  newWatchlist,
 } = {}) {
   const name = cleanDialogField(workspace);
   const oldTeam = cleanDialogField(currentPin);
   const newTeam = cleanDialogField(newPin || teamId);
   const url = cleanDialogField(authUrl);
   const named = name || newTeam || oldTeam;
-  const changingTokens = Boolean(tokensChanged || resetWorkspace || (!allowlistAdded && !enabledOn));
+  const changingTokens = Boolean(
+    tokensChanged ||
+      resetWorkspace ||
+      (!allowlistAdded && !enabledOn && !watchlistChanged && !digestChannelChanged)
+  );
 
   let message;
   if (resetWorkspace) {
@@ -43,6 +64,10 @@ function tuskConfirmDialogOptions({
     message = named
       ? `Add channel(s) to the Tusk allowlist for ${named}?`
       : "Add channel(s) to the Tusk allowlist?";
+  } else if (watchlistChanged || digestChannelChanged) {
+    message = named
+      ? `Change the Tusk watchlist or digest channel for ${named}?`
+      : "Change the Tusk watchlist or digest channel?";
   } else {
     message = "Confirm this Tusk settings change?";
   }
@@ -52,6 +77,18 @@ function tuskConfirmDialogOptions({
     `Old team ID: ${oldTeam || "(none)"}`,
     `New team ID: ${newTeam || "(none)"}`,
     url ? `auth.test URL: ${url}` : null,
+    watchlistChanged || digestChannelChanged
+      ? `Old digest channel: ${cleanDialogField(oldDigestChannel) || "(none)"}`
+      : null,
+    watchlistChanged || digestChannelChanged
+      ? `New digest channel: ${cleanDialogField(newDigestChannel) || "(none)"}`
+      : null,
+    watchlistChanged || digestChannelChanged
+      ? `Old watchlist: ${cleanDialogField(oldWatchlist, 160) || "(none)"}`
+      : null,
+    watchlistChanged || digestChannelChanged
+      ? `New watchlist: ${cleanDialogField(newWatchlist, 160) || "(none)"}`
+      : null,
   ]
     .filter(Boolean)
     .join("\n");
@@ -127,4 +164,6 @@ module.exports = {
   cancelledError,
   busyError,
   allowlistIdsAdded,
+  watchFeedsChanged,
+  feedUrls,
 };

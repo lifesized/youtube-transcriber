@@ -206,6 +206,48 @@ test("adding allowlist channels or enabling Tusk requires confirmation", async (
   }
 });
 
+test("changing digestChannel or watchFeeds requires confirm and shows old vs new", async () => {
+  const { store, cleanup } = storeInDir();
+  try {
+    const reasons = [];
+    const manager = createTuskManager({
+      store,
+      slackApi: mockApi(),
+      WebSocket: FakeSocket,
+      confirmSensitiveChange: async (info) => {
+        reasons.push(info);
+        return true;
+      },
+    });
+    await manager.applyPatch({
+      botToken: BOT,
+      appToken: APP,
+      enabled: true,
+      channelAllowlist: ["C01234567"],
+    });
+    reasons.length = 0;
+    const feed =
+      "https://www.youtube.com/feeds/videos.xml?channel_id=UCuAXFkgsw1L7xaCfnd5JJOw";
+    await manager.applyPatch({ watchlist: feed, digestChannel: "C01234567" });
+    assert.equal(reasons.length, 1);
+    assert.equal(reasons[0].watchlistChanged, true);
+    assert.equal(reasons[0].digestChannelChanged, true);
+    assert.equal(reasons[0].oldDigestChannel, "");
+    assert.equal(reasons[0].newDigestChannel, "C01234567");
+    assert.equal(reasons[0].oldWatchlist, "");
+    assert.match(reasons[0].newWatchlist, /UCuAXFkgsw1L7xaCfnd5JJOw/);
+    const dialog = tuskConfirmDialogOptions(reasons[0]);
+    assert.match(dialog.message, /watchlist or digest channel/);
+    assert.match(dialog.detail, /Old digest channel: \(none\)/);
+    assert.match(dialog.detail, /New digest channel: C01234567/);
+    assert.match(dialog.detail, /Old watchlist: \(none\)/);
+    assert.match(dialog.detail, /New watchlist: https:\/\/www\.youtube\.com\/feeds\/videos\.xml/);
+    await manager.stop();
+  } finally {
+    await cleanup();
+  }
+});
+
 test("a busy 409 does not release the dialog lock for a third request", async () => {
   const { store, cleanup } = storeInDir();
   try {
