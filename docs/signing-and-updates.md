@@ -28,7 +28,8 @@ Do **not** set `SIGNING_ENABLED` until the Environment exists and is protected. 
 
 Also do these repo settings once. They are not required for the first signed build, but they are the intended posture:
 
-- **Prevent self review: leave it OFF.** James is the only reviewer. GitHub's "Require a pull request before merging" option **Require approval from someone other than the last pusher** would lock the beta branch because there is no second reviewer.
+- **Environment `release` → Prevent self-review: leave it OFF.** This is the Environment checkbox (Settings → Environments → `release`), not a branch rule. James is the only reviewer and must be able to approve a `release` deployment he started.
+- **Branch rule “Require approval from someone other than the last pusher”: leave it OFF.** That option lives under “Require a pull request before merging” on `beta/electron-menubar`. Turning it on would lock the branch because there is no second reviewer.
 - **Protect `beta/electron-menubar`:** require a pull request before merging, dismiss stale reviews, and block force pushes. Do not require a second reviewer.
 - **Default workflow permissions: read.** Settings → Actions → General → Workflow permissions → **Read repository contents and packages permissions**. The `release` job still requests `contents: write` for `gh release create`. Everything else stays read.
 
@@ -36,7 +37,7 @@ Also do these repo settings once. They are not required for the first signed bui
 
 1. Open `https://github.com/lifesized/youtube-transcriber/settings/environments`.
 2. **New environment**. Name it exactly `release`.
-3. **Required reviewers:** add yourself (James). Leave the reviewer count at 1.
+3. **Required reviewers:** add yourself (James). Leave the reviewer count at 1. Leave **Prevent self-review** OFF on this Environment.
 4. **Deployment branches and tags:** restrict to:
    - Branch: `beta/electron-menubar` (needed for `workflow_dispatch` from that branch).
    - Tag pattern: `v*-beta.*` (example: `v0.2.0-beta.1`).

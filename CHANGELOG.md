@@ -2,10 +2,10 @@
 
 ## 2026-10-09
 
-### Added
-- **Tusk M4 watchlist digest** — Settings › Slack (Tusk) accepts YouTube channel / playlist IDs or `videos.xml` URLs and a digest channel. Tusk polls the public Atom feed (ETag / If-Modified-Since), stores seen video IDs on disk (`0600`), and posts one escaped digest to that allowlisted channel. First poll seeds history. Signed-in library captures are skipped.
-
 ### Security
+- **Signing keychain re-unlocks before DMG codesign** — `notarytool --wait` can exceed 15 minutes, so the sign job unlocks the temporary keychain immediately before `macos-codesign-dmg.sh` and uses `-lut 3600` as a backstop. The `keychain.password` file is deleted after that unlock.
+- **Quit-and-install stops Tusk** — Restart to Update awaits `tuskManager.stop()` before Next is stopped, so the Slack runtime does not survive the swap.
+- **Sign job requires the SHA on beta** — the same `git merge-base --is-ancestor` check as the release job.
 - **Tusk M-1 posting** — Progress `postOrUpdate` sends the bot token. Slack `ok: false` on HTTP 200 throws in `postMessage`, `updateMessage`, and `uploadThreadFile`, so a missing `ts` cannot be handed to `chat.update`.
 - **Tusk M-2 markup** — Video titles in the transcript `initial_comment` and failure `detail` are passed through `escapeSlackMrkdwn`, so `<!channel>`, `<@U…>`, and `<https://evil|Click>` stay literal.
 - **Tusk M-3 Q&A** — `/api/summaries` passes `promptOverride` on every path. A thread question is never written or read back as the video’s cached summary.
@@ -14,6 +14,12 @@
 - **Tusk L-2 sources** — Slack jobs skip LinkedIn, Spotify, `client_panel_scrape`, and any non-YouTube library entry so signed-in captures are not posted to a channel.
 - **Tusk L-3 caps** — 20 LLM calls per hour and 80 per day. The job queue is bounded. The 180s duration cap aborts the client and `POST /api/jobs/cancel`, which aborts in-flight LLM fetches and SIGTERMs live Whisper/yt-dlp children.
 - **Tusk info hardening** — Bullet lists are escaped once. File uploads use `redirect: "error"` and refuse `upload_url` values with userinfo or any port. Prompts wrap question and transcript in data delimiters. `is_ext_shared_channel` is denied unless the channel is allowlisted. An empty `Authorization` header is rejected on Settings writes.
+
+### Changed
+- **James docs name the two self-review settings separately** — Environment `release` → Prevent self-review stays OFF; the `beta/electron-menubar` branch rule “Require approval from someone other than the last pusher” stays OFF.
+
+### Added
+- **Tusk M4 watchlist digest** — Settings › Slack (Tusk) accepts YouTube channel / playlist IDs or `videos.xml` URLs and a digest channel. Tusk polls the public Atom feed (ETag / If-Modified-Since), stores seen video IDs on disk (`0600`), and posts one escaped digest to that allowlisted channel. First poll seeds history. Signed-in library captures are skipped.
 
 ## 2026-10-08
 
