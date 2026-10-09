@@ -16,6 +16,22 @@ function sortUrls(urls) {
   return [...urls].sort((a, b) => (rank[a.platform] ?? 9) - (rank[b.platform] ?? 9));
 }
 
+const SIGNED_IN_SOURCES = new Set(["client_panel_scrape", "linkedin", "linkedin_whisper_local"]);
+
+function isTuskAllowedSource(videoOrUrl) {
+  if (!videoOrUrl || typeof videoOrUrl !== "object") return false;
+  const platform = String(videoOrUrl.platform || "").toLowerCase();
+  const source = String(videoOrUrl.source || "").toLowerCase();
+  if (platform && platform !== "youtube") return false;
+  if (source && source !== "youtube" && SIGNED_IN_SOURCES.has(source)) return false;
+  if (source.startsWith("linkedin")) return false;
+  return platform === "youtube" || (!platform && !source);
+}
+
+function youtubeUrlsOnly(urls) {
+  return (urls || []).filter((item) => item && item.platform === "youtube" && item.url);
+}
+
 function parseSegments(transcript) {
   if (Array.isArray(transcript)) return transcript;
   if (typeof transcript !== "string") return [];
@@ -173,6 +189,12 @@ function createPipeline(options = {}) {
 
       const video = await local.createTranscript(card.sourceUrl, { signal });
       throwIfAborted(signal);
+      if (!isTuskAllowedSource({ ...url, ...video, platform: video.platform || url.platform })) {
+        const err = new Error(COPY.not_youtube);
+        err.status = 422;
+        err.code = "tusk_not_youtube";
+        throw err;
+      }
       const segments = parseSegments(video.transcript);
       card.videoId = video.videoId || card.videoId;
 
@@ -246,8 +268,8 @@ function createPipeline(options = {}) {
   }
 
   async function handleSupportedLink(evt, signal) {
-    const urls = sortUrls(evt.urls || []);
-    if (!urls.length) return { skipped: "no_url" };
+    const urls = youtubeUrlsOnly(sortUrls(evt.urls || []));
+    if (!urls.length) return { skipped: "not_youtube" };
     return processUrl(evt, urls[0], signal);
   }
 
@@ -322,6 +344,8 @@ function createPipeline(options = {}) {
 module.exports = {
   createPipeline,
   sortUrls,
+  youtubeUrlsOnly,
+  isTuskAllowedSource,
   formatTranscriptFile,
   safeFilename,
   parseSegments,

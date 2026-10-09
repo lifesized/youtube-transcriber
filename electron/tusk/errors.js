@@ -15,6 +15,8 @@ const COPY = {
     "Add a summary provider in Transcriber › Settings › Summaries, then paste the link again. I attached the transcript in the meantime.",
   timeout: "Tusk timed out waiting for Transcriber. Try again.",
   cancelled: "Tusk stopped that job.",
+  not_youtube:
+    "Tusk only summarizes public YouTube videos, not LinkedIn, Spotify, or library items captured while signed in.",
   generic: "Tusk couldn’t finish that. Check Transcriber and try again.",
 };
 
@@ -61,6 +63,9 @@ function classifyLocalFailure(err) {
   }
   if (status === 503 && /anthropic|openai|api key|openrouter|summar/i.test(raw)) {
     return { code: "no_llm", message: COPY.no_llm };
+  }
+  if (err.code === "tusk_not_youtube" || /signed in|not linkedin|public youtube/i.test(raw)) {
+    return { code: "not_youtube", message: COPY.not_youtube };
   }
   if (status === 422 && raw && raw.length < 280 && !/stack|token|xoxb|xapp|bearer/i.test(raw)) {
     return { code: "generic", message: raw };

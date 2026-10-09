@@ -7,7 +7,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const { createPipeline } = require(path.join(root, "electron/tusk/pipeline.js"));
+const { createPipeline, isTuskAllowedSource } = require(path.join(root, "electron/tusk/pipeline.js"));
 const { createJobGate } = require(path.join(root, "electron/tusk/jobs.js"));
 const { COPY, classifyLocalFailure } = require(path.join(root, "electron/tusk/errors.js"));
 const { LocalApiError } = require(path.join(root, "electron/tusk/local-client.js"));
@@ -389,3 +389,57 @@ test("job gate dedupes one in-flight job per message and caps concurrency at 2",
   assert.ok(maxRunning <= 2);
   assert.equal(typeof rb, "number");
 });
+
+test("Tusk skips LinkedIn, client_panel_scrape, and any non-YouTube source", async () => {
+  assert.equal(isTuskAllowedSource({ platform: "youtube" }), true);
+  assert.equal(isTuskAllowedSource({ platform: "linkedin" }), false);
+  assert.equal(isTuskAllowedSource({ platform: "spotify" }), false);
+  assert.equal(
+    isTuskAllowedSource({ platform: "youtube", source: "client_panel_scrape" }),
+    false
+  );
+  assert.equal(
+    isTuskAllowedSource({ platform: "linkedin", source: "linkedin_whisper_local" }),
+    false
+  );
+
+  const linkedin = mocks({
+    createTranscript: async () => {
+      throw new Error("must not fetch LinkedIn for Tusk");
+    },
+  });
+  const skipped = await linkedin.pipeline.handleSupportedLink(
+    event({
+      text: "https://www.linkedin.com/feed/update/urn:li:activity:7016901149999955968/",
+      urls: [
+        {
+          platform: "linkedin",
+          contentId: "linkedin:7016901149999955968",
+          url: "https://www.linkedin.com/feed/update/urn:li:activity:7016901149999955968/",
+        },
+      ],
+    })
+  );
+  assert.equal(skipped.skipped, "not_youtube");
+  assert.equal(linkedin.slack.calls.length, 0);
+
+  let fetched = 0;
+  const scraped = mocks({
+    createTranscript: async () => {
+      fetched += 1;
+      return {
+        ...VIDEO,
+        platform: "youtube",
+        source: "client_panel_scrape",
+      };
+    },
+  });
+  const refused = await scraped.pipeline.handleSupportedLink(event());
+  assert.equal(fetched, 1);
+  assert.equal(refused.ok, false);
+  assert.equal(refused.error, "not_youtube");
+  const posted = JSON.stringify(scraped.slack.calls);
+  assert.equal(posted.includes("hello from ci"), false);
+  assert.match(posted, /public YouTube/);
+});
+
