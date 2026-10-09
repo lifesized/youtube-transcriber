@@ -384,6 +384,66 @@ test("quitAndInstall still stops the server and installs when the hook hangs", a
   }
 });
 
+test("quitAndInstall runs only once while a restart is already in flight", async () => {
+  const order = [];
+  const releases = [];
+  const dir = mkdtempSync(path.join(tmpdir(), "ytt-quit-once-"));
+  writeFileSync(
+    path.join(dir, "signing-identity.json"),
+    JSON.stringify({ teamId: TEAM })
+  );
+  const updater = createUpdater({
+    isPackaged: true,
+    isDev: false,
+    resourcesPath: dir,
+    signature: developerId,
+    serverManager: {
+      stop() {
+        order.push("stop-server");
+        return new Promise((resolve) => {
+          releases.push(resolve);
+        });
+      },
+    },
+    loadAutoUpdater: () => ({
+      autoDownload: true,
+      autoInstallOnAppQuit: true,
+      allowDowngrade: true,
+      allowPrerelease: false,
+      forceDevUpdateConfig: true,
+      on() {},
+      setFeedURL() {},
+      quitAndInstall() {
+        order.push("install");
+      },
+    }),
+  });
+  try {
+    const first = updater.quitAndInstall();
+    await new Promise((resolve, reject) => {
+      const start = Date.now();
+      const tick = () => {
+        if (releases.length) return resolve();
+        if (Date.now() - start > 1000) return reject(new Error("stop never started"));
+        setImmediate(tick);
+      };
+      tick();
+    });
+    const second = updater.quitAndInstall();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    try {
+      assert.equal(releases.length, 1);
+    } finally {
+      for (const release of releases) release();
+      await Promise.all([first, second]);
+    }
+    assert.deepEqual(order, ["stop-server", "install"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("quitAndInstall catch resets the flag and restarts the server", async () => {
   const order = [];
   let installing = false;

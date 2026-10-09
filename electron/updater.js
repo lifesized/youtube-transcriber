@@ -218,6 +218,7 @@ function createUpdater(options) {
   let percent = 0;
   let timers = [];
   let autoUpdater = null;
+  let installInFlight = false;
 
   const emit = () => {
     if (typeof onState === "function") {
@@ -305,6 +306,8 @@ function createUpdater(options) {
   }
 
   async function quitAndInstall() {
+    if (installInFlight) return;
+    installInFlight = true;
     try {
       await runBeforeQuitHook(
         onBeforeQuitAndInstall,
@@ -319,6 +322,7 @@ function createUpdater(options) {
     } catch (error) {
       console.warn("updater: quitAndInstall failed:", error && error.message);
       if (typeof onInstallFailed === "function") onInstallFailed();
+      installInFlight = false;
       if (serverManager && typeof serverManager.start === "function") {
         try {
           await serverManager.start();
