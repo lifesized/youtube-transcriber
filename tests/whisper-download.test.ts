@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -216,14 +216,27 @@ test("whisper never pgrep-kills and does not clean up on import", () => {
   assert.match(afterExport, /downloadAudio[\s\S]*cleanupTrackedWhisperProcesses\(\)/);
 });
 
-test("cleanupTrackedWhisperProcesses kills only recorded PIDs", async (t) => {
+function psInspect(pid: number): { startTime: string; exe: string } {
+  const startTime = execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], {
+    encoding: "utf8",
+  }).trim();
+  const exe = path.basename(
+    execFileSync("ps", ["-o", "comm=", "-p", String(pid)], {
+      encoding: "utf8",
+    }).trim()
+  );
+  return { startTime, exe };
+}
+
+test("cleanupTrackedWhisperProcesses kills only recorded matching children", async (t) => {
   const fixtureDir = await mkdtemp(path.join(tmpdir(), "ytt-whisper-pids-"));
   const previousStateDir = process.env.TRANSCRIBER_STATE_DIR;
   process.env.TRANSCRIBER_STATE_DIR = fixtureDir;
+  const whisperBin = path.join(fixtureDir, "whisper");
+  await copyFile("/bin/sleep", whisperBin);
+  await chmod(whisperBin, 0o755);
 
-  const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
-    stdio: "ignore",
-  });
+  const child = spawn(whisperBin, ["60"], { stdio: "ignore", argv0: "whisper" });
   const survivor = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
     stdio: "ignore",
   });
@@ -245,9 +258,17 @@ test("cleanupTrackedWhisperProcesses kills only recorded PIDs", async (t) => {
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.ok(child.pid);
   assert.ok(survivor.pid);
+  const info = psInspect(child.pid);
   await writeFile(
     path.join(fixtureDir, "whisper-children.json"),
-    `${JSON.stringify([child.pid])}\n`
+    `${JSON.stringify([
+      {
+        pid: child.pid,
+        startTime: info.startTime,
+        exe: info.exe,
+        recordedAt: Date.now(),
+      },
+    ])}\n`
   );
 
   const { cleanupTrackedWhisperProcesses } = await import("../lib/whisper.js");
@@ -256,4 +277,40 @@ test("cleanupTrackedWhisperProcesses kills only recorded PIDs", async (t) => {
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.throws(() => process.kill(child.pid as number, 0));
   process.kill(survivor.pid as number, 0);
+});
+
+test("a recorded stray sleep process survives cleanup", async (t) => {
+  const fixtureDir = await mkdtemp(path.join(tmpdir(), "ytt-whisper-sleep-"));
+  const previousStateDir = process.env.TRANSCRIBER_STATE_DIR;
+  process.env.TRANSCRIBER_STATE_DIR = fixtureDir;
+  const child = spawn("sleep", ["60"], { stdio: "ignore" });
+  t.after(async () => {
+    if (previousStateDir === undefined) delete process.env.TRANSCRIBER_STATE_DIR;
+    else process.env.TRANSCRIBER_STATE_DIR = previousStateDir;
+    try {
+      child.kill("SIGKILL");
+    } catch {
+      /* already dead */
+    }
+    await rm(fixtureDir, { recursive: true, force: true });
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.ok(child.pid);
+  const info = psInspect(child.pid);
+  await writeFile(
+    path.join(fixtureDir, "whisper-children.json"),
+    `${JSON.stringify([
+      {
+        pid: child.pid,
+        startTime: info.startTime,
+        exe: info.exe,
+        recordedAt: Date.now(),
+      },
+    ])}\n`
+  );
+
+  const { cleanupTrackedWhisperProcesses } = await import("../lib/whisper.js");
+  const killed = cleanupTrackedWhisperProcesses();
+  assert.equal(killed, 0);
+  process.kill(child.pid as number, 0);
 });

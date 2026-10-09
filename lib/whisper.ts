@@ -1,6 +1,6 @@
-import { execFile, type ChildProcess } from "child_process";
+import { execFile, execFileSync, type ChildProcess } from "child_process";
 import { promises as fs } from "fs";
-import { mkdirSync, readFileSync } from "fs";
+import { mkdirSync, readFileSync, statSync } from "fs";
 import os from "os";
 import path from "path";
 import { writeFileAtomic } from "./write-file-atomic.js";
@@ -118,8 +118,8 @@ function execFileAsync(
     const meta = currentChildMeta();
     liveChildren.set(child, meta);
     if (typeof child.pid === "number" && child.pid > 0) {
-      trackWhisperPid(child.pid);
-      child.on("exit", () => untrackWhisperPid(child.pid as number));
+      trackWhisperChild(child.pid);
+      child.on("exit", () => untrackWhisperChild(child.pid as number));
     }
     const abortSignal = options?.signal ?? currentJobContext()?.signal;
 
@@ -161,60 +161,145 @@ function execFileAsync(
 }
 
 const WHISPER_PID_FILE = "whisper-children.json";
+const MAX_TRACKED_CHILDREN = 32;
+const MAX_PID_FILE_BYTES = 16 * 1024;
+const MAX_TRACKED_AGE_MS = 24 * 60 * 60 * 1000;
+
+type TrackedChild = {
+  pid: number;
+  startTime: string;
+  exe: string;
+  recordedAt: number;
+};
 
 function whisperPidPath(): string {
   return path.join(getStateDir(), WHISPER_PID_FILE);
 }
 
-function readTrackedPids(): number[] {
+function bootCutoffMs(): number {
+  return Date.now() - Math.floor(os.uptime() * 1000);
+}
+
+function allowedWhisperExe(exe: string): boolean {
+  const base = path.basename(exe).toLowerCase();
+  return base === "yt-dlp" || base === "whisper" || base === "python" || /^python\d/.test(base);
+}
+
+function inspectPid(pid: number): { startTime: string; exe: string } | null {
   try {
+    const startTime = execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], {
+      encoding: "utf8",
+      timeout: 2000,
+    }).trim();
+    const exe = path.basename(
+      execFileSync("ps", ["-o", "comm=", "-p", String(pid)], {
+        encoding: "utf8",
+        timeout: 2000,
+      }).trim()
+    );
+    if (!startTime || !exe) return null;
+    return { startTime, exe };
+  } catch {
+    return null;
+  }
+}
+
+function isFreshRecord(rec: TrackedChild): boolean {
+  if (!Number.isInteger(rec.pid) || rec.pid <= 1) return false;
+  if (typeof rec.startTime !== "string" || !rec.startTime) return false;
+  if (typeof rec.exe !== "string" || !rec.exe) return false;
+  if (!Number.isFinite(rec.recordedAt) || rec.recordedAt <= 0) return false;
+  if (rec.recordedAt < bootCutoffMs()) return false;
+  if (Date.now() - rec.recordedAt > MAX_TRACKED_AGE_MS) return false;
+  return true;
+}
+
+function readTrackedChildren(): TrackedChild[] {
+  try {
+    const info = statSync(whisperPidPath());
+    if (!info.isFile() || info.size <= 0 || info.size > MAX_PID_FILE_BYTES) return [];
     const raw = JSON.parse(readFileSync(whisperPidPath(), "utf8"));
     if (!Array.isArray(raw)) return [];
-    return raw.filter((n) => Number.isInteger(n) && n > 1);
+    const out: TrackedChild[] = [];
+    for (const item of raw) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+      const rec: TrackedChild = {
+        pid: Number((item as TrackedChild).pid),
+        startTime: String((item as TrackedChild).startTime || ""),
+        exe: String((item as TrackedChild).exe || ""),
+        recordedAt: Number((item as TrackedChild).recordedAt),
+      };
+      if (!isFreshRecord(rec)) continue;
+      out.push(rec);
+      if (out.length >= MAX_TRACKED_CHILDREN) break;
+    }
+    return out;
   } catch {
     return [];
   }
 }
 
-function writeTrackedPids(pids: number[]): void {
+function writeTrackedChildren(recs: TrackedChild[]): void {
   try {
     mkdirSync(getStateDir(), { recursive: true });
-    writeFileAtomic(whisperPidPath(), `${JSON.stringify(pids)}\n`, 0o600);
+    writeFileAtomic(
+      whisperPidPath(),
+      `${JSON.stringify(recs.slice(0, MAX_TRACKED_CHILDREN))}\n`,
+      0o600
+    );
   } catch {
     // best-effort; cancel still kills liveChildren in this process
   }
 }
 
-function trackWhisperPid(pid: number): void {
-  writeTrackedPids([...new Set([...readTrackedPids(), pid])]);
+function trackWhisperChild(pid: number): void {
+  const info = inspectPid(pid);
+  if (!info) return;
+  const next = readTrackedChildren().filter((rec) => rec.pid !== pid);
+  next.push({
+    pid,
+    startTime: info.startTime,
+    exe: info.exe,
+    recordedAt: Date.now(),
+  });
+  writeTrackedChildren(next.slice(-MAX_TRACKED_CHILDREN));
 }
 
-function untrackWhisperPid(pid: number): void {
-  writeTrackedPids(readTrackedPids().filter((n) => n !== pid));
+function untrackWhisperChild(pid: number): void {
+  writeTrackedChildren(readTrackedChildren().filter((rec) => rec.pid !== pid));
 }
 
-/** Kill only PIDs this app spawned and recorded. Never kill by name pattern. */
+/** Kill only recorded children that still match pid + start + allowed exe. */
 export function cleanupTrackedWhisperProcesses(): number {
   const livePids = new Set<number>();
   for (const child of liveChildren.keys()) {
     if (typeof child.pid === "number" && child.pid > 1) livePids.add(child.pid);
   }
-  const pids = readTrackedPids();
-  const keep: number[] = [];
+  const recs = readTrackedChildren();
+  const keep: TrackedChild[] = [];
   let n = 0;
-  for (const pid of pids) {
-    if (livePids.has(pid)) {
-      keep.push(pid);
+  for (const rec of recs) {
+    if (livePids.has(rec.pid)) {
+      keep.push(rec);
+      continue;
+    }
+    const live = inspectPid(rec.pid);
+    if (
+      !live ||
+      live.startTime !== rec.startTime ||
+      live.exe !== rec.exe ||
+      !allowedWhisperExe(live.exe)
+    ) {
       continue;
     }
     try {
-      process.kill(pid, "SIGKILL");
+      process.kill(rec.pid, "SIGKILL");
       n += 1;
     } catch {
       // already dead
     }
   }
-  writeTrackedPids(keep);
+  writeTrackedChildren(keep);
   return n;
 }
 
