@@ -120,6 +120,18 @@ function createWatchDigest(options = {}) {
     }
   }
 
+  function reportPauseStatus() {
+    const persisted = Boolean(seen.isDigestPaused && seen.isDigestPaused());
+    const reason = pauseReason || (seen.digestPauseReason && seen.digestPauseReason()) || "";
+    if (!paused && !persisted) return false;
+    paused = true;
+    pauseReason = reason;
+    if (typeof options.onPause === "function") {
+      options.onPause({ reason, message: pauseCopy(reason) });
+    }
+    return true;
+  }
+
   function config() {
     const cfg = getConfig() || {};
     const feeds = Array.isArray(cfg.watchFeeds) ? cfg.watchFeeds : [];
@@ -321,6 +333,8 @@ function createWatchDigest(options = {}) {
       stopped = false;
       startedAt = now();
       if (pollTimer != null) timers.clearTimeout(pollTimer);
+      pollTimer = null;
+      if (reportPauseStatus()) return;
       schedule(0);
     },
     stop,
@@ -329,6 +343,7 @@ function createWatchDigest(options = {}) {
     tick,
     formatDigestMessage,
     digestChannelAllowed,
+    reportPauseStatus,
     isStopped: () => stopped,
     isPaused: () => paused || Boolean(seen.isDigestPaused && seen.isDigestPaused()),
     hasPollScheduled: () => pollTimer != null,

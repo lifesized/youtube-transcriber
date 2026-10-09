@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -60,10 +61,43 @@ test("PUT /api/settings/tusk rejects bearer-only and accepts Settings same-origi
     assert.equal(settings.status, 503);
     const payload = await settings.json();
     assert.match(payload.error, /menu-bar app|Keychain/i);
+
+    const resumeBearer = await PUT(
+      fakeRequest({ authorization: `Bearer ${TOKEN}`, secFetchSite: "cross-site" }, { resumeDigest: true })
+    );
+    assert.equal(resumeBearer.status, 401);
+
+    const resumeAuthPlusCookie = await PUT(
+      fakeRequest(
+        {
+          authorization: `Bearer ${TOKEN}`,
+          cookie: COOKIE,
+          secFetchSite: "same-origin",
+        },
+        { resumeDigest: true }
+      )
+    );
+    assert.equal(resumeAuthPlusCookie.status, 401);
+
+    const resumeSettings = await PUT(
+      fakeRequest({ cookie: COOKIE, secFetchSite: "same-origin" }, { resumeDigest: true })
+    );
+    assert.equal(resumeSettings.status, 503);
   } finally {
     if (prevPort === undefined) delete process.env.PORT;
     else process.env.PORT = prevPort;
     if (prevToken === undefined) delete process.env.TRANSCRIBER_LOCAL_TOKEN;
     else process.env.TRANSCRIBER_LOCAL_TOKEN = prevToken;
   }
+});
+
+test("Settings Slack (Tusk) Resume digest uses the cookie write gate, not Authorization", () => {
+  const panel = readFileSync(path.join(root, "components/settings-panel.tsx"), "utf8");
+  assert.match(panel, /Resume digest/);
+  assert.match(panel, /resumeDigest:\s*true/);
+  const resumeIdx = panel.indexOf("resumeDigest: true");
+  assert.ok(resumeIdx > 0);
+  const resumeChunk = panel.slice(resumeIdx - 400, resumeIdx + 80);
+  assert.match(resumeChunk, /\/api\/settings\/tusk/);
+  assert.doesNotMatch(resumeChunk, /Authorization/);
 });

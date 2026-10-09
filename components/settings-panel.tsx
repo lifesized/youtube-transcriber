@@ -299,6 +299,7 @@ export function SettingsPanel() {
   const [tuskBotName, setTuskBotName] = useState("");
   const [tuskConnection, setTuskConnection] = useState("");
   const [tuskDigestStatus, setTuskDigestStatus] = useState("");
+  const [tuskDigestPaused, setTuskDigestPaused] = useState(false);
   const [tuskSaving, setTuskSaving] = useState(false);
   const [tuskError, setTuskError] = useState("");
   const [tuskResetWorkspace, setTuskResetWorkspace] = useState(false);
@@ -343,6 +344,7 @@ export function SettingsPanel() {
     else if (conn === "error") setTuskConnection("error");
     else setTuskConnection(conn || (data.enabled ? "off" : "off"));
     const digest = data.connection?.digest;
+    setTuskDigestPaused(Boolean(digest?.paused));
     setTuskDigestStatus(
       digest?.paused
         ? digest.message || `Digest paused (${digest.reason || "error"})`
@@ -798,43 +800,76 @@ export function SettingsPanel() {
           autoComplete="off"
           className="h-11 w-full rounded-md bg-[hsl(var(--panel-2))] px-3 py-3 text-sm text-white/90 placeholder:text-[hsl(var(--muted-2))] shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)]"
         />
-        <button
-          type="button"
-          onClick={async () => {
-            setTuskSaving(true);
-            setTuskError("");
-            try {
-              const res = await fetch("/api/settings/tusk", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  botToken: tuskBotToken,
-                  appToken: tuskAppToken,
-                  enabled: tuskEnabled || Boolean(tuskBotToken && tuskAppToken),
-                  channelAllowlist: tuskAllowlist,
-                  watchlist: tuskWatchlist,
-                  digestChannel: tuskDigestChannel,
-                  resetWorkspace: tuskResetWorkspace,
-                }),
-              });
-              const data = await res.json().catch(() => ({}));
-              if (!res.ok) {
-                setTuskError(data.error || "Could not save");
-                return;
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={async () => {
+              setTuskSaving(true);
+              setTuskError("");
+              try {
+                const res = await fetch("/api/settings/tusk", {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    botToken: tuskBotToken,
+                    appToken: tuskAppToken,
+                    enabled: tuskEnabled || Boolean(tuskBotToken && tuskAppToken),
+                    channelAllowlist: tuskAllowlist,
+                    watchlist: tuskWatchlist,
+                    digestChannel: tuskDigestChannel,
+                    resetWorkspace: tuskResetWorkspace,
+                  }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                  setTuskError(data.error || "Could not save");
+                  return;
+                }
+                applyTuskPublic(data);
+              } catch {
+                setTuskError("Could not save");
+              } finally {
+                setTuskSaving(false);
               }
-              applyTuskPublic(data);
-            } catch {
-              setTuskError("Could not save");
-            } finally {
-              setTuskSaving(false);
-            }
-          }}
-          disabled={tuskSaving}
-          aria-busy={tuskSaving}
-          className="h-11 rounded-md bg-[hsl(var(--accent))] px-4 py-3 text-sm font-semibold text-black shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] disabled:cursor-not-allowed disabled:text-[hsl(var(--muted-2))] disabled:hover:bg-[hsl(var(--accent))]"
-        >
-          {tuskSaving ? "Saving…" : "Save Tusk"}
-        </button>
+            }}
+            disabled={tuskSaving}
+            aria-busy={tuskSaving}
+            className="h-11 rounded-md bg-[hsl(var(--accent))] px-4 py-3 text-sm font-semibold text-black shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] disabled:cursor-not-allowed disabled:text-[hsl(var(--muted-2))] disabled:hover:bg-[hsl(var(--accent))]"
+          >
+            {tuskSaving ? "Saving…" : "Save Tusk"}
+          </button>
+          {tuskDigestPaused ? (
+            <button
+              type="button"
+              onClick={async () => {
+                setTuskSaving(true);
+                setTuskError("");
+                try {
+                  const res = await fetch("/api/settings/tusk", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ resumeDigest: true }),
+                  });
+                  const data = await res.json().catch(() => ({}));
+                  if (!res.ok) {
+                    setTuskError(data.error || "Could not resume digest");
+                    return;
+                  }
+                  applyTuskPublic(data);
+                } catch {
+                  setTuskError("Could not resume digest");
+                } finally {
+                  setTuskSaving(false);
+                }
+              }}
+              disabled={tuskSaving}
+              aria-busy={tuskSaving}
+              className="h-11 rounded-md bg-[hsl(var(--panel-2))] px-4 py-3 text-sm font-semibold text-white/80 shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)] disabled:cursor-not-allowed disabled:text-[hsl(var(--muted-2))] disabled:hover:bg-[hsl(var(--panel-2))]"
+            >
+              {tuskSaving ? "Resuming…" : "Resume digest"}
+            </button>
+          ) : null}
+        </div>
         {tuskTeamName ? (
           <label className="flex items-start gap-2 text-sm text-white/40">
             <input

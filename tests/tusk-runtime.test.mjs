@@ -10,6 +10,7 @@ const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const { createTuskRuntime, BACKOFF_MS, MAX_RETRY_AFTER_MS } = require(path.join(root, "electron/tusk/runtime.js"));
 const { createTuskManager } = require(path.join(root, "electron/tusk/manager.js"));
+const { createWatchSeen } = require(path.join(root, "electron/tusk/watch-seen.js"));
 const { SecretsStore } = require(path.join(root, "electron/secrets-store.js"));
 
 const BOT = "xoxb-123456789012-1234567890123-AbCdEfGhIjKlMnOpQrStUv";
@@ -693,4 +694,183 @@ test("Retry-After is clamped to 300s and never below backoff", async () => {
   await assert.rejects(() => tinyRuntime.start());
   assert.equal(tiny[0], BACKOFF_MS[0]);
   await tinyRuntime.stop();
+});
+
+function managerHarness() {
+  const dir = mkdtempSync(path.join(tmpdir(), "tusk-n3-"));
+  const prev = process.env.TRANSCRIBER_STATE_DIR;
+  process.env.TRANSCRIBER_STATE_DIR = dir;
+  const store = new SecretsStore({
+    safeStorage: {
+      isEncryptionAvailable: () => true,
+      encryptString: (p) => Buffer.from(`enc:${p}`),
+      decryptString: (b) => Buffer.from(b).toString().slice(4),
+    },
+  });
+  const watchSeen = createWatchSeen({ stateDir: dir });
+  const statuses = [];
+  const timers = createTimerQueue();
+  const FEED = "https://www.youtube.com/feeds/videos.xml?channel_id=UCuAXFkgsw1L7xaCfnd5JJOw";
+  const manager = createTuskManager({
+    store,
+    watchSeen,
+    slackApi: mockApi(),
+    WebSocket: FakeSocket,
+    timers: timers.api,
+    fetchImpl: async () => ({ ok: true, notModified: true }),
+    confirmSensitiveChange: async () => true,
+    onStatus: (s) => statuses.push({ ...s }),
+    createRuntime: () => ({
+      start: async () => {},
+      stop: async () => {},
+      isStopped: () => false,
+    }),
+  });
+  return {
+    dir,
+    store,
+    watchSeen,
+    manager,
+    statuses,
+    timers,
+    FEED,
+    async cleanup() {
+      await manager.stop();
+      if (prev === undefined) delete process.env.TRANSCRIBER_STATE_DIR;
+      else process.env.TRANSCRIBER_STATE_DIR = prev;
+      rmSync(dir, { recursive: true, force: true });
+    },
+  };
+}
+
+test("saving tokens, digest channel, or allowlist clears a persisted digest pause", async () => {
+  const harness = managerHarness();
+  try {
+    await harness.manager.applyPatch({
+      botToken: BOT,
+      appToken: APP,
+      enabled: true,
+      channelAllowlist: ["C01234567"],
+      watchlist: harness.FEED,
+      digestChannel: "C01234567",
+    });
+    harness.watchSeen.pauseDigest("token_revoked");
+    assert.equal(harness.watchSeen.isDigestPaused(), true);
+
+    await harness.manager.applyPatch({ channelAllowlist: ["C01234567", "C07654321"] });
+    assert.equal(harness.watchSeen.isDigestPaused(), false);
+
+    harness.watchSeen.pauseDigest("not_in_channel");
+    await harness.manager.applyPatch({ digestChannel: "C07654321" });
+    assert.equal(harness.watchSeen.isDigestPaused(), false);
+
+    harness.watchSeen.pauseDigest("invalid_auth");
+    const otherBot = "xoxb-123456789012-1234567890123-ZyXwVuTsRqPoNmLkJiHgFeDc";
+    await harness.manager.applyPatch({ botToken: otherBot, appToken: APP, resetWorkspace: true });
+    assert.equal(harness.watchSeen.isDigestPaused(), false);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("resumeDigest clears the pause without a confirm dialog", async () => {
+  const harness = managerHarness();
+  let confirms = 0;
+  try {
+    const manager = createTuskManager({
+      store: harness.store,
+      watchSeen: harness.watchSeen,
+      slackApi: mockApi(),
+      WebSocket: FakeSocket,
+      timers: harness.timers.api,
+      fetchImpl: async () => ({ ok: true, notModified: true }),
+      confirmSensitiveChange: async () => {
+        confirms += 1;
+        return true;
+      },
+      createRuntime: () => ({
+        start: async () => {},
+        stop: async () => {},
+        isStopped: () => false,
+      }),
+    });
+    await manager.applyPatch({
+      botToken: BOT,
+      appToken: APP,
+      enabled: true,
+      channelAllowlist: ["C01234567"],
+      watchlist: harness.FEED,
+      digestChannel: "C01234567",
+    });
+    confirms = 0;
+    harness.watchSeen.pauseDigest("channel_not_found");
+    await manager.applyPatch({ resumeDigest: true });
+    assert.equal(harness.watchSeen.isDigestPaused(), false);
+    assert.equal(confirms, 0, "Resume digest is not a confirm-gated settings change");
+    await manager.stop();
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("sync after restart resends the persisted digest pause to Settings", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "tusk-n3-restart-"));
+  const prev = process.env.TRANSCRIBER_STATE_DIR;
+  process.env.TRANSCRIBER_STATE_DIR = dir;
+  try {
+    const store = new SecretsStore({
+      safeStorage: {
+        isEncryptionAvailable: () => true,
+        encryptString: (p) => Buffer.from(`enc:${p}`),
+        decryptString: (b) => Buffer.from(b).toString().slice(4),
+      },
+    });
+    store.setSlack({
+      botToken: BOT,
+      appToken: APP,
+      enabled: true,
+      teamId: "THOME",
+      teamName: "Personal",
+      botUserId: "Ubot",
+      botName: "tusk",
+      channelAllowlist: ["C01234567"],
+      watchFeeds: [
+        {
+          kind: "channel",
+          id: "UCuAXFkgsw1L7xaCfnd5JJOw",
+          url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCuAXFkgsw1L7xaCfnd5JJOw",
+        },
+      ],
+      digestChannel: "C01234567",
+    });
+    const watchSeen = createWatchSeen({ stateDir: dir });
+    watchSeen.pauseDigest("not_in_channel");
+    const statuses = [];
+    const timers = createTimerQueue();
+    const manager = createTuskManager({
+      store,
+      watchSeen,
+      slackApi: mockApi(),
+      WebSocket: FakeSocket,
+      timers: timers.api,
+      fetchImpl: async () => ({ ok: true, notModified: true }),
+      onStatus: (s) => statuses.push({ ...s }),
+      createRuntime: () => ({
+        start: async () => {},
+        stop: async () => {},
+        isStopped: () => false,
+      }),
+    });
+    await manager.sync();
+    const digest = manager.getStatus().digest;
+    assert.equal(digest.paused, true);
+    assert.equal(digest.reason, "not_in_channel");
+    assert.match(digest.message, /not in that channel/);
+    assert.equal(timers.pending().length, 0, "a paused digest must not schedule a poll");
+    await manager.stop();
+  } finally {
+    if (prev === undefined) delete process.env.TRANSCRIBER_STATE_DIR;
+    else process.env.TRANSCRIBER_STATE_DIR = prev;
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

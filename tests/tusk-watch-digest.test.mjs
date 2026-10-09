@@ -406,3 +406,40 @@ test("digest refuses to post when the destination is not allowlisted", async () 
     cleanup();
   }
 });
+
+test("start resends a persisted pause and does not schedule a poll", () => {
+  const { seen, cleanup } = seenInDir();
+  try {
+    seen.pauseDigest("not_in_channel");
+    const pauses = [];
+    const timers = [];
+    const digest = createWatchDigest({
+      seen,
+      onPause: (info) => pauses.push(info),
+      timers: {
+        setTimeout: (fn, ms) => {
+          const id = { fn, ms };
+          timers.push(id);
+          return id;
+        },
+        clearTimeout: () => {},
+      },
+      config: {
+        enabled: true,
+        watchFeeds: [{ url: FEED }],
+        digestChannel: "C01234567",
+        channelAllowlist: ["C01234567"],
+      },
+    });
+    digest.start();
+    assert.equal(pauses.length, 1);
+    assert.equal(pauses[0].reason, "not_in_channel");
+    assert.match(pauses[0].message, /not in that channel/);
+    assert.equal(digest.isPaused(), true);
+    assert.equal(digest.hasPollScheduled(), false);
+    assert.equal(timers.length, 0);
+    digest.stop();
+  } finally {
+    cleanup();
+  }
+});

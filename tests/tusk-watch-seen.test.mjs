@@ -62,6 +62,20 @@ test("corrupt seen file is moved aside and reseeds without a first-run flood", (
   });
 });
 
+test("clearDigestPause drops a persisted pause so a later load is not paused", () => {
+  withDir((dir) => {
+    const seen = createWatchSeen({ stateDir: dir });
+    seen.pauseDigest("not_in_channel");
+    assert.equal(seen.isDigestPaused(), true);
+    assert.equal(seen.digestPauseReason(), "not_in_channel");
+    seen.clearDigestPause();
+    assert.equal(seen.isDigestPaused(), false);
+    assert.equal(seen.digestPauseReason(), "");
+    const again = createWatchSeen({ stateDir: dir });
+    assert.equal(again.isDigestPaused(), false);
+  });
+});
+
 test("feed meta stores etag for the next poll and strips CR/LF", () => {
   withDir((dir) => {
     const seen = createWatchSeen({ stateDir: dir, now: () => 50 });

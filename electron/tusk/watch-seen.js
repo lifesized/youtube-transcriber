@@ -224,6 +224,12 @@ function createWatchSeen(options = {}) {
       state.digestPauseReason = String(reason || "").slice(0, 80);
       persist();
     },
+    clearDigestPause() {
+      const state = load();
+      state.digestPaused = false;
+      state.digestPauseReason = "";
+      persist();
+    },
     isDigestPaused() {
       return Boolean(load().digestPaused);
     },

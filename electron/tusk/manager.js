@@ -81,9 +81,13 @@ function createTuskManager(options = {}) {
 
   function ensureWatchRunning() {
     const live = store.getSlackPlain();
-    if (!live.enabled || digestIsPaused()) return;
+    if (!live.enabled) return;
     const runner = attachWatch();
     if (!runner) return;
+    if (digestIsPaused()) {
+      if (typeof runner.reportPauseStatus === "function") runner.reportPauseStatus();
+      return;
+    }
     if (runner.isStopped()) runner.start();
   }
 
@@ -373,6 +377,17 @@ function createTuskManager(options = {}) {
 
       if (isCancelled()) throw cancelledError();
       writeSlack(current, next, auth);
+      const allowlistChanged =
+        (current.channelAllowlist || []).join("\0") !== (next.channelAllowlist || []).join("\0");
+      if (
+        patch.resumeDigest ||
+        tokensChanged ||
+        digestChannelChanged ||
+        allowlistChanged
+      ) {
+        if (typeof watchSeen.clearDigestPause === "function") watchSeen.clearDigestPause();
+        emitStatus({ digest: { paused: false, reason: "", message: "" } });
+      }
     } finally {
       if (tookLock) confirmOpen = false;
       if (requestId) pendingRequests.delete(requestId);

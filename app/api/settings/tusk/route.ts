@@ -48,6 +48,7 @@ export async function PUT(request: NextRequest) {
     watchFeeds?: Array<{ kind?: string; id?: string; url?: string }>;
     digestChannel?: string;
     resetWorkspace?: boolean;
+    resumeDigest?: boolean;
   };
   try {
     body = await request.json();
@@ -64,6 +65,7 @@ export async function PUT(request: NextRequest) {
       watchFeeds: body.watchFeeds,
       digestChannel: body.digestChannel,
       resetWorkspace: body.resetWorkspace,
+      resumeDigest: body.resumeDigest === true,
     });
     return NextResponse.json(payload);
   } catch (error) {
