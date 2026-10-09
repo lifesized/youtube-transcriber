@@ -13,8 +13,20 @@ function createTuskManager(options = {}) {
   const store = options.store;
   const api = options.slackApi || slackApi;
   const createRuntime = options.createRuntime || createTuskRuntime;
-  const jobs = options.jobGate || createJobGate();
-  const localClient = options.localClient || createLocalClient();
+  const rawClient = options.localClient || createLocalClient();
+  const jobs =
+    options.jobGate ||
+    createJobGate({
+      cancelServerJob: () =>
+        rawClient.cancelInFlight ? rawClient.cancelInFlight() : Promise.resolve(),
+    });
+  const localClient = {
+    ...rawClient,
+    createSummary(transcriptId, extra) {
+      jobs.takeLlm();
+      return rawClient.createSummary(transcriptId, extra);
+    },
+  };
   let runtime = null;
   let status = { state: "off", workspace: "" };
   let starting = null;

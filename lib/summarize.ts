@@ -12,6 +12,7 @@ import {
   LLM_DEFAULT_MODELS,
   type LlmProvider,
 } from "./llm-provider";
+import { beginServerJob } from "./in-flight-jobs";
 
 export type { LlmProvider };
 export { callLlmProvider, LLM_DEFAULT_MODELS as DEFAULT_MODELS };
@@ -56,6 +57,7 @@ export async function summarize(
     provider?: LlmProvider;
     apiKey?: string;
     promptOverride?: string | null;
+    signal?: AbortSignal;
   }
 ): Promise<string> {
   const lang = transcript.captionLanguage;
@@ -69,19 +71,31 @@ export async function summarize(
     if (cached) return cached;
   }
 
-  const { provider, apiKey } = await resolveLlmConfig(options);
-  const segments = segmentsFromTranscript(transcript.transcript);
-  const transcriptText = formatTranscriptForSummary(segments);
-  const summary = await callLlmProvider({
-    provider,
-    apiKey,
-    title: transcript.title,
-    transcriptText,
-    promptOverride: promptOverride || null,
-    fetchImpl: options?.fetchImpl,
-  });
-  if (!promptOverride) {
-    await cacheBaseSummary(transcript.videoId, lang, promptVersion, summary);
+  const job = beginServerJob(options?.signal);
+  try {
+    if (job.signal.aborted) {
+      const err = new Error("aborted");
+      err.name = "AbortError";
+      (err as Error & { code?: string }).code = "ABORT_ERR";
+      throw err;
+    }
+    const { provider, apiKey } = await resolveLlmConfig(options);
+    const segments = segmentsFromTranscript(transcript.transcript);
+    const transcriptText = formatTranscriptForSummary(segments);
+    const summary = await callLlmProvider({
+      provider,
+      apiKey,
+      title: transcript.title,
+      transcriptText,
+      promptOverride: promptOverride || null,
+      fetchImpl: options?.fetchImpl,
+      signal: job.signal,
+    });
+    if (!promptOverride) {
+      await cacheBaseSummary(transcript.videoId, lang, promptVersion, summary);
+    }
+    return summary;
+  } finally {
+    job.finish();
   }
-  return summary;
 }

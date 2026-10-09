@@ -1,4 +1,4 @@
-import { execFile, execSync } from "child_process";
+import { execFile, execSync, type ChildProcess } from "child_process";
 import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
@@ -43,30 +43,78 @@ interface WhisperJsonOutput {
   segments: WhisperJsonSegment[];
 }
 
+const liveChildren = new Set<ChildProcess>();
+
+function killChild(child: ChildProcess): void {
+  try {
+    child.kill("SIGTERM");
+  } catch {
+    /* already dead */
+  }
+  setTimeout(() => {
+    try {
+      child.kill("SIGKILL");
+    } catch {
+      /* already dead */
+    }
+  }, 5000);
+}
+
+/** Kill every in-flight yt-dlp / Whisper child. Used when Tusk's duration cap fires. */
+export function cancelTranscription(): number {
+  const n = liveChildren.size;
+  for (const child of [...liveChildren]) {
+    killChild(child);
+  }
+  return n;
+}
+
 function execFileAsync(
   cmd: string,
   args: string[],
-  options?: { timeout?: number }
+  options?: { timeout?: number; signal?: AbortSignal }
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
+    let settled = false;
     const child = execFile(cmd, args, { maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
-      clearTimeout(timer);
-      if (err) reject(err);
-      else resolve({ stdout, stderr });
+      finish(err, stdout, stderr);
     });
+    liveChildren.add(child);
+
+    const finish = (err: Error | null, stdout?: string, stderr?: string) => {
+      if (settled) return;
+      settled = true;
+      liveChildren.delete(child);
+      clearTimeout(timer);
+      options?.signal?.removeEventListener("abort", onAbort);
+      if (err) {
+        if (options?.signal?.aborted) {
+          const abortErr = new Error("aborted");
+          abortErr.name = "AbortError";
+          (abortErr as Error & { code?: string }).code = "ABORT_ERR";
+          reject(abortErr);
+          return;
+        }
+        reject(err);
+        return;
+      }
+      resolve({ stdout: stdout || "", stderr: stderr || "" });
+    };
 
     const timeoutMs = options?.timeout ?? 300000;
     const timer = setTimeout(() => {
       console.log(`[whisper] Process timed out after ${timeoutMs}ms, sending SIGTERM...`);
-      child.kill('SIGTERM');
-      // Force kill after 5 seconds if still alive
-      setTimeout(() => {
-        try {
-          child.kill('SIGKILL');
-          console.log('[whisper] Sent SIGKILL after SIGTERM timeout');
-        } catch { /* already dead */ }
-      }, 5000);
+      killChild(child);
     }, timeoutMs);
+
+    const onAbort = () => {
+      console.log("[whisper] Job cancelled, sending SIGTERM...");
+      killChild(child);
+    };
+    if (options?.signal) {
+      if (options.signal.aborted) onAbort();
+      else options.signal.addEventListener("abort", onAbort, { once: true });
+    }
   });
 }
 

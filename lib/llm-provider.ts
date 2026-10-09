@@ -14,6 +14,7 @@ export async function callLlmProvider(opts: {
   transcriptText: string;
   promptOverride?: string | null;
   fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
 }): Promise<string> {
   const fetchImpl = opts.fetchImpl || fetch;
   const instruction = (opts.promptOverride && opts.promptOverride.trim()) ||
@@ -34,6 +35,7 @@ export async function callLlmProvider(opts: {
         system: SYSTEM,
         messages: [{ role: "user", content: userContent }],
       }),
+      signal: opts.signal,
     });
     const data = (await response.json().catch(() => ({}))) as {
       error?: { message?: string };
@@ -62,6 +64,7 @@ export async function callLlmProvider(opts: {
         { role: "user", content: userContent },
       ],
     }),
+    signal: opts.signal,
   });
   const data = (await response.json().catch(() => ({}))) as {
     error?: { message?: string };

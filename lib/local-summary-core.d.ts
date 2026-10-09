@@ -16,6 +16,7 @@ export function requestLocalSummary(opts: {
   transcript: string;
   promptOverride?: string | null;
   fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
 }): Promise<{
   summary: string;
   model: string;

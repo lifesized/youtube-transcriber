@@ -112,6 +112,11 @@ function createLocalClient(options = {}) {
         opts(extra)
       );
     },
+    cancelInFlight(extra) {
+      return localRequest("/api/jobs/cancel", { method: "POST" }, opts(extra)).catch(() => ({
+        ok: false,
+      }));
+    },
   };
 }
 

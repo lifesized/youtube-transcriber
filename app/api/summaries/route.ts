@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
         captionLanguage: video.captionLanguage || "en",
       },
       SUMMARY_PROMPT_VERSION,
-      { promptOverride: promptOverride || undefined }
+      { promptOverride: promptOverride || undefined, signal: request.signal }
     );
     return NextResponse.json({
       summary_md: summary,
@@ -141,6 +141,7 @@ export async function POST(request: NextRequest) {
       title: video.title,
       transcript: formatTranscriptForSummary(segments),
       promptOverride: promptOverride || null,
+      signal: request.signal,
     });
     const promptHash = createHash("sha256")
       .update(`${LOCAL_SUMMARY_MODEL}:${promptOverride || "default"}`)
