@@ -3,7 +3,7 @@
     "name": "Tusk",
     "description": "Local Slack bot in Transcriber. Paste a supported link for 👀; /tusk help and status.",
     "background_color": "#0a0a0a",
-    "long_description": "Tusk is a Socket Mode Slack bot that runs locally inside the Transcriber menu-bar app on your Mac. No public URL, tunnel, or cloud worker. Invite @Tusk to an allowlisted channel, paste a YouTube URL, and Tusk adds 👀 then a threaded summary (or transcript file). @Tusk questions in that thread answer only from that video. /tusk help and /tusk status report whether the Mac app is connected. channels:history delivers every message in public channels Tusk has joined; Tusk ignores DMs, private channels, other workspaces, and Slack Connect externals unless that channel ID is on the allowlist."
+    "long_description": "Tusk is a Socket Mode Slack bot that runs locally inside the Transcriber menu-bar app on your Mac. No public URL, tunnel, or cloud worker. Invite @Tusk to an allowlisted channel, paste a YouTube URL, and Tusk adds 👀 then a threaded summary (or transcript file). @Tusk questions in that thread answer only from that video. /tusk help and /tusk status report whether the Mac app is connected. channels:history delivers every message in public channels Tusk has joined; Tusk ignores DMs, private channels, and other workspaces. External authors are always denied. Only internal members can trigger Tusk in a listed shared channel."
   },
   "features": {
     "bot_user": {

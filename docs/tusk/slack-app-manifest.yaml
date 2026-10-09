@@ -15,8 +15,8 @@ display_information:
     in that thread answer only from that video. /tusk help and /tusk status
     report whether the Mac app is connected. channels:history delivers every
     message in public channels Tusk has joined; Tusk ignores DMs, private
-    channels, other workspaces, and Slack Connect externals unless that
-    channel ID is on the allowlist.
+    channels, and other workspaces. External authors are always denied.
+    Only internal members can trigger Tusk in a listed shared channel.
 
 features:
   bot_user:
