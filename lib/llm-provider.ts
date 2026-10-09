@@ -12,10 +12,13 @@ export async function callLlmProvider(opts: {
   apiKey: string;
   title: string;
   transcriptText: string;
+  promptOverride?: string | null;
   fetchImpl?: typeof fetch;
 }): Promise<string> {
   const fetchImpl = opts.fetchImpl || fetch;
-  const userContent = `Summarize this transcript from "${opts.title}".\n\nTranscript:\n\n${opts.transcriptText}`;
+  const instruction = (opts.promptOverride && opts.promptOverride.trim()) ||
+    `Summarize this transcript from "${opts.title}".`;
+  const userContent = `${instruction}\n\nTranscript:\n\n${opts.transcriptText}`;
 
   if (opts.provider === "anthropic") {
     const response = await fetchImpl("https://api.anthropic.com/v1/messages", {

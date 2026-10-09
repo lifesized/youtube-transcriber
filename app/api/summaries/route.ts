@@ -63,6 +63,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Transcript not found" }, { status: 404 });
   }
 
+  const promptOverride =
+    typeof body.promptOverride === "string"
+      ? body.promptOverride.trim().slice(0, 10_000)
+      : "";
+
   try {
     const summary = await summarize(
       {
@@ -71,12 +76,13 @@ export async function POST(request: NextRequest) {
         transcript: video.transcript,
         captionLanguage: video.captionLanguage || "en",
       },
-      SUMMARY_PROMPT_VERSION
+      SUMMARY_PROMPT_VERSION,
+      { promptOverride: promptOverride || undefined }
     );
     return NextResponse.json({
       summary_md: summary,
       model: "app-llm",
-      cached: true,
+      cached: !promptOverride,
     });
   } catch (llmError) {
     const llmMessage =
@@ -129,17 +135,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const promptOverride =
-    typeof body.promptOverride === "string"
-      ? body.promptOverride.trim().slice(0, 10_000)
-      : null;
-
   try {
     const result = await requestLocalSummary({
       apiKey,
       title: video.title,
       transcript: formatTranscriptForSummary(segments),
-      promptOverride,
+      promptOverride: promptOverride || null,
     });
     const promptHash = createHash("sha256")
       .update(`${LOCAL_SUMMARY_MODEL}:${promptOverride || "default"}`)

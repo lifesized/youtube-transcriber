@@ -55,15 +55,19 @@ export async function summarize(
     fetchImpl?: typeof fetch;
     provider?: LlmProvider;
     apiKey?: string;
+    promptOverride?: string | null;
   }
 ): Promise<string> {
   const lang = transcript.captionLanguage;
-  const cached = await getCachedBaseSummary(
-    transcript.videoId,
-    lang,
-    promptVersion
-  );
-  if (cached) return cached;
+  const promptOverride = options?.promptOverride?.trim() || "";
+  if (!promptOverride) {
+    const cached = await getCachedBaseSummary(
+      transcript.videoId,
+      lang,
+      promptVersion
+    );
+    if (cached) return cached;
+  }
 
   const { provider, apiKey } = await resolveLlmConfig(options);
   const segments = segmentsFromTranscript(transcript.transcript);
@@ -73,8 +77,11 @@ export async function summarize(
     apiKey,
     title: transcript.title,
     transcriptText,
+    promptOverride: promptOverride || null,
     fetchImpl: options?.fetchImpl,
   });
-  await cacheBaseSummary(transcript.videoId, lang, promptVersion, summary);
+  if (!promptOverride) {
+    await cacheBaseSummary(transcript.videoId, lang, promptVersion, summary);
+  }
   return summary;
 }

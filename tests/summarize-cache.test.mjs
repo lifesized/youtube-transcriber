@@ -64,4 +64,32 @@ test("summarize caches baseSummary and only calls the provider once", async () =
   assert.equal(first, "Cached summary body");
   assert.equal(second, "Cached summary body");
   assert.equal(calls, 1);
+
+  const bodies = [];
+  const qaFetch = async (_url, init) => {
+    calls += 1;
+    bodies.push(JSON.parse(init.body));
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: "The decision was to ship Tusk." } }],
+      }),
+    };
+  };
+  const qa = await summarize(row, 1, {
+    fetchImpl: qaFetch,
+    provider: "openai",
+    apiKey: "sk-test",
+    promptOverride: "Answer only: what was the decision?",
+  });
+  assert.equal(qa, "The decision was to ship Tusk.");
+  assert.match(JSON.stringify(bodies[0]), /what was the decision/);
+  const third = await summarize(row, 1, {
+    fetchImpl: qaFetch,
+    provider: "openai",
+    apiKey: "sk-test",
+  });
+  assert.equal(third, "Cached summary body");
+  assert.equal(third.includes("ship Tusk"), false);
+  assert.equal(calls, 2);
 });

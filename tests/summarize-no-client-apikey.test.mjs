@@ -85,6 +85,10 @@ test("summarize HTTP routes reject client apiKey and use server key helpers", ()
       /if \(!apiKey \|\| typeof apiKey !== "string"\)/
     );
   }
+  const summaries = readFileSync(path.join(repoRoot, "app/api/summaries/route.ts"), "utf8");
+  assert.match(summaries, /promptOverride:\s*promptOverride/);
+  const summarizeCall = summaries.slice(summaries.indexOf("await summarize("), summaries.indexOf("await summarize(") + 400);
+  assert.match(summarizeCall, /promptOverride/);
 });
 
 test("MCP summarize_transcript no longer accepts or forwards apiKey", () => {
