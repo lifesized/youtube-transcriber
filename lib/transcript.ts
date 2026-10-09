@@ -544,7 +544,8 @@ async function fetchTranscriptWebFallback(
  * Called when YouTube captions are unavailable.
  */
 async function transcribeAudioFallback(
-  videoId: string
+  videoId: string,
+  options?: { allowBrowserCookies?: boolean }
 ): Promise<{ segments: TranscriptSegment[]; source: string }> {
   const [whisperEnabled, whisperPriority, providers] = await Promise.all([
     isWhisperEnabled(),
@@ -590,7 +591,10 @@ async function transcribeAudioFallback(
           statusText: "Downloading audio from YouTube...",
           videoId,
         });
-        const segments = await transcribeWithWhisper(videoId, "base", (evt) => {
+        const segments = await transcribeWithWhisper(
+          videoId,
+          "base",
+          (evt) => {
           if (evt.stage === "transcribing") {
             transcriptionProgress.emit("progress", {
               stage: "transcribing",
@@ -606,7 +610,9 @@ async function transcribeAudioFallback(
               videoId,
             });
           }
-        });
+          },
+          options
+        );
         // Clean up cloud audio file if we downloaded one
         if (audioPath) await fs.unlink(audioPath).catch(() => {});
         return { segments, source: "whisper_local" };
@@ -627,7 +633,7 @@ async function transcribeAudioFallback(
             videoId,
           });
           const audioDir = path.join("/tmp", "yt-audio");
-          audioPath = await downloadAudio(videoId, audioDir);
+          audioPath = await downloadAudio(videoId, audioDir, undefined, options);
         }
         transcriptionProgress.emit("progress", {
           stage: "transcribing",
@@ -838,7 +844,8 @@ const INNERTUBE_ENABLED = process.env.YTT_INNERTUBE_ENABLED === "1";
  */
 async function fetchTranscript(
   videoId: string,
-  lang?: string
+  lang?: string,
+  options?: { allowBrowserCookies?: boolean }
 ): Promise<{ segments: TranscriptSegment[]; source: string }> {
   type CaptionResult = { segments: TranscriptSegment[]; source: string };
 
@@ -908,7 +915,7 @@ async function fetchTranscript(
       );
     }
     
-    return await transcribeAudioFallback(videoId);
+    return await transcribeAudioFallback(videoId, options);
   }
 }
 
@@ -920,7 +927,8 @@ async function fetchTranscript(
  */
 export async function getVideoTranscript(
   url: string,
-  lang?: string
+  lang?: string,
+  options?: { allowBrowserCookies?: boolean }
 ): Promise<VideoTranscriptResult & { source: string }> {
   const parsed = parseContentUrl(url);
 
@@ -943,7 +951,7 @@ export async function getVideoTranscript(
     (async () => {
       const [metadata, transcriptResult] = await Promise.all([
         fetchMetadata(videoId),
-        fetchTranscript(videoId, lang),
+        fetchTranscript(videoId, lang, options),
       ]);
       return {
         ...metadata,

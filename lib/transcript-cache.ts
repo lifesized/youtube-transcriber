@@ -63,6 +63,7 @@ export async function getOrCreateTranscript(
   options?: {
     fetcher?: TranscriptFetcher;
     pipelineVersion?: number;
+    allowBrowserCookies?: boolean;
   }
 ): Promise<CachedTranscript> {
   const captionLanguage = normalizeCaptionLanguage(lang);
@@ -90,7 +91,12 @@ export async function getOrCreateTranscript(
   }
 
   // Cache miss — fetch/transcribe
-  const fetchTranscript = options?.fetcher ?? getVideoTranscript;
+  const fetchTranscript =
+    options?.fetcher ??
+    ((href, language) =>
+      getVideoTranscript(href, language, {
+        allowBrowserCookies: options?.allowBrowserCookies,
+      }));
   const result = await fetchTranscript(url, lang);
 
   const data = {

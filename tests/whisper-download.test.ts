@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 test("falls back to progressive format 18 after an audio-only HTTP 403", async (t) => {
@@ -98,7 +100,9 @@ process.exit(1);
   await assert.rejects(
     () =>
       jobContext.run({ jobId: "tusk-job-cookies", tag: "tusk" }, () =>
-        downloadAudio("dQw4w9WgXcQ", outputDir)
+        downloadAudio("dQw4w9WgXcQ", outputDir, undefined, {
+          allowBrowserCookies: false,
+        })
       ),
     /age-restricted|authentication|sign in/i
   );
@@ -126,4 +130,74 @@ process.exit(1);
     localCalls.some((args) => args.includes("--cookies-from-browser")),
     true
   );
+});
+
+test("dropped async context does not enable the browser-cookie fallback", async (t) => {
+  const fixtureDir = await mkdtemp(path.join(tmpdir(), "ytt-ytdlp-nocontext-"));
+  const outputDir = path.join(fixtureDir, "audio");
+  const logPath = path.join(fixtureDir, "calls.log");
+  const fakeYtdlpPath = path.join(fixtureDir, "yt-dlp.cjs");
+  const previousYtdlpPath = process.env.YTDLP_PATH;
+  const previousLogPath = process.env.YTDLP_TEST_LOG;
+
+  t.after(async () => {
+    if (previousYtdlpPath === undefined) delete process.env.YTDLP_PATH;
+    else process.env.YTDLP_PATH = previousYtdlpPath;
+    if (previousLogPath === undefined) delete process.env.YTDLP_TEST_LOG;
+    else process.env.YTDLP_TEST_LOG = previousLogPath;
+    await rm(fixtureDir, { recursive: true, force: true });
+  });
+
+  await writeFile(
+    fakeYtdlpPath,
+    `#!/usr/bin/env node
+const fs = require("node:fs");
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.YTDLP_TEST_LOG, JSON.stringify(args) + "\\n");
+if (args.includes("--cookies-from-browser")) {
+  const outputTemplate = args[args.indexOf("-o") + 1];
+  const outputPath = outputTemplate.replace("%(ext)s", "mp3");
+  fs.mkdirSync(require("node:path").dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, "fake audio");
+  process.exit(0);
+}
+console.error("ERROR: sign in to confirm your age");
+process.exit(1);
+`
+  );
+  await chmod(fakeYtdlpPath, 0o755);
+  process.env.YTDLP_PATH = fakeYtdlpPath;
+  process.env.YTDLP_TEST_LOG = logPath;
+
+  const { downloadAudio } = await import("../lib/whisper.js");
+
+  await assert.rejects(
+    () =>
+      downloadAudio("dQw4w9WgXcQ", outputDir, undefined, {
+        allowBrowserCookies: false,
+      }),
+    /age-restricted|authentication|sign in/i
+  );
+  await assert.rejects(
+    () => downloadAudio("oHg5SJYRHA0", outputDir),
+    /age-restricted|authentication|sign in/i
+  );
+  const calls = (await readFile(logPath, "utf8"))
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as string[]);
+  assert.ok(calls.length >= 2);
+  assert.equal(
+    calls.some((args) => args.includes("--cookies-from-browser")),
+    false
+  );
+});
+
+test("transcripts route passes allowBrowserCookies from the job tag", () => {
+  const src = readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), "../app/api/transcripts/route.ts"),
+    "utf8"
+  );
+  assert.match(src, /allowBrowserCookies:\s*job\.tag !== "tusk"/);
 });

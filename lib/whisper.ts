@@ -347,9 +347,9 @@ function classifyYtdlpError(raw: string): string {
  * Retries once on transient network errors.
  */
 function browserCookiesAllowed(explicit?: boolean): boolean {
-  if (explicit === false) return false;
-  if (explicit === true) return true;
-  return currentJobContext()?.tag !== "tusk";
+  // Second guard: a lost ALS context must not re-enable cookies for Tusk.
+  if (currentJobContext()?.tag === "tusk") return false;
+  return explicit === true;
 }
 
 export async function downloadAudio(
@@ -667,7 +667,8 @@ export async function transcribeAudioFileWithWhisper(
 export async function transcribeWithWhisper(
   videoId: string,
   model: string = "base",
-  onProgress?: ProgressCallback
+  onProgress?: ProgressCallback,
+  options?: { allowBrowserCookies?: boolean }
 ): Promise<TranscriptSegment[]> {
   if (transcriptionInProgress) {
     throw new Error("A transcription is already in progress. Please wait and try again.");
@@ -681,7 +682,7 @@ export async function transcribeWithWhisper(
   const overallStart = Date.now();
 
   try {
-    const audioPath = await downloadAudio(videoId, audioDir, onProgress);
+    const audioPath = await downloadAudio(videoId, audioDir, onProgress, options);
     const segments = await runWhisper(audioPath, whisperOutDir, model);
 
     // Speaker diarization (opt-in, requires HF_TOKEN)

@@ -165,7 +165,10 @@ export async function POST(request: NextRequest) {
   try {
     return await job.run(async () => {
       // Use cache-aware transcript lookup/creation
-      const video = await getOrCreateTranscript(videoId, storedUrl, lang, platform, { fetcher });
+      const video = await getOrCreateTranscript(videoId, storedUrl, lang, platform, {
+        fetcher,
+        allowBrowserCookies: job.tag !== "tusk",
+      });
       return NextResponse.json(video, { status: 201 });
     });
   } catch (err: unknown) {
