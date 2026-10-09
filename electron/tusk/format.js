@@ -10,7 +10,7 @@ function escapeSlackMrkdwn(value) {
 function bulletList(items) {
   return (items ?? [])
     .filter(Boolean)
-    .map((item) => `• ${escapeSlackMrkdwn(item)}`)
+    .map((item) => `• ${item}`)
     .join("\n");
 }
 

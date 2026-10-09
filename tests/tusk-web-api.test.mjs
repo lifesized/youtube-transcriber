@@ -81,3 +81,41 @@ test("refuses a file upload_url that is not https://files.slack.com", async () =
     globalThis.fetch = original;
   }
 });
+
+test("file upload_url with userinfo or a port is refused", async () => {
+  const { uploadSlackThreadFile } = await import("../lib/tusk/web-api.ts");
+  for (const upload_url of [
+    "https://user:pass@files.slack.com/upload/x",
+    "https://files.slack.com:8443/upload/x",
+    "https://files.slack.com:443/upload/x",
+  ]) {
+    const original = globalThis.fetch;
+    const uploads = [];
+    globalThis.fetch = async (url) => {
+      if (String(url).includes("files.getUploadURLExternal")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ ok: true, upload_url, file_id: "F1" }),
+        };
+      }
+      uploads.push(String(url));
+      return { ok: true, status: 200, json: async () => ({ ok: true }) };
+    };
+    try {
+      const result = await uploadSlackThreadFile({
+        botToken: "xoxb-token",
+        channel: "C123",
+        threadTs: "1.1",
+        filename: "t.txt",
+        title: "t",
+        content: "hi",
+      });
+      assert.equal(result.ok, false, upload_url);
+      assert.equal(result.error, "invalid_upload_url", upload_url);
+      assert.deepEqual(uploads, []);
+    } finally {
+      globalThis.fetch = original;
+    }
+  }
+});

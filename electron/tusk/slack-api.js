@@ -19,8 +19,18 @@ class SlackApiError extends Error {
 
 function isSlackFileUploadUrl(url) {
   try {
-    const parsed = new URL(String(url || ""));
-    return parsed.protocol === "https:" && parsed.hostname === "files.slack.com";
+    const raw = String(url || "");
+    const parsed = new URL(raw);
+    if (parsed.protocol !== "https:") return false;
+    if (parsed.hostname !== "files.slack.com") return false;
+    if (parsed.username || parsed.password) return false;
+    if (parsed.port) return false;
+    const authority = raw.replace(/^https:\/\//i, "").split("/")[0];
+    const host = authority.includes("@")
+      ? authority.slice(authority.lastIndexOf("@") + 1)
+      : authority;
+    if (host.includes(":")) return false;
+    return true;
   } catch {
     return false;
   }
@@ -131,6 +141,7 @@ async function uploadThreadFile(args) {
   }
   const upload = await fetch(uploadUrl.upload_url, {
     method: "POST",
+    redirect: "error",
     headers: { "Content-Type": "text/plain; charset=utf-8" },
     body: bytes,
   });

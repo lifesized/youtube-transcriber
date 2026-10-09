@@ -150,8 +150,20 @@ export async function uploadSlackThreadFile(args: {
     return { ok: false, error: uploadUrl.error ?? "slack_upload_url_failed" };
   }
   try {
-    const parsed = new URL(uploadUrl.upload_url);
-    if (parsed.protocol !== "https:" || parsed.hostname !== "files.slack.com") {
+    const raw = String(uploadUrl.upload_url || "");
+    const parsed = new URL(raw);
+    const authority = raw.replace(/^https:\/\//i, "").split("/")[0];
+    const host = authority.includes("@")
+      ? authority.slice(authority.lastIndexOf("@") + 1)
+      : authority;
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.hostname !== "files.slack.com" ||
+      parsed.username ||
+      parsed.password ||
+      parsed.port ||
+      host.includes(":")
+    ) {
       return { ok: false, error: "invalid_upload_url" };
     }
   } catch {
@@ -160,6 +172,7 @@ export async function uploadSlackThreadFile(args: {
 
   const upload = await fetch(uploadUrl.upload_url, {
     method: "POST",
+    redirect: "error",
     headers: { "Content-Type": "text/plain; charset=utf-8" },
     body: bytes,
   });

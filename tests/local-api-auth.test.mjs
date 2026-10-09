@@ -262,6 +262,15 @@ test("Tusk settings writes need the port cookie and same-origin, not Bearer", ()
   );
   assert.equal(
     call({
+      authorization: "",
+      cookie,
+      secFetchSite: "same-origin",
+    }),
+    false,
+    "an empty Authorization header is also rejected"
+  );
+  assert.equal(
+    call({
       authorization: "Basic not-even-bearer",
       cookie,
       secFetchSite: "same-origin",

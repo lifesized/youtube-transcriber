@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-10-09
+
+### Security
+- **Tusk M-1 posting** — Progress `postOrUpdate` sends the bot token. Slack `ok: false` on HTTP 200 throws in `postMessage`, `updateMessage`, and `uploadThreadFile`, so a missing `ts` cannot be handed to `chat.update`.
+- **Tusk M-2 markup** — Video titles in the transcript `initial_comment` and failure `detail` are passed through `escapeSlackMrkdwn`, so `<!channel>`, `<@U…>`, and `<https://evil|Click>` stay literal.
+- **Tusk M-3 Q&A** — `/api/summaries` passes `promptOverride` on every path. A thread question is never written or read back as the video’s cached summary.
+- **Tusk L-4 docs** — README, manifests, setup, and the extension privacy policy say summaries and transcript files are visible to everyone in an allowlisted channel (including Slack Connect if listed) and that questions and transcripts go to the configured LLM provider.
+- **Tusk L-1 confirm** — One native confirm at a time (409 while a dialog is open). After Change, the store is re-read and the patch is applied to that fresh state. Allowlist adds and enabling Tusk also confirm. The dialog shows team ID, `auth.test` URL, and current pin vs new pin. `app.focus({ steal: true })` plus a parent window when one exists. `tusk-set` IPC waits 15 minutes; a timed-out request sends a cancel and never writes.
+- **Tusk L-2 sources** — Slack jobs skip LinkedIn, Spotify, `client_panel_scrape`, and any non-YouTube library entry so signed-in captures are not posted to a channel.
+- **Tusk L-3 caps** — 20 LLM calls per hour and 80 per day. The job queue is bounded. The 180s duration cap aborts the client and `POST /api/jobs/cancel`, which aborts in-flight LLM fetches and SIGTERMs live Whisper/yt-dlp children.
+- **Tusk info hardening** — Bullet lists are escaped once. File uploads use `redirect: "error"` and refuse `upload_url` values with userinfo or any port. Prompts wrap question and transcript in data delimiters. `is_ext_shared_channel` is denied unless the channel is allowlisted. An empty `Authorization` header is rejected on Settings writes.
+
 ## 2026-10-08
 
 ### Added

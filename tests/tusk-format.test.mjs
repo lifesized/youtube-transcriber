@@ -65,6 +65,7 @@ test("escapes titles and model output before posting", () => {
   assert.match(markdown, /A &lt;script&gt; &amp; more/);
   assert.match(markdown, /&lt;https:\/\/evil\|click&gt;/);
   assert.doesNotMatch(markdown, /<https:\/\/evil/);
+  assert.doesNotMatch(markdown, /&amp;lt;/, "bullets must not be escaped twice");
 });
 
 test("renders into Slack markdown ending up under the 3800-char ceiling", () => {

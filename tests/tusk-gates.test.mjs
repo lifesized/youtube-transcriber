@@ -68,6 +68,29 @@ test("empty team pin denies every event until auth.test sets it", () => {
   assert.equal(gates.gateEvent(other, HOME, helpers()).reason, "wrong_team");
 });
 
+test("is_ext_shared_channel is rejected unless the channel is allowlisted", () => {
+  const shared = { ...userMessage, is_ext_shared_channel: true };
+  assert.equal(
+    gates.gateEvent(envelope(shared), { teamId: "THOME", channelAllowlist: [] }, helpers()).reason,
+    "ext_shared"
+  );
+  assert.equal(
+    gates.gateEvent(envelope(shared), { teamId: "THOME", channelAllowlist: ["C99999999"] }, helpers())
+      .reason,
+    "ext_shared"
+  );
+  assert.equal(gates.gateEvent(envelope(shared), HOME, helpers()).ok, true);
+  assert.equal(
+    gates.gateSlashCommand(slashPayload({ is_ext_shared_channel: true }), { teamId: "THOME" }, helpers())
+      .reason,
+    "ext_shared"
+  );
+  assert.equal(
+    gates.gateSlashCommand(slashPayload({ is_ext_shared_channel: true }), HOME, helpers()).ok,
+    true
+  );
+});
+
 test("Slack Connect external members are ignored even in the pinned workspace", () => {
   const h = helpers();
   const external = envelope({ ...userMessage, user_team: "TEXT", team: "TEXT" });

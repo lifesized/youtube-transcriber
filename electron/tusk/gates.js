@@ -137,6 +137,13 @@ function gateEvent(envelope, state, helpers) {
   if (!teamAllowed(authorTeam, state.teamId)) return { ok: false, reason: "slack_connect" };
   if (!isPlainUserMessage(event)) return { ok: false, reason: "ignored_message" };
   if (isSelfMessage(event, state.botUserId)) return { ok: false, reason: "self" };
+  if (event.is_ext_shared_channel) {
+    const list = parseChannelAllowlist(state.channelAllowlist);
+    const id = normalizeChannelId(event.channel);
+    if (!id || !list.includes(id)) {
+      return { ok: false, reason: "ext_shared" };
+    }
+  }
   if (!channelAllowed(event.channel, state.channelAllowlist, event.channel_type, event.channel_name)) {
     return { ok: false, reason: "channel" };
   }
@@ -163,6 +170,13 @@ function gateSlashCommand(envelope, state, helpers) {
   const userId = payload && payload.user_id;
   if (!teamAllowed(teamId, state.teamId)) {
     return { ok: false, reason: "wrong_team", hint: DENIED_CONVERSATION_HINT };
+  }
+  if (payload.is_ext_shared_channel) {
+    const list = parseChannelAllowlist(state.channelAllowlist);
+    const id = normalizeChannelId(channel);
+    if (!id || !list.includes(id)) {
+      return { ok: false, reason: "ext_shared", hint: DENIED_CONVERSATION_HINT };
+    }
   }
   if (!channelAllowed(channel, state.channelAllowlist, payload.channel_type, payload.channel_name)) {
     return { ok: false, reason: "channel", hint: DENIED_CONVERSATION_HINT };
