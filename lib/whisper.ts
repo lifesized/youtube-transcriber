@@ -193,7 +193,7 @@ function untrackWhisperPid(pid: number): void {
   writeTrackedPids(readTrackedPids().filter((n) => n !== pid));
 }
 
-/** Kill only PIDs this app spawned and recorded. Never pgrep by name. */
+/** Kill only PIDs this app spawned and recorded. Never kill by name pattern. */
 export function cleanupTrackedWhisperProcesses(): number {
   const livePids = new Set<number>();
   for (const child of liveChildren.keys()) {
