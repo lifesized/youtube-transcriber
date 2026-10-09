@@ -152,12 +152,20 @@ function parseWatchlistText(value) {
   return feeds;
 }
 
-function tagText(block, names) {
+function tagText(block, names, cap = 8 * 1024) {
   const list = Array.isArray(names) ? names : [names];
+  const raw = String(block || "");
+  const lower = raw.toLowerCase();
   for (const name of list) {
-    const re = new RegExp(`<${name.replace(":", "\\:")}[^>]*>([\\s\\S]*?)</${name.replace(":", "\\:")}>`, "i");
-    const match = block.match(re);
-    if (match) return decodeXmlEntities(stripTags(match[1])).trim();
+    const open = `<${String(name).toLowerCase()}`;
+    const close = `</${String(name).toLowerCase()}>`;
+    const start = lower.indexOf(open, 0);
+    if (start < 0) continue;
+    const gt = raw.indexOf(">", start);
+    if (gt < 0 || gt - start > 256) continue;
+    const end = lower.indexOf(close, gt + 1);
+    if (end < 0 || end - (gt + 1) > cap) continue;
+    return decodeXmlEntities(stripTags(raw.slice(gt + 1, end))).trim();
   }
   return "";
 }
@@ -165,19 +173,35 @@ function tagText(block, names) {
 function parseYoutubeAtom(xml, options = {}) {
   const maxBytes = options.maxBytes ?? 512 * 1024;
   const maxEntries = options.maxEntries ?? 50;
+  const maxBlock = options.maxBlock ?? 32 * 1024;
   const raw = String(xml || "");
   if (Buffer.byteLength(raw, "utf8") > maxBytes) {
     return { ok: false, error: "too_large", entries: [] };
   }
+  const lower = raw.toLowerCase();
   const entries = [];
   const seen = new Set();
-  const entryRe = /<entry\b[^>]*>([\s\S]*?)<\/entry>/gi;
-  let match;
-  while ((match = entryRe.exec(raw)) !== null && entries.length < maxEntries) {
-    const block = match[1];
-    let videoId = tagText(block, ["yt:videoId", "yt:videoid"]);
+  let from = 0;
+  while (entries.length < maxEntries) {
+    const start = lower.indexOf("<entry", from);
+    if (start < 0) break;
+    const openEnd = raw.indexOf(">", start);
+    if (openEnd < 0) break;
+    if (openEnd - start > 256) {
+      from = start + 6;
+      continue;
+    }
+    const close = lower.indexOf("</entry>", openEnd + 1);
+    if (close < 0) break;
+    if (close - (openEnd + 1) > maxBlock) {
+      from = openEnd + 1;
+      continue;
+    }
+    const block = raw.slice(openEnd + 1, close);
+    from = close + 8;
+    let videoId = tagText(block, ["yt:videoId", "yt:videoid"], 256);
     if (!VIDEO_ID_RE.test(videoId)) {
-      const idText = tagText(block, "id");
+      const idText = tagText(block, "id", 256);
       const fromId = idText.match(/yt:video:([A-Za-z0-9_-]{11})/);
       videoId = fromId ? fromId[1] : "";
     }

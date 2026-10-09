@@ -84,3 +84,21 @@ test("Atom parser refuses oversized XML", () => {
   assert.equal(parsed.error, "too_large");
   assert.deepEqual(parsed.entries, []);
 });
+
+test("XML entities are decoded once", () => {
+  const xml = `<feed><entry><yt:videoId>${VIDEO}</yt:videoId><title>&amp;lt;script&amp;gt;</title></entry></feed>`;
+  const parsed = feeds.parseYoutubeAtom(xml);
+  assert.equal(parsed.entries[0].title, "&lt;script&gt;");
+  assert.equal(feeds.decodeXmlEntities("&amp;lt;"), "&lt;");
+});
+
+test("unclosed entry and yt:videoId tags parse 512 KB in under 200 ms", () => {
+  const chunk = "<entry<yt:videoId>";
+  const xml = chunk.repeat(Math.ceil((512 * 1024) / chunk.length)).slice(0, 512 * 1024);
+  const t0 = Date.now();
+  const parsed = feeds.parseYoutubeAtom(xml);
+  const elapsed = Date.now() - t0;
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.entries.length, 0);
+  assert.ok(elapsed < 200, `indexOf scan took ${elapsed}ms`);
+});
