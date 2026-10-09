@@ -57,6 +57,9 @@ jobs:
 
       - name: Frame headers tests
         run: npm run test:headers
+
+      - name: Typecheck
+        run: npx tsc --noEmit -p .
       
       - name: Build Next.js
         run: npm run build

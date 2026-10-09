@@ -18,6 +18,7 @@
     "build": "next build",
     "start": "node scripts/run-with-local-token.js next start -p 19720 --hostname 127.0.0.1",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p .",
     "postinstall": "prisma generate",
     "mcp:build": "cd mcp-server && npm run build",
     "mcp:config": "bash scripts/mcp-config.sh",

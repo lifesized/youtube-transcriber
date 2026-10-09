@@ -95,7 +95,7 @@ process.exit(1);
   process.env.YTDLP_TEST_LOG = logPath;
 
   const { downloadAudio } = await import("../lib/whisper.js");
-  const { jobContext } = await import("../lib/job-context.ts");
+  const { jobContext } = await import("../lib/job-context.js");
 
   await assert.rejects(
     () =>
