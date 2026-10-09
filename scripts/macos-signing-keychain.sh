@@ -87,6 +87,7 @@ unlock() {
   [ -f "$PASSWORD_PATH" ] || { echo "signing: keychain.password missing; run setup first"; exit 1; }
   KEYCHAIN_PASSWORD="$(cat "$PASSWORD_PATH")"
   security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+  rm -f "$PASSWORD_PATH"
   echo "signing: keychain unlocked"
 }
 

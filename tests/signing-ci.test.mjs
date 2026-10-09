@@ -191,6 +191,7 @@ test("signing scripts never echo secrets and write decoded files under RUNNER_TE
   assert.match(keychain, /-lut 3600/);
   assert.doesNotMatch(keychain, /-lut 900\b/);
   assert.match(keychain, /unlock-keychain/);
+  assert.match(keychain, /unlock-keychain[\s\S]*rm -f "\$PASSWORD_PATH"/);
   assert.match(keychain, /security import[\s\S]*\s-x\s/);
   assert.match(keychain, /rm -f "\$CERT_PATH"/);
   assert.match(keychain, /lock-keychain/);
