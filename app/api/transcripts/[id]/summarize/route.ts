@@ -8,6 +8,7 @@ import {
 } from "@/lib/local-summary";
 import { SecretsKeyError } from "@/lib/secrets-crypto.js";
 import type { TranscriptSegment } from "@/lib/types";
+import { OverrideCapError, takeOverrideSlot } from "@/lib/override-budget";
 
 /**
  * Legacy summarize path (YTT-436).
@@ -89,6 +90,17 @@ export async function POST(
         : format === "text"
           ? 'Summarize "{title}" as plain text paragraphs. Focus on main topics and takeaways.'
           : null;
+
+  if (customPrompt) {
+    try {
+      takeOverrideSlot();
+    } catch (error) {
+      if (error instanceof OverrideCapError) {
+        return NextResponse.json({ error: error.message }, { status: 429 });
+      }
+      throw error;
+    }
+  }
 
   try {
     const result = await requestLocalSummary({

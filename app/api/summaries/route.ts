@@ -14,6 +14,7 @@ import { summarize } from "@/lib/summarize";
 import { SUMMARY_PROMPT_VERSION } from "@/lib/transcript-pipeline";
 import { getSecretsFromMainOrEnv } from "@/lib/electron-ipc.js";
 import { beginServerJob } from "@/lib/in-flight-jobs";
+import { OverrideCapError, takeOverrideSlot } from "@/lib/override-budget";
 
 export async function GET() {
   try {
@@ -68,6 +69,16 @@ export async function POST(request: NextRequest) {
     typeof body.promptOverride === "string"
       ? body.promptOverride.trim().slice(0, 10_000)
       : "";
+  if (promptOverride) {
+    try {
+      takeOverrideSlot();
+    } catch (error) {
+      if (error instanceof OverrideCapError) {
+        return NextResponse.json({ error: error.message }, { status: 429 });
+      }
+      throw error;
+    }
+  }
   const job = beginServerJob({
     signal: request.signal,
     jobId: typeof body.jobId === "string" ? body.jobId : undefined,
