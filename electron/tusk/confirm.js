@@ -1,5 +1,7 @@
 "use strict";
 
+const { parseWatchlistText } = require("./watch-feeds.js");
+
 function cleanDialogField(value, max = 80) {
   return String(value ?? "")
     .replace(/[\r\n\t]+/g, " ")
@@ -19,6 +21,26 @@ function feedUrls(feeds) {
 
 function watchFeedsChanged(currentFeeds, nextFeeds) {
   return feedUrls(currentFeeds) !== feedUrls(nextFeeds);
+}
+
+function feedIdsFromWatchlist(text) {
+  return parseWatchlistText(text)
+    .map((feed) => feed.id)
+    .filter(Boolean);
+}
+
+function feedIdDiff(oldWatchlist, newWatchlist) {
+  const before = new Set(feedIdsFromWatchlist(oldWatchlist));
+  const after = new Set(feedIdsFromWatchlist(newWatchlist));
+  return {
+    added: [...after].filter((id) => !before.has(id)),
+    removed: [...before].filter((id) => !after.has(id)),
+  };
+}
+
+function formatFeedIds(ids) {
+  if (!ids || !ids.length) return "(none)";
+  return ids.map((id) => cleanDialogField(id, 80)).filter(Boolean).join(", ") || "(none)";
 }
 
 function tuskConfirmDialogOptions({
@@ -84,10 +106,10 @@ function tuskConfirmDialogOptions({
       ? `New digest channel: ${cleanDialogField(newDigestChannel) || "(none)"}`
       : null,
     watchlistChanged || digestChannelChanged
-      ? `Old watchlist: ${cleanDialogField(oldWatchlist, 160) || "(none)"}`
+      ? `Added feeds: ${formatFeedIds(feedIdDiff(oldWatchlist, newWatchlist).added)}`
       : null,
     watchlistChanged || digestChannelChanged
-      ? `New watchlist: ${cleanDialogField(newWatchlist, 160) || "(none)"}`
+      ? `Removed feeds: ${formatFeedIds(feedIdDiff(oldWatchlist, newWatchlist).removed)}`
       : null,
   ]
     .filter(Boolean)
@@ -166,4 +188,6 @@ module.exports = {
   allowlistIdsAdded,
   watchFeedsChanged,
   feedUrls,
+  feedIdsFromWatchlist,
+  feedIdDiff,
 };

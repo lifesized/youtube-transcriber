@@ -14,6 +14,7 @@ const {
   cleanDialogField,
   tuskConfirmDialogOptions,
   confirmTuskSensitiveChange,
+  feedIdDiff,
 } = require(path.join(root, "electron/tusk/confirm.js"));
 const { SecretsStore } = require(path.join(root, "electron/secrets-store.js"));
 const ipc = require(path.join(root, "lib/electron-ipc.js"));
@@ -240,8 +241,23 @@ test("changing digestChannel or watchFeeds requires confirm and shows old vs new
     assert.match(dialog.message, /watchlist or digest channel/);
     assert.match(dialog.detail, /Old digest channel: \(none\)/);
     assert.match(dialog.detail, /New digest channel: C01234567/);
-    assert.match(dialog.detail, /Old watchlist: \(none\)/);
-    assert.match(dialog.detail, /New watchlist: https:\/\/www\.youtube\.com\/feeds\/videos\.xml/);
+    assert.match(dialog.detail, /Added feeds: UCuAXFkgsw1L7xaCfnd5JJOw/);
+    assert.match(dialog.detail, /Removed feeds: \(none\)/);
+    assert.doesNotMatch(dialog.detail, /Old watchlist:/);
+    assert.doesNotMatch(dialog.detail, /New watchlist:/);
+    const added = "https://www.youtube.com/feeds/videos.xml?channel_id=UCuAXFkgsw1L7xaCfnd5JJOw";
+    const removed = "https://www.youtube.com/feeds/videos.xml?playlist_id=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf";
+    const ids = feedIdDiff(removed, added);
+    assert.deepEqual(ids.added, ["UCuAXFkgsw1L7xaCfnd5JJOw"]);
+    assert.deepEqual(ids.removed, ["PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf"]);
+    const swap = tuskConfirmDialogOptions({
+      watchlistChanged: true,
+      oldWatchlist: `${removed}\n${added}`,
+      newWatchlist: added,
+    });
+    assert.match(swap.detail, /Added feeds: \(none\)/);
+    assert.match(swap.detail, /Removed feeds: PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf/);
+    assert.doesNotMatch(swap.detail, /videos\.xml/);
     await manager.stop();
   } finally {
     await cleanup();
