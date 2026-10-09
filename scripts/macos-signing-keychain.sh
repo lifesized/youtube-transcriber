@@ -2,7 +2,7 @@
 # Temporary keychain for Developer ID signing. Never echo a secret.
 # Decoded .p12 / .p8 live in $RUNNER_TEMP with mode 600.
 #
-#   macos-signing-keychain.sh setup|teardown
+#   macos-signing-keychain.sh setup|unlock|lock|teardown
 #
 # setup is a no-op when MACOS_CERT_P12_BASE64 is empty (fork PRs, unsigned CI).
 set -euo pipefail
@@ -38,7 +38,8 @@ setup() {
   chmod 600 "$CERT_PATH"
 
   security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-  security set-keychain-settings -lut 900 "$KEYCHAIN_PATH"
+  # 3600s backstop: notarytool --wait can exceed 15 minutes before DMG codesign.
+  security set-keychain-settings -lut 3600 "$KEYCHAIN_PATH"
   security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
   security import "$CERT_PATH" \
@@ -78,6 +79,17 @@ setup() {
   echo "signing: using Developer ID Application identity for team ${APPLE_TEAM_ID}"
 }
 
+unlock() {
+  if [ ! -f "$KEYCHAIN_PATH" ]; then
+    echo "signing: no keychain to unlock"
+    exit 1
+  fi
+  [ -f "$PASSWORD_PATH" ] || { echo "signing: keychain.password missing; run setup first"; exit 1; }
+  KEYCHAIN_PASSWORD="$(cat "$PASSWORD_PATH")"
+  security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+  echo "signing: keychain unlocked"
+}
+
 lock() {
   if [ -f "$KEYCHAIN_PATH" ]; then
     security lock-keychain "$KEYCHAIN_PATH" || true
@@ -95,7 +107,8 @@ teardown() {
 
 case "${1:-}" in
   setup) setup ;;
+  unlock) unlock ;;
   lock) lock ;;
   teardown) teardown ;;
-  *) echo "usage: $0 setup|lock|teardown" >&2; exit 2 ;;
+  *) echo "usage: $0 setup|unlock|lock|teardown" >&2; exit 2 ;;
 esac

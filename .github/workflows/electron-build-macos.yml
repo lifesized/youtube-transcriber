@@ -1383,6 +1383,9 @@ jobs:
       - name: Build signed drag-to-Applications DMG
         run: bash electron/dmg/build-signed-dmg.sh
 
+      - name: Unlock signing keychain
+        run: bash scripts/macos-signing-keychain.sh unlock
+
       - name: Sign the signed DMG
         run: bash scripts/macos-codesign-dmg.sh dist-electron/signed/Transcriber-signed.dmg
 

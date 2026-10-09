@@ -99,6 +99,11 @@ test("signing and notarization are gated on the exact secret names", () => {
   assert.doesNotMatch(sign, /npm ci/);
   assert.match(sign, /persist-credentials: false/);
   assert.match(sign, /macos-signing-keychain\.sh setup/);
+  assert.match(sign, /macos-signing-keychain\.sh unlock/);
+  assert.ok(
+    sign.indexOf("macos-signing-keychain.sh unlock") <
+      sign.indexOf("macos-codesign-dmg.sh")
+  );
   assert.match(workflow, /if: always\(\)/);
   assert.match(workflow, /macos-signing-keychain\.sh teardown/);
   assert.match(workflow, /macos-codesign-app\.sh/);
@@ -183,7 +188,9 @@ test("signing scripts never echo secrets and write decoded files under RUNNER_TE
   assert.match(keychain, /chmod 600/);
   assert.match(keychain, /-T \/usr\/bin\/codesign/);
   assert.match(keychain, /set-key-partition-list/);
-  assert.match(keychain, /-lut 900/);
+  assert.match(keychain, /-lut 3600/);
+  assert.doesNotMatch(keychain, /-lut 900\b/);
+  assert.match(keychain, /unlock-keychain/);
   assert.match(keychain, /security import[\s\S]*\s-x\s/);
   assert.match(keychain, /rm -f "\$CERT_PATH"/);
   assert.match(keychain, /lock-keychain/);
