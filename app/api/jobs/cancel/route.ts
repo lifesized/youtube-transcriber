@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
 
   if (jobId) {
     const cancelled = cancelJob(jobId, { tag: "tusk" });
-    return NextResponse.json({ ok: true, ...cancelled });
+    return NextResponse.json(cancelled);
   }
 
   if (tag === "tusk") {
