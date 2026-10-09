@@ -38,6 +38,54 @@ function createTuskManager(options = {}) {
   let starting = null;
   let confirmOpen = false;
   const pendingRequests = new Map();
+  const watchSeen = options.watchSeen || createWatchSeen();
+
+  function digestIsPaused() {
+    if (status.digest && status.digest.paused) return true;
+    return Boolean(watchSeen.isDigestPaused && watchSeen.isDigestPaused());
+  }
+
+  function attachWatch() {
+    if (watch) return watch;
+    const live = store.getSlackPlain();
+    if (!live.watchFeeds || !live.watchFeeds.length) return null;
+    watch = createWatchDigest({
+      getConfig: () => {
+        const cfg = store.getSlackPlain();
+        return {
+          enabled: cfg.enabled,
+          botToken: cfg.botToken,
+          watchFeeds: cfg.watchFeeds,
+          digestChannel: cfg.digestChannel,
+          channelAllowlist: cfg.channelAllowlist,
+        };
+      },
+      seen: watchSeen,
+      slackApi: api,
+      localClient,
+      runJob: (key, fn) => jobs.run(key, fn),
+      WebSocket: options.WebSocket,
+      timers: options.timers,
+      fetchImpl: options.fetchImpl,
+      onPause: ({ reason, message }) => {
+        emitStatus({
+          digest: { paused: true, reason, message },
+        });
+      },
+      onStatus: (next) => {
+        if (next && next.digest) emitStatus({ digest: { ...status.digest, ...next.digest } });
+      },
+    });
+    return watch;
+  }
+
+  function ensureWatchRunning() {
+    const live = store.getSlackPlain();
+    if (!live.enabled || digestIsPaused()) return;
+    const runner = attachWatch();
+    if (!runner) return;
+    if (runner.isStopped()) runner.start();
+  }
 
   function emitStatus(next) {
     status = { ...status, ...next };
@@ -91,12 +139,17 @@ function createTuskManager(options = {}) {
         emitStatus({
           state: next.state,
           workspace: next.workspace || cfg.teamName || "",
+          fatal: Boolean(next.fatal),
+          error: next.error,
         });
-        const failed = next.state === "error" || next.state === "off";
         const mismatch = Boolean(
           next.workspace && cfg.teamName && next.workspace !== cfg.teamName
         );
-        if (watch && (failed || mismatch)) watch.stop();
+        if (watch && (next.fatal || next.state === "off" || mismatch)) {
+          watch.stop();
+          return;
+        }
+        if (next.state === "connected") ensureWatchRunning();
       },
       onAuth: (auth) => {
         store.setSlack({
@@ -121,36 +174,7 @@ function createTuskManager(options = {}) {
     });
     try {
       await runtime.start();
-      if (cfg.watchFeeds && cfg.watchFeeds.length) {
-        watch = createWatchDigest({
-          getConfig: () => {
-            const live = store.getSlackPlain();
-            return {
-              enabled: live.enabled,
-              botToken: live.botToken,
-              watchFeeds: live.watchFeeds,
-              digestChannel: live.digestChannel,
-              channelAllowlist: live.channelAllowlist,
-            };
-          },
-          seen: options.watchSeen || createWatchSeen(),
-          slackApi: api,
-          localClient,
-          runJob: (key, fn) => jobs.run(key, fn),
-          WebSocket: options.WebSocket,
-          timers: options.timers,
-          fetchImpl: options.fetchImpl,
-          onPause: ({ reason, message }) => {
-            emitStatus({
-              digest: { paused: true, reason, message },
-            });
-          },
-          onStatus: (next) => {
-            if (next && next.digest) emitStatus({ digest: { ...status.digest, ...next.digest } });
-          },
-        });
-        watch.start();
-      }
+      ensureWatchRunning();
     } catch {
       emitStatus({ state: "error", workspace: store.getSlackPublic().teamName || "" });
     }

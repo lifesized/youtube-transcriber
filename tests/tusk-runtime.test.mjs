@@ -579,6 +579,66 @@ test("reconnect honours Retry-After instead of the backoff table", async () => {
   await runtime.stop();
 });
 
+test("a recoverable socket error then reconnect leaves a digest poll scheduled", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "tusk-n2-"));
+  const prev = process.env.TRANSCRIBER_STATE_DIR;
+  process.env.TRANSCRIBER_STATE_DIR = dir;
+  const timers = createTimerQueue();
+  let runtimeOnStatus = null;
+  const FEED = "https://www.youtube.com/feeds/videos.xml?channel_id=UCuAXFkgsw1L7xaCfnd5JJOw";
+  try {
+    const store = new SecretsStore({
+      safeStorage: {
+        isEncryptionAvailable: () => true,
+        encryptString: (p) => Buffer.from(`enc:${p}`),
+        decryptString: (b) => Buffer.from(b).toString().slice(4),
+      },
+    });
+    const manager = createTuskManager({
+      store,
+      slackApi: mockApi(),
+      WebSocket: FakeSocket,
+      timers: timers.api,
+      fetchImpl: async () => ({ ok: true, notModified: true }),
+      confirmSensitiveChange: async () => true,
+      createRuntime: (opts) => {
+        runtimeOnStatus = opts.onStatus;
+        return {
+          start: async () => {},
+          stop: async () => {},
+          isStopped: () => false,
+        };
+      },
+    });
+    await manager.applyPatch({
+      botToken: BOT,
+      appToken: APP,
+      enabled: true,
+      channelAllowlist: ["C01234567"],
+      watchlist: FEED,
+      digestChannel: "C01234567",
+    });
+    assert.ok(runtimeOnStatus, "createRuntime must capture onStatus");
+    assert.ok(
+      timers.pending().length > 0,
+      "digest should schedule a poll after start"
+    );
+
+    runtimeOnStatus({ state: "error", error: "socket_error" });
+    runtimeOnStatus({ state: "connected", workspace: "Personal" });
+
+    assert.ok(
+      timers.pending().length > 0,
+      "error then reconnect must leave a digest poll scheduled"
+    );
+    await manager.stop();
+  } finally {
+    if (prev === undefined) delete process.env.TRANSCRIBER_STATE_DIR;
+    else process.env.TRANSCRIBER_STATE_DIR = prev;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("Retry-After is clamped to 300s and never below backoff", async () => {
   const huge = [];
   let opens = 0;

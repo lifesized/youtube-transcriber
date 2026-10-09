@@ -330,6 +330,8 @@ function createWatchDigest(options = {}) {
     formatDigestMessage,
     digestChannelAllowed,
     isStopped: () => stopped,
+    isPaused: () => paused || Boolean(seen.isDigestPaused && seen.isDigestPaused()),
+    hasPollScheduled: () => pollTimer != null,
   };
 }
 
