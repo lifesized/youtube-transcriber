@@ -22,6 +22,8 @@ const UNSIGNED_STEPS = [
   "LinkedIn capture tests",
   "Home page library gate tests",
   "Local API cookie auth (middleware) tests",
+  "Frame headers tests",
+  "Typecheck",
   "Build Next.js",
   "Download ffmpeg (arm64 static)",
   "Download yt-dlp",
