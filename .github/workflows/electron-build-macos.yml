@@ -1469,7 +1469,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Unsigned-path and updater contract tests
-        run: node --test tests/signing-ci.test.mjs tests/dmg-install.test.mjs tests/electron-lows.test.mjs tests/updater-gate.test.mjs tests/updater-menu.test.mjs tests/tray-menu.test.mjs
+        run: node --test tests/signing-ci.test.mjs tests/dmg-install.test.mjs tests/electron-lows.test.mjs tests/updater-gate.test.mjs tests/updater-menu.test.mjs tests/tray-menu.test.mjs tests/update-feed.test.mjs
       - name: Lint workflows with actionlint
         run: bash scripts/run-actionlint.sh
 

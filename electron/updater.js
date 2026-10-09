@@ -17,6 +17,10 @@ const {
 } = require("./updater-gate.js");
 const { updaterMenuItem } = require("./updater-menu.js");
 const {
+  UPDATE_CHANNEL,
+  isBetaPrereleaseVersion,
+} = require("./update-feed.js");
+const {
   parseCodesignVerbose,
   appBundleFromExecPath,
 } = require("./code-signature.js");
@@ -129,11 +133,6 @@ function evaluateFromDisk(options) {
   });
 }
 
-function isBetaPrereleaseVersion(version) {
-  const pre = String(version || "").split("-")[1] || "";
-  return pre === "beta" || pre.startsWith("beta.");
-}
-
 /**
  * electron-updater 6.8.9's `channel` setter sets allowDowngrade = true.
  * Set channel first, then pin allowDowngrade false. Beta clients only
@@ -143,7 +142,7 @@ function configureAutoUpdater(autoUpdater) {
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
   autoUpdater.allowPrerelease = true;
-  autoUpdater.channel = "beta";
+  autoUpdater.channel = UPDATE_CHANNEL;
   autoUpdater.allowDowngrade = false;
   autoUpdater.forceDevUpdateConfig = false;
   autoUpdater.setFeedURL(pinnedFeed());

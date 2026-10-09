@@ -180,7 +180,7 @@ The packaged app initializes `electron-updater` only when all of these hold:
 
 Feed is pinned to `lifesized/youtube-transcriber` on GitHub. There is no env or Settings override. Channel is set to `beta` first (electron-updater 6.8.9's setter flips `allowDowngrade` to true), then `allowDowngrade` is set back to `false`. Beta clients follow the beta channel only — a future plain `vX.Y.Z` is rejected. `autoInstallOnAppQuit` is false. macOS signature validation (Squirrel.Mac designated requirement) is left enabled.
 
-When the updater is enabled it checks `releases.atom` and `latest-mac.yml` on GitHub Releases for this repo 30 seconds after launch and then every 6 hours. A found update zip downloads automatically; installing it needs a click on **Restart to Update**. Documented in `extension/privacy-policy.md`. Disabled builds make no GitHub calls.
+When the updater is enabled it first fetches `releases.atom`, then **`beta-mac.yml`** for the selected tag (electron-updater 6.8.9 `GitHubProvider`: `channel` `"beta"` → `getCustomChannelName` → `beta-mac` → `getChannelFilename` → `beta-mac.yml`). Because `allowPrerelease` is true, a 404 on that file falls back to `latest-mac.yml`. Checks run 30 seconds after launch and then every 6 hours. A found update zip downloads automatically; installing it needs a click on **Restart to Update**. Documented in `extension/privacy-policy.md`. Disabled builds make no GitHub calls. The sign job always publishes `beta-mac.yml` (what the app requests) and `latest-mac.yml` (the fallback).
 
 ## Native host after a signed install
 

@@ -24,6 +24,7 @@
 - **Tusk info hardening** — Bullet lists are escaped once. File uploads use `redirect: "error"` and refuse `upload_url` values with userinfo or any port. Prompts wrap question and transcript in data delimiters. `is_ext_shared_channel` is denied unless the channel is allowlisted. An empty `Authorization` header is rejected on Settings writes.
 
 ### Changed
+- **Beta feed file is `beta-mac.yml`** — electron-updater 6.8.9's GitHub provider requests `beta-mac.yml` when `channel` is `beta`. Docs and the privacy policy say that. The sign job still also writes `latest-mac.yml` because `allowPrerelease` falls back to it on 404.
 - **James docs name the two self-review settings separately** — Environment `release` → Prevent self-review stays OFF; the `beta/electron-menubar` branch rule “Require approval from someone other than the last pusher” stays OFF. Those repo settings are required before setting `SIGNING_ENABLED`.
 
 ### Added

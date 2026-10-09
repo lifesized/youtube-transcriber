@@ -342,6 +342,8 @@ test("docs list every secret and the GitHub update call", () => {
   assert.ok(privacy.includes("19721"));
   assert.ok(privacy.includes("lifesized/youtube-transcriber"));
   assert.ok(privacy.includes("releases.atom"));
+  assert.ok(privacy.includes("beta-mac.yml"));
   assert.ok(privacy.includes("latest-mac.yml"));
+  assert.ok(docs.includes("beta-mac.yml"));
   assert.ok(privacy.includes("6 hours"));
 });

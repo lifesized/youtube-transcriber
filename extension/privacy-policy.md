@@ -28,7 +28,7 @@ If you add YouTube channel or playlist IDs to the Tusk watchlist in Settings, th
 
 No data is sent to a remote Transcriber host. The extension does not contact `transcribed.dev`.
 
-**Packaged app updates (Developer ID builds only):** A notarized, Developer ID–signed Transcriber.app checks GitHub Releases for `lifesized/youtube-transcriber` (`releases.atom` and `latest-mac.yml`) 30 seconds after launch and then every 6 hours. When an update is found, the zip downloads automatically. Installing it requires clicking **Restart to Update** in the menu. Ad-hoc, unsigned, and `electron:dev` builds never initialize the updater and make no GitHub calls. The extension itself never checks for app updates.
+**Packaged app updates (Developer ID builds only):** A notarized, Developer ID–signed Transcriber.app checks GitHub Releases for `lifesized/youtube-transcriber` (`releases.atom`, then `beta-mac.yml`, falling back to `latest-mac.yml` if that 404s) 30 seconds after launch and then every 6 hours. When an update is found, the zip downloads automatically. Installing it requires clicking **Restart to Update** in the menu. Ad-hoc, unsigned, and `electron:dev` builds never initialize the updater and make no GitHub calls. The extension itself never checks for app updates.
 
 ## Data stored in the browser
 
