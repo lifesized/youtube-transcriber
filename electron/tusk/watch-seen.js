@@ -8,6 +8,14 @@ const { VIDEO_ID_RE } = require("./watch-feeds.js");
 
 const FILE_NAME = "tusk-watch-seen.json";
 const MAX_VIDEOS = 2000;
+const MAX_VIDEO_ATTEMPTS = 3;
+const VIDEO_BACKOFF_BASE_MS = 30 * 60 * 1000;
+const VIDEO_BACKOFF_MAX_MS = 6 * 60 * 60 * 1000;
+
+function videoBackoffMs(attempts) {
+  const exp = Math.max(0, Number(attempts) - 1);
+  return Math.min(VIDEO_BACKOFF_BASE_MS * 2 ** exp, VIDEO_BACKOFF_MAX_MS);
+}
 
 function seenPath(dir) {
   return path.join(dir || getStateDir(), FILE_NAME);
@@ -131,6 +139,8 @@ function createWatchSeen(options = {}) {
           state.videos[videoId] = {
             firstSeenAt: now,
             postedAt: 0,
+            attempts: 0,
+            nextAttemptAt: 0,
             title: entry.title ? String(entry.title).slice(0, 200) : "",
             url: entry.url || "",
             published: entry.published || "",
@@ -142,14 +152,39 @@ function createWatchSeen(options = {}) {
       persist();
       return fresh;
     },
-    unpublished(limit) {
+    unpublished(limit, when) {
       const state = load();
+      const at = Number.isFinite(when) ? when : nowFn();
       const items = Object.entries(state.videos)
-        .filter(([, row]) => row && !row.postedAt)
+        .filter(([, row]) => {
+          if (!row || row.postedAt) return false;
+          const next = Number(row.nextAttemptAt) || 0;
+          return next <= at;
+        })
         .map(([videoId, row]) => ({ videoId, ...row }))
         .sort((a, b) => String(b.published || "").localeCompare(String(a.published || "")));
       if (limit == null) return items;
       return items.slice(0, Math.max(0, Number(limit) || 0));
+    },
+    noteVideoFailure(videoId) {
+      const state = load();
+      const row = state.videos[videoId];
+      if (!row) return { attempts: 0, dropped: false };
+      const attempts = (Number(row.attempts) || 0) + 1;
+      row.attempts = attempts;
+      if (attempts >= MAX_VIDEO_ATTEMPTS) {
+        row.postedAt = nowFn();
+        row.nextAttemptAt = 0;
+        persist();
+        return { attempts, dropped: true };
+      }
+      row.nextAttemptAt = nowFn() + videoBackoffMs(attempts);
+      persist();
+      return { attempts, dropped: false };
+    },
+    videoAttempts(videoId) {
+      const row = load().videos[videoId];
+      return row ? Number(row.attempts) || 0 : 0;
     },
     markPosted(videoIds, opts = {}) {
       const state = load();
@@ -208,4 +243,10 @@ function createWatchSeen(options = {}) {
   };
 }
 
-module.exports = { createWatchSeen, FILE_NAME, MAX_VIDEOS, seenPath };
+module.exports = {
+  createWatchSeen,
+  FILE_NAME,
+  MAX_VIDEOS,
+  MAX_VIDEO_ATTEMPTS,
+  seenPath,
+};

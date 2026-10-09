@@ -233,7 +233,7 @@ function createWatchDigest(options = {}) {
     if (!digestChannelAllowed(cfg.digestChannel, cfg.channelAllowlist)) {
       return { skipped: "channel", reason: "digest channel is not on the allowlist" };
     }
-    const pending = seen.unpublished(cfg.maxVideos);
+    const pending = seen.unpublished(cfg.maxVideos, now());
     if (!pending.length) return { skipped: "empty" };
     const items = [];
     for (const entry of pending) {
@@ -253,15 +253,22 @@ function createWatchDigest(options = {}) {
           seen.markPosted([entry.videoId], { digest: false });
           continue;
         }
-        if (!item || item.skipped) continue;
+        if (item && (item.skipped === "queue_full" || item.skipped === "deduped")) continue;
+        if (!item || item.skipped) {
+          if (typeof seen.noteVideoFailure === "function") seen.noteVideoFailure(entry.videoId);
+          continue;
+        }
         if (typeof seen.cacheSummary === "function") seen.cacheSummary(entry.videoId, item);
         items.push(item);
       } catch {
-        // leave unpublished so a later tick can retry
+        if (typeof seen.noteVideoFailure === "function") seen.noteVideoFailure(entry.videoId);
       }
       if (items.length >= cfg.maxVideos) break;
     }
-    if (!items.length) return { skipped: "no_items" };
+    if (!items.length) {
+      if (typeof seen.noteDigestAttempt === "function") seen.noteDigestAttempt();
+      return { skipped: "no_items" };
+    }
     const text = formatDigestMessage(items, cfg.maxSummaryChars);
     try {
       await slack.postMessage({

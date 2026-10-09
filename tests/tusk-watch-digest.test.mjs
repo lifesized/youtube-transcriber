@@ -252,6 +252,96 @@ test("tick always clears the running flag after a thrown poll", async () => {
   }
 });
 
+test("a transcript failure is retried at most 3 times then dropped", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "tusk-digest-"));
+  let clock = 10_000;
+  const seen = createWatchSeen({ stateDir: dir, now: () => clock });
+  try {
+    seen.rememberVideos([{ videoId: VIDEO, title: "Demo", published: "2026-10-09T00:00:00Z" }]);
+    let transcripts = 0;
+    const digest = createWatchDigest({
+      seen,
+      now: () => clock,
+      localClient: {
+        createTranscript: async () => {
+          transcripts += 1;
+          throw new Error("whisper failed");
+        },
+        createSummary: async () => {
+          throw new Error("must not summarize");
+        },
+      },
+      slackApi: { postMessage: async () => ({ ok: true }) },
+      config: {
+        enabled: true,
+        botToken: "xoxb-test",
+        digestChannel: "C01234567",
+        channelAllowlist: ["C01234567"],
+        digestIntervalMs: 1,
+      },
+    });
+    for (let i = 0; i < 3; i += 1) {
+      const result = await digest.digestOnce({ force: true });
+      assert.equal(result.skipped, "no_items");
+      clock += 2 * 60 * 60 * 1000;
+    }
+    assert.equal(transcripts, 3);
+    assert.equal(seen.isPosted(VIDEO), true);
+    assert.equal(seen.videoAttempts(VIDEO), 3);
+    const again = await digest.digestOnce({ force: true });
+    assert.equal(again.skipped, "empty");
+    assert.equal(transcripts, 3);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a summary failure is retried at most 3 times then dropped", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "tusk-digest-"));
+  let clock = 10_000;
+  const seen = createWatchSeen({ stateDir: dir, now: () => clock });
+  try {
+    seen.rememberVideos([{ videoId: VIDEO, title: "Demo", published: "2026-10-09T00:00:00Z" }]);
+    let summaries = 0;
+    const digest = createWatchDigest({
+      seen,
+      now: () => clock,
+      localClient: {
+        createTranscript: async () => ({
+          id: "vid-1",
+          title: "Demo",
+          platform: "youtube",
+          source: "youtube",
+        }),
+        createSummary: async () => {
+          summaries += 1;
+          throw new Error("llm failed");
+        },
+      },
+      slackApi: { postMessage: async () => ({ ok: true }) },
+      config: {
+        enabled: true,
+        botToken: "xoxb-test",
+        digestChannel: "C01234567",
+        channelAllowlist: ["C01234567"],
+        digestIntervalMs: 1,
+      },
+    });
+    for (let i = 0; i < 3; i += 1) {
+      const result = await digest.digestOnce({ force: true });
+      assert.equal(result.skipped, "no_items");
+      clock += 2 * 60 * 60 * 1000;
+    }
+    assert.equal(summaries, 3);
+    assert.equal(seen.isPosted(VIDEO), true);
+    const again = await digest.digestOnce({ force: true });
+    assert.equal(again.skipped, "empty");
+    assert.equal(summaries, 3);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("queue-full and failed transcripts stay unpublished for a later retry", async () => {
   const { seen, cleanup } = seenInDir();
   try {
