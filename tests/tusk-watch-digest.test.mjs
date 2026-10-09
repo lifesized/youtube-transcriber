@@ -118,7 +118,10 @@ test("digest posts new public YouTube videos and skips signed-in cache hits", as
         },
       },
       localClient: {
-        createTranscript: async (url) => {
+        createTranscript: async (url, extra) => {
+          assert.equal(extra.jobTag, "tusk");
+          assert.equal(typeof extra.jobId, "string");
+          assert.ok(extra.jobId.length >= 8);
           if (url.includes("oHg5SJYRHA0")) {
             return {
               id: "scrape-1",
@@ -154,6 +157,8 @@ test("digest posts new public YouTube videos and skips signed-in cache hits", as
     assert.doesNotMatch(posted[0].text, /Scrape/);
     assert.equal(summarized.length, 1);
     assert.match(summarized[0].extra.promptOverride, /Demo/);
+    assert.equal(summarized[0].extra.jobTag, "tusk");
+    assert.equal(typeof summarized[0].extra.jobId, "string");
     assert.equal(seen.isPosted(VIDEO), true);
     assert.equal(seen.isPosted("oHg5SJYRHA0"), true);
   } finally {

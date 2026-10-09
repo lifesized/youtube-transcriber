@@ -131,6 +131,7 @@ function createTuskManager(options = {}) {
           seen: options.watchSeen || createWatchSeen(),
           slackApi: api,
           localClient,
+          runJob: (key, fn) => jobs.run(key, fn),
           WebSocket: options.WebSocket,
           timers: options.timers,
           fetchImpl: options.fetchImpl,

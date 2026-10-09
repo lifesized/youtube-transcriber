@@ -1,5 +1,6 @@
 "use strict";
 
+const { randomUUID } = require("node:crypto");
 const { channelAllowed, parseChannelAllowlist, normalizeChannelId } = require("./gates.js");
 const { fetchYoutubeFeed } = require("./watch-fetch.js");
 const { watchUrlForVideoId, feedUrlForSpec } = require("./watch-feeds.js");
@@ -120,10 +121,11 @@ function createWatchDigest(options = {}) {
     return now() - origin >= cfg.digestIntervalMs;
   }
 
-  async function summarizeOne(entry, cfg, signal) {
+  async function summarizeOne(entry, cfg, signal, jobId) {
     const url = watchUrlForVideoId(entry.videoId);
     if (!url) return null;
-    const video = await local.createTranscript(url, { signal });
+    const extra = { signal, jobTag: "tusk", jobId: jobId || randomUUID() };
+    const video = await local.createTranscript(url, extra);
     if (
       !isTuskAllowedSource({
         platform: (video && video.platform) || "youtube",
@@ -135,7 +137,7 @@ function createWatchDigest(options = {}) {
     let summary = "";
     try {
       const result = await local.createSummary(video && video.id, {
-        signal,
+        ...extra,
         promptOverride: buildSlackPrimitivePrompt({
           title: (video && video.title) || entry.title || "Video",
           preset: resolvePreset(cfg.preset),
@@ -166,7 +168,15 @@ function createWatchDigest(options = {}) {
     const postedIds = [];
     for (const entry of pending) {
       try {
-        const item = await summarizeOne(entry, cfg, opts.signal);
+        const item = options.runJob
+          ? await options.runJob(`digest:${entry.videoId}`, (signal, jobId) =>
+              summarizeOne(entry, cfg, signal, jobId)
+            )
+          : await summarizeOne(entry, cfg, opts.signal);
+        if (item && item.skipped) {
+          postedIds.push(entry.videoId);
+          continue;
+        }
         postedIds.push(entry.videoId);
         if (item) items.push(item);
       } catch {
