@@ -1,7 +1,10 @@
-import { execFile, execSync, type ChildProcess } from "child_process";
+import { execFile, type ChildProcess } from "child_process";
 import { promises as fs } from "fs";
+import { mkdirSync, readFileSync } from "fs";
 import os from "os";
 import path from "path";
+import { writeFileAtomic } from "./write-file-atomic.js";
+import { getStateDir } from "./local-api-token.js";
 import type { TranscriptSegment } from "./types";
 import type { ProgressStage } from "./progress";
 import { currentJobContext, type JobTag } from "./job-context";
@@ -114,6 +117,10 @@ function execFileAsync(
     });
     const meta = currentChildMeta();
     liveChildren.set(child, meta);
+    if (typeof child.pid === "number" && child.pid > 0) {
+      trackWhisperPid(child.pid);
+      child.on("exit", () => untrackWhisperPid(child.pid as number));
+    }
     const abortSignal = options?.signal ?? currentJobContext()?.signal;
 
     const finish = (err: Error | null, stdout?: string, stderr?: string) => {
@@ -153,30 +160,63 @@ function execFileAsync(
   });
 }
 
-function cleanupOrphanedProcesses(): void {
-  const patterns = ["mlx_whisper", "openai-whisper", "whisper.*--model", "yt-dlp.*youtube"];
-  for (const pattern of patterns) {
-    try {
-      const pids = execSync(
-        `pgrep -f "${pattern}" 2>/dev/null || true`,
-        { encoding: "utf-8" }
-      ).trim();
-      if (pids) {
-        const pidList = pids.split("\n").filter(Boolean);
-        console.log(`[whisper] Found ${pidList.length} orphaned process(es) matching "${pattern}": ${pidList.join(", ")}`);
-        for (const pid of pidList) {
-          try {
-            process.kill(parseInt(pid, 10), "SIGKILL");
-            console.log(`[whisper] Killed orphaned process ${pid}`);
-          } catch { /* already dead */ }
-        }
-      }
-    } catch { /* pgrep not available or no matches */ }
+const WHISPER_PID_FILE = "whisper-children.json";
+
+function whisperPidPath(): string {
+  return path.join(getStateDir(), WHISPER_PID_FILE);
+}
+
+function readTrackedPids(): number[] {
+  try {
+    const raw = JSON.parse(readFileSync(whisperPidPath(), "utf8"));
+    if (!Array.isArray(raw)) return [];
+    return raw.filter((n) => Number.isInteger(n) && n > 1);
+  } catch {
+    return [];
   }
 }
 
-// Run cleanup on module load
-cleanupOrphanedProcesses();
+function writeTrackedPids(pids: number[]): void {
+  try {
+    mkdirSync(getStateDir(), { recursive: true });
+    writeFileAtomic(whisperPidPath(), `${JSON.stringify(pids)}\n`, 0o600);
+  } catch {
+    // best-effort; cancel still kills liveChildren in this process
+  }
+}
+
+function trackWhisperPid(pid: number): void {
+  writeTrackedPids([...new Set([...readTrackedPids(), pid])]);
+}
+
+function untrackWhisperPid(pid: number): void {
+  writeTrackedPids(readTrackedPids().filter((n) => n !== pid));
+}
+
+/** Kill only PIDs this app spawned and recorded. Never pgrep by name. */
+export function cleanupTrackedWhisperProcesses(): number {
+  const livePids = new Set<number>();
+  for (const child of liveChildren.keys()) {
+    if (typeof child.pid === "number" && child.pid > 1) livePids.add(child.pid);
+  }
+  const pids = readTrackedPids();
+  const keep: number[] = [];
+  let n = 0;
+  for (const pid of pids) {
+    if (livePids.has(pid)) {
+      keep.push(pid);
+      continue;
+    }
+    try {
+      process.kill(pid, "SIGKILL");
+      n += 1;
+    } catch {
+      // already dead
+    }
+  }
+  writeTrackedPids(keep);
+  return n;
+}
 
 function getWhisperBackend(): WhisperBackend {
   if (WHISPER_BACKEND_OVERRIDE === "mlx" || WHISPER_BACKEND_OVERRIDE === "openai") {
@@ -358,6 +398,7 @@ export async function downloadAudio(
   onProgress?: ProgressCallback,
   options?: { allowBrowserCookies?: boolean }
 ): Promise<string> {
+  cleanupTrackedWhisperProcesses();
   await fs.mkdir(outputDir, { recursive: true });
 
   const outputTemplate = path.join(outputDir, `${videoId}.%(ext)s`);
@@ -622,6 +663,7 @@ export async function transcribeAudioFileWithWhisper(
   model: string = "base",
   onProgress?: ProgressCallback
 ): Promise<TranscriptSegment[]> {
+  cleanupTrackedWhisperProcesses();
   if (transcriptionInProgress) {
     throw new Error("A transcription is already in progress. Please wait and try again.");
   }
@@ -670,6 +712,7 @@ export async function transcribeWithWhisper(
   onProgress?: ProgressCallback,
   options?: { allowBrowserCookies?: boolean }
 ): Promise<TranscriptSegment[]> {
+  cleanupTrackedWhisperProcesses();
   if (transcriptionInProgress) {
     throw new Error("A transcription is already in progress. Please wait and try again.");
   }
