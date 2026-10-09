@@ -165,30 +165,38 @@ function createWatchDigest(options = {}) {
           digest: { message: "Watch seen-state was corrupt; reseeding without a flood." },
         });
       }
+      if (typeof seen.clearCorruptReseed === "function") seen.clearCorruptReseed();
     }
     for (const feed of cfg.watchFeeds) {
-      const meta = seen.getFeedMeta(feed.url);
-      const firstPoll = !meta.polledAt;
-      const fetched = await fetchFeed(feed.url, {
-        etag: meta.etag,
-        lastModified: meta.lastModified,
-        fetchImpl: options.fetchImpl,
-      });
-      if (!fetched.ok) {
-        results.push({ url: feed.url, error: fetched.error });
-        continue;
-      }
-      if (!fetched.notModified) {
-        seen.setFeedMeta(feed.url, { etag: fetched.etag, lastModified: fetched.lastModified });
-        const entries = fetched.entries || [];
-        seen.rememberVideos(entries);
-        if (firstPoll) {
-          seen.markPosted(entries.map((entry) => entry.videoId));
+      try {
+        const meta = seen.getFeedMeta(feed.url);
+        const firstPoll = !meta.polledAt;
+        const fetched = await fetchFeed(feed.url, {
+          etag: meta.etag,
+          lastModified: meta.lastModified,
+          fetchImpl: options.fetchImpl,
+        });
+        if (!fetched.ok) {
+          results.push({ url: feed.url, error: fetched.error });
+          continue;
         }
-      } else {
-        seen.setFeedMeta(feed.url, { etag: fetched.etag || meta.etag, lastModified: fetched.lastModified || meta.lastModified });
+        if (!fetched.notModified) {
+          seen.setFeedMeta(feed.url, { etag: fetched.etag, lastModified: fetched.lastModified });
+          const entries = fetched.entries || [];
+          seen.rememberVideos(entries);
+          if (firstPoll) {
+            seen.markPosted(entries.map((entry) => entry.videoId));
+          }
+        } else {
+          seen.setFeedMeta(feed.url, {
+            etag: fetched.etag || meta.etag,
+            lastModified: fetched.lastModified || meta.lastModified,
+          });
+        }
+        results.push({ url: feed.url, notModified: Boolean(fetched.notModified), seeded: firstPoll });
+      } catch (err) {
+        results.push({ url: feed.url, error: (err && err.message) || "feed_failed" });
       }
-      results.push({ url: feed.url, notModified: Boolean(fetched.notModified), seeded: firstPoll });
     }
     return { ok: true, results };
   }

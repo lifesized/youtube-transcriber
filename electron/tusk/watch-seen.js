@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { getStateDir } = require("../../lib/local-api-token.js");
 const { writeFileAtomic } = require("../utils.js");
-const { VIDEO_ID_RE } = require("./watch-feeds.js");
+const { VIDEO_ID_RE, watchUrlForVideoId } = require("./watch-feeds.js");
 
 const FILE_NAME = "tusk-watch-seen.json";
 const MAX_VIDEOS = 2000;
@@ -117,7 +117,14 @@ function createWatchSeen(options = {}) {
     getFeedMeta(url) {
       const state = load();
       const meta = state.feeds[url];
-      return meta && typeof meta === "object" ? { ...meta } : { etag: "", lastModified: "", polledAt: 0 };
+      if (!meta || typeof meta !== "object") {
+        return { etag: "", lastModified: "", polledAt: 0 };
+      }
+      return {
+        etag: sanitizeHeaderValue(meta.etag),
+        lastModified: sanitizeHeaderValue(meta.lastModified),
+        polledAt: Number(meta.polledAt) || 0,
+      };
     },
     setFeedMeta(url, meta) {
       const state = load();
@@ -209,9 +216,12 @@ function createWatchSeen(options = {}) {
       return {
         videoId,
         title: row.summaryTitle || row.title || "Video",
-        url: row.summaryUrl || row.url || "",
+        url: watchUrlForVideoId(videoId),
         summary: row.summary,
       };
+    },
+    clearCorruptReseed() {
+      corruptReseed = false;
     },
     noteDigestAttempt() {
       const state = load();
@@ -237,6 +247,7 @@ function createWatchSeen(options = {}) {
       return load().digestPauseReason || "";
     },
     wasCorruptReseed() {
+      load();
       return corruptReseed;
     },
     lastDigestAt() {

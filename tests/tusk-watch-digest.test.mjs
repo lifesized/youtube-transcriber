@@ -243,9 +243,9 @@ test("tick always clears the running flag after a thrown poll", async () => {
       },
     });
     digest.start();
-    await assert.rejects(() => digest.tick(), /boom/);
-    await assert.rejects(() => digest.tick(), /boom/);
-    assert.equal(polls, 2, "running must reset so the next tick can run");
+    await digest.tick();
+    await digest.tick();
+    assert.equal(polls, 2, "a thrown feed must not stick the running flag or skip later ticks");
     digest.stop();
   } finally {
     cleanup();
@@ -402,6 +402,89 @@ test("digest refuses to post when the destination is not allowlisted", async () 
     });
     const result = await digest.digestOnce({ force: true });
     assert.equal(result.skipped, "channel");
+  } finally {
+    cleanup();
+  }
+});
+
+test("first poll reports a corrupt reseed once, then clears the flag", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "tusk-reseed-"));
+  try {
+    require("node:fs").writeFileSync(path.join(dir, "tusk-watch-seen.json"), "{not json", "utf8");
+    const seen = createWatchSeen({ stateDir: dir, now: () => 3 });
+    assert.equal(seen.wasCorruptReseed(), true);
+    const notices = [];
+    const digest = createWatchDigest({
+      seen,
+      onStatus: (next) => notices.push(next),
+      fetchFeed: async () => ({ ok: true, notModified: true }),
+      config: {
+        enabled: true,
+        watchFeeds: [{ url: FEED }],
+        digestChannel: "C01234567",
+        channelAllowlist: ["C01234567"],
+      },
+    });
+    const first = await digest.pollOnce();
+    assert.equal(first.results[0].reseeds, true);
+    assert.match(notices[0].digest.message, /corrupt/);
+    assert.equal(seen.wasCorruptReseed(), false);
+    const second = await digest.pollOnce();
+    assert.equal(second.results.some((row) => row.reseeds), false);
+    assert.equal(notices.length, 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a timed-out feed does not skip later feeds or the digest", async () => {
+  const { seen, cleanup } = seenInDir();
+  try {
+    const FEED_B = "https://www.youtube.com/feeds/videos.xml?playlist_id=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf";
+    seen.rememberVideos([{ videoId: VIDEO, title: "Demo", published: "2026-10-09T00:00:00Z" }]);
+    const fetched = [];
+    const posted = [];
+    const digest = createWatchDigest({
+      seen,
+      now: () => 10_000,
+      fetchFeed: async (url) => {
+        fetched.push(url);
+        if (url === FEED) throw new Error("timeout");
+        return { ok: true, notModified: true };
+      },
+      slackApi: {
+        postMessage: async (args) => {
+          posted.push(args);
+          return { ok: true };
+        },
+      },
+      localClient: {
+        createTranscript: async () => ({
+          id: "vid-1",
+          title: "Demo",
+          platform: "youtube",
+          source: "youtube",
+        }),
+        createSummary: async () => ({ summary_md: "A short public summary." }),
+      },
+      config: {
+        enabled: true,
+        botToken: "xoxb-test",
+        watchFeeds: [{ url: FEED }, { url: FEED_B }],
+        digestChannel: "C01234567",
+        channelAllowlist: ["C01234567"],
+        digestIntervalMs: 1,
+      },
+    });
+    const poll = await digest.pollOnce();
+    assert.equal(poll.ok, true);
+    assert.equal(poll.results.find((row) => row.url === FEED).error, "timeout");
+    assert.equal(poll.results.find((row) => row.url === FEED_B).notModified, true);
+    assert.deepEqual(fetched, [FEED, FEED_B]);
+    const result = await digest.digestOnce({ force: true });
+    assert.equal(result.ok, true);
+    assert.equal(posted.length, 1);
+    assert.equal(seen.isPosted(VIDEO), true);
   } finally {
     cleanup();
   }

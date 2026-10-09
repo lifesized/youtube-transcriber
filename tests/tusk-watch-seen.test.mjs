@@ -87,3 +87,56 @@ test("feed meta stores etag for the next poll and strips CR/LF", () => {
     assert.match(seen.getFeedMeta(url).etag, /v1/);
   });
 });
+
+test("getFeedMeta sanitizes a dirty etag that was already on disk", () => {
+  withDir((dir) => {
+    const url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCuAXFkgsw1L7xaCfnd5JJOw";
+    writeFileSync(
+      path.join(dir, FILE_NAME),
+      JSON.stringify({
+        version: 1,
+        videos: {},
+        feeds: {
+          [url]: { etag: '"v1"\r\nX-Injected: 1', lastModified: "Wed, 21 Oct 2015 07:28:00 GMT\n", polledAt: 9 },
+        },
+        lastDigestAt: 0,
+        digestPaused: false,
+        digestPauseReason: "",
+      }),
+      "utf8"
+    );
+    const seen = createWatchSeen({ stateDir: dir });
+    const meta = seen.getFeedMeta(url);
+    assert.equal(meta.etag.includes("\r"), false);
+    assert.equal(meta.etag.includes("\n"), false);
+    assert.equal(meta.lastModified.includes("\n"), false);
+    assert.match(meta.etag, /v1/);
+  });
+});
+
+test("getCachedSummary rebuilds the watch URL from the video id", () => {
+  withDir((dir) => {
+    const seen = createWatchSeen({ stateDir: dir, now: () => 10 });
+    seen.rememberVideos([
+      { videoId: "dQw4w9WgXcQ", title: "Rick", url: "https://evil.example/watch?v=dQw4w9WgXcQ" },
+    ]);
+    seen.cacheSummary("dQw4w9WgXcQ", {
+      title: "Rick",
+      url: "https://evil.example/phish",
+      summary: "cached",
+    });
+    const cached = seen.getCachedSummary("dQw4w9WgXcQ");
+    assert.equal(cached.url, "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    assert.equal(cached.summary, "cached");
+  });
+});
+
+test("wasCorruptReseed clears after it is reported once", () => {
+  withDir((dir) => {
+    writeFileSync(path.join(dir, FILE_NAME), "{not json", "utf8");
+    const seen = createWatchSeen({ stateDir: dir, now: () => 88 });
+    assert.equal(seen.wasCorruptReseed(), true);
+    seen.clearCorruptReseed();
+    assert.equal(seen.wasCorruptReseed(), false);
+  });
+});
