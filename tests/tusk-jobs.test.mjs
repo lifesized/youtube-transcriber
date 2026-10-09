@@ -46,21 +46,45 @@ test("hourly and daily caps reject further LLM calls", () => {
   assert.throws(() => budget.take(), (err) => err.code === "llm_daily_cap" && err.status === 429);
 });
 
-test("duration cap aborts the job and cancels the server work", async () => {
-  let cancelled = 0;
+test("duration cap aborts the job and cancels only that server job", async () => {
+  const cancelled = [];
   const gate = createJobGate({
     concurrency: 1,
     timeoutMs: 25,
-    cancelServerJob: async () => {
-      cancelled += 1;
+    cancelServerJob: async (jobId) => {
+      cancelled.push(jobId);
     },
   });
-  const result = await gate.run("slow", async (signal) => {
+  const result = await gate.run("slow", async (signal, jobId) => {
+    assert.equal(typeof jobId, "string");
+    assert.ok(jobId.length >= 8);
     await delay(80);
     return signal.aborted ? "aborted" : "done";
   });
   assert.equal(result, "aborted");
-  assert.equal(cancelled, 1);
+  assert.equal(cancelled.length, 1);
+  assert.equal(typeof cancelled[0], "string");
+  assert.ok(cancelled[0].length >= 8);
+});
+
+test("cancelAll asks the server to cancel Tusk jobs, not a specific local id", async () => {
+  const cancelled = [];
+  const gate = createJobGate({
+    concurrency: 1,
+    timeoutMs: 5_000,
+    cancelServerJob: async (jobId) => {
+      cancelled.push(jobId);
+    },
+  });
+  const pending = gate.run("held", async (signal) => {
+    await delay(80);
+    return signal.aborted ? "aborted" : "done";
+  });
+  await delay(5);
+  gate.cancelAll();
+  assert.equal(await pending, "aborted");
+  assert.equal(cancelled.length, 1);
+  assert.equal(cancelled[0], undefined);
 });
 
 test("createJobGate.takeLlm uses the shared budget", () => {

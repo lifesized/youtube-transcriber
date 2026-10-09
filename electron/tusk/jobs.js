@@ -1,5 +1,7 @@
 "use strict";
 
+const { randomUUID } = require("node:crypto");
+
 const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
 
@@ -75,10 +77,10 @@ function createJobGate(options = {}) {
     }
   }
 
-  async function cancelServerJob() {
+  async function cancelServerJob(jobId) {
     if (typeof options.cancelServerJob !== "function") return;
     try {
-      await options.cancelServerJob();
+      await options.cancelServerJob(jobId);
     } catch {
       // cancel is best-effort; the AbortController still fired
     }
@@ -92,6 +94,7 @@ function createJobGate(options = {}) {
       return { skipped: "queue_full" };
     }
 
+    const jobId = randomUUID();
     const controller = new AbortController();
     controllers.add(controller);
     const work = (async () => {
@@ -102,10 +105,10 @@ function createJobGate(options = {}) {
         } catch {
           // already aborted
         }
-        void cancelServerJob();
+        void cancelServerJob(jobId);
       }, timeoutMs);
       try {
-        return await fn(controller.signal);
+        return await fn(controller.signal, jobId);
       } finally {
         clearTimeout(timer);
         controllers.delete(controller);
@@ -129,6 +132,7 @@ function createJobGate(options = {}) {
       }
     }
     controllers.clear();
+    // No jobId: cancel every Tusk-tagged server job, never local/untagged work.
     void cancelServerJob();
   }
 

@@ -13,6 +13,7 @@ import type { TranscriptSegment } from "@/lib/types";
 import { summarize } from "@/lib/summarize";
 import { SUMMARY_PROMPT_VERSION } from "@/lib/transcript-pipeline";
 import { getSecretsFromMainOrEnv } from "@/lib/electron-ipc.js";
+import { beginServerJob } from "@/lib/in-flight-jobs";
 
 export async function GET() {
   try {
@@ -67,33 +68,45 @@ export async function POST(request: NextRequest) {
     typeof body.promptOverride === "string"
       ? body.promptOverride.trim().slice(0, 10_000)
       : "";
+  const job = beginServerJob({
+    signal: request.signal,
+    jobId: typeof body.jobId === "string" ? body.jobId : undefined,
+    tag: body.jobTag === "tusk" ? "tusk" : "local",
+  });
 
   try {
-    const summary = await summarize(
-      {
-        videoId: video.videoId,
-        title: video.title,
-        transcript: video.transcript,
-        captionLanguage: video.captionLanguage || "en",
-      },
-      SUMMARY_PROMPT_VERSION,
-      { promptOverride: promptOverride || undefined, signal: request.signal }
-    );
-    return NextResponse.json({
-      summary_md: summary,
-      model: "app-llm",
-      cached: !promptOverride,
-    });
-  } catch (llmError) {
-    const llmMessage =
-      llmError instanceof Error ? llmError.message : "Summarization failed";
-    if (
-      !llmMessage.includes("Choose Anthropic or OpenAI") &&
-      !llmMessage.includes("Add an API key")
-    ) {
-      return NextResponse.json({ error: llmMessage }, { status: 502 });
-    }
-  }
+    return await job.run(async () => {
+      try {
+        const summary = await summarize(
+          {
+            videoId: video.videoId,
+            title: video.title,
+            transcript: video.transcript,
+            captionLanguage: video.captionLanguage || "en",
+          },
+          SUMMARY_PROMPT_VERSION,
+          {
+            promptOverride: promptOverride || undefined,
+            signal: job.signal,
+            jobId: job.jobId,
+            tag: job.tag,
+          }
+        );
+        return NextResponse.json({
+          summary_md: summary,
+          model: "app-llm",
+          cached: !promptOverride,
+        });
+      } catch (llmError) {
+        const llmMessage =
+          llmError instanceof Error ? llmError.message : "Summarization failed";
+        if (
+          !llmMessage.includes("Choose Anthropic or OpenAI") &&
+          !llmMessage.includes("Add an API key")
+        ) {
+          return NextResponse.json({ error: llmMessage }, { status: 502 });
+        }
+      }
 
   let apiKey: string | null;
   try {
@@ -141,7 +154,7 @@ export async function POST(request: NextRequest) {
       title: video.title,
       transcript: formatTranscriptForSummary(segments),
       promptOverride: promptOverride || null,
-      signal: request.signal,
+      signal: job.signal,
     });
     const promptHash = createHash("sha256")
       .update(`${LOCAL_SUMMARY_MODEL}:${promptOverride || "default"}`)
@@ -159,5 +172,9 @@ export async function POST(request: NextRequest) {
     const message =
       error instanceof Error ? error.message : "Summarization failed";
     return NextResponse.json({ error: message }, { status: 502 });
+  }
+    });
+  } finally {
+    job.finish();
   }
 }

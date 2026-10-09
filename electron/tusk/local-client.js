@@ -89,19 +89,28 @@ function createLocalClient(options = {}) {
 
   return {
     createTranscript(url, extra) {
+      const body = {
+        url,
+        jobTag: (extra && extra.jobTag) || "tusk",
+      };
+      if (extra && extra.jobId) body.jobId = extra.jobId;
       return localRequest(
         "/api/transcripts",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url }),
+          body: JSON.stringify(body),
         },
         opts(extra)
       );
     },
     createSummary(transcriptId, extra) {
-      const body = { transcriptId };
+      const body = {
+        transcriptId,
+        jobTag: (extra && extra.jobTag) || "tusk",
+      };
       if (extra && extra.promptOverride) body.promptOverride = extra.promptOverride;
+      if (extra && extra.jobId) body.jobId = extra.jobId;
       return localRequest(
         "/api/summaries",
         {
@@ -113,7 +122,17 @@ function createLocalClient(options = {}) {
       );
     },
     cancelInFlight(extra) {
-      return localRequest("/api/jobs/cancel", { method: "POST" }, opts(extra)).catch(() => ({
+      const body = { tag: (extra && extra.tag) || "tusk" };
+      if (extra && extra.jobId) body.jobId = extra.jobId;
+      return localRequest(
+        "/api/jobs/cancel",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+        opts(extra)
+      ).catch(() => ({
         ok: false,
       }));
     },

@@ -4,6 +4,7 @@ import os from "os";
 import path from "path";
 import type { TranscriptSegment } from "./types";
 import type { ProgressStage } from "./progress";
+import { currentJobContext, type JobTag } from "./job-context";
 
 export type ProgressCallback = (event: { stage: ProgressStage; progress: number; statusText: string }) => void;
 
@@ -43,7 +44,17 @@ interface WhisperJsonOutput {
   segments: WhisperJsonSegment[];
 }
 
-const liveChildren = new Set<ChildProcess>();
+type ChildMeta = { jobId: string; tag: JobTag };
+
+const liveChildren = new Map<ChildProcess, ChildMeta>();
+
+function currentChildMeta(): ChildMeta {
+  const ctx = currentJobContext();
+  return {
+    jobId: ctx?.jobId || "",
+    tag: ctx?.tag === "tusk" ? "tusk" : "local",
+  };
+}
 
 function killChild(child: ChildProcess): void {
   try {
@@ -60,13 +71,37 @@ function killChild(child: ChildProcess): void {
   }, 5000);
 }
 
-/** Kill every in-flight yt-dlp / Whisper child. Used when Tusk's duration cap fires. */
-export function cancelTranscription(): number {
-  const n = liveChildren.size;
-  for (const child of [...liveChildren]) {
+function killMatching(predicate: (meta: ChildMeta) => boolean): number {
+  let n = 0;
+  for (const [child, meta] of liveChildren) {
+    if (!predicate(meta)) continue;
     killChild(child);
+    n += 1;
   }
   return n;
+}
+
+/** Kill every in-flight yt-dlp / Whisper child. Prefer cancelTranscriptionForJob. */
+export function cancelTranscription(): number {
+  return killMatching(() => true);
+}
+
+export function cancelTranscriptionForJob(
+  jobId: string,
+  opts?: { tag?: string }
+): number {
+  const id = typeof jobId === "string" ? jobId.trim() : "";
+  if (!id) return 0;
+  return killMatching((meta) => {
+    if (meta.jobId !== id) return false;
+    if (opts?.tag && meta.tag !== opts.tag) return false;
+    return true;
+  });
+}
+
+export function cancelTranscriptionByTag(tag: string): number {
+  if (!tag) return 0;
+  return killMatching((meta) => meta.tag === tag);
 }
 
 function execFileAsync(
@@ -79,16 +114,18 @@ function execFileAsync(
     const child = execFile(cmd, args, { maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
       finish(err, stdout, stderr);
     });
-    liveChildren.add(child);
+    const meta = currentChildMeta();
+    liveChildren.set(child, meta);
+    const abortSignal = options?.signal ?? currentJobContext()?.signal;
 
     const finish = (err: Error | null, stdout?: string, stderr?: string) => {
       if (settled) return;
       settled = true;
       liveChildren.delete(child);
       clearTimeout(timer);
-      options?.signal?.removeEventListener("abort", onAbort);
+      abortSignal?.removeEventListener("abort", onAbort);
       if (err) {
-        if (options?.signal?.aborted) {
+        if (abortSignal?.aborted) {
           const abortErr = new Error("aborted");
           abortErr.name = "AbortError";
           (abortErr as Error & { code?: string }).code = "ABORT_ERR";
@@ -111,9 +148,9 @@ function execFileAsync(
       console.log("[whisper] Job cancelled, sending SIGTERM...");
       killChild(child);
     };
-    if (options?.signal) {
-      if (options.signal.aborted) onAbort();
-      else options.signal.addEventListener("abort", onAbort, { once: true });
+    if (abortSignal) {
+      if (abortSignal.aborted) onAbort();
+      else abortSignal.addEventListener("abort", onAbort, { once: true });
     }
   });
 }

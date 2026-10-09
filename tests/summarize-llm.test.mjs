@@ -98,12 +98,36 @@ test("callLlmProvider forwards an abort signal to fetch", async () => {
   assert.equal(seen, controller.signal);
 });
 
-test("cancelInFlightJobs aborts a registered LLM job", async () => {
-  const { beginServerJob, cancelInFlightJobs } = await import("../lib/in-flight-jobs.ts");
-  const job = beginServerJob();
-  assert.equal(job.signal.aborted, false);
-  const result = cancelInFlightJobs();
-  assert.equal(job.signal.aborted, true);
-  assert.ok(result.llm >= 1);
-  job.finish();
+test("cancelJob aborts only that job and leaves others running", async () => {
+  const { beginServerJob, cancelJob, cancelInFlightJobs, cancelJobsByTag } =
+    await import("../lib/in-flight-jobs.ts");
+  const tusk = beginServerJob({ jobId: "tusk-job-aa", tag: "tusk" });
+  const otherTusk = beginServerJob({ jobId: "tusk-job-bb", tag: "tusk" });
+  const local = beginServerJob({ jobId: "local-job-cc", tag: "local" });
+  assert.equal(tusk.signal.aborted, false);
+  assert.equal(otherTusk.signal.aborted, false);
+  assert.equal(local.signal.aborted, false);
+
+  const refused = cancelJob("local-job-cc", { tag: "tusk" });
+  assert.equal(refused.ok, false);
+  assert.equal(local.signal.aborted, false);
+
+  const one = cancelJob("tusk-job-aa", { tag: "tusk" });
+  assert.equal(tusk.signal.aborted, true);
+  assert.equal(otherTusk.signal.aborted, false);
+  assert.equal(local.signal.aborted, false);
+  assert.ok(one.llm >= 1);
+
+  const tagged = cancelJobsByTag("tusk");
+  assert.equal(otherTusk.signal.aborted, true);
+  assert.equal(local.signal.aborted, false);
+  assert.ok(tagged.llm >= 1);
+
+  const leftover = cancelInFlightJobs();
+  assert.equal(local.signal.aborted, false);
+  assert.equal(leftover.llm, 0);
+
+  tusk.finish();
+  otherTusk.finish();
+  local.finish();
 });

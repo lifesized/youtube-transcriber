@@ -17,8 +17,10 @@ function createTuskManager(options = {}) {
   const jobs =
     options.jobGate ||
     createJobGate({
-      cancelServerJob: () =>
-        rawClient.cancelInFlight ? rawClient.cancelInFlight() : Promise.resolve(),
+      cancelServerJob: (jobId) =>
+        rawClient.cancelInFlight
+          ? rawClient.cancelInFlight(jobId ? { jobId, tag: "tusk" } : { tag: "tusk" })
+          : Promise.resolve(),
     });
   const localClient = {
     ...rawClient,
@@ -93,14 +95,14 @@ function createTuskManager(options = {}) {
       },
       onSupportedLink: async (evt) => {
         if (!evt.ts || !evt.channel) return;
-        await jobs.run(`${evt.channel}:${evt.ts}`, (signal) =>
-          pipeline.handleSupportedLink(evt, signal)
+        await jobs.run(`${evt.channel}:${evt.ts}`, (signal, jobId) =>
+          pipeline.handleSupportedLink(evt, signal, jobId)
         );
       },
       onThreadQuestion: async (evt) => {
         if (!evt.ts || !evt.channel || !evt.threadTs) return;
-        await jobs.run(`qa:${evt.channel}:${evt.threadTs}:${evt.ts}`, (signal) =>
-          pipeline.handleThreadQuestion(evt, signal)
+        await jobs.run(`qa:${evt.channel}:${evt.threadTs}:${evt.ts}`, (signal, jobId) =>
+          pipeline.handleThreadQuestion(evt, signal, jobId)
         );
       },
     });

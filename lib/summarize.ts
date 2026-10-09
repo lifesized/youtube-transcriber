@@ -58,6 +58,8 @@ export async function summarize(
     apiKey?: string;
     promptOverride?: string | null;
     signal?: AbortSignal;
+    jobId?: string | null;
+    tag?: string | null;
   }
 ): Promise<string> {
   const lang = transcript.captionLanguage;
@@ -71,7 +73,11 @@ export async function summarize(
     if (cached) return cached;
   }
 
-  const job = beginServerJob(options?.signal);
+  const job = beginServerJob({
+    signal: options?.signal,
+    jobId: options?.jobId,
+    tag: options?.tag,
+  });
   try {
     if (job.signal.aborted) {
       const err = new Error("aborted");
@@ -82,19 +88,21 @@ export async function summarize(
     const { provider, apiKey } = await resolveLlmConfig(options);
     const segments = segmentsFromTranscript(transcript.transcript);
     const transcriptText = formatTranscriptForSummary(segments);
-    const summary = await callLlmProvider({
-      provider,
-      apiKey,
-      title: transcript.title,
-      transcriptText,
-      promptOverride: promptOverride || null,
-      fetchImpl: options?.fetchImpl,
-      signal: job.signal,
+    return await job.run(async () => {
+      const summary = await callLlmProvider({
+        provider,
+        apiKey,
+        title: transcript.title,
+        transcriptText,
+        promptOverride: promptOverride || null,
+        fetchImpl: options?.fetchImpl,
+        signal: job.signal,
+      });
+      if (!promptOverride) {
+        await cacheBaseSummary(transcript.videoId, lang, promptVersion, summary);
+      }
+      return summary;
     });
-    if (!promptOverride) {
-      await cacheBaseSummary(transcript.videoId, lang, promptVersion, summary);
-    }
-    return summary;
   } finally {
     job.finish();
   }

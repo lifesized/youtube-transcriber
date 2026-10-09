@@ -166,7 +166,13 @@ function createPipeline(options = {}) {
     return { ok: false, error: mapped.code };
   }
 
-  async function processUrl(evt, url, signal) {
+  function jobOpts(signal, jobId) {
+    const extra = { signal, jobTag: "tusk" };
+    if (jobId) extra.jobId = jobId;
+    return extra;
+  }
+
+  async function processUrl(evt, url, signal, jobId) {
     const mode = resolveArtifactMode(evt.text || "");
     const card = {
       channel: evt.channel,
@@ -187,7 +193,7 @@ function createPipeline(options = {}) {
       throwIfAborted(signal);
       card.replyTs = await postOrUpdate(card, "fetching");
 
-      const video = await local.createTranscript(card.sourceUrl, { signal });
+      const video = await local.createTranscript(card.sourceUrl, jobOpts(signal, jobId));
       throwIfAborted(signal);
       if (!isTuskAllowedSource({ ...url, ...video, platform: video.platform || url.platform })) {
         const err = new Error(COPY.not_youtube);
@@ -212,7 +218,7 @@ function createPipeline(options = {}) {
       let summary;
       try {
         summary = await local.createSummary(video.id, {
-          signal,
+          ...jobOpts(signal, jobId),
           promptOverride: buildSlackPrimitivePrompt({
             title: video.title || "Video",
             preset,
@@ -267,13 +273,13 @@ function createPipeline(options = {}) {
     });
   }
 
-  async function handleSupportedLink(evt, signal) {
+  async function handleSupportedLink(evt, signal, jobId) {
     const urls = youtubeUrlsOnly(sortUrls(evt.urls || []));
     if (!urls.length) return { skipped: "not_youtube" };
-    return processUrl(evt, urls[0], signal);
+    return processUrl(evt, urls[0], signal, jobId);
   }
 
-  async function handleThreadQuestion(evt, signal) {
+  async function handleThreadQuestion(evt, signal, jobId) {
     const channel = evt && evt.channel;
     const threadTs = evt && (evt.threadTs || evt.ts);
     if (!channel || !threadTs) return { skipped: "no_thread" };
@@ -300,7 +306,7 @@ function createPipeline(options = {}) {
     try {
       throwIfAborted(signal);
       const summary = await local.createSummary(remembered.transcriptId, {
-        signal,
+        ...jobOpts(signal, jobId),
         promptOverride: buildThreadQuestionPrompt({
           title: remembered.title,
           question,

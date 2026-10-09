@@ -9,6 +9,7 @@ import {
   NoCaptionsError,
 } from "@/lib/transcript";
 import { isTranscriptionInProgress } from "@/lib/whisper";
+import { beginServerJob } from "@/lib/in-flight-jobs";
 import { getOrCreateTranscript, type TranscriptFetcher } from "@/lib/transcript-cache";
 import {
   cleanLinkedInText,
@@ -39,6 +40,8 @@ export async function POST(request: NextRequest) {
     /** LinkedIn only: signed CDN URL the extension read from the user's tab. */
     mediaUrl?: unknown;
     author?: unknown;
+    jobId?: unknown;
+    jobTag?: unknown;
   };
   try {
     body = await request.json();
@@ -153,10 +156,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const job = beginServerJob({
+    signal: request.signal,
+    jobId: typeof body.jobId === "string" ? body.jobId : undefined,
+    tag: body.jobTag === "tusk" ? "tusk" : "local",
+  });
+
   try {
-    // Use cache-aware transcript lookup/creation
-    const video = await getOrCreateTranscript(videoId, storedUrl, lang, platform, { fetcher });
-    return NextResponse.json(video, { status: 201 });
+    return await job.run(async () => {
+      // Use cache-aware transcript lookup/creation
+      const video = await getOrCreateTranscript(videoId, storedUrl, lang, platform, { fetcher });
+      return NextResponse.json(video, { status: 201 });
+    });
   } catch (err: unknown) {
     if (err instanceof LinkedInMediaError) {
       return NextResponse.json({ error: err.message }, { status: 422 });
@@ -201,6 +212,8 @@ export async function POST(request: NextRequest) {
       { error: `Failed to fetch transcript: ${message}` },
       { status: 500 }
     );
+  } finally {
+    job.finish();
   }
 }
 
