@@ -273,6 +273,7 @@ function createTuskManager(options = {}) {
       );
 
     let needsConfirm = false;
+    let tookLock = false;
     try {
       let current = store.getSlackPlain();
       let next = buildNext(current, patch);
@@ -288,7 +289,10 @@ function createTuskManager(options = {}) {
       }
 
       let auth = null;
-      if (needsConfirm) confirmOpen = true;
+      if (needsConfirm) {
+        confirmOpen = true;
+        tookLock = true;
+      }
       auth = await resolveAuth(current, next, resetWorkspace);
       if (isCancelled()) throw cancelledError();
 
@@ -319,7 +323,7 @@ function createTuskManager(options = {}) {
       if (isCancelled()) throw cancelledError();
       writeSlack(current, next, auth);
     } finally {
-      if (needsConfirm) confirmOpen = false;
+      if (tookLock) confirmOpen = false;
       if (requestId) pendingRequests.delete(requestId);
     }
     return sync();

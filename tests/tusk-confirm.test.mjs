@@ -206,6 +206,52 @@ test("adding allowlist channels or enabling Tusk requires confirmation", async (
   }
 });
 
+test("a busy 409 does not release the dialog lock for a third request", async () => {
+  const { store, cleanup } = storeInDir();
+  try {
+    let release;
+    const held = new Promise((resolve) => {
+      release = resolve;
+    });
+    let dialogs = 0;
+    const manager = createTuskManager({
+      store,
+      slackApi: mockApi(),
+      WebSocket: FakeSocket,
+      confirmSensitiveChange: async () => {
+        dialogs += 1;
+        await held;
+        return true;
+      },
+    });
+    const first = manager.applyPatch({ botToken: BOT, appToken: APP, enabled: true });
+    await assert.rejects(
+      () => manager.applyPatch({ channelAllowlist: ["C01234567"] }),
+      (err) => {
+        assert.equal(err.status, 409);
+        assert.equal(err.code, "TUSK_SETTINGS_BUSY");
+        return true;
+      }
+    );
+    await assert.rejects(
+      () => manager.applyPatch({ channelAllowlist: ["C07654321"] }),
+      (err) => {
+        assert.equal(err.status, 409);
+        assert.equal(err.code, "TUSK_SETTINGS_BUSY");
+        return true;
+      }
+    );
+    assert.equal(dialogs, 1, "only the first request opens a dialog");
+    release(true);
+    await first;
+    assert.equal(dialogs, 1);
+    assert.equal(store.getSlackPublic().teamId, "THOME");
+    await manager.stop();
+  } finally {
+    await cleanup();
+  }
+});
+
 test("a second sensitive change gets 409 while a confirm dialog is open", async () => {
   const { store, cleanup } = storeInDir();
   try {
