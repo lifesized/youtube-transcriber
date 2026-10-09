@@ -14,6 +14,37 @@ const DEFAULT_MAX_VIDEOS = 5;
 const DEFAULT_MAX_SUMMARY = 400;
 const MAX_VIDEOS_HARD = 10;
 const MAX_SUMMARY_HARD = 800;
+const BACKOFF_BASE_MS = 30 * 60 * 1000;
+const BACKOFF_MAX_MS = 6 * 60 * 60 * 1000;
+const PAUSE_ERRORS = new Set([
+  "not_in_channel",
+  "channel_not_found",
+  "invalid_auth",
+  "token_revoked",
+]);
+
+const PAUSE_COPY = {
+  not_in_channel: "Digest paused: Tusk is not in that channel.",
+  channel_not_found: "Digest paused: digest channel was not found.",
+  invalid_auth: "Digest paused: Slack token is invalid.",
+  token_revoked: "Digest paused: Slack token was revoked.",
+};
+
+function slackErrorCode(err) {
+  if (!err) return "";
+  const code = err.slackError || err.code || err.error || "";
+  if (PAUSE_ERRORS.has(code)) return code;
+  const message = String(err.message || "").toLowerCase();
+  for (const name of PAUSE_ERRORS) {
+    if (message.includes(name)) return name;
+  }
+  return typeof code === "string" ? code : "";
+}
+
+function backoffMs(streak) {
+  const exp = Math.max(0, Number(streak) - 1);
+  return Math.min(BACKOFF_BASE_MS * 2 ** exp, BACKOFF_MAX_MS);
+}
 
 function clamp(value, min, max, fallback) {
   const n = Number(value);
@@ -61,6 +92,29 @@ function createWatchDigest(options = {}) {
   let stopped = true;
   let startedAt = 0;
   let running = false;
+  let failStreak = 0;
+  let paused = false;
+  let pauseReason = "";
+
+  function stop() {
+    stopped = true;
+    if (pollTimer != null) timers.clearTimeout(pollTimer);
+    pollTimer = null;
+  }
+
+  function pauseCopy(reason) {
+    return PAUSE_COPY[reason] || "Digest paused.";
+  }
+
+  function emitPause(reason) {
+    paused = true;
+    pauseReason = reason;
+    if (typeof seen.pauseDigest === "function") seen.pauseDigest(reason);
+    stop();
+    if (typeof options.onPause === "function") {
+      options.onPause({ reason, message: pauseCopy(reason) });
+    }
+  }
 
   function config() {
     const cfg = getConfig() || {};
@@ -116,9 +170,11 @@ function createWatchDigest(options = {}) {
   }
 
   function digestDue(cfg) {
+    if (paused || (seen.isDigestPaused && seen.isDigestPaused())) return false;
     const last = seen.lastDigestAt();
     const origin = last || startedAt || now();
-    return now() - origin >= cfg.digestIntervalMs;
+    const wait = failStreak > 0 ? backoffMs(failStreak) : cfg.digestIntervalMs;
+    return now() - origin >= wait;
   }
 
   async function summarizeOne(entry, cfg, signal, jobId) {
@@ -132,7 +188,7 @@ function createWatchDigest(options = {}) {
         source: video && video.source,
       })
     ) {
-      return null;
+      return { skipped: "not_youtube", videoId: entry.videoId };
     }
     let summary = "";
     try {
@@ -145,7 +201,7 @@ function createWatchDigest(options = {}) {
       });
       summary = (result && (result.summary_md || result.summary)) || "";
     } catch {
-      summary = "";
+      return null;
     }
     return {
       videoId: entry.videoId,
@@ -157,6 +213,9 @@ function createWatchDigest(options = {}) {
 
   async function digestOnce(opts = {}) {
     const cfg = config();
+    if (paused || (seen.isDigestPaused && seen.isDigestPaused())) {
+      return { skipped: "paused", reason: pauseReason || (seen.digestPauseReason && seen.digestPauseReason()) };
+    }
     if (!cfg.enabled) return { skipped: "disabled" };
     if (!opts.force && !digestDue(cfg)) return { skipped: "not_due" };
     if (!digestChannelAllowed(cfg.digestChannel, cfg.channelAllowlist)) {
@@ -165,38 +224,53 @@ function createWatchDigest(options = {}) {
     const pending = seen.unpublished(cfg.maxVideos);
     if (!pending.length) return { skipped: "empty" };
     const items = [];
-    const postedIds = [];
     for (const entry of pending) {
+      const cached = seen.getCachedSummary && seen.getCachedSummary(entry.videoId);
+      if (cached) {
+        items.push(cached);
+        if (items.length >= cfg.maxVideos) break;
+        continue;
+      }
       try {
         const item = options.runJob
           ? await options.runJob(`digest:${entry.videoId}`, (signal, jobId) =>
               summarizeOne(entry, cfg, signal, jobId)
             )
           : await summarizeOne(entry, cfg, opts.signal);
-        if (item && item.skipped) {
-          postedIds.push(entry.videoId);
+        if (item && item.skipped === "not_youtube") {
+          seen.markPosted([entry.videoId], { digest: false });
           continue;
         }
-        postedIds.push(entry.videoId);
-        if (item) items.push(item);
+        if (!item || item.skipped) continue;
+        if (typeof seen.cacheSummary === "function") seen.cacheSummary(entry.videoId, item);
+        items.push(item);
       } catch {
-        postedIds.push(entry.videoId);
+        // leave unpublished so a later tick can retry
       }
       if (items.length >= cfg.maxVideos) break;
     }
-    if (!items.length) {
-      if (postedIds.length) seen.markPosted(postedIds);
-      return { skipped: "no_items" };
-    }
+    if (!items.length) return { skipped: "no_items" };
     const text = formatDigestMessage(items, cfg.maxSummaryChars);
-    await slack.postMessage({
-      botToken: cfg.botToken,
-      channel: cfg.digestChannel,
-      text,
-      unfurl_links: false,
-      unfurl_media: false,
-    });
-    seen.markPosted(postedIds);
+    try {
+      await slack.postMessage({
+        botToken: cfg.botToken,
+        channel: cfg.digestChannel,
+        text,
+        unfurl_links: false,
+        unfurl_media: false,
+      });
+    } catch (err) {
+      failStreak += 1;
+      if (typeof seen.noteDigestAttempt === "function") seen.noteDigestAttempt();
+      const reason = slackErrorCode(err);
+      if (PAUSE_ERRORS.has(reason)) {
+        emitPause(reason);
+        return { ok: false, error: reason, paused: true, message: pauseCopy(reason) };
+      }
+      return { ok: false, error: "post_failed", backoffMs: backoffMs(failStreak) };
+    }
+    failStreak = 0;
+    seen.markPosted(items.map((item) => item.videoId));
     return { ok: true, count: items.length, channel: cfg.digestChannel, text };
   }
 
@@ -230,11 +304,7 @@ function createWatchDigest(options = {}) {
       if (pollTimer != null) timers.clearTimeout(pollTimer);
       schedule(0);
     },
-    stop() {
-      stopped = true;
-      if (pollTimer != null) timers.clearTimeout(pollTimer);
-      pollTimer = null;
-    },
+    stop,
     pollOnce,
     digestOnce,
     tick,

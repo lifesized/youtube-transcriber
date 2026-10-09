@@ -166,6 +166,62 @@ test("digest posts new public YouTube videos and skips signed-in cache hits", as
   }
 });
 
+test("a revoked token pauses the digest after one summary and does not call the LLM again", async () => {
+  const { seen, cleanup } = seenInDir();
+  try {
+    seen.rememberVideos([{ videoId: VIDEO, title: "Demo", published: "2026-10-09T00:00:00Z" }]);
+    const summarized = [];
+    const pauses = [];
+    const digest = createWatchDigest({
+      seen,
+      now: () => 10_000,
+      slackApi: {
+        postMessage: async () => {
+          const err = new Error("Slack API error (token_revoked)");
+          err.slackError = "token_revoked";
+          throw err;
+        },
+      },
+      localClient: {
+        createTranscript: async () => ({
+          id: "vid-1",
+          title: "Demo",
+          platform: "youtube",
+          source: "youtube",
+        }),
+        createSummary: async (id) => {
+          summarized.push(id);
+          return { summary_md: "A short public summary." };
+        },
+      },
+      onPause: (info) => pauses.push(info),
+      config: {
+        enabled: true,
+        botToken: "xoxb-test",
+        watchFeeds: [{ url: FEED }],
+        digestChannel: "C01234567",
+        channelAllowlist: ["C01234567"],
+        digestIntervalMs: 1,
+      },
+    });
+    const first = await digest.digestOnce({ force: true });
+    assert.equal(first.ok, false);
+    assert.equal(first.error, "token_revoked");
+    assert.equal(first.paused, true);
+    assert.equal(summarized.length, 1);
+    assert.equal(seen.isPosted(VIDEO), false);
+    assert.ok(seen.getCachedSummary(VIDEO));
+    assert.equal(digest.isStopped(), true);
+    assert.equal(pauses[0].reason, "token_revoked");
+    assert.match(pauses[0].message, /revoked/i);
+    const second = await digest.digestOnce({ force: true });
+    assert.equal(second.skipped, "paused");
+    assert.equal(summarized.length, 1, "cached summary must not call the LLM again");
+  } finally {
+    cleanup();
+  }
+});
+
 test("digest refuses to post when the destination is not allowlisted", async () => {
   const { seen, cleanup } = seenInDir();
   try {

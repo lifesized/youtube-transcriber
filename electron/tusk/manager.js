@@ -92,6 +92,11 @@ function createTuskManager(options = {}) {
           state: next.state,
           workspace: next.workspace || cfg.teamName || "",
         });
+        const failed = next.state === "error" || next.state === "off";
+        const mismatch = Boolean(
+          next.workspace && cfg.teamName && next.workspace !== cfg.teamName
+        );
+        if (watch && (failed || mismatch)) watch.stop();
       },
       onAuth: (auth) => {
         store.setSlack({
@@ -135,6 +140,11 @@ function createTuskManager(options = {}) {
           WebSocket: options.WebSocket,
           timers: options.timers,
           fetchImpl: options.fetchImpl,
+          onPause: ({ reason, message }) => {
+            emitStatus({
+              digest: { paused: true, reason, message },
+            });
+          },
         });
         watch.start();
       }

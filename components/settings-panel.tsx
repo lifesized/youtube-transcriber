@@ -298,6 +298,7 @@ export function SettingsPanel() {
   const [tuskTeamName, setTuskTeamName] = useState("");
   const [tuskBotName, setTuskBotName] = useState("");
   const [tuskConnection, setTuskConnection] = useState("");
+  const [tuskDigestStatus, setTuskDigestStatus] = useState("");
   const [tuskSaving, setTuskSaving] = useState(false);
   const [tuskError, setTuskError] = useState("");
   const [tuskResetWorkspace, setTuskResetWorkspace] = useState(false);
@@ -317,7 +318,11 @@ export function SettingsPanel() {
     channelAllowlist?: string[];
     watchFeeds?: Array<{ url?: string }>;
     digestChannel?: string;
-    connection?: { state?: string; workspace?: string };
+    connection?: {
+      state?: string;
+      workspace?: string;
+      digest?: { paused?: boolean; reason?: string; message?: string };
+    };
   }) {
     setTuskHasBotToken(!!data.hasBotToken);
     setTuskHasAppToken(!!data.hasAppToken);
@@ -337,6 +342,12 @@ export function SettingsPanel() {
     if (conn === "connected" && workspace) setTuskConnection(`connected to ${workspace}`);
     else if (conn === "error") setTuskConnection("error");
     else setTuskConnection(conn || (data.enabled ? "off" : "off"));
+    const digest = data.connection?.digest;
+    setTuskDigestStatus(
+      digest?.paused
+        ? digest.message || `Digest paused (${digest.reason || "error"})`
+        : ""
+    );
   }
 
   const loadSettings = useCallback(async () => {
@@ -851,6 +862,7 @@ export function SettingsPanel() {
               </p>
             ) : null}
             <p>Status: {tuskConnection || "off"}</p>
+            {tuskDigestStatus ? <p>{tuskDigestStatus}</p> : null}
           </div>
         )}
       </div>

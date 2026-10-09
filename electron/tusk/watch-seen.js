@@ -14,7 +14,18 @@ function seenPath(dir) {
 }
 
 function emptyState() {
-  return { version: 1, videos: {}, feeds: {}, lastDigestAt: 0 };
+  return {
+    version: 1,
+    videos: {},
+    feeds: {},
+    lastDigestAt: 0,
+    digestPaused: false,
+    digestPauseReason: "",
+  };
+}
+
+function sanitizeHeaderValue(value) {
+  return String(value || "").replace(/[\r\n\0]+/g, "").slice(0, 256);
 }
 
 function createWatchSeen(options = {}) {
@@ -51,6 +62,8 @@ function createWatchSeen(options = {}) {
       videos: parsed.videos && typeof parsed.videos === "object" ? parsed.videos : {},
       feeds: parsed.feeds && typeof parsed.feeds === "object" ? parsed.feeds : {},
       lastDigestAt: Number(parsed.lastDigestAt) || 0,
+      digestPaused: Boolean(parsed.digestPaused),
+      digestPauseReason: parsed.digestPauseReason ? String(parsed.digestPauseReason).slice(0, 80) : "",
     };
     return memory;
   }
@@ -87,8 +100,8 @@ function createWatchSeen(options = {}) {
     setFeedMeta(url, meta) {
       const state = load();
       state.feeds[String(url)] = {
-        etag: meta && meta.etag ? String(meta.etag) : "",
-        lastModified: meta && meta.lastModified ? String(meta.lastModified) : "",
+        etag: sanitizeHeaderValue(meta && meta.etag),
+        lastModified: sanitizeHeaderValue(meta && meta.lastModified),
         polledAt: nowFn(),
       };
       persist();
@@ -124,14 +137,49 @@ function createWatchSeen(options = {}) {
       if (limit == null) return items;
       return items.slice(0, Math.max(0, Number(limit) || 0));
     },
-    markPosted(videoIds) {
+    markPosted(videoIds, opts = {}) {
       const state = load();
       const now = nowFn();
       for (const id of videoIds || []) {
         if (state.videos[id]) state.videos[id].postedAt = now;
       }
-      state.lastDigestAt = now;
+      if (opts.digest !== false) state.lastDigestAt = now;
       persist();
+    },
+    cacheSummary(videoId, item) {
+      const state = load();
+      if (!state.videos[videoId]) return;
+      state.videos[videoId].summary = String((item && item.summary) || "").slice(0, 4000);
+      state.videos[videoId].summaryTitle = String((item && item.title) || "").slice(0, 200);
+      state.videos[videoId].summaryUrl = String((item && item.url) || "").slice(0, 300);
+      persist();
+    },
+    getCachedSummary(videoId) {
+      const row = load().videos[videoId];
+      if (!row || typeof row.summary !== "string" || !row.summary) return null;
+      return {
+        videoId,
+        title: row.summaryTitle || row.title || "Video",
+        url: row.summaryUrl || row.url || "",
+        summary: row.summary,
+      };
+    },
+    noteDigestAttempt() {
+      const state = load();
+      state.lastDigestAt = nowFn();
+      persist();
+    },
+    pauseDigest(reason) {
+      const state = load();
+      state.digestPaused = true;
+      state.digestPauseReason = String(reason || "").slice(0, 80);
+      persist();
+    },
+    isDigestPaused() {
+      return Boolean(load().digestPaused);
+    },
+    digestPauseReason() {
+      return load().digestPauseReason || "";
     },
     lastDigestAt() {
       return load().lastDigestAt || 0;
