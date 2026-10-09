@@ -182,6 +182,7 @@ function parseYoutubeAtom(xml, options = {}) {
   const entries = [];
   const seen = new Set();
   let from = 0;
+  let closeFrom = 0;
   while (entries.length < maxEntries) {
     const start = lower.indexOf("<entry", from);
     if (start < 0) break;
@@ -191,8 +192,9 @@ function parseYoutubeAtom(xml, options = {}) {
       from = start + 6;
       continue;
     }
-    const close = lower.indexOf("</entry>", openEnd + 1);
+    const close = lower.indexOf("</entry>", Math.max(openEnd + 1, closeFrom));
     if (close < 0) break;
+    closeFrom = close + 8;
     if (close - (openEnd + 1) > maxBlock) {
       from = openEnd + 1;
       continue;
