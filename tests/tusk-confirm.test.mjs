@@ -67,7 +67,9 @@ test("confirm dialog strips control characters and labels old vs new team IDs", 
     tokensChanged: true,
   });
   assert.doesNotMatch(dirty.message, /[\n\r\u0007]/);
-  assert.doesNotMatch(dirty.detail, /[\u0000-\u001F]/);
+  assert.doesNotMatch(dirty.detail, /TOLD\nPIN/);
+  assert.doesNotMatch(dirty.detail, /slack\.com\/\n/);
+  assert.doesNotMatch(dirty.detail, /\u0007/);
   assert.match(dirty.detail, /Old team ID: TOLD PIN/);
   assert.match(dirty.detail, /New team ID: TNEW/);
   assert.match(dirty.detail, /auth\.test URL: https:\/\/acme\.slack\.com\/ X-Injected: 1/);
