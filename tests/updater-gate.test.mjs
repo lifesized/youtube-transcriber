@@ -29,6 +29,7 @@ const {
   stopServerThenInstall,
   INITIAL_DELAY_MS,
   INTERVAL_MS,
+  BEFORE_QUIT_HOOK_TIMEOUT_MS,
 } = require(path.join(root, "electron", "updater.js"));
 const { buildTrayMenuTemplate } = require(
   path.join(root, "electron", "tray-menu.js")
@@ -259,43 +260,115 @@ test("stopServerThenInstall stops Next before quitAndInstall", async () => {
   assert.deepEqual(order, ["stop", "install"]);
 });
 
+function quitUpdaterFixture({
+  onBeforeQuitAndInstall,
+  onReadyToInstall,
+  beforeQuitHookTimeoutMs,
+  order,
+}) {
+  const dir = mkdtempSync(path.join(tmpdir(), "ytt-quit-tusk-"));
+  writeFileSync(
+    path.join(dir, "signing-identity.json"),
+    JSON.stringify({ teamId: TEAM })
+  );
+  const updater = createUpdater({
+    isPackaged: true,
+    isDev: false,
+    resourcesPath: dir,
+    signature: developerId,
+    beforeQuitHookTimeoutMs,
+    serverManager: {
+      async stop() {
+        order.push("stop-server");
+      },
+    },
+    onBeforeQuitAndInstall,
+    onReadyToInstall,
+    loadAutoUpdater: () => ({
+      autoDownload: true,
+      autoInstallOnAppQuit: true,
+      allowDowngrade: true,
+      allowPrerelease: false,
+      forceDevUpdateConfig: true,
+      on() {},
+      setFeedURL() {},
+      quitAndInstall() {
+        order.push("install");
+      },
+    }),
+  });
+  return { updater, dir };
+}
+
 test("quitAndInstall awaits onBeforeQuitAndInstall before stopping the server", async () => {
   const order = [];
-  const dir = mkdtempSync(path.join(tmpdir(), "ytt-quit-tusk-"));
+  let installing = false;
+  const { updater, dir } = quitUpdaterFixture({
+    order,
+    onBeforeQuitAndInstall: async () => {
+      await Promise.resolve();
+      assert.equal(installing, false);
+      order.push("stop-tusk");
+    },
+    onReadyToInstall: () => {
+      installing = true;
+      order.push("flag");
+    },
+  });
   try {
-    writeFileSync(
-      path.join(dir, "signing-identity.json"),
-      JSON.stringify({ teamId: TEAM })
-    );
-    const updater = createUpdater({
-      isPackaged: true,
-      isDev: false,
-      resourcesPath: dir,
-      signature: developerId,
-      serverManager: {
-        async stop() {
-          order.push("stop-server");
-        },
-      },
-      onBeforeQuitAndInstall: async () => {
-        await Promise.resolve();
-        order.push("stop-tusk");
-      },
-      loadAutoUpdater: () => ({
-        autoDownload: true,
-        autoInstallOnAppQuit: true,
-        allowDowngrade: true,
-        allowPrerelease: false,
-        forceDevUpdateConfig: true,
-        on() {},
-        setFeedURL() {},
-        quitAndInstall() {
-          order.push("install");
-        },
-      }),
-    });
     await updater.quitAndInstall();
-    assert.deepEqual(order, ["stop-tusk", "stop-server", "install"]);
+    assert.deepEqual(order, ["stop-tusk", "stop-server", "flag", "install"]);
+    assert.equal(installing, true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("quitAndInstall still stops the server and installs when the hook throws", async () => {
+  const order = [];
+  let installing = false;
+  const { updater, dir } = quitUpdaterFixture({
+    order,
+    onBeforeQuitAndInstall: async () => {
+      assert.equal(installing, false);
+      order.push("hook");
+      throw new Error("tusk stop failed");
+    },
+    onReadyToInstall: () => {
+      installing = true;
+      order.push("flag");
+    },
+  });
+  try {
+    await updater.quitAndInstall();
+    assert.deepEqual(order, ["hook", "stop-server", "flag", "install"]);
+    assert.equal(installing, true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("quitAndInstall still stops the server and installs when the hook hangs", async () => {
+  assert.equal(BEFORE_QUIT_HOOK_TIMEOUT_MS, 5000);
+  const order = [];
+  let installing = false;
+  const { updater, dir } = quitUpdaterFixture({
+    order,
+    beforeQuitHookTimeoutMs: 25,
+    onBeforeQuitAndInstall: () =>
+      new Promise(() => {
+        assert.equal(installing, false);
+        order.push("hook-start");
+      }),
+    onReadyToInstall: () => {
+      installing = true;
+      order.push("flag");
+    },
+  });
+  try {
+    await updater.quitAndInstall();
+    assert.deepEqual(order, ["hook-start", "stop-server", "flag", "install"]);
+    assert.equal(installing, true);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -259,6 +259,15 @@ test("main wires the updater gate and stops Next before quitAndInstall", () => {
     main,
     /onBeforeQuitAndInstall:\s*async\s*\(\)\s*=>\s*\{[\s\S]*await tuskManager\.stop\(\)/
   );
+  const hook = main.slice(
+    main.indexOf("onBeforeQuitAndInstall"),
+    main.indexOf("onReadyToInstall")
+  );
+  assert.doesNotMatch(hook, /installingUpdate\s*=\s*true/);
+  assert.match(
+    main,
+    /onReadyToInstall:\s*\(\)\s*=>\s*\{[\s\S]*installingUpdate\s*=\s*true/
+  );
   assert.ok(main.includes("listExtensionIds"));
   assert.ok(main.includes("shouldRepointNativeHost"));
   assert.ok(main.includes("readRecordedBundlePath"));

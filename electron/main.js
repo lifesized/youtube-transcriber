@@ -74,8 +74,10 @@ async function attachUpdaterAfterTray({ extraResources, serverManager }) {
       if (trayManager) trayManager.setUpdaterState(state);
     },
     onBeforeQuitAndInstall: async () => {
-      installingUpdate = true;
       if (tuskManager) await tuskManager.stop();
+    },
+    onReadyToInstall: () => {
+      installingUpdate = true;
     },
   });
   if (trayManager) {

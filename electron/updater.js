@@ -152,6 +152,27 @@ function configureAutoUpdater(autoUpdater) {
   return autoUpdater;
 }
 
+const BEFORE_QUIT_HOOK_TIMEOUT_MS = 5000;
+
+async function runBeforeQuitHook(hook, timeoutMs, setTimeoutFn, clearTimeoutFn) {
+  if (typeof hook !== "function") return;
+  let timer;
+  try {
+    await Promise.race([
+      Promise.resolve().then(() => hook()),
+      new Promise((_, reject) => {
+        timer = setTimeoutFn(() => {
+          reject(new Error("onBeforeQuitAndInstall timed out"));
+        }, timeoutMs);
+      }),
+    ]);
+  } catch (error) {
+    console.warn("updater: before-quit hook failed:", error && error.message);
+  } finally {
+    if (timer != null) clearTimeoutFn(timer);
+  }
+}
+
 async function stopServerThenInstall(serverManager, install) {
   if (serverManager && typeof serverManager.stop === "function") {
     try {
@@ -174,6 +195,8 @@ function createUpdater(options) {
     serverManager,
     onState,
     onBeforeQuitAndInstall,
+    onReadyToInstall,
+    beforeQuitHookTimeoutMs = BEFORE_QUIT_HOOK_TIMEOUT_MS,
     loadAutoUpdater,
     setIntervalFn = setInterval,
     setTimeoutFn = setTimeout,
@@ -281,10 +304,14 @@ function createUpdater(options) {
   }
 
   async function quitAndInstall() {
-    if (typeof onBeforeQuitAndInstall === "function") {
-      await onBeforeQuitAndInstall();
-    }
+    await runBeforeQuitHook(
+      onBeforeQuitAndInstall,
+      beforeQuitHookTimeoutMs,
+      setTimeoutFn,
+      clearTimeoutFn
+    );
     await stopServerThenInstall(serverManager, () => {
+      if (typeof onReadyToInstall === "function") onReadyToInstall();
       if (autoUpdater) autoUpdater.quitAndInstall();
     });
   }
@@ -335,6 +362,8 @@ module.exports = {
   configureAutoUpdater,
   isBetaPrereleaseVersion,
   stopServerThenInstall,
+  runBeforeQuitHook,
+  BEFORE_QUIT_HOOK_TIMEOUT_MS,
   INITIAL_DELAY_MS,
   INTERVAL_MS,
   UPDATE_FEED,
