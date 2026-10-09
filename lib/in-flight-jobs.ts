@@ -123,7 +123,7 @@ export function cancelJob(
   }
 
   let llm = 0;
-  if (job) {
+  if (job && !job.controller.signal.aborted) {
     try {
       job.controller.abort();
       llm = 1;
@@ -142,7 +142,7 @@ export function cancelJob(
 export function cancelJobsByTag(tag: JobTag): { llm: number; whisper: number } {
   let llm = 0;
   for (const job of jobs.values()) {
-    if (job.tag !== tag) continue;
+    if (job.tag !== tag || job.controller.signal.aborted) continue;
     try {
       job.controller.abort();
       llm += 1;
