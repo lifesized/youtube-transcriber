@@ -69,9 +69,19 @@ test("unsigned artifact name and glob are unchanged", () => {
   );
   assert.doesNotMatch(workflow, /pull_request_target/);
   assert.doesNotMatch(workflow, /upload-artifact@v4\b/);
+  assert.doesNotMatch(workflow, /actions\/checkout@v4\b/);
+  assert.doesNotMatch(workflow, /actions\/setup-node@v4\b/);
   assert.match(
     workflow,
     /upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02/
+  );
+  assert.match(
+    workflow,
+    /checkout@11bd71901bbe5b1630ceea73d27597364c9af683/
+  );
+  assert.match(
+    workflow,
+    /setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020/
   );
   assert.match(workflow, /CSC_IDENTITY_AUTO_DISCOVERY: false/);
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
