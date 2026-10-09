@@ -11,11 +11,9 @@ export type ProgressCallback = (event: { stage: ProgressStage; progress: number;
 // Concurrency lock: only one transcription at a time to prevent memory exhaustion
 let transcriptionInProgress = false;
 
-const YTDLP_PATH = process.env.YTDLP_PATH?.trim() || "yt-dlp";
-
 /** Get the resolved yt-dlp path for use by other modules. */
 export function getYtdlpPath(): string {
-  return YTDLP_PATH;
+  return process.env.YTDLP_PATH?.trim() || "yt-dlp";
 }
 const YTDLP_BROWSER = process.env.YTDLP_BROWSER?.trim() || "chrome";
 // Avoid hard-referencing `.venv/*` so builds don't depend on local symlinks.
@@ -348,7 +346,18 @@ function classifyYtdlpError(raw: string): string {
  * Returns the path to the downloaded MP3 file.
  * Retries once on transient network errors.
  */
-export async function downloadAudio(videoId: string, outputDir: string, onProgress?: ProgressCallback): Promise<string> {
+function browserCookiesAllowed(explicit?: boolean): boolean {
+  if (explicit === false) return false;
+  if (explicit === true) return true;
+  return currentJobContext()?.tag !== "tusk";
+}
+
+export async function downloadAudio(
+  videoId: string,
+  outputDir: string,
+  onProgress?: ProgressCallback,
+  options?: { allowBrowserCookies?: boolean }
+): Promise<string> {
   await fs.mkdir(outputDir, { recursive: true });
 
   const outputTemplate = path.join(outputDir, `${videoId}.%(ext)s`);
@@ -365,7 +374,7 @@ export async function downloadAudio(videoId: string, outputDir: string, onProgre
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     console.log(`[whisper] Downloading audio for ${videoId} (attempt ${attempt}/${maxAttempts})...`);
     try {
-      const { stderr } = await execFileAsync(YTDLP_PATH, baseArgs, { timeout: 120000 });
+      const { stderr } = await execFileAsync(getYtdlpPath(), baseArgs, { timeout: 120000 });
 
       if (stderr) {
         console.log(`[whisper] yt-dlp stderr: ${stderr.slice(0, 500)}`);
@@ -386,14 +395,18 @@ export async function downloadAudio(videoId: string, outputDir: string, onProgre
         continue;
       }
 
-      // If auth-related, retry once with browser cookies
+      // If auth-related, retry once with browser cookies — never for Tusk URLs.
       const isAuthError = /sign in to confirm|age-restricted/i.test(raw);
-      if (isAuthError && attempt < maxAttempts) {
+      if (
+        isAuthError &&
+        attempt < maxAttempts &&
+        browserCookiesAllowed(options?.allowBrowserCookies)
+      ) {
         const browser = YTDLP_BROWSER;
         console.log(`[whisper] Auth required, retrying with ${browser} cookies...`);
         try {
           const cookieArgs = [...baseArgs.slice(0, -1), "--cookies-from-browser", browser, baseArgs[baseArgs.length - 1]];
-          const { stderr: stderr2 } = await execFileAsync(YTDLP_PATH, cookieArgs, { timeout: 120000 });
+          const { stderr: stderr2 } = await execFileAsync(getYtdlpPath(), cookieArgs, { timeout: 120000 });
           if (stderr2) console.log(`[whisper] yt-dlp stderr (cookie retry): ${stderr2.slice(0, 500)}`);
           const audioPath = path.join(outputDir, `${videoId}.mp3`);
           await fs.access(audioPath);
@@ -409,7 +422,7 @@ export async function downloadAudio(videoId: string, outputDir: string, onProgre
         console.log("[whisper] Audio-only stream returned HTTP 403; trying progressive format 18...");
         try {
           const fallbackArgs = ["-f", "18", ...baseArgs];
-          const { stderr } = await execFileAsync(YTDLP_PATH, fallbackArgs, { timeout: 120000 });
+          const { stderr } = await execFileAsync(getYtdlpPath(), fallbackArgs, { timeout: 120000 });
           if (stderr) console.log(`[whisper] yt-dlp stderr (format 18 fallback): ${stderr.slice(0, 500)}`);
           const audioPath = path.join(outputDir, `${videoId}.mp3`);
           await fs.access(audioPath);

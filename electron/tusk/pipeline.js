@@ -61,6 +61,16 @@ function formatTranscriptFile({ title, sourceUrl, segments }) {
   return lines.join("\n");
 }
 
+function cleanFileTitle(title) {
+  const cleaned = String(title || "Transcript")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+  return cleaned || "Transcript";
+}
+
 function safeFilename(title) {
   const base = String(title || "transcript")
     .replace(/[^\w\s-]+/g, "")
@@ -134,7 +144,7 @@ function createPipeline(options = {}) {
       channel: card.channel,
       threadTs: card.threadTs,
       filename: safeFilename(video.title),
-      title: `${video.title || "Transcript"} — transcript`,
+      title: `${cleanFileTitle(video.title)} — transcript`,
       content: formatTranscriptFile({
         title: video.title,
         sourceUrl: card.sourceUrl,
@@ -342,6 +352,7 @@ function createPipeline(options = {}) {
     rememberThread,
     sortUrls,
     formatTranscriptFile,
+    cleanFileTitle,
     safeFilename,
     threadCache,
   };
@@ -353,6 +364,7 @@ module.exports = {
   youtubeUrlsOnly,
   isTuskAllowedSource,
   formatTranscriptFile,
+  cleanFileTitle,
   safeFilename,
   parseSegments,
 };

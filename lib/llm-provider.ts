@@ -1,3 +1,5 @@
+import { neutralizePromptData } from "./local-summary-core.js";
+
 export type LlmProvider = "anthropic" | "openai";
 
 export const LLM_DEFAULT_MODELS: Record<LlmProvider, string> = {
@@ -19,8 +21,8 @@ export async function callLlmProvider(opts: {
 }): Promise<string> {
   const fetchImpl = opts.fetchImpl || fetch;
   const instruction = (opts.promptOverride && opts.promptOverride.trim()) ||
-    `Summarize this transcript from "${opts.title}".`;
-  const userContent = `${instruction}\n\nTranscript:\n\n<transcript>\n${opts.transcriptText}\n</transcript>`;
+    `Summarize this transcript from "${neutralizePromptData(opts.title)}".`;
+  const userContent = `${instruction}\n\nTranscript:\n\n<transcript>\n${neutralizePromptData(opts.transcriptText)}\n</transcript>`;
 
   if (opts.provider === "anthropic") {
     const response = await fetchImpl("https://api.anthropic.com/v1/messages", {

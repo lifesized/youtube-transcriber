@@ -315,6 +315,34 @@ test("a timed-out tusk-set never applies after the user later confirms", async (
   }
 });
 
+test("a cancel for an unknown request id does not block a later tusk-set", async () => {
+  const { store, cleanup } = storeInDir();
+  try {
+    const manager = createTuskManager({
+      store,
+      slackApi: mockApi(),
+      WebSocket: FakeSocket,
+      confirmSensitiveChange: async () => true,
+    });
+    const child = new EventEmitter();
+    const sent = [];
+    child.send = (msg) => sent.push(msg);
+    manager.attachIpc(child);
+    child.emit("message", { type: "tusk-set-cancel", requestId: "req-reuse" });
+    child.emit("message", {
+      type: "tusk-set",
+      requestId: "req-reuse",
+      payload: { botToken: BOT, appToken: APP, enabled: true },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.equal(store.getSlackPublic().hasBotToken, true);
+    assert.equal(store.getSlackPublic().teamId, "THOME");
+    await manager.stop();
+  } finally {
+    await cleanup();
+  }
+});
+
 test("tusk-set IPC timeout is longer than the confirm dialog and sends a cancel", async () => {
   assert.ok(ipc.TUSK_SET_TIMEOUT_MS > 60_000);
   assert.ok(ipc.TUSK_SET_TIMEOUT_MS > ipc.DEFAULT_IPC_TIMEOUT_MS);

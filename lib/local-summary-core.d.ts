@@ -2,6 +2,8 @@ import type { TranscriptSegment } from "./types";
 
 export const LOCAL_SUMMARY_MODEL: string;
 
+export function neutralizePromptData(text: string | null | undefined): string;
+
 export function rejectClientApiKey(
   body: Record<string, unknown> | null | undefined
 ): string | null;

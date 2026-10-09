@@ -54,3 +54,76 @@ fs.writeFileSync(outputPath, "fake audio");
   assert.equal(calls[0].includes("-f"), false);
   assert.deepEqual(calls[1].slice(0, 2), ["-f", "18"]);
 });
+
+test("Tusk-originated downloads skip the yt-dlp browser-cookie fallback", async (t) => {
+  const fixtureDir = await mkdtemp(path.join(tmpdir(), "ytt-ytdlp-tusk-"));
+  const outputDir = path.join(fixtureDir, "audio");
+  const logPath = path.join(fixtureDir, "calls.log");
+  const fakeYtdlpPath = path.join(fixtureDir, "yt-dlp.cjs");
+  const previousYtdlpPath = process.env.YTDLP_PATH;
+  const previousLogPath = process.env.YTDLP_TEST_LOG;
+
+  t.after(async () => {
+    if (previousYtdlpPath === undefined) delete process.env.YTDLP_PATH;
+    else process.env.YTDLP_PATH = previousYtdlpPath;
+    if (previousLogPath === undefined) delete process.env.YTDLP_TEST_LOG;
+    else process.env.YTDLP_TEST_LOG = previousLogPath;
+    await rm(fixtureDir, { recursive: true, force: true });
+  });
+
+  await writeFile(
+    fakeYtdlpPath,
+    `#!/usr/bin/env node
+const fs = require("node:fs");
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.YTDLP_TEST_LOG, JSON.stringify(args) + "\\n");
+if (args.includes("--cookies-from-browser")) {
+  const outputTemplate = args[args.indexOf("-o") + 1];
+  const outputPath = outputTemplate.replace("%(ext)s", "mp3");
+  fs.mkdirSync(require("node:path").dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, "fake audio");
+  process.exit(0);
+}
+console.error("ERROR: sign in to confirm your age");
+process.exit(1);
+`
+  );
+  await chmod(fakeYtdlpPath, 0o755);
+  process.env.YTDLP_PATH = fakeYtdlpPath;
+  process.env.YTDLP_TEST_LOG = logPath;
+
+  const { downloadAudio } = await import("../lib/whisper.js");
+  const { jobContext } = await import("../lib/job-context.ts");
+
+  await assert.rejects(
+    () =>
+      jobContext.run({ jobId: "tusk-job-cookies", tag: "tusk" }, () =>
+        downloadAudio("dQw4w9WgXcQ", outputDir)
+      ),
+    /age-restricted|authentication|sign in/i
+  );
+  const tuskCalls = (await readFile(logPath, "utf8"))
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as string[]);
+  assert.ok(tuskCalls.length >= 1);
+  assert.equal(
+    tuskCalls.some((args) => args.includes("--cookies-from-browser")),
+    false
+  );
+
+  await writeFile(logPath, "");
+  const localPath = await downloadAudio("dQw4w9WgXcQ", outputDir, undefined, {
+    allowBrowserCookies: true,
+  });
+  assert.equal(localPath, path.join(outputDir, "dQw4w9WgXcQ.mp3"));
+  const localCalls = (await readFile(logPath, "utf8"))
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as string[]);
+  assert.equal(
+    localCalls.some((args) => args.includes("--cookies-from-browser")),
+    true
+  );
+});

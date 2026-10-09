@@ -33,7 +33,7 @@ function createTuskManager(options = {}) {
   let status = { state: "off", workspace: "" };
   let starting = null;
   let confirmOpen = false;
-  const cancelledRequestIds = new Set();
+  const pendingRequests = new Map();
 
   function emitStatus(next) {
     status = { ...status, ...next };
@@ -213,10 +213,13 @@ function createTuskManager(options = {}) {
 
   async function applyPatch(patch, meta = {}) {
     const requestId = meta.requestId;
+    if (requestId && !pendingRequests.has(requestId)) {
+      pendingRequests.set(requestId, { cancelled: false });
+    }
     const isCancelled = () =>
       Boolean(
         (typeof meta.isCancelled === "function" && meta.isCancelled()) ||
-          (requestId && cancelledRequestIds.has(requestId))
+          (requestId && pendingRequests.get(requestId)?.cancelled)
       );
 
     let current = store.getSlackPlain();
@@ -266,7 +269,7 @@ function createTuskManager(options = {}) {
       writeSlack(current, next, auth);
     } finally {
       if (needsConfirm) confirmOpen = false;
-      if (requestId) cancelledRequestIds.delete(requestId);
+      if (requestId) pendingRequests.delete(requestId);
     }
     return sync();
   }
@@ -284,10 +287,12 @@ function createTuskManager(options = {}) {
         return;
       }
       if (msg.type === "tusk-set-cancel" && msg.requestId) {
-        cancelledRequestIds.add(msg.requestId);
+        const pending = pendingRequests.get(msg.requestId);
+        if (pending) pending.cancelled = true;
         return;
       }
       if (msg.type === "tusk-set") {
+        pendingRequests.set(msg.requestId, { cancelled: false });
         applyPatch(msg.payload || {}, { requestId: msg.requestId })
           .then((payload) => {
             child.send({
