@@ -78,8 +78,8 @@ in **#youtube-notes**. Tusk only receives `message.channels` for public channels
 
 | Destination | What |
 | --- | --- |
-| Slack Web API + Socket Mode websocket | Connection, `auth.test`, slash-command replies, 👀 reactions. Later: message text Tusk posts, and (milestone 2) a transcript file upload. |
-| The LLM provider you already configured in Settings | Later milestones only: summarize / Q&A. Milestone 1 does not call a model. |
-| Nowhere else | No Transcriber cloud, no Inngest, no Supabase, no tunnel. Video URLs are not fetched from Slack text until a later milestone, and then only through the app’s existing validators on `127.0.0.1:19721`. |
+| Slack Web API + Socket Mode websocket | Connection, `auth.test`, slash-command replies, 👀 reactions, threaded summaries, and transcript file uploads. Anyone in an allowlisted channel can see those posts, including Slack Connect members if that channel is on the list. |
+| The LLM provider you already configured in Settings | Questions and transcripts go to that provider (Anthropic, OpenAI, or OpenRouter) so Tusk can summarize and answer in-thread. |
+| Nowhere else | No Transcriber cloud, no Inngest, no Supabase, no tunnel. Video URLs from Slack are fetched only through the app’s existing validators on `127.0.0.1:19721`. |
 
 Slack still stores the messages you type in #youtube-notes, as it does for any channel. Tusk does not send those messages to a server we run.

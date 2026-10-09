@@ -2,7 +2,7 @@
 
 Tusk is a Socket Mode Slack bot that runs inside the Transcriber Electron menu-bar app. No public request URL, tunnel, or cloud worker.
 
-What ships today (milestone 1): `/tusk help`, `/tusk status`, and a 👀 reaction on a supported YouTube, Spotify episode, or LinkedIn URL in a public channel Tusk is in. Threaded summaries and `@Tusk` Q&A are not in this build.
+What ships today: `/tusk help`, `/tusk status`, a 👀 reaction plus a threaded summary (or transcript file) on a supported YouTube URL in an allowlisted channel, and `@Tusk <question>` in that thread answering only from that video.
 
 - **Manifest:** [slack-app-manifest.yaml](./slack-app-manifest.yaml) (same content as [slack-app-manifest.json](./slack-app-manifest.json))
 - **Setup for James:** [setup.md](./setup.md)
@@ -17,7 +17,7 @@ Display copy is the old Transcriber Dev manifest, renamed to Tusk. Socket Mode i
 | `channels:history` | Required for the `message.channels` event so a pasted link in #youtube-notes works without a mention. This delivers **every message** in public channels Tusk has joined, not only messages that contain a link. Tusk ignores bot messages, edits, other workspaces, Slack Connect externals, DMs, and private channels. |
 | `chat:write` | Post in channels Tusk is invited to. Slash-command replies use the Socket Mode ack payload and do not need this scope. Milestone 2 uses it for threaded summaries. |
 | `commands` | The `/tusk` slash command. |
-| `files:write` | Later: upload a transcript file. Unused in milestone 1. Included now so the Slack app is created once. |
+| `files:write` | Upload a transcript file into the thread when summarizing is unavailable or you asked for the transcript. |
 | `reactions:write` | Milestone 1: 👀 on a supported link. Later: progress reactions. |
 
 **Not requested:** `incoming-webhook`, OAuth redirect URLs, `chat:write.public` (Tusk must be invited), `groups:history` / `im:history` (DMs, MPIMs, and private channels are denied unless the channel ID is on the explicit allowlist), `channels:read`. An empty allowlist **denies every channel**. Missing `channel_type` is unknown (a `C…` id is not assumed public). Slash commands also use `channel_name` to deny `privategroup`, `directmessage`, and `mpdm-*` unless that channel ID is on the list. Slash commands in any other conversation get an ephemeral hint.
