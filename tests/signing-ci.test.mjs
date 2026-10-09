@@ -242,6 +242,10 @@ test("main wires the updater gate and stops Next before quitAndInstall", () => {
   assert.ok(ready.indexOf("new TrayManager") < ready.indexOf("attachUpdaterAfterTray"));
   assert.ok(ready.indexOf("attachUpdaterAfterTray") < ready.indexOf("checkIfTranslocated"));
   assert.ok(main.includes("installingUpdate"));
+  assert.match(
+    main,
+    /onBeforeQuitAndInstall:\s*async\s*\(\)\s*=>\s*\{[\s\S]*await tuskManager\.stop\(\)/
+  );
   assert.ok(main.includes("listExtensionIds"));
   assert.ok(main.includes("shouldRepointNativeHost"));
   assert.ok(main.includes("readRecordedBundlePath"));

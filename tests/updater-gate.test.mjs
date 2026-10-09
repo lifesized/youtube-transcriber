@@ -259,6 +259,48 @@ test("stopServerThenInstall stops Next before quitAndInstall", async () => {
   assert.deepEqual(order, ["stop", "install"]);
 });
 
+test("quitAndInstall awaits onBeforeQuitAndInstall before stopping the server", async () => {
+  const order = [];
+  const dir = mkdtempSync(path.join(tmpdir(), "ytt-quit-tusk-"));
+  try {
+    writeFileSync(
+      path.join(dir, "signing-identity.json"),
+      JSON.stringify({ teamId: TEAM })
+    );
+    const updater = createUpdater({
+      isPackaged: true,
+      isDev: false,
+      resourcesPath: dir,
+      signature: developerId,
+      serverManager: {
+        async stop() {
+          order.push("stop-server");
+        },
+      },
+      onBeforeQuitAndInstall: async () => {
+        await Promise.resolve();
+        order.push("stop-tusk");
+      },
+      loadAutoUpdater: () => ({
+        autoDownload: true,
+        autoInstallOnAppQuit: true,
+        allowDowngrade: true,
+        allowPrerelease: false,
+        forceDevUpdateConfig: true,
+        on() {},
+        setFeedURL() {},
+        quitAndInstall() {
+          order.push("install");
+        },
+      }),
+    });
+    await updater.quitAndInstall();
+    assert.deepEqual(order, ["stop-tusk", "stop-server", "install"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("background cadence is 30s then 6h", () => {
   assert.equal(INITIAL_DELAY_MS, 30_000);
   assert.equal(INTERVAL_MS, 6 * 60 * 60 * 1000);

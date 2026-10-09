@@ -281,7 +281,9 @@ function createUpdater(options) {
   }
 
   async function quitAndInstall() {
-    if (typeof onBeforeQuitAndInstall === "function") onBeforeQuitAndInstall();
+    if (typeof onBeforeQuitAndInstall === "function") {
+      await onBeforeQuitAndInstall();
+    }
     await stopServerThenInstall(serverManager, () => {
       if (autoUpdater) autoUpdater.quitAndInstall();
     });
