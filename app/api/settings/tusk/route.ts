@@ -63,11 +63,14 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to save";
     if (message === "electron_ipc_unavailable") return unavailable();
-    const fromError = error && typeof error === "object" && "status" in error ? Number(error.status) : 0;
-    const status = fromError
-      || (error && typeof error === "object" && error.code === "TUSK_SETTINGS_CANCELLED" ? 409 : 0)
-      || (/cancelled/i.test(message) ? 409 : 0)
-      || (/token|auth\.test|xoxb|xapp/i.test(message) ? 400 : 500);
+    const statusFromError =
+      error instanceof Error && "status" in error
+        ? Number((error as Error & { status?: number }).status)
+        : 0;
+    const status =
+      statusFromError ||
+      (/cancelled/i.test(message) ? 409 : 0) ||
+      (/token|auth\.test|xoxb|xapp/i.test(message) ? 400 : 500);
     return NextResponse.json({ error: message }, { status });
   }
 }
