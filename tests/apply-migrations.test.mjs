@@ -262,6 +262,32 @@ test("the startup secrets check reads ProviderConfig and Setting on a fresh libr
   );
 });
 
+test("concurrent applyMigrations does not throw table already exists", async () => {
+  const { spawnSync } = require("node:child_process");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ytt-migrate-race-"));
+  const dbPath = path.join(dir, "test.db");
+  const script = path.join(dir, "apply.js");
+  fs.writeFileSync(
+    script,
+    `
+      const { applyMigrations } = require(${JSON.stringify(path.join(projectRoot, "lib/apply-migrations.js"))});
+      applyMigrations(${JSON.stringify(`file:${dbPath}`)}, ${JSON.stringify(migrationsDir)});
+    `
+  );
+  const workers = Array.from({ length: 2 }, () =>
+    spawnSync(process.execPath, [script], { encoding: "utf8" })
+  );
+  for (const worker of workers) {
+    assert.equal(worker.status, 0, worker.stderr || worker.stdout);
+  }
+  const Database = require("better-sqlite3");
+  const db = new Database(dbPath, { readonly: true });
+  assert.ok(
+    db.prepare("SELECT name FROM sqlite_master WHERE name='Video'").get()
+  );
+  db.close();
+});
+
 test("applyMigrations is idempotent", async () => {
   const { applyMigrations } = require("../lib/apply-migrations.js");
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ytt-migrate-"));
