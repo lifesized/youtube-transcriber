@@ -346,7 +346,7 @@ export function SettingsPanel() {
     setTuskDigestStatus(
       digest?.paused
         ? digest.message || `Digest paused (${digest.reason || "error"})`
-        : ""
+        : digest?.message || ""
     );
   }
 

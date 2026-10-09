@@ -32,6 +32,8 @@ function createWatchSeen(options = {}) {
   const dir = options.stateDir || null;
   const nowFn = options.now || Date.now;
   let memory = null;
+  let corruptReseed = false;
+  const onCorrupt = options.onCorrupt;
 
   function file() {
     return seenPath(dir);
@@ -47,15 +49,27 @@ function createWatchSeen(options = {}) {
     let parsed;
     try {
       parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    } catch (error) {
-      const err = new Error("tusk-watch-seen.json is corrupt");
-      err.code = "CORRUPT_WATCH_SEEN";
-      throw err;
+    } catch {
+      parsed = null;
     }
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || parsed.version !== 1) {
-      const err = new Error("tusk-watch-seen.json is corrupt");
-      err.code = "CORRUPT_WATCH_SEEN";
-      throw err;
+      const aside = `${filePath}.corrupt-${nowFn()}`;
+      try {
+        fs.renameSync(filePath, aside);
+      } catch {
+        try {
+          fs.unlinkSync(filePath);
+        } catch {
+          // best-effort
+        }
+      }
+      memory = emptyState();
+      corruptReseed = true;
+      persist();
+      if (typeof onCorrupt === "function") {
+        onCorrupt({ path: aside, message: "Watch seen-state was corrupt; reseeding without a flood." });
+      }
+      return memory;
     }
     memory = {
       version: 1,
@@ -180,6 +194,9 @@ function createWatchSeen(options = {}) {
     },
     digestPauseReason() {
       return load().digestPauseReason || "";
+    },
+    wasCorruptReseed() {
+      return corruptReseed;
     },
     lastDigestAt() {
       return load().lastDigestAt || 0;

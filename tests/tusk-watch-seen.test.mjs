@@ -43,19 +43,33 @@ test("new videos are unpublished until markPosted, and survive reload", () => {
   });
 });
 
-test("corrupt seen file is refused so a digest is not posted blindly", () => {
+test("corrupt seen file is moved aside and reseeds without a first-run flood", () => {
   withDir((dir) => {
+    const notices = [];
     writeFileSync(path.join(dir, FILE_NAME), "{not json", "utf8");
-    const seen = createWatchSeen({ stateDir: dir });
-    assert.throws(() => seen.load(), /corrupt/);
+    const seen = createWatchSeen({
+      stateDir: dir,
+      now: () => 77,
+      onCorrupt: (info) => notices.push(info),
+    });
+    const state = seen.load();
+    assert.equal(state.version, 1);
+    assert.deepEqual(state.videos, {});
+    assert.equal(seen.wasCorruptReseed(), true);
+    assert.equal(notices[0].message.includes("reseeding"), true);
+    assert.ok(require("node:fs").existsSync(path.join(dir, `${FILE_NAME}.corrupt-77`)));
+    assert.equal(seen.unpublished().length, 0);
   });
 });
 
-test("feed meta stores etag for the next poll", () => {
+test("feed meta stores etag for the next poll and strips CR/LF", () => {
   withDir((dir) => {
     const seen = createWatchSeen({ stateDir: dir, now: () => 50 });
     const url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCuAXFkgsw1L7xaCfnd5JJOw";
-    seen.setFeedMeta(url, { etag: '"v1"', lastModified: "Wed, 21 Oct 2015 07:28:00 GMT" });
-    assert.equal(seen.getFeedMeta(url).etag, '"v1"');
+    seen.setFeedMeta(url, { etag: '"v1"\r\nX-Injected: 1', lastModified: "Wed, 21 Oct 2015 07:28:00 GMT\n" });
+    assert.equal(seen.getFeedMeta(url).etag.includes("\r"), false);
+    assert.equal(seen.getFeedMeta(url).etag.includes("\n"), false);
+    assert.equal(seen.getFeedMeta(url).lastModified.includes("\n"), false);
+    assert.match(seen.getFeedMeta(url).etag, /v1/);
   });
 });

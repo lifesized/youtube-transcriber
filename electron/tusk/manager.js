@@ -145,6 +145,9 @@ function createTuskManager(options = {}) {
               digest: { paused: true, reason, message },
             });
           },
+          onStatus: (next) => {
+            if (next && next.digest) emitStatus({ digest: { ...status.digest, ...next.digest } });
+          },
         });
         watch.start();
       }

@@ -142,6 +142,14 @@ function createWatchDigest(options = {}) {
     const cfg = config();
     if (!cfg.enabled || !cfg.watchFeeds.length) return { skipped: "disabled" };
     const results = [];
+    if (seen.wasCorruptReseed && seen.wasCorruptReseed()) {
+      results.push({ reseeds: true, status: "Watch seen-state was corrupt; reseeding without a flood." });
+      if (typeof options.onStatus === "function") {
+        options.onStatus({
+          digest: { message: "Watch seen-state was corrupt; reseeding without a flood." },
+        });
+      }
+    }
     for (const feed of cfg.watchFeeds) {
       const meta = seen.getFeedMeta(feed.url);
       const firstPoll = !meta.polledAt;
