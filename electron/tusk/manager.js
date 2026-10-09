@@ -249,10 +249,10 @@ function createTuskManager(options = {}) {
           tokensChanged,
           allowlistAdded,
           enabledOn,
-          teamId: current.teamId || (auth && auth.team_id) || "",
+          teamId: (auth && auth.team_id) || "",
           authUrl: (auth && auth.url) || "",
           currentPin: current.teamId || "",
-          newPin: (auth && auth.team_id) || current.teamId || "",
+          newPin: (auth && auth.team_id) || "",
         });
         if (!ok) throw cancelledError();
         if (isCancelled()) throw cancelledError();

@@ -1,5 +1,14 @@
 "use strict";
 
+function cleanDialogField(value, max = 80) {
+  return String(value ?? "")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
+}
+
 function tuskConfirmDialogOptions({
   workspace,
   resetWorkspace,
@@ -11,9 +20,11 @@ function tuskConfirmDialogOptions({
   currentPin,
   newPin,
 } = {}) {
-  const name = typeof workspace === "string" ? workspace.trim() : "";
-  const id = typeof teamId === "string" ? teamId.trim() : "";
-  const named = name || id;
+  const name = cleanDialogField(workspace);
+  const oldTeam = cleanDialogField(currentPin);
+  const newTeam = cleanDialogField(newPin || teamId);
+  const url = cleanDialogField(authUrl);
+  const named = name || newTeam || oldTeam;
   const changingTokens = Boolean(tokensChanged || resetWorkspace || (!allowlistAdded && !enabledOn));
 
   let message;
@@ -37,11 +48,9 @@ function tuskConfirmDialogOptions({
 
   const detail = [
     "Cancel leaves the current settings in place.",
-    id ? `Team ID: ${id}` : null,
-    authUrl ? `auth.test URL: ${authUrl}` : null,
-    currentPin || newPin
-      ? `Workspace pin: ${currentPin || "(none)"} → ${newPin || "(none)"}`
-      : null,
+    `Old team ID: ${oldTeam || "(none)"}`,
+    `New team ID: ${newTeam || "(none)"}`,
+    url ? `auth.test URL: ${url}` : null,
   ]
     .filter(Boolean)
     .join("\n");
@@ -111,6 +120,7 @@ function allowlistIdsAdded(currentList, nextList) {
 }
 
 module.exports = {
+  cleanDialogField,
   tuskConfirmDialogOptions,
   confirmTuskSensitiveChange,
   cancelledError,

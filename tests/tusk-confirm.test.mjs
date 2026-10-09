@@ -11,6 +11,7 @@ const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const { createTuskManager } = require(path.join(root, "electron/tusk/manager.js"));
 const {
+  cleanDialogField,
   tuskConfirmDialogOptions,
   confirmTuskSensitiveChange,
 } = require(path.join(root, "electron/tusk/confirm.js"));
@@ -56,6 +57,23 @@ class FakeSocket {
   close() {}
 }
 
+test("confirm dialog strips control characters and labels old vs new team IDs", () => {
+  const dirty = tuskConfirmDialogOptions({
+    workspace: "Acme\n<script>\u0007",
+    teamId: "TNEW",
+    authUrl: "https://acme.slack.com/\nX-Injected: 1",
+    currentPin: "TOLD\nPIN",
+    newPin: "TNEW",
+    tokensChanged: true,
+  });
+  assert.doesNotMatch(dirty.message, /[\n\r\u0007]/);
+  assert.doesNotMatch(dirty.detail, /[\u0000-\u001F]/);
+  assert.match(dirty.detail, /Old team ID: TOLD PIN/);
+  assert.match(dirty.detail, /New team ID: TNEW/);
+  assert.match(dirty.detail, /auth\.test URL: https:\/\/acme\.slack\.com\/ X-Injected: 1/);
+  assert.equal(cleanDialogField("a".repeat(90)).length, 80);
+});
+
 test("confirm dialog defaults to Cancel and names the workspace when known", () => {
   const named = tuskConfirmDialogOptions({
     workspace: "Personal",
@@ -70,9 +88,11 @@ test("confirm dialog defaults to Cancel and names the workspace when known", () 
   assert.deepEqual(named.buttons, ["Cancel", "Change"]);
   assert.match(named.message, /Personal/);
   assert.match(named.message, /Slack tokens/);
-  assert.match(named.detail, /Team ID: THOME/);
+  assert.match(named.detail, /Old team ID: THOME/);
+  assert.match(named.detail, /New team ID: THOME/);
   assert.match(named.detail, /auth\.test URL: https:\/\/lifesized\.slack\.com\//);
-  assert.match(named.detail, /Workspace pin: THOME → THOME/);
+  assert.doesNotMatch(named.detail, /Team ID: THOME/);
+  assert.doesNotMatch(named.detail, /Workspace pin:/);
 
   const reset = tuskConfirmDialogOptions({
     workspace: "Personal",
@@ -84,7 +104,8 @@ test("confirm dialog defaults to Cancel and names the workspace when known", () 
   assert.equal(reset.defaultId, 0);
   assert.match(reset.message, /Reset/);
   assert.match(reset.message, /Personal/);
-  assert.match(reset.detail, /THOME → TOTHER/);
+  assert.match(reset.detail, /Old team ID: THOME/);
+  assert.match(reset.detail, /New team ID: TOTHER/);
 
   const unknown = tuskConfirmDialogOptions({});
   assert.equal(unknown.defaultId, 0);
@@ -114,9 +135,9 @@ test("mocked dialog: Change applies the token write, Cancel leaves store unchang
     assert.equal(calls.length, 1);
     assert.equal(calls[0].defaultId, 0);
     assert.match(calls[0].message, /Personal/);
-    assert.match(calls[0].detail, /Team ID: THOME/);
+    assert.match(calls[0].detail, /Old team ID: \(none\)/);
+    assert.match(calls[0].detail, /New team ID: THOME/);
     assert.match(calls[0].detail, /auth\.test URL: https:\/\/lifesized\.slack\.com\//);
-    assert.match(calls[0].detail, /Workspace pin: \(none\) → THOME/);
 
     dialog.showMessageBox = async (opts) => {
       calls.push(opts);
