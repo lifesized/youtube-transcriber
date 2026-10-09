@@ -272,22 +272,23 @@ function createTuskManager(options = {}) {
           (requestId && pendingRequests.get(requestId)?.cancelled)
       );
 
-    let current = store.getSlackPlain();
-    let next = buildNext(current, patch);
-    const tokensChanged =
-      next.botToken !== current.botToken || next.appToken !== current.appToken;
-    const resetWorkspace = Boolean(patch.resetWorkspace);
-    const allowlistAdded = allowlistIdsAdded(current.channelAllowlist, next.channelAllowlist);
-    const enabledOn = Boolean(next.enabled && !current.enabled);
-    const needsConfirm = tokensChanged || resetWorkspace || allowlistAdded || enabledOn;
-
-    if (needsConfirm && confirmOpen) {
-      throw busyError();
-    }
-
-    let auth = null;
-    if (needsConfirm) confirmOpen = true;
+    let needsConfirm = false;
     try {
+      let current = store.getSlackPlain();
+      let next = buildNext(current, patch);
+      const tokensChanged =
+        next.botToken !== current.botToken || next.appToken !== current.appToken;
+      const resetWorkspace = Boolean(patch.resetWorkspace);
+      const allowlistAdded = allowlistIdsAdded(current.channelAllowlist, next.channelAllowlist);
+      const enabledOn = Boolean(next.enabled && !current.enabled);
+      needsConfirm = tokensChanged || resetWorkspace || allowlistAdded || enabledOn;
+
+      if (needsConfirm && confirmOpen) {
+        throw busyError();
+      }
+
+      let auth = null;
+      if (needsConfirm) confirmOpen = true;
       auth = await resolveAuth(current, next, resetWorkspace);
       if (isCancelled()) throw cancelledError();
 

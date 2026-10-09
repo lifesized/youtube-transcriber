@@ -240,6 +240,59 @@ test("a second sensitive change gets 409 while a confirm dialog is open", async 
   }
 });
 
+test("a busy 409 still drops the pending request id", async () => {
+  const { store, cleanup } = storeInDir();
+  try {
+    let release;
+    const held = new Promise((resolve) => {
+      release = resolve;
+    });
+    const manager = createTuskManager({
+      store,
+      slackApi: mockApi(),
+      WebSocket: FakeSocket,
+      confirmSensitiveChange: async () => {
+        await held;
+        return true;
+      },
+    });
+    const child = new EventEmitter();
+    const sent = [];
+    child.send = (msg) => sent.push(msg);
+    manager.attachIpc(child);
+    child.emit("message", {
+      type: "tusk-set",
+      requestId: "req-first",
+      payload: { botToken: BOT, appToken: APP, enabled: true },
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    child.emit("message", {
+      type: "tusk-set",
+      requestId: "req-busy",
+      payload: { channelAllowlist: ["C01234567"] },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const busy = sent.find((msg) => msg.requestId === "req-busy");
+    assert.equal(busy.status, 409);
+    child.emit("message", { type: "tusk-set-cancel", requestId: "req-busy" });
+    release(true);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(store.getSlackPublic().teamId, "THOME");
+    child.emit("message", {
+      type: "tusk-set",
+      requestId: "req-busy",
+      payload: { channelAllowlist: ["C01234567"] },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    const reused = sent.filter((msg) => msg.requestId === "req-busy" && !msg.error).pop();
+    assert.ok(reused, "reused request id must apply after the 409, not stay cancelled");
+    assert.deepEqual(store.getSlackPublic().channelAllowlist, ["C01234567"]);
+    await manager.stop();
+  } finally {
+    await cleanup();
+  }
+});
+
 test("after confirm, the patch is applied to a freshly read store", async () => {
   const { store, cleanup } = storeInDir();
   try {
