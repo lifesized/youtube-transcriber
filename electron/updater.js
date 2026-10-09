@@ -19,6 +19,7 @@ const { updaterMenuItem } = require("./updater-menu.js");
 const {
   UPDATE_CHANNEL,
   isBetaPrereleaseVersion,
+  isUpdateSupported,
 } = require("./update-feed.js");
 const {
   parseCodesignVerbose,
@@ -147,7 +148,7 @@ function configureAutoUpdater(autoUpdater) {
   autoUpdater.forceDevUpdateConfig = false;
   autoUpdater.setFeedURL(pinnedFeed());
   autoUpdater.isUpdateSupported = (updateInfo) =>
-    isBetaPrereleaseVersion(updateInfo && updateInfo.version);
+    isUpdateSupported(updateInfo, require("os").release());
   return autoUpdater;
 }
 

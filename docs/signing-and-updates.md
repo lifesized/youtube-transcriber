@@ -182,6 +182,14 @@ Feed is pinned to `lifesized/youtube-transcriber` on GitHub. There is no env or 
 
 When the updater is enabled it first fetches `releases.atom`, then **`beta-mac.yml`** for the selected tag (electron-updater 6.8.9 `GitHubProvider`: `channel` `"beta"` → `getCustomChannelName` → `beta-mac` → `getChannelFilename` → `beta-mac.yml`). Because `allowPrerelease` is true, a 404 on that file falls back to `latest-mac.yml`. Checks run 30 seconds after launch and then every 6 hours. A found update zip downloads automatically; installing it needs a click on **Restart to Update**. Documented in `extension/privacy-policy.md`. Disabled builds make no GitHub calls. The sign job always publishes `beta-mac.yml` (what the app requests) and `latest-mac.yml` (the fallback).
 
+## Minimum macOS
+
+Electron 44 dropped macOS 12. The v44.0.0 notes say: “macOS 13 (Ventura) or later will be required to run Electron v44.0.0 and higher” ([electron v44.0.0](https://github.com/electron/electron/releases/tag/v44.0.0), #51967). This app pins `electron` `^44.7.0`, so the floor is **13.0.0**.
+
+- `electron-builder.json` `mac.minimumSystemVersion` is `"13.0.0"`. electron-builder writes that as `LSMinimumSystemVersion` in `Info.plist`.
+- `scripts/macos-update-artifacts.sh` writes the same value as `minimumSystemVersion` in `beta-mac.yml` and `latest-mac.yml` (via `renderUpdateYml` in `electron/update-feed.js`).
+- The in-app `isUpdateSupported` override still rejects a non-beta version, and also runs electron-updater 6.8.9’s stock check: if `updateInfo.minimumSystemVersion` is set and `semver.lt(os.release(), minimumSystemVersion)`, the update is skipped. A compare error fails open (`AppUpdater.checkIfUpdateSupported`). `os.release()` on macOS is the Darwin kernel (Ventura is 22.x), not the marketing version; that is the same comparison electron-updater itself uses.
+
 ## Native host after a signed install
 
 Drag-to-Applications lands at `/Applications/Transcriber.app`. That is already the app host Start fallback and the helper's destination. Pairing still writes `com.transcribed.app.host` manifests. A packaged launch rewrites the wrapper only when the app is running from `/Applications` or from the already-recorded install path — never from `~/Downloads`, `/Volumes`, or App Translocation.

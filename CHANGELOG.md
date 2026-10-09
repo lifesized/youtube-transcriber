@@ -25,6 +25,7 @@
 
 ### Changed
 - **Beta feed file is `beta-mac.yml`** — electron-updater 6.8.9's GitHub provider requests `beta-mac.yml` when `channel` is `beta`. Docs and the privacy policy say that. The sign job still also writes `latest-mac.yml` because `allowPrerelease` falls back to it on 404.
+- **Minimum macOS is 13.0.0** — `electron-builder.json` pins `mac.minimumSystemVersion` (LSMinimumSystemVersion) to Electron 44's floor. The update yml carries the same field. The updater override still rejects a non-beta version and now also runs electron-updater's `minimumSystemVersion` vs `os.release()` check.
 - **James docs name the two self-review settings separately** — Environment `release` → Prevent self-review stays OFF; the `beta/electron-menubar` branch rule “Require approval from someone other than the last pusher” stays OFF. Those repo settings are required before setting `SIGNING_ENABLED`.
 
 ### Added

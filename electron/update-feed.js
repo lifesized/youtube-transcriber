@@ -25,12 +25,39 @@ function channelFileName(channel, platform = "darwin") {
 const UPDATE_CHANNEL_FILE = channelFileName(UPDATE_CHANNEL, "darwin");
 const FALLBACK_CHANNEL_FILE = channelFileName(FALLBACK_CHANNEL, "darwin");
 
+// Electron 44 dropped macOS 12: "macOS 13 (Ventura) or later will be required
+// to run Electron v44.0.0 and higher."
+// https://github.com/electron/electron/releases/tag/v44.0.0 (#51967)
+const MINIMUM_MACOS_VERSION = "13.0.0";
+
 function isBetaPrereleaseVersion(version) {
   const pre = String(version || "").split("-")[1] || "";
   return pre === "beta" || pre.startsWith("beta.");
 }
 
-function renderUpdateYml({ version, zipName, sha512, size, releaseDate }) {
+function isOsNewEnough(currentOsVersion, minimumSystemVersion) {
+  if (!minimumSystemVersion) return true;
+  try {
+    const semver = require("semver");
+    return !semver.lt(String(currentOsVersion), String(minimumSystemVersion));
+  } catch {
+    return true;
+  }
+}
+
+function isUpdateSupported(updateInfo, currentOsVersion) {
+  if (!isBetaPrereleaseVersion(updateInfo && updateInfo.version)) return false;
+  return isOsNewEnough(currentOsVersion, updateInfo && updateInfo.minimumSystemVersion);
+}
+
+function renderUpdateYml({
+  version,
+  zipName,
+  sha512,
+  size,
+  releaseDate,
+  minimumSystemVersion = MINIMUM_MACOS_VERSION,
+}) {
   return [
     `version: ${version}`,
     "files:",
@@ -40,6 +67,7 @@ function renderUpdateYml({ version, zipName, sha512, size, releaseDate }) {
     `path: ${zipName}`,
     `sha512: ${sha512}`,
     `releaseDate: '${releaseDate}'`,
+    `minimumSystemVersion: ${minimumSystemVersion}`,
     "",
   ].join("\n");
 }
@@ -49,7 +77,10 @@ module.exports = {
   FALLBACK_CHANNEL,
   UPDATE_CHANNEL_FILE,
   FALLBACK_CHANNEL_FILE,
+  MINIMUM_MACOS_VERSION,
   channelFileName,
   isBetaPrereleaseVersion,
+  isOsNewEnough,
+  isUpdateSupported,
   renderUpdateYml,
 };

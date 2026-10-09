@@ -403,6 +403,7 @@ test("electron-builder sets mac.icon, LSUIElement, and unpacks tray templates", 
     fs.readFileSync(path.join(projectRoot, "electron-builder.json"), "utf8")
   );
   assert.equal(builder.mac.icon, "electron/resources/icon.icns");
+  assert.equal(builder.mac.minimumSystemVersion, "13.0.0");
   assert.equal(builder.mac.extendInfo.LSUIElement, true);
   for (const name of [
     "electron/resources/trayTemplate.png",

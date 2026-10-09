@@ -61,6 +61,7 @@
   ],
   "mac": {
     "icon": "electron/resources/icon.icns",
+    "minimumSystemVersion": "13.0.0",
     "extendInfo": {
       "LSUIElement": true
     },
