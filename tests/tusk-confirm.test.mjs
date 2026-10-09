@@ -74,6 +74,14 @@ test("confirm dialog strips control characters and labels old vs new team IDs", 
   assert.match(dirty.detail, /New team ID: TNEW/);
   assert.match(dirty.detail, /auth\.test URL: https:\/\/acme\.slack\.com\/ X-Injected: 1/);
   assert.equal(cleanDialogField("a".repeat(90)).length, 80);
+
+  const rlo = tuskConfirmDialogOptions({
+    workspace: "acme\u202Eemca",
+    tokensChanged: true,
+  });
+  assert.equal(cleanDialogField("acme\u202Eemca"), "acmeemca");
+  assert.doesNotMatch(rlo.message, /\u202E/);
+  assert.match(rlo.message, /acmeemca/);
 });
 
 test("confirm dialog defaults to Cancel and names the workspace when known", () => {

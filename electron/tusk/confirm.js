@@ -4,6 +4,7 @@ function cleanDialogField(value, max = 80) {
   return String(value ?? "")
     .replace(/[\r\n\t]+/g, " ")
     .replace(/[\u0000-\u001F\u007F-\u009F]/g, "")
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/g, "")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, max);
