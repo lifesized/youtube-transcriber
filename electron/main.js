@@ -79,6 +79,9 @@ async function attachUpdaterAfterTray({ extraResources, serverManager }) {
     onReadyToInstall: () => {
       installingUpdate = true;
     },
+    onInstallFailed: () => {
+      installingUpdate = false;
+    },
   });
   if (trayManager) {
     trayManager.updater = updater;

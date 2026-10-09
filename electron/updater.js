@@ -181,7 +181,7 @@ async function stopServerThenInstall(serverManager, install) {
       console.warn("updater: server stop failed:", error && error.message);
     }
   }
-  if (typeof install === "function") install();
+  if (typeof install === "function") await install();
 }
 
 function createUpdater(options) {
@@ -196,6 +196,7 @@ function createUpdater(options) {
     onState,
     onBeforeQuitAndInstall,
     onReadyToInstall,
+    onInstallFailed,
     beforeQuitHookTimeoutMs = BEFORE_QUIT_HOOK_TIMEOUT_MS,
     loadAutoUpdater,
     setIntervalFn = setInterval,
@@ -304,16 +305,31 @@ function createUpdater(options) {
   }
 
   async function quitAndInstall() {
-    await runBeforeQuitHook(
-      onBeforeQuitAndInstall,
-      beforeQuitHookTimeoutMs,
-      setTimeoutFn,
-      clearTimeoutFn
-    );
-    await stopServerThenInstall(serverManager, () => {
-      if (typeof onReadyToInstall === "function") onReadyToInstall();
-      if (autoUpdater) autoUpdater.quitAndInstall();
-    });
+    try {
+      await runBeforeQuitHook(
+        onBeforeQuitAndInstall,
+        beforeQuitHookTimeoutMs,
+        setTimeoutFn,
+        clearTimeoutFn
+      );
+      await stopServerThenInstall(serverManager, async () => {
+        if (typeof onReadyToInstall === "function") onReadyToInstall();
+        if (autoUpdater) await autoUpdater.quitAndInstall();
+      });
+    } catch (error) {
+      console.warn("updater: quitAndInstall failed:", error && error.message);
+      if (typeof onInstallFailed === "function") onInstallFailed();
+      if (serverManager && typeof serverManager.start === "function") {
+        try {
+          await serverManager.start();
+        } catch (startError) {
+          console.warn(
+            "updater: server restart failed:",
+            startError && startError.message
+          );
+        }
+      }
+    }
   }
 
   function startBackgroundChecks() {

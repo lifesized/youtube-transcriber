@@ -12,6 +12,7 @@
 ### Security
 - **Signing keychain re-unlocks before DMG codesign** — `notarytool --wait` can exceed 15 minutes, so the sign job unlocks the temporary keychain immediately before `macos-codesign-dmg.sh` and uses `-lut 3600` as a backstop. The `keychain.password` file is deleted after that unlock.
 - **Quit-and-install stops Tusk without blocking install** — Restart to Update still calls `tuskManager.stop()`, but a throw or ~5s hang cannot skip Next stop or the install. `installingUpdate` is set only at install time so a failed hook still lets a normal Quit tear down Tusk and the server.
+- **Failed quitAndInstall recovers the tray** — if `autoUpdater.quitAndInstall()` throws, the updater logs it, clears `installingUpdate`, and restarts Next so Restart to Update cannot leave an unhandled rejection and a stopped server.
 - **Sign job requires the SHA on beta** — the same `git merge-base --is-ancestor` check as the release job.
 - **Tusk M-1 posting** — Progress `postOrUpdate` sends the bot token. Slack `ok: false` on HTTP 200 throws in `postMessage`, `updateMessage`, and `uploadThreadFile`, so a missing `ts` cannot be handed to `chat.update`.
 - **Tusk M-2 markup** — Video titles in the transcript `initial_comment` and failure `detail` are passed through `escapeSlackMrkdwn`, so `<!channel>`, `<@U…>`, and `<https://evil|Click>` stay literal.

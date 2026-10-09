@@ -268,6 +268,10 @@ test("main wires the updater gate and stops Next before quitAndInstall", () => {
     main,
     /onReadyToInstall:\s*\(\)\s*=>\s*\{[\s\S]*installingUpdate\s*=\s*true/
   );
+  assert.match(
+    main,
+    /onInstallFailed:\s*\(\)\s*=>\s*\{[\s\S]*installingUpdate\s*=\s*false/
+  );
   assert.ok(main.includes("listExtensionIds"));
   assert.ok(main.includes("shouldRepointNativeHost"));
   assert.ok(main.includes("readRecordedBundlePath"));

@@ -263,8 +263,11 @@ test("stopServerThenInstall stops Next before quitAndInstall", async () => {
 function quitUpdaterFixture({
   onBeforeQuitAndInstall,
   onReadyToInstall,
+  onInstallFailed,
   beforeQuitHookTimeoutMs,
   order,
+  quitAndInstall,
+  start,
 }) {
   const dir = mkdtempSync(path.join(tmpdir(), "ytt-quit-tusk-"));
   writeFileSync(
@@ -281,9 +284,14 @@ function quitUpdaterFixture({
       async stop() {
         order.push("stop-server");
       },
+      async start() {
+        order.push("start-server");
+        if (typeof start === "function") await start();
+      },
     },
     onBeforeQuitAndInstall,
     onReadyToInstall,
+    onInstallFailed,
     loadAutoUpdater: () => ({
       autoDownload: true,
       autoInstallOnAppQuit: true,
@@ -292,9 +300,11 @@ function quitUpdaterFixture({
       forceDevUpdateConfig: true,
       on() {},
       setFeedURL() {},
-      quitAndInstall() {
-        order.push("install");
-      },
+      quitAndInstall:
+        quitAndInstall ||
+        (() => {
+          order.push("install");
+        }),
     }),
   });
   return { updater, dir };
@@ -369,6 +379,39 @@ test("quitAndInstall still stops the server and installs when the hook hangs", a
     await updater.quitAndInstall();
     assert.deepEqual(order, ["hook-start", "stop-server", "flag", "install"]);
     assert.equal(installing, true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("quitAndInstall catch resets the flag and restarts the server", async () => {
+  const order = [];
+  let installing = false;
+  const { updater, dir } = quitUpdaterFixture({
+    order,
+    quitAndInstall() {
+      order.push("install");
+      throw new Error("Squirrel failed");
+    },
+    onReadyToInstall: () => {
+      installing = true;
+      order.push("flag");
+    },
+    onInstallFailed: () => {
+      installing = false;
+      order.push("flag-reset");
+    },
+  });
+  try {
+    await updater.quitAndInstall();
+    assert.deepEqual(order, [
+      "stop-server",
+      "flag",
+      "install",
+      "flag-reset",
+      "start-server",
+    ]);
+    assert.equal(installing, false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
