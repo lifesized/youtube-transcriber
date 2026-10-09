@@ -1,8 +1,10 @@
 "use strict";
 
 const { progressBlocks, progressText } = require("./progress.js");
-const { classifyLocalFailure, COPY } = require("./errors.js");
+const { classifyLocalFailure, COPY, isNoLlmError } = require("./errors.js");
 const { renderSummaryMarkdown, escapeSlackMrkdwn } = require("./format.js");
+const { noKeySlackText, NO_KEY_COPY } = require("./llm-links.js");
+const { createNoKeyNotice } = require("./no-key-notice.js");
 const {
   buildSlackPrimitivePrompt,
   buildThreadQuestionPrompt,
@@ -101,6 +103,32 @@ function createPipeline(options = {}) {
   const preset = resolvePreset(options.preset);
   const threadCache = options.threadCache || new Map();
   const maxThreads = options.maxThreads ?? 80;
+  const noKeyNotice = options.noKeyNotice || createNoKeyNotice();
+  const rateLimit = options.rateLimit;
+
+  async function maybePostNoKeyNotice(channel, threadTs) {
+    if (!channel || !threadTs) return false;
+    if (typeof noKeyNotice.shouldPost === "function" && !noKeyNotice.shouldPost(channel)) {
+      return false;
+    }
+    if (rateLimit && typeof rateLimit.allowGlobal === "function" && !rateLimit.allowGlobal()) {
+      return false;
+    }
+    try {
+      await slack.postMessage({
+        botToken,
+        channel,
+        threadTs,
+        text: noKeySlackText(),
+        unfurl_links: false,
+        unfurl_media: false,
+      });
+      if (typeof noKeyNotice.markPosted === "function") noKeyNotice.markPosted(channel);
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
   async function reactEyes(channel, ts) {
     try {
@@ -241,6 +269,7 @@ function createPipeline(options = {}) {
         card.replyTs = await postOrUpdate(card, "uploading", { detail: COPY.no_llm });
         await uploadTranscript(card, video, segments);
         await postOrUpdate(card, "done", { detail: COPY.no_llm });
+        await maybePostNoKeyNotice(card.channel, card.threadTs);
         rememberThread(card, video);
         return { ok: true, mode: "transcript", reason: "no_llm" };
       }
@@ -336,6 +365,20 @@ function createPipeline(options = {}) {
       });
       return { ok: true, mode: "qa", transcriptId: remembered.transcriptId };
     } catch (err) {
+      if (isNoLlmError(err)) {
+        const posted = await maybePostNoKeyNotice(channel, threadTs);
+        if (!posted) {
+          await slack.postMessage({
+            botToken,
+            channel,
+            threadTs,
+            text: escapeSlackMrkdwn(NO_KEY_COPY),
+            unfurl_links: false,
+            unfurl_media: false,
+          });
+        }
+        return { ok: false, error: "no_llm" };
+      }
       const mapped = classifyLocalFailure(err);
       await slack.postMessage({
         botToken,

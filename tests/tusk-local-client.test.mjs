@@ -40,6 +40,14 @@ test("Tusk local client tags transcript and summary requests with a job id", asy
   assert.equal(calls[1].body.promptOverride, "summarize");
 });
 
+test("Tusk local client reads summary availability without posting a key", async () => {
+  const { client, calls } = clientWithCapture();
+  await client.getSummaryAvailable();
+  assert.equal(calls[0].method, "GET");
+  assert.match(calls[0].url, /\/api\/summaries$/);
+  assert.equal(calls[0].body, null);
+});
+
 test("Tusk cancel posts a job id, or tag=tusk for stop()", async () => {
   const { client, calls } = clientWithCapture();
   await client.cancelInFlight({ jobId: "tusk-job-01", tag: "tusk" });

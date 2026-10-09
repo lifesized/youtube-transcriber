@@ -7,6 +7,7 @@
 
 const trayCopy = require("./tray-copy.js");
 const { updaterMenuItem } = require("./updater-menu.js");
+const { LLM_KEY_LINKS } = require("./tusk/llm-links.js");
 
 function transcriberUrl(port) {
   return `http://127.0.0.1:${port}`;
@@ -61,6 +62,15 @@ function buildTrayMenuTemplate(state, actions) {
       enabled: false,
     },
   ];
+  if (state.hasLlmKey === false) {
+    template.push({
+      label: trayCopy.AI_KEY_MISSING,
+      submenu: LLM_KEY_LINKS.map((link) => ({
+        label: link.label,
+        click: () => actions.openLlmKeyUrl && actions.openLlmKeyUrl(link.url),
+      })),
+    });
+  }
   const recovery = recoveryItem(state.status, actions);
   if (recovery) template.push(recovery);
 

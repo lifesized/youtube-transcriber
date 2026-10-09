@@ -874,3 +874,43 @@ test("sync after restart resends the persisted digest pause to Settings", async 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("refreshLlmReady clears a no_llm digest pause when a key appears", async () => {
+  const harness = managerHarness();
+  try {
+    let available = false;
+    const manager = createTuskManager({
+      store: harness.store,
+      watchSeen: harness.watchSeen,
+      slackApi: mockApi(),
+      WebSocket: FakeSocket,
+      timers: harness.timers.api,
+      fetchImpl: async () => ({ ok: true, notModified: true }),
+      confirmSensitiveChange: async () => true,
+      localClient: {
+        getSummaryAvailable: async () => ({ available }),
+        createTranscript: async () => ({ id: "vid-1" }),
+        createSummary: async () => ({ summary_md: "nope" }),
+        cancelInFlight: async () => ({ ok: true }),
+      },
+      createRuntime: () => ({
+        start: async () => {},
+        stop: async () => {},
+        isStopped: () => false,
+      }),
+    });
+    harness.watchSeen.pauseDigest("no_llm");
+    await manager.refreshLlmReady();
+    assert.equal(manager.getStatus().hasLlmKey, false);
+    assert.equal(harness.watchSeen.isDigestPaused(), true);
+
+    available = true;
+    await manager.refreshLlmReady();
+    assert.equal(manager.getStatus().hasLlmKey, true);
+    assert.equal(harness.watchSeen.isDigestPaused(), false);
+    assert.doesNotMatch(JSON.stringify(manager.getStatus()), /sk-|xoxb|xapp/i);
+    await manager.stop();
+  } finally {
+    await harness.cleanup();
+  }
+});

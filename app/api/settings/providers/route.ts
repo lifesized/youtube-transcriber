@@ -8,6 +8,7 @@ import {
 } from "@/lib/secrets-store.js";
 import { SecretsKeyError } from "@/lib/secrets-crypto.js";
 import { assertSafeProviderUrl } from "@/lib/provider-url-policy.js";
+import { notifyTuskLlmChanged } from "@/lib/electron-ipc.js";
 
 const VALID_PROVIDERS = ["openrouter", "groq", "custom"];
 
@@ -75,6 +76,7 @@ export async function POST(request: Request) {
         where: { id },
         data,
       });
+      await notifyTuskLlmChanged();
       return NextResponse.json({
         ...updated,
         apiKey: maskApiKeyForResponse(updated.apiKey),
@@ -123,6 +125,7 @@ export async function POST(request: Request) {
         priority: priority ?? 0,
       },
     });
+    await notifyTuskLlmChanged();
     return NextResponse.json(
       { ...created, apiKey: maskApiKeyForResponse(created.apiKey) },
       { status: 201 }

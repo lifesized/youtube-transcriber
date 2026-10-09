@@ -10,7 +10,7 @@
  * - Native messaging host installation
  */
 
-const { app, dialog, BrowserWindow, powerSaveBlocker, safeStorage } = require("electron");
+const { app, dialog, BrowserWindow, powerSaveBlocker, safeStorage, shell } = require("electron");
 const path = require("path");
 const config = require("./config.js");
 const appLog = require("./app-log.js");
@@ -20,6 +20,7 @@ const PairingBridge = require("./pairing-bridge.js");
 const NativeHostInstaller = require("./native-host-installer.js");
 const { SecretsStore, attachSecretsIpc } = require("./secrets-store.js");
 const { createTuskManager } = require("./tusk/manager.js");
+const { attachOpenExternalIpc } = require("./tusk/llm-links.js");
 const { confirmTuskSensitiveChange } = require("./tusk/confirm.js");
 const { checkIfTranslocated, shouldRepointNativeHost } = require("./utils.js");
 const { launchedByNativeHost, shouldRevealOnLaunch } = require("../lib/launch-source.js");
@@ -259,8 +260,11 @@ app.whenReady().then(async () => {
 
   serverManager.on("spawned", (child) => {
     pairingBridge.attach(child);
-    attachSecretsIpc(child, secretsStore);
+    attachSecretsIpc(child, secretsStore, () => {
+      void tuskManager.refreshLlmReady();
+    });
     tuskManager.attachIpc(child);
+    attachOpenExternalIpc(child, shell);
   });
   
   // Start power save blocker. isStarted() rejects null; id is null until first start.

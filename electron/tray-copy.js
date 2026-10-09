@@ -72,6 +72,8 @@ function tuskStatusLine(state, workspace) {
   return "Tusk: off";
 }
 
+const AI_KEY_MISSING = "AI key missing";
+
 const TRY_AGAIN = "Try Again";
 const RESTART = "Start Transcriber";
 const MOVE_TO_APPLICATIONS = "Move to Applications and Reopen";
@@ -100,4 +102,5 @@ module.exports = {
   ADVANCED,
   SHOW_DATA_IN_FINDER,
   tuskStatusLine,
+  AI_KEY_MISSING,
 };

@@ -7,7 +7,7 @@ const { watchUrlForVideoId, feedUrlForSpec } = require("./watch-feeds.js");
 const { parseSlackArtifactMarkdown, escapeSlackMrkdwn } = require("./format.js");
 const { isTuskAllowedSource } = require("./pipeline.js");
 const { buildSlackPrimitivePrompt, resolvePreset } = require("./prompt.js");
-const { classifyLocalFailure } = require("./errors.js");
+const { classifyLocalFailure, isNoLlmError } = require("./errors.js");
 
 const DEFAULT_POLL_MS = 30 * 60 * 1000;
 const DEFAULT_DIGEST_MS = 6 * 60 * 60 * 1000;
@@ -29,6 +29,7 @@ const PAUSE_COPY = {
   channel_not_found: "Digest paused: digest channel was not found.",
   invalid_auth: "Digest paused: Slack token is invalid.",
   token_revoked: "Digest paused: Slack token was revoked.",
+  no_llm: "Digest paused: Tusk needs an AI key.",
 };
 
 function slackErrorCode(err) {
@@ -93,7 +94,8 @@ function isNoAttemptSkip(item) {
     skipped === "queue_full" ||
     skipped === "deduped" ||
     skipped === "llm_hourly_cap" ||
-    skipped === "llm_daily_cap"
+    skipped === "llm_daily_cap" ||
+    skipped === "no_llm"
   );
 }
 
@@ -258,6 +260,9 @@ function createWatchDigest(options = {}) {
       if (isLlmCapError(err)) {
         return { skipped: err.code === "llm_daily_cap" ? "llm_daily_cap" : "llm_hourly_cap" };
       }
+      if (isNoLlmError(err)) {
+        return { skipped: "no_llm" };
+      }
       return null;
     }
     return {
@@ -272,6 +277,10 @@ function createWatchDigest(options = {}) {
     const cfg = config();
     if (paused || (seen.isDigestPaused && seen.isDigestPaused())) {
       return { skipped: "paused", reason: pauseReason || (seen.digestPauseReason && seen.digestPauseReason()) };
+    }
+    if (typeof options.hasLlmKey === "function" && !options.hasLlmKey()) {
+      emitPause("no_llm");
+      return { skipped: "paused", reason: "no_llm", message: pauseCopy("no_llm") };
     }
     if (!cfg.enabled) return { skipped: "disabled" };
     if (!opts.force && !digestDue(cfg)) return { skipped: "not_due" };
@@ -298,6 +307,10 @@ function createWatchDigest(options = {}) {
           seen.markPosted([entry.videoId], { digest: false });
           continue;
         }
+        if (item && item.skipped === "no_llm") {
+          emitPause("no_llm");
+          return { skipped: "paused", reason: "no_llm", message: pauseCopy("no_llm") };
+        }
         if (isNoAttemptSkip(item)) continue;
         if (!item || item.skipped) {
           if (typeof seen.noteVideoFailure === "function") seen.noteVideoFailure(entry.videoId);
@@ -307,6 +320,10 @@ function createWatchDigest(options = {}) {
         items.push(item);
       } catch (err) {
         if (isLlmCapError(err)) continue;
+        if (isNoLlmError(err)) {
+          emitPause("no_llm");
+          return { skipped: "paused", reason: "no_llm", message: pauseCopy("no_llm") };
+        }
         if (typeof seen.noteVideoFailure === "function") seen.noteVideoFailure(entry.videoId);
       }
       if (items.length >= cfg.maxVideos) break;

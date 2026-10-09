@@ -244,7 +244,7 @@ function isMasked(value, maskedPlaceholder) {
   );
 }
 
-function attachSecretsIpc(child, store) {
+function attachSecretsIpc(child, store, onChange) {
   if (!child || typeof child.on !== "function") return;
   child.on("message", (msg) => {
     if (!msg || !msg.requestId) return;
@@ -262,6 +262,7 @@ function attachSecretsIpc(child, store) {
           requestId: msg.requestId,
           payload: publicView,
         });
+        if (typeof onChange === "function") onChange(publicView);
       }
     } catch (error) {
       child.send({

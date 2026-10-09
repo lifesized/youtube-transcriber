@@ -42,6 +42,12 @@ const PROVIDER_LABELS: Record<ProviderType, string> = {
   custom: "Custom Endpoint",
 };
 
+const LLM_KEY_LINKS = [
+  { label: "Anthropic console", url: "https://console.anthropic.com/settings/keys" },
+  { label: "OpenAI platform", url: "https://platform.openai.com/api-keys" },
+  { label: "OpenRouter", url: "https://openrouter.ai/keys" },
+] as const;
+
 const OPENROUTER_MODELS = [
   { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash", tag: "recommended" },
   { id: "google/gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", tag: "budget" },
@@ -278,8 +284,10 @@ export function SettingsPanel() {
   const [llmProvider, setLlmProvider] = useState<"anthropic" | "openai">("anthropic");
   const [llmKey, setLlmKey] = useState("");
   const [llmHasKey, setLlmHasKey] = useState(false);
+  const [summariesAvailable, setSummariesAvailable] = useState<boolean | null>(null);
   const [llmSaving, setLlmSaving] = useState(false);
   const [llmError, setLlmError] = useState("");
+  const [llmLinkError, setLlmLinkError] = useState("");
   const [notionToken, setNotionToken] = useState("");
   const [notionDatabaseId, setNotionDatabaseId] = useState("");
   const [notionHasToken, setNotionHasToken] = useState(false);
@@ -354,13 +362,14 @@ export function SettingsPanel() {
 
   const loadSettings = useCallback(async () => {
     try {
-      const [settingsRes, providersRes, usageRes, llmRes, notionRes, tuskRes] = await Promise.all([
+      const [settingsRes, providersRes, usageRes, llmRes, notionRes, tuskRes, summariesRes] = await Promise.all([
         fetch("/api/settings"),
         fetch("/api/settings/providers"),
         fetch("/api/usage"),
         fetch("/api/settings/llm"),
         fetch("/api/settings/notion"),
         fetch("/api/settings/tusk"),
+        fetch("/api/summaries"),
       ]);
 
       if (settingsRes.ok) {
@@ -415,6 +424,11 @@ export function SettingsPanel() {
         }
         setLlmHasKey(!!data.hasKey);
         setLlmKey(data.keyMasked || "");
+      }
+
+      if (summariesRes.ok) {
+        const data = await summariesRes.json();
+        setSummariesAvailable(!!data.available);
       }
 
       if (notionRes.ok) {
@@ -616,6 +630,13 @@ export function SettingsPanel() {
       }
       setLlmHasKey(!!data.hasLlmKey || !!data.hasKey || llmHasKey);
       if (data.llmKeyMasked) setLlmKey(data.llmKeyMasked);
+      const availableRes = await fetch("/api/summaries");
+      if (availableRes.ok) {
+        const available = await availableRes.json();
+        setSummariesAvailable(!!available.available);
+      } else {
+        setSummariesAvailable(true);
+      }
     } catch {
       setLlmError("Could not save");
     } finally {
@@ -623,10 +644,49 @@ export function SettingsPanel() {
     }
   }
 
+  async function openLlmKeyLink(url: string) {
+    setLlmLinkError("");
+    try {
+      const res = await fetch("/api/settings/open-external", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setLlmLinkError(typeof data.error === "string" ? data.error : "Could not open that page");
+      }
+    } catch {
+      setLlmLinkError("Could not open that page from the menu-bar app.");
+    }
+  }
+
   return (
     <div className="space-y-8">
       <div className="space-y-3">
         <h2 className="text-sm font-semibold text-white/80">Summaries</h2>
+        {summariesAvailable === false ||
+        (summariesAvailable == null && !llmHasKey && !providers.some((p) => p.provider === "openrouter" && p.apiKey)) ? (
+          <div className="space-y-3 rounded-lg bg-[hsl(var(--panel-2))] p-4 shadow-[var(--edge)]">
+            <p className="text-sm font-semibold text-white/80">AI key missing</p>
+            <p className="text-sm text-[hsl(var(--muted))]">
+              Tusk needs an AI key. Add Anthropic, OpenAI, or OpenRouter below.
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              {LLM_KEY_LINKS.map((link) => (
+                <button
+                  key={link.url}
+                  type="button"
+                  onClick={() => void openLlmKeyLink(link.url)}
+                  className="h-11 rounded-md bg-[hsl(var(--panel))] px-4 py-3 text-sm font-semibold text-white/90 shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)]"
+                >
+                  {link.label}
+                </button>
+              ))}
+            </div>
+            {llmLinkError ? <p className="text-sm text-red-400">{llmLinkError}</p> : null}
+          </div>
+        ) : null}
         <p className="text-sm text-white/40">
           Choose Anthropic or OpenAI. The key is stored in the macOS Keychain via the Transcriber app — never in plaintext on disk.
         </p>

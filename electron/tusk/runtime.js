@@ -168,6 +168,8 @@ function createTuskRuntime(options = {}) {
           workspace: status.workspace || options.teamName,
           botName: options.botName,
           channelAllowlist: options.channelAllowlist,
+          hasLlmKey:
+            typeof options.hasLlmKey === "function" ? options.hasLlmKey() : Boolean(options.hasLlmKey),
         }),
       });
       return;

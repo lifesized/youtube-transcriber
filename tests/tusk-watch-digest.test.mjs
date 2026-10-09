@@ -588,3 +588,101 @@ test("start resends a persisted pause and does not schedule a poll", () => {
     cleanup();
   }
 });
+
+test("no LLM key pauses the digest instead of spending video tries", async () => {
+  const { LocalApiError } = require(path.join(root, "electron/tusk/local-client.js"));
+  const dir = mkdtempSync(path.join(tmpdir(), "tusk-digest-nokey-"));
+  const seen = createWatchSeen({ stateDir: dir });
+  try {
+    seen.rememberVideos([{ videoId: VIDEO, title: "Demo", published: "2026-10-09T00:00:00Z" }]);
+    let summaries = 0;
+    const pauses = [];
+    const digest = createWatchDigest({
+      seen,
+      onPause: (info) => pauses.push(info),
+      localClient: {
+        createTranscript: async () => ({
+          id: "vid-1",
+          title: "Demo",
+          platform: "youtube",
+          source: "youtube",
+        }),
+        createSummary: async () => {
+          summaries += 1;
+          throw new LocalApiError({
+            status: 503,
+            message: "Choose Anthropic or OpenAI in Settings and add an API key, or set an OpenRouter key.",
+          });
+        },
+      },
+      slackApi: {
+        postMessage: async () => {
+          throw new Error("must not post");
+        },
+      },
+      config: {
+        enabled: true,
+        botToken: "xoxb-test",
+        digestChannel: "C01234567",
+        channelAllowlist: ["C01234567"],
+        digestIntervalMs: 1,
+      },
+    });
+    for (let i = 0; i < 4; i += 1) {
+      const result = await digest.digestOnce({ force: true });
+      assert.equal(result.skipped, "paused");
+      assert.equal(result.reason, "no_llm");
+    }
+    assert.equal(summaries, 1);
+    assert.equal(seen.videoAttempts(VIDEO), 0);
+    assert.equal(seen.isPosted(VIDEO), false);
+    assert.equal(seen.isDigestPaused(), true);
+    assert.equal(seen.digestPauseReason(), "no_llm");
+    assert.equal(pauses[0].reason, "no_llm");
+    assert.match(pauses[0].message, /AI key/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("digest pauses for a missing AI key before calling summarize", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "tusk-digest-haskey-"));
+  const seen = createWatchSeen({ stateDir: dir });
+  try {
+    seen.rememberVideos([{ videoId: VIDEO, title: "Demo", published: "2026-10-09T00:00:00Z" }]);
+    let transcripts = 0;
+    const digest = createWatchDigest({
+      seen,
+      hasLlmKey: () => false,
+      localClient: {
+        createTranscript: async () => {
+          transcripts += 1;
+          throw new Error("must not transcribe");
+        },
+        createSummary: async () => {
+          throw new Error("must not summarize");
+        },
+      },
+      slackApi: {
+        postMessage: async () => {
+          throw new Error("must not post");
+        },
+      },
+      config: {
+        enabled: true,
+        botToken: "xoxb-test",
+        digestChannel: "C01234567",
+        channelAllowlist: ["C01234567"],
+        digestIntervalMs: 1,
+      },
+    });
+    const result = await digest.digestOnce({ force: true });
+    assert.equal(result.skipped, "paused");
+    assert.equal(result.reason, "no_llm");
+    assert.equal(transcripts, 0);
+    assert.equal(seen.videoAttempts(VIDEO), 0);
+    assert.equal(seen.isDigestPaused(), true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -20,3 +20,5 @@ export function secretsFromEnv(): {
   notionToken: string;
   notionDatabaseId: string;
 };
+
+export function notifyTuskLlmChanged(): Promise<void>;

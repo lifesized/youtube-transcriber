@@ -35,6 +35,7 @@ function statusText(info) {
       ? `Channel allowlist: ${allowlist.length} id(s).`
       : "Channel allowlist: empty — every channel is denied."
   );
+  lines.push(info && info.hasLlmKey ? "AI key: set" : "AI key: missing");
   return lines.join("\n");
 }
 

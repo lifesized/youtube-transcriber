@@ -11,8 +11,7 @@ const COPY = {
   no_captions: "No captions for this video, and local transcription didn’t produce a transcript.",
   too_long: "This video is too long for Tusk to handle in one go.",
   rate_limit: "The site is rate-limiting fetches. Wait a moment and paste the link again.",
-  no_llm:
-    "Add a summary provider in Transcriber › Settings › Summaries, then paste the link again. I attached the transcript in the meantime.",
+  no_llm: "Tusk needs an AI key. Open Transcriber > Settings to add one.",
   timeout: "Tusk timed out waiting for Transcriber. Try again.",
   cancelled: "Tusk stopped that job.",
   llm_hourly_cap: "Tusk hit the hourly summary cap. Try again in a bit.",
@@ -73,7 +72,11 @@ function classifyLocalFailure(err) {
   if (status === 429 || /rate.?limit/i.test(raw)) {
     return { code: "rate_limit", message: COPY.rate_limit };
   }
-  if (status === 503 && /anthropic|openai|api key|openrouter|summar/i.test(raw)) {
+  if (
+    err.code === "no_llm" ||
+    (status === 503 && /anthropic|openai|api key|openrouter|summar/i.test(raw)) ||
+    /add an api key|choose anthropic or openai/i.test(combined)
+  ) {
     return { code: "no_llm", message: COPY.no_llm };
   }
   if (err.code === "llm_hourly_cap" || err.code === "llm_daily_cap") {
@@ -92,9 +95,14 @@ function safeErrorMessage(err) {
   return classifyLocalFailure(err).message;
 }
 
+function isNoLlmError(err) {
+  return classifyLocalFailure(err).code === "no_llm";
+}
+
 module.exports = {
   COPY,
   classifyLocalFailure,
   safeErrorMessage,
+  isNoLlmError,
   bodyError,
 };

@@ -121,6 +121,9 @@ function createLocalClient(options = {}) {
         opts(extra)
       );
     },
+    getSummaryAvailable(extra) {
+      return localRequest("/api/summaries", { method: "GET" }, opts(extra));
+    },
     cancelInFlight(extra) {
       const body = { tag: (extra && extra.tag) || "tusk" };
       if (extra && extra.jobId) body.jobId = extra.jobId;

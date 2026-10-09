@@ -1,7 +1,7 @@
 "use strict";
 
 const { validateBotToken, validateAppToken, looksMasked } = require("./tokens.js");
-const { parseChannelAllowlist, normalizeChannelId } = require("./gates.js");
+const { parseChannelAllowlist, normalizeChannelId, createRateLimiter } = require("./gates.js");
 const { createTuskRuntime } = require("./runtime.js");
 const { createPipeline } = require("./pipeline.js");
 const { createJobGate } = require("./jobs.js");
@@ -10,6 +10,7 @@ const { cancelledError, busyError, allowlistIdsAdded, watchFeedsChanged, feedUrl
 const { parseWatchlistText } = require("./watch-feeds.js");
 const { createWatchSeen } = require("./watch-seen.js");
 const { createWatchDigest } = require("./watch-digest.js");
+const { createNoKeyNotice } = require("./no-key-notice.js");
 const slackApi = require("./slack-api.js");
 
 function createTuskManager(options = {}) {
@@ -32,13 +33,20 @@ function createTuskManager(options = {}) {
       return rawClient.createSummary(transcriptId, extra);
     },
   };
+  const rateLimit = options.rateLimit || createRateLimiter();
+  const noKeyNotice = options.noKeyNotice || createNoKeyNotice();
+  const watchSeen = options.watchSeen || createWatchSeen();
+  let llmReady = Boolean(store.getPublic && store.getPublic().hasLlmKey);
   let runtime = null;
   let watch = null;
-  let status = { state: "off", workspace: "" };
+  let status = { state: "off", workspace: "", hasLlmKey: llmReady };
   let starting = null;
   let confirmOpen = false;
   const pendingRequests = new Map();
-  const watchSeen = options.watchSeen || createWatchSeen();
+
+  function hasLlmKey() {
+    return llmReady;
+  }
 
   function digestIsPaused() {
     if (status.digest && status.digest.paused) return true;
@@ -63,6 +71,7 @@ function createTuskManager(options = {}) {
       seen: watchSeen,
       slackApi: api,
       localClient,
+      hasLlmKey,
       runJob: (key, fn) => jobs.run(key, fn),
       WebSocket: options.WebSocket,
       timers: options.timers,
@@ -92,8 +101,34 @@ function createTuskManager(options = {}) {
   }
 
   function emitStatus(next) {
-    status = { ...status, ...next };
+    if (next && Object.prototype.hasOwnProperty.call(next, "hasLlmKey")) {
+      llmReady = Boolean(next.hasLlmKey);
+    }
+    status = { ...status, ...next, hasLlmKey: llmReady };
     if (typeof options.onStatus === "function") options.onStatus({ ...status });
+  }
+
+  async function refreshLlmReady() {
+    let ready = Boolean(store.getPublic && store.getPublic().hasLlmKey);
+    try {
+      if (typeof rawClient.getSummaryAvailable === "function") {
+        const payload = await rawClient.getSummaryAvailable();
+        if (payload && typeof payload.available === "boolean") {
+          ready = payload.available;
+        }
+      }
+    } catch {
+      // Keep the Keychain guess when the local API is down.
+    }
+    emitStatus({ hasLlmKey: ready });
+    const reason =
+      typeof watchSeen.digestPauseReason === "function" ? watchSeen.digestPauseReason() : "";
+    if (ready && reason === "no_llm") {
+      if (typeof watchSeen.clearDigestPause === "function") watchSeen.clearDigestPause();
+      emitStatus({ digest: { paused: false, reason: "", message: "" } });
+      ensureWatchRunning();
+    }
+    return ready;
   }
 
   function publicView() {
@@ -119,6 +154,7 @@ function createTuskManager(options = {}) {
     if (!cfg.enabled || !cfg.botToken || !cfg.appToken) {
       await stopRuntime();
       emitStatus({ state: "off", workspace: cfg.teamName || "" });
+      await refreshLlmReady();
       return publicView();
     }
     await stopRuntime();
@@ -127,6 +163,8 @@ function createTuskManager(options = {}) {
       localClient,
       botToken: cfg.botToken,
       botUserId: cfg.botUserId,
+      noKeyNotice,
+      rateLimit,
     });
     runtime = createRuntime({
       botToken: cfg.botToken,
@@ -137,6 +175,8 @@ function createTuskManager(options = {}) {
       botName: cfg.botName,
       channelAllowlist: cfg.channelAllowlist,
       slackApi: api,
+      rateLimit,
+      hasLlmKey,
       WebSocket: options.WebSocket,
       timers: options.timers,
       onStatus: (next) => {
@@ -178,6 +218,7 @@ function createTuskManager(options = {}) {
     });
     try {
       await runtime.start();
+      await refreshLlmReady();
       ensureWatchRunning();
     } catch {
       emitStatus({ state: "error", workspace: store.getSlackPublic().teamName || "" });
@@ -407,6 +448,24 @@ function createTuskManager(options = {}) {
         });
         return;
       }
+      if (msg.type === "tusk-llm-changed") {
+        refreshLlmReady()
+          .then((ready) => {
+            child.send({
+              type: "tusk-llm-changed-result",
+              requestId: msg.requestId,
+              payload: { hasLlmKey: ready },
+            });
+          })
+          .catch((error) => {
+            child.send({
+              type: "tusk-llm-changed-result",
+              requestId: msg.requestId,
+              error: error.message,
+            });
+          });
+        return;
+      }
       if (msg.type === "tusk-set-cancel" && msg.requestId) {
         const pending = pendingRequests.get(msg.requestId);
         if (pending) pending.cancelled = true;
@@ -444,6 +503,7 @@ function createTuskManager(options = {}) {
     },
     getPublic: publicView,
     getStatus: () => ({ ...status }),
+    refreshLlmReady,
     attachIpc,
   };
 }

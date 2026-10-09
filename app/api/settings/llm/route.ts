@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requestFromMain } from "@/lib/electron-ipc.js";
+import { requestFromMain, notifyTuskLlmChanged } from "@/lib/electron-ipc.js";
 import { getSecretsFromMainOrEnv } from "@/lib/electron-ipc.js";
 
 const VALID = new Set(["anthropic", "openai"]);
@@ -46,6 +46,7 @@ export async function PUT(request: NextRequest) {
       llmProvider: provider,
       llmApiKey: body.apiKey,
     });
+    await notifyTuskLlmChanged();
     return NextResponse.json({
       provider: payload?.llmProvider || provider,
       hasKey: Boolean(payload?.hasLlmKey),

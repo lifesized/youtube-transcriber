@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,7 +41,8 @@ function event(extra = {}) {
   };
 }
 
-function mocks(localOverrides = {}, slackOverrides = {}) {
+function mocks(localOverrides = {}, slackOverrides = {}, pipelineOpts = {}) {
+  const { createNoKeyNotice } = require(path.join(root, "electron/tusk/no-key-notice.js"));
   const slack = {
     calls: [],
     addReaction: async (args) => {
@@ -68,8 +71,20 @@ function mocks(localOverrides = {}, slackOverrides = {}) {
     }),
     ...localOverrides,
   };
-  const pipeline = createPipeline({ slackApi: slack, localClient: local, botToken: BOT });
-  return { slack, local, pipeline };
+  const dir = mkdtempSync(path.join(tmpdir(), "tusk-nokey-"));
+  const pipeline = createPipeline({
+    slackApi: slack,
+    localClient: local,
+    botToken: BOT,
+    noKeyNotice: createNoKeyNotice({ stateDir: dir, cooldownMs: 0 }),
+    ...pipelineOpts,
+  });
+  return {
+    slack,
+    local,
+    pipeline,
+    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+  };
 }
 
 function stages(slack) {
@@ -156,9 +171,89 @@ test("no LLM configured uploads the transcript and shows the setup hint", async 
   assert.ok(upload);
   assert.match(upload[1].content, /hello from ci/);
   assert.match(upload[1].content, /\[0:00\]/);
-  const last = slack.calls.filter(([kind]) => kind === "update").pop();
-  assert.match(last[1].text, /Settings › Summaries/);
-  assert.equal(last[1].text.includes(BOT), false);
+  const notice = slack.calls.find(
+    ([kind, args]) => kind === "post" && /Tusk needs an AI key/.test(args.text) && /Anthropic console/.test(args.text)
+  );
+  assert.ok(notice);
+  assert.match(notice[1].text, /https:\/\/console\.anthropic\.com\/settings\/keys/);
+  assert.match(notice[1].text, /https:\/\/platform\.openai\.com\/api-keys/);
+  assert.match(notice[1].text, /https:\/\/openrouter\.ai\/keys/);
+  assert.equal(notice[1].text.includes(BOT), false);
+  assert.doesNotMatch(notice[1].text, /sk-|xoxb|xapp|Bearer/i);
+  assert.equal(notice[1].unfurl_links, false);
+  assert.equal(notice[1].unfurl_media, false);
+});
+
+test("no-key Slack notice posts at most once per channel per cooldown and respects the global rate limit", async () => {
+  const { createNoKeyNotice } = require(path.join(root, "electron/tusk/no-key-notice.js"));
+  const dir = mkdtempSync(path.join(tmpdir(), "tusk-nokey-cd-"));
+  let clock = 1_000;
+  const notice = createNoKeyNotice({
+    stateDir: dir,
+    cooldownMs: 6 * 60 * 60 * 1000,
+    now: () => clock,
+  });
+  try {
+  const noKey = {
+    createSummary: async () => {
+      throw new LocalApiError({
+        status: 503,
+        message: "Choose Anthropic or OpenAI in Settings and add an API key, or set an OpenRouter key.",
+      });
+    },
+  };
+  const first = mocks(noKey, {}, { noKeyNotice: notice });
+  await first.pipeline.handleSupportedLink(event());
+  const firstNotices = first.slack.calls.filter(
+    ([kind, args]) => kind === "post" && /Anthropic console/.test(args.text)
+  );
+  assert.equal(firstNotices.length, 1);
+
+  const second = mocks(noKey, {}, { noKeyNotice: notice });
+  await second.pipeline.handleSupportedLink(event());
+  const secondNotices = second.slack.calls.filter(
+    ([kind, args]) => kind === "post" && /Anthropic console/.test(args.text)
+  );
+  assert.equal(secondNotices.length, 0);
+
+  clock += 6 * 60 * 60 * 1000 + 1;
+  const limiter = { allowGlobal: () => false };
+  const blocked = mocks(noKey, {}, { noKeyNotice: notice, rateLimit: limiter });
+  await blocked.pipeline.handleSupportedLink(event());
+  const blockedNotices = blocked.slack.calls.filter(
+    ([kind, args]) => kind === "post" && /Anthropic console/.test(args.text)
+  );
+  assert.equal(blockedNotices.length, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("@tusk Q&A with no AI key posts the setup notice, not the key", async () => {
+  const { slack, pipeline } = mocks({
+    createSummary: async () => {
+      throw new LocalApiError({
+        status: 503,
+        message: "Add an API key in Settings for the selected summary provider.",
+      });
+    },
+  });
+  pipeline.rememberThread(
+    { channel: "C01234567", threadTs: "1710000000.000100", sourceUrl: VIDEO.videoUrl },
+    VIDEO
+  );
+  const result = await pipeline.handleThreadQuestion({
+    channel: "C01234567",
+    threadTs: "1710000000.000100",
+    ts: "1710000000.000300",
+    text: "<@Ubot> what was the decision?",
+    botUserId: "Ubot",
+  });
+  assert.equal(result.error, "no_llm");
+  const notice = slack.calls.find(([kind, args]) => kind === "post" && /Tusk needs an AI key/.test(args.text));
+  assert.ok(notice);
+  assert.match(notice[1].text, /openrouter\.ai\/keys/);
+  assert.equal(notice[1].text.includes(BOT), false);
 });
 
 test("hostile video titles are escaped in the Slack file comment", async () => {

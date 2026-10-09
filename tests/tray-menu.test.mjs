@@ -99,6 +99,40 @@ test("Tusk connected line uses the workspace name", () => {
   assert.equal(t[1].enabled, false);
 });
 
+test("AI key missing submenu lists the three signup links", () => {
+  const opened = [];
+  const t = buildTrayMenuTemplate(
+    {
+      status: "running",
+      port: 19721,
+      supportsSublabel: true,
+      openAtLogin: true,
+      showImport: false,
+      updater: { enabled: false },
+      hasLlmKey: false,
+    },
+    {
+      ...ACTIONS,
+      openLlmKeyUrl: (url) => {
+        opened.push(url);
+        return url;
+      },
+    }
+  );
+  const missing = item(t, "AI key missing");
+  assert.deepEqual(
+    missing.submenu.map((entry) => entry.label),
+    ["Anthropic console", "OpenAI platform", "OpenRouter"]
+  );
+  missing.submenu.forEach((entry) => entry.click());
+  assert.deepEqual(opened, [
+    "https://console.anthropic.com/settings/keys",
+    "https://platform.openai.com/api-keys",
+    "https://openrouter.ai/keys",
+  ]);
+  assert.equal(labels(menu("running")).includes("AI key missing"), false);
+});
+
 test("Open Library and the server-backed items are enabled only while running", () => {
   const serverItems = [
     "Open Transcriber",

@@ -60,6 +60,7 @@ test("Tusk tray line uses Design placeholders", () => {
   assert.equal(copy.tuskStatusLine("error"), "Tusk: error");
   assert.equal(copy.tuskStatusLine("connected", "Personal"), "Tusk: connected to Personal");
   assert.equal(copy.tuskStatusLine("connected"), "Tusk: connected");
+  assert.equal(copy.AI_KEY_MISSING, "AI key missing");
 });
 
 test("menu names the library it serves and offers its data folder under Advanced", () => {

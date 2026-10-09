@@ -22,6 +22,20 @@ test("/tusk help and status copy", () => {
   assert.match(commands.slashReply("unknown"), /Unknown subcommand/);
 });
 
+test("/tusk status reports AI key as set or missing, never the value", () => {
+  const missing = commands.slashReply("status", {
+    state: "connected",
+    workspace: "Personal",
+    hasLlmKey: false,
+    llmApiKey: "sk-secret-should-never-appear",
+  });
+  assert.match(missing, /AI key: missing/);
+  assert.doesNotMatch(missing, /sk-secret|xoxb|xapp|Bearer/i);
+  const set = commands.slashReply("status", { state: "connected", workspace: "Personal", hasLlmKey: true });
+  assert.match(set, /AI key: set/);
+  assert.doesNotMatch(set, /sk-|••••/);
+});
+
 test("mention and summarize/transcript mode parsing from the old events route", () => {
   assert.equal(isMentionTriggered("<@Ubot> summarize https://youtu.be/dQw4w9WgXcQ", "Ubot"), true);
   assert.equal(isMentionTriggered("https://youtu.be/dQw4w9WgXcQ", "Ubot"), false);
