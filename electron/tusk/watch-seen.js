@@ -36,6 +36,32 @@ function sanitizeHeaderValue(value) {
   return String(value || "").replace(/[\r\n\0]+/g, "").slice(0, 256);
 }
 
+function clampAttempts(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(MAX_VIDEO_ATTEMPTS, Math.max(0, Math.trunc(n)));
+}
+
+function clampNextAttemptAt(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.trunc(n);
+}
+
+function sanitizeVideos(videos) {
+  if (!videos || typeof videos !== "object" || Array.isArray(videos)) return {};
+  const out = {};
+  for (const [id, row] of Object.entries(videos)) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+    out[id] = {
+      ...row,
+      attempts: clampAttempts(row.attempts),
+      nextAttemptAt: clampNextAttemptAt(row.nextAttemptAt),
+    };
+  }
+  return out;
+}
+
 function createWatchSeen(options = {}) {
   const dir = options.stateDir || null;
   const nowFn = options.now || Date.now;
@@ -81,7 +107,7 @@ function createWatchSeen(options = {}) {
     }
     memory = {
       version: 1,
-      videos: parsed.videos && typeof parsed.videos === "object" ? parsed.videos : {},
+      videos: sanitizeVideos(parsed.videos),
       feeds: parsed.feeds && typeof parsed.feeds === "object" ? parsed.feeds : {},
       lastDigestAt: Number(parsed.lastDigestAt) || 0,
       digestPaused: Boolean(parsed.digestPaused),

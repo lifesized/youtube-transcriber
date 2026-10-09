@@ -342,6 +342,68 @@ test("a summary failure is retried at most 3 times then dropped", async () => {
   }
 });
 
+test("llm caps across more than 3 digests do not consume a video try", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "tusk-digest-"));
+  const seen = createWatchSeen({ stateDir: dir });
+  try {
+    seen.rememberVideos([{ videoId: VIDEO, title: "Demo", published: "2026-10-09T00:00:00Z" }]);
+    const caps = [
+      Object.assign(new Error("Tusk hit the hourly summary cap. Try again in a bit."), {
+        code: "llm_hourly_cap",
+        status: 429,
+      }),
+      Object.assign(new Error("Tusk hit the daily summary cap. Try again tomorrow."), {
+        code: "llm_daily_cap",
+        status: 429,
+      }),
+      Object.assign(new Error("Hourly prompt-override cap reached"), {
+        status: 429,
+        payload: { code: "override_hourly_cap", error: "override cap" },
+      }),
+      Object.assign(new Error("hourly summary cap exceeded"), { status: 429 }),
+    ];
+    let summaries = 0;
+    const digest = createWatchDigest({
+      seen,
+      localClient: {
+        createTranscript: async () => ({
+          id: "vid-1",
+          title: "Demo",
+          platform: "youtube",
+          source: "youtube",
+        }),
+        createSummary: async () => {
+          const err = caps[summaries] || caps[0];
+          summaries += 1;
+          throw err;
+        },
+      },
+      slackApi: {
+        postMessage: async () => {
+          throw new Error("must not post");
+        },
+      },
+      config: {
+        enabled: true,
+        botToken: "xoxb-test",
+        digestChannel: "C01234567",
+        channelAllowlist: ["C01234567"],
+        digestIntervalMs: 1,
+      },
+    });
+    for (let i = 0; i < 4; i += 1) {
+      const result = await digest.digestOnce({ force: true });
+      assert.equal(result.skipped, "no_items");
+    }
+    assert.equal(summaries, 4);
+    assert.equal(seen.videoAttempts(VIDEO), 0);
+    assert.equal(seen.isPosted(VIDEO), false);
+    assert.equal(seen.unpublished().some((row) => row.videoId === VIDEO), true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("queue-full and failed transcripts stay unpublished for a later retry", async () => {
   const { seen, cleanup } = seenInDir();
   try {

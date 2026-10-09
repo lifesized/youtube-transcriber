@@ -7,6 +7,7 @@ const { watchUrlForVideoId, feedUrlForSpec } = require("./watch-feeds.js");
 const { parseSlackArtifactMarkdown, escapeSlackMrkdwn } = require("./format.js");
 const { isTuskAllowedSource } = require("./pipeline.js");
 const { buildSlackPrimitivePrompt, resolvePreset } = require("./prompt.js");
+const { classifyLocalFailure } = require("./errors.js");
 
 const DEFAULT_POLL_MS = 30 * 60 * 1000;
 const DEFAULT_DIGEST_MS = 6 * 60 * 60 * 1000;
@@ -73,6 +74,27 @@ function formatDigestMessage(items, maxSummary) {
     blocks.push(["", `*${title}*`, escapeSlackMrkdwn(url), summary].filter(Boolean).join("\n"));
   }
   return blocks.join("\n");
+}
+
+function isLlmCapError(err) {
+  if (!err || typeof err !== "object") return false;
+  const payloadCode = err.payload && typeof err.payload.code === "string" ? err.payload.code : "";
+  const code = err.code || payloadCode;
+  if (code === "llm_hourly_cap" || code === "llm_daily_cap" || code === "override_hourly_cap") {
+    return true;
+  }
+  const classified = classifyLocalFailure(err).code;
+  return classified === "llm_hourly_cap" || classified === "llm_daily_cap";
+}
+
+function isNoAttemptSkip(item) {
+  const skipped = item && item.skipped;
+  return (
+    skipped === "queue_full" ||
+    skipped === "deduped" ||
+    skipped === "llm_hourly_cap" ||
+    skipped === "llm_daily_cap"
+  );
 }
 
 function digestChannelAllowed(channel, allowlist) {
@@ -232,7 +254,10 @@ function createWatchDigest(options = {}) {
         }),
       });
       summary = (result && (result.summary_md || result.summary)) || "";
-    } catch {
+    } catch (err) {
+      if (isLlmCapError(err)) {
+        return { skipped: err.code === "llm_daily_cap" ? "llm_daily_cap" : "llm_hourly_cap" };
+      }
       return null;
     }
     return {
@@ -273,14 +298,15 @@ function createWatchDigest(options = {}) {
           seen.markPosted([entry.videoId], { digest: false });
           continue;
         }
-        if (item && (item.skipped === "queue_full" || item.skipped === "deduped")) continue;
+        if (isNoAttemptSkip(item)) continue;
         if (!item || item.skipped) {
           if (typeof seen.noteVideoFailure === "function") seen.noteVideoFailure(entry.videoId);
           continue;
         }
         if (typeof seen.cacheSummary === "function") seen.cacheSummary(entry.videoId, item);
         items.push(item);
-      } catch {
+      } catch (err) {
+        if (isLlmCapError(err)) continue;
         if (typeof seen.noteVideoFailure === "function") seen.noteVideoFailure(entry.videoId);
       }
       if (items.length >= cfg.maxVideos) break;

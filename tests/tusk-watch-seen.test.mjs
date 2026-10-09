@@ -114,6 +114,43 @@ test("getFeedMeta sanitizes a dirty etag that was already on disk", () => {
   });
 });
 
+test("load clamps attempts to 0-3 and rejects a bad nextAttemptAt", () => {
+  withDir((dir) => {
+    writeFileSync(
+      path.join(dir, FILE_NAME),
+      JSON.stringify({
+        version: 1,
+        videos: {
+          dQw4w9WgXcQ: {
+            postedAt: 0,
+            attempts: -2,
+            nextAttemptAt: "soon",
+            title: "neg",
+          },
+          oHg5SJYRHA0: {
+            postedAt: 0,
+            attempts: "nope",
+            nextAttemptAt: -99,
+            title: "nan",
+          },
+        },
+        feeds: {},
+        lastDigestAt: 0,
+        digestPaused: false,
+        digestPauseReason: "",
+      }),
+      "utf8"
+    );
+    const seen = createWatchSeen({ stateDir: dir });
+    assert.equal(seen.videoAttempts("dQw4w9WgXcQ"), 0);
+    assert.equal(seen.load().videos.dQw4w9WgXcQ.nextAttemptAt, 0);
+    assert.equal(seen.videoAttempts("oHg5SJYRHA0"), 0);
+    assert.equal(seen.load().videos.oHg5SJYRHA0.nextAttemptAt, 0);
+    assert.equal(seen.isPosted("dQw4w9WgXcQ"), false);
+    assert.equal(seen.unpublished().length, 2);
+  });
+});
+
 test("getCachedSummary rebuilds the watch URL from the video id", () => {
   withDir((dir) => {
     const seen = createWatchSeen({ stateDir: dir, now: () => 10 });
