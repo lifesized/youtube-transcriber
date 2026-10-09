@@ -4,6 +4,8 @@ const { channelAllowed, parseChannelAllowlist, normalizeChannelId } = require(".
 const { fetchYoutubeFeed } = require("./watch-fetch.js");
 const { watchUrlForVideoId, feedUrlForSpec } = require("./watch-feeds.js");
 const { parseSlackArtifactMarkdown, escapeSlackMrkdwn } = require("./format.js");
+const { isTuskAllowedSource } = require("./pipeline.js");
+const { buildSlackPrimitivePrompt, resolvePreset } = require("./prompt.js");
 
 const DEFAULT_POLL_MS = 30 * 60 * 1000;
 const DEFAULT_DIGEST_MS = 6 * 60 * 60 * 1000;
@@ -118,13 +120,27 @@ function createWatchDigest(options = {}) {
     return now() - origin >= cfg.digestIntervalMs;
   }
 
-  async function summarizeOne(entry, cfg) {
+  async function summarizeOne(entry, cfg, signal) {
     const url = watchUrlForVideoId(entry.videoId);
     if (!url) return null;
-    const video = await local.createTranscript(url);
+    const video = await local.createTranscript(url, { signal });
+    if (
+      !isTuskAllowedSource({
+        platform: (video && video.platform) || "youtube",
+        source: video && video.source,
+      })
+    ) {
+      return null;
+    }
     let summary = "";
     try {
-      const result = await local.createSummary(video && video.id);
+      const result = await local.createSummary(video && video.id, {
+        signal,
+        promptOverride: buildSlackPrimitivePrompt({
+          title: (video && video.title) || entry.title || "Video",
+          preset: resolvePreset(cfg.preset),
+        }),
+      });
       summary = (result && (result.summary_md || result.summary)) || "";
     } catch {
       summary = "";
@@ -150,11 +166,9 @@ function createWatchDigest(options = {}) {
     const postedIds = [];
     for (const entry of pending) {
       try {
-        const item = await summarizeOne(entry, cfg);
-        if (item) {
-          items.push(item);
-          postedIds.push(entry.videoId);
-        }
+        const item = await summarizeOne(entry, cfg, opts.signal);
+        postedIds.push(entry.videoId);
+        if (item) items.push(item);
       } catch {
         postedIds.push(entry.videoId);
       }
@@ -181,7 +195,7 @@ function createWatchDigest(options = {}) {
     running = true;
     try {
       await pollOnce();
-      await digestOnce();
+      await digestOnce({ signal: options.signal });
     } finally {
       running = false;
     }
