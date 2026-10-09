@@ -211,6 +211,8 @@ test("whisper never pgrep-kills and does not clean up on import", () => {
   assert.doesNotMatch(src, /pgrep\s+-f|execSync\([^)]*pgrep/);
   assert.doesNotMatch(src, /cleanupOrphanedProcesses/);
   assert.doesNotMatch(src, /\bexecSync\b/);
+  assert.match(src, /execFileSync\("\/bin\/ps"/);
+  assert.doesNotMatch(src, /execFileSync\("ps"/);
   assert.match(src, /cleanupTrackedWhisperProcesses\(\)/);
   const afterExport = src.split("export function cleanupTrackedWhisperProcesses")[1] || "";
   assert.match(afterExport, /downloadAudio[\s\S]*cleanupTrackedWhisperProcesses\(\)/);

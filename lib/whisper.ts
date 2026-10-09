@@ -187,12 +187,12 @@ function allowedWhisperExe(exe: string): boolean {
 
 function inspectPid(pid: number): { startTime: string; exe: string } | null {
   try {
-    const startTime = execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], {
+    const startTime = execFileSync("/bin/ps", ["-o", "lstart=", "-p", String(pid)], {
       encoding: "utf8",
       timeout: 2000,
     }).trim();
     const exe = path.basename(
-      execFileSync("ps", ["-o", "comm=", "-p", String(pid)], {
+      execFileSync("/bin/ps", ["-o", "comm=", "-p", String(pid)], {
         encoding: "utf8",
         timeout: 2000,
       }).trim()
