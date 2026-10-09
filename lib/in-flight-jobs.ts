@@ -25,6 +25,10 @@ type ServerJob = {
 
 const jobs = new Map<string, ServerJob>();
 
+function jobKey(tag: JobTag, id: string): string {
+  return `${tag}:${id}`;
+}
+
 function isAbortSignal(value: unknown): value is AbortSignal {
   return Boolean(
     value &&
@@ -60,7 +64,8 @@ export function beginServerJob(
   const requestedTag = normalizeJobTag(opts.tag);
   const clientSignal = opts.signal ?? null;
 
-  let job = jobs.get(jobId);
+  const key = jobKey(requestedTag, jobId);
+  let job = jobs.get(key);
   if (!job) {
     job = {
       id: jobId,
@@ -68,9 +73,7 @@ export function beginServerJob(
       controller: new AbortController(),
       refs: 0,
     };
-    jobs.set(jobId, job);
-  } else if (requestedTag === "tusk") {
-    job.tag = "tusk";
+    jobs.set(key, job);
   }
   job.refs += 1;
 
@@ -104,7 +107,7 @@ export function beginServerJob(
         clientSignal.removeEventListener("abort", onClientAbort);
       }
       job.refs -= 1;
-      if (job.refs <= 0) jobs.delete(jobId);
+      if (job.refs <= 0) jobs.delete(jobKey(job.tag, job.id));
     },
   };
 }
@@ -116,10 +119,11 @@ export function cancelJob(
   const id = typeof jobId === "string" ? jobId.trim() : "";
   if (!id) return { llm: 0, whisper: 0, ok: false };
 
-  const requiredTag = opts?.tag ? normalizeJobTag(opts.tag) : undefined;
-  const job = jobs.get(id);
-  if (job && requiredTag && job.tag !== requiredTag) {
-    return { llm: 0, whisper: 0, ok: false };
+  const requiredTag = opts?.tag ? normalizeJobTag(opts.tag) : "tusk";
+  const job = jobs.get(jobKey(requiredTag, id));
+  if (!job) {
+    const whisper = cancelTranscriptionForJob(id, { tag: requiredTag });
+    return { llm: 0, whisper, ok: whisper > 0 };
   }
 
   let llm = 0;

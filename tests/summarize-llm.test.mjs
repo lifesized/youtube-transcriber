@@ -154,3 +154,18 @@ test("cancelJob aborts only that job and leaves others running", async () => {
   otherTusk.finish();
   local.finish();
 });
+
+test("an existing job is never retagged when a later request reuses the id", async () => {
+  const { beginServerJob, cancelJob } = await import("../lib/in-flight-jobs.ts");
+  const local = beginServerJob({ jobId: "shared-job-id", tag: "local" });
+  const tusk = beginServerJob({ jobId: "shared-job-id", tag: "tusk" });
+  assert.equal(local.tag, "local");
+  assert.equal(tusk.tag, "tusk");
+  assert.equal(local.signal.aborted, false);
+  const cancelled = cancelJob("shared-job-id", { tag: "tusk" });
+  assert.ok(cancelled.ok);
+  assert.equal(tusk.signal.aborted, true);
+  assert.equal(local.signal.aborted, false);
+  local.finish();
+  tusk.finish();
+});
