@@ -98,6 +98,8 @@ test("signing and notarization are gated on the exact secret names", () => {
   const sign = workflow.slice(workflow.indexOf("\n  sign:"), workflow.indexOf("\n  unsigned-path-contract:"));
   assert.doesNotMatch(sign, /npm ci/);
   assert.match(sign, /persist-credentials: false/);
+  assert.match(sign, /merge-base --is-ancestor/);
+  assert.match(sign, /fetch-depth: 0/);
   assert.match(sign, /macos-signing-keychain\.sh setup/);
   assert.match(sign, /macos-signing-keychain\.sh unlock/);
   assert.ok(
