@@ -346,4 +346,9 @@ test("docs list every secret and the GitHub update call", () => {
   assert.ok(privacy.includes("latest-mac.yml"));
   assert.ok(docs.includes("beta-mac.yml"));
   assert.ok(privacy.includes("6 hours"));
+  assert.ok(docs.includes("minimumSystemVersion"));
+  assert.ok(docs.includes("13.0.0"));
+  assert.ok(docs.includes("First signed release dry run"));
+  assert.ok(docs.includes("merge-base --is-ancestor"));
+  assert.ok(docs.includes("There is **no** `.blockmap`"));
 });

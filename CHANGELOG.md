@@ -30,6 +30,7 @@
 
 ### Added
 - **Tusk no-key UX** — When no Anthropic, OpenAI, or OpenRouter key is set, Slack paste and `@tusk` Q&A post a threaded setup notice (once per channel per 6 hours, also under the global rate limit) with the three signup links. The watch digest pauses with that reason instead of spending video tries. Settings and the tray show **AI key missing** and open those same https URLs via `shell.openExternal`. `/tusk status` reports `AI key: set` or `AI key: missing` and never the value.
+- **First signed-release dry-run plan** — `docs/signing-and-updates.md` lists the throwaway `v*-beta.*` steps, Gatekeeper checks, `beta.0` → `beta.1` update, rollback, and the blockers (ancestry, tag equals version, drafts, no blockmap).
 - **Tusk M4 watchlist digest** — Settings › Slack (Tusk) accepts YouTube channel / playlist IDs or `videos.xml` URLs and a digest channel. Tusk polls the public Atom feed (ETag / If-Modified-Since), stores seen video IDs on disk (`0600`), and posts one escaped digest to that allowlisted channel. First poll seeds history. Signed-in library captures are skipped.
 
 ## 2026-10-08

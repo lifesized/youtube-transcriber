@@ -190,6 +190,35 @@ Electron 44 dropped macOS 12. The v44.0.0 notes say: “macOS 13 (Ventura) or la
 - `scripts/macos-update-artifacts.sh` writes the same value as `minimumSystemVersion` in `beta-mac.yml` and `latest-mac.yml` (via `renderUpdateYml` in `electron/update-feed.js`).
 - The in-app `isUpdateSupported` override still rejects a non-beta version, and also runs electron-updater 6.8.9’s stock check: if `updateInfo.minimumSystemVersion` is set and `semver.lt(os.release(), minimumSystemVersion)`, the update is skipped. A compare error fails open (`AppUpdater.checkIfUpdateSupported`). `os.release()` on macOS is the Darwin kernel (Ventura is 22.x), not the marketing version; that is the same comparison electron-updater itself uses.
 
+## First signed release dry run
+
+Do this once James’s Developer ID certificate is in the `release` Environment secrets and `SIGNING_ENABLED` is `true`. Do **not** tag from a feature PR. This is a throwaway prerelease on `beta/electron-menubar`.
+
+1. **Bump and land on beta first.** `package.json` `version` must equal the tag without the `v`. The release job exits if they differ (`tag $TAG does not match package.json version`). Today the version is `0.2.0-beta.1`, so a literal `v0.2.0-beta.0` tag will fail unless you first set `version` to `0.2.0-beta.0` and merge that to `beta/electron-menubar`. For a two-step update test, use two unused `X.Y.Z-beta.N` values (example: `0.2.0-beta.0` then `0.2.0-beta.1`, or the next free pair if those are taken).
+2. **Push the tag on a SHA that is already on beta.** Both `sign` and `release` run `git merge-base --is-ancestor "$GITHUB_SHA" origin/beta/electron-menubar`. Tagging a feature-branch commit that is not an ancestor of `beta/electron-menubar` fails that check. After the version bump is on beta: `git tag v0.2.0-beta.0 && git push origin v0.2.0-beta.0`. The tag must match `v*-beta.*` (Environment + tag ruleset). Only James can create it; `gh release create` cannot create the tag.
+3. **Approve both `release` Environment deployments** (sign, then release) when GitHub asks.
+4. **Confirm sign / notarize / staple succeeded** on the sign job. The draft prerelease must contain: signed `.dmg`, update `.zip`, `beta-mac.yml` (the file the app requests), `latest-mac.yml` (404 fallback), and `SHA256SUMS`. There is **no** `.blockmap`: `macos-update-artifacts.sh` leaves `BLOCKMAP` empty because the sign job does not run `app-builder-bin`. Do not fail the dry run looking for one.
+5. **Publish the draft.** The release job creates a **draft** prerelease. `GitHubProvider` reads `releases.atom`, which omits drafts, so electron-updater will not see it until James publishes it from the GitHub Releases UI.
+6. **Gatekeeper checks** on a Mac (after mounting the DMG or installing the app):
+
+   ```bash
+   spctl --assess --type execute --verbose /Applications/Transcriber.app
+   codesign --verify --deep --strict --verbose=2 /Applications/Transcriber.app
+   xcrun stapler validate /Applications/Transcriber.app
+   ```
+
+7. **Update path.** Install the `beta.0` build, then land and tag `beta.1` the same way (version bump on beta, tag, approve, **publish** the second draft). Confirm the installed `beta.0` app offers **Restart to Update** and installs `beta.1`.
+8. **Roll back.** Delete both GitHub prereleases and both tags (`gh release delete v0.2.0-beta.0 --yes` then `git push origin :refs/tags/v0.2.0-beta.0`, same for `beta.1`). The tag ruleset restricts deletions to James.
+
+### What blocks a dry run today
+
+- **Apple cert not in yet.** Until the Environment secrets exist and `SIGNING_ENABLED` is `true`, `sign` and `release` are skipped.
+- **Ancestry.** The tagged SHA must already be on `beta/electron-menubar`. A tag on this PR branch alone will fail `merge-base --is-ancestor`.
+- **Tag equals `v${package.json.version}`.** `v0.2.0-beta.0` is only valid after `package.json` is `0.2.0-beta.0` on that SHA. The current tree is `0.2.0-beta.1`.
+- **Tag format / ruleset.** Pattern is `v*-beta.*`. Push the tag first; only James can create or delete it.
+- **Drafts are invisible to the updater.** Publishing is a required manual step before the `beta.0` → `beta.1` check.
+- **No blockmap.** Expected artifacts are dmg, zip, `beta-mac.yml`, `latest-mac.yml`, `SHA256SUMS` only.
+
 ## Native host after a signed install
 
 Drag-to-Applications lands at `/Applications/Transcriber.app`. That is already the app host Start fallback and the helper's destination. Pairing still writes `com.transcribed.app.host` manifests. A packaged launch rewrites the wrapper only when the app is running from `/Applications` or from the already-recorded install path — never from `~/Downloads`, `/Volumes`, or App Translocation.
