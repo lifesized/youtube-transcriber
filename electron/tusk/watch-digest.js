@@ -60,10 +60,14 @@ function clipSummary(raw, max) {
   return `${escaped.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
 }
 
+function escapeSlackBold(value) {
+  return escapeSlackMrkdwn(value).replace(/[*_]/g, (ch) => `\\${ch}`);
+}
+
 function formatDigestMessage(items, maxSummary) {
   const blocks = ["*Tusk watch digest*"];
   for (const item of items) {
-    const title = escapeSlackMrkdwn(item.title || "Video");
+    const title = escapeSlackBold(item.title || "Video");
     const url = item.url || watchUrlForVideoId(item.videoId);
     const summary = item.summary ? clipSummary(item.summary, maxSummary) : "";
     blocks.push(["", `*${title}*`, escapeSlackMrkdwn(url), summary].filter(Boolean).join("\n"));

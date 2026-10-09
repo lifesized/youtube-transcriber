@@ -51,6 +51,8 @@ test("digest titles and URLs are escaped; hostile titles cannot ping", () => {
   assert.doesNotMatch(text, /<@Uevil>/);
   assert.doesNotMatch(text, /<https:\/\/evil\|Click>/);
   assert.match(text, /https:\/\/www\.youtube\.com\/watch\?v=dQw4w9WgXcQ/);
+  const starred = formatDigestMessage([{ title: "foo*bar_baz", url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" }], 400);
+  assert.match(starred, /\*foo\\\*bar\\_baz\*/);
 });
 
 test("first poll seeds seen videos and does not digest them", async () => {
@@ -245,6 +247,41 @@ test("tick always clears the running flag after a thrown poll", async () => {
     await assert.rejects(() => digest.tick(), /boom/);
     assert.equal(polls, 2, "running must reset so the next tick can run");
     digest.stop();
+  } finally {
+    cleanup();
+  }
+});
+
+test("queue-full and failed transcripts stay unpublished for a later retry", async () => {
+  const { seen, cleanup } = seenInDir();
+  try {
+    seen.rememberVideos([
+      { videoId: VIDEO, title: "Demo", published: "2026-10-09T00:00:00Z" },
+      { videoId: "oHg5SJYRHA0", title: "Fail", published: "2026-10-09T00:01:00Z" },
+    ]);
+    const digest = createWatchDigest({
+      seen,
+      runJob: async (key) => {
+        if (key.includes(VIDEO)) return { skipped: "queue_full" };
+        throw new Error("transcript failed");
+      },
+      slackApi: {
+        postMessage: async () => {
+          throw new Error("must not post");
+        },
+      },
+      config: {
+        enabled: true,
+        botToken: "xoxb-test",
+        digestChannel: "C01234567",
+        channelAllowlist: ["C01234567"],
+        digestIntervalMs: 1,
+      },
+    });
+    const result = await digest.digestOnce({ force: true });
+    assert.equal(result.skipped, "no_items");
+    assert.equal(seen.isPosted(VIDEO), false);
+    assert.equal(seen.isPosted("oHg5SJYRHA0"), false);
   } finally {
     cleanup();
   }
