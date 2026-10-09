@@ -26,7 +26,7 @@ Do **not** set `SIGNING_ENABLED` until the Environment exists and is protected. 
 4. **Set the repository variable** `SIGNING_ENABLED` to `true` (Settings → Secrets and variables → Actions → Variables).
 5. **Push the first tag** `v0.2.0-beta.1` (or the current `package.json` version). Do this *after* the ruleset is active.
 
-Also do these repo settings once. They are not required for the first signed build, but they are the intended posture:
+Also do these repo settings once. They are required before setting `SIGNING_ENABLED`:
 
 - **Environment `release` → Prevent self-review: leave it OFF.** This is the Environment checkbox (Settings → Environments → `release`), not a branch rule. James is the only reviewer and must be able to approve a `release` deployment he started.
 - **Branch rule “Require approval from someone other than the last pusher”: leave it OFF.** That option lives under “Require a pull request before merging” on `beta/electron-menubar`. Turning it on would lock the branch because there is no second reviewer.

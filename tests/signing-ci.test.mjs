@@ -324,6 +324,8 @@ test("docs list every secret and the GitHub update call", () => {
   assert.doesNotMatch(docs, /beta-v\*/);
   assert.ok(docs.includes("environment: release"));
   assert.ok(docs.includes("SIGNING_ENABLED"));
+  assert.ok(docs.includes("required before setting `SIGNING_ENABLED`"));
+  assert.doesNotMatch(docs, /not required for the first signed build/);
   assert.ok(docs.includes("Prevent self-review: leave it OFF"));
   assert.ok(docs.includes("Require approval from someone other than the last pusher"));
   assert.ok(docs.includes("leave it OFF"));

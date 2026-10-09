@@ -4,7 +4,7 @@
 
 ### Security
 - **Signing keychain re-unlocks before DMG codesign** — `notarytool --wait` can exceed 15 minutes, so the sign job unlocks the temporary keychain immediately before `macos-codesign-dmg.sh` and uses `-lut 3600` as a backstop. The `keychain.password` file is deleted after that unlock.
-- **Quit-and-install stops Tusk** — Restart to Update awaits `tuskManager.stop()` before Next is stopped, so the Slack runtime does not survive the swap.
+- **Quit-and-install stops Tusk without blocking install** — Restart to Update still calls `tuskManager.stop()`, but a throw or ~5s hang cannot skip Next stop or the install. `installingUpdate` is set only at install time so a failed hook still lets a normal Quit tear down Tusk and the server.
 - **Sign job requires the SHA on beta** — the same `git merge-base --is-ancestor` check as the release job.
 - **Tusk M-1 posting** — Progress `postOrUpdate` sends the bot token. Slack `ok: false` on HTTP 200 throws in `postMessage`, `updateMessage`, and `uploadThreadFile`, so a missing `ts` cannot be handed to `chat.update`.
 - **Tusk M-2 markup** — Video titles in the transcript `initial_comment` and failure `detail` are passed through `escapeSlackMrkdwn`, so `<!channel>`, `<@U…>`, and `<https://evil|Click>` stay literal.
@@ -16,7 +16,7 @@
 - **Tusk info hardening** — Bullet lists are escaped once. File uploads use `redirect: "error"` and refuse `upload_url` values with userinfo or any port. Prompts wrap question and transcript in data delimiters. `is_ext_shared_channel` is denied unless the channel is allowlisted. An empty `Authorization` header is rejected on Settings writes.
 
 ### Changed
-- **James docs name the two self-review settings separately** — Environment `release` → Prevent self-review stays OFF; the `beta/electron-menubar` branch rule “Require approval from someone other than the last pusher” stays OFF.
+- **James docs name the two self-review settings separately** — Environment `release` → Prevent self-review stays OFF; the `beta/electron-menubar` branch rule “Require approval from someone other than the last pusher” stays OFF. Those repo settings are required before setting `SIGNING_ENABLED`.
 
 ### Added
 - **Tusk M4 watchlist digest** — Settings › Slack (Tusk) accepts YouTube channel / playlist IDs or `videos.xml` URLs and a digest channel. Tusk polls the public Atom feed (ETag / If-Modified-Since), stores seen video IDs on disk (`0600`), and posts one escaped digest to that allowlisted channel. First poll seeds history. Signed-in library captures are skipped.
