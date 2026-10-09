@@ -161,6 +161,39 @@ test("no LLM configured uploads the transcript and shows the setup hint", async 
   assert.equal(last[1].text.includes(BOT), false);
 });
 
+test("hostile video titles are escaped in the Slack file comment", async () => {
+  const hostile = "<!channel> <@Uevil> <https://evil.example|Click>";
+  const { slack, pipeline } = mocks({
+    createTranscript: async () => ({ ...VIDEO, title: hostile }),
+  });
+  const result = await pipeline.handleSupportedLink(
+    event({ text: "transcript https://youtu.be/dQw4w9WgXcQ" })
+  );
+  assert.equal(result.mode, "transcript");
+  const upload = slack.calls.find(([kind]) => kind === "upload");
+  assert.ok(upload);
+  assert.equal(upload[1].initialComment.includes("<!channel>"), false);
+  assert.equal(upload[1].initialComment.includes("<@Uevil>"), false);
+  assert.equal(upload[1].initialComment.includes("<https://evil.example|Click>"), false);
+  assert.match(upload[1].initialComment, /&lt;!channel&gt;/);
+  assert.match(upload[1].initialComment, /&lt;@Uevil&gt;/);
+});
+
+test("failure detail is escaped before it is posted to Slack", async () => {
+  const { slack, pipeline } = mocks({
+    createTranscript: async () => {
+      throw new LocalApiError({
+        status: 422,
+        message: "<!channel> captions <https://evil.example|no>",
+      });
+    },
+  });
+  await pipeline.handleSupportedLink(event());
+  const last = slack.calls.filter((c) => c[0] === "update" || c[0] === "post").pop();
+  assert.equal(last[1].text.includes("<!channel>"), false);
+  assert.equal(last[1].text.includes("<https://evil.example|no>"), false);
+});
+
 test("transcript-file mode uploads via getUploadURLExternal helper", async () => {
   const { slack, local, pipeline } = mocks();
   let summarized = false;

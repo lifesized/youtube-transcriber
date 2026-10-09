@@ -125,14 +125,14 @@ function createPipeline(options = {}) {
         segments,
       }),
       initialComment: video.title
-        ? `Transcript for ${video.title}`
+        ? `Transcript for ${escapeSlackMrkdwn(video.title)}`
         : "Transcript",
     });
   }
 
   async function failCard(card, err) {
     const mapped = classifyLocalFailure(err);
-    const detail = mapped.message;
+    const detail = escapeSlackMrkdwn(mapped.message);
     try {
       if (card.replyTs) {
         await postOrUpdate(card, "failed", { detail });
