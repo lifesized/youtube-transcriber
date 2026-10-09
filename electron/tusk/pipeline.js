@@ -85,6 +85,7 @@ function createPipeline(options = {}) {
 
   async function postOrUpdate(card, stage, extra = {}) {
     const payload = {
+      botToken,
       channel: card.channel,
       text: progressText({
         stage,
@@ -103,10 +104,12 @@ function createPipeline(options = {}) {
     };
     if (card.replyTs) {
       const updated = await slack.updateMessage({ ...payload, ts: card.replyTs });
-      return updated && updated.ts ? updated.ts : card.replyTs;
+      if (!updated || !updated.ts) throw new Error("slack_update_missing_ts");
+      return updated.ts;
     }
     const posted = await slack.postMessage({ ...payload, threadTs: card.threadTs });
-    return posted && posted.ts ? posted.ts : null;
+    if (!posted || !posted.ts) throw new Error("slack_post_missing_ts");
+    return posted.ts;
   }
 
   async function uploadTranscript(card, video, segments) {

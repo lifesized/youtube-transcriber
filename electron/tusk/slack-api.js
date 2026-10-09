@@ -27,17 +27,24 @@ function isSlackFileUploadUrl(url) {
 }
 
 async function parseSlackResponse(res) {
+  let body = null;
+  try {
+    body = await res.json();
+  } catch {
+    body = null;
+  }
+  const slackError = body && body.error;
   if (!res.ok) {
-    let slackError;
-    try {
-      const responseBody = await res.json();
-      slackError = responseBody && responseBody.error;
-    } catch {
-      // Non-JSON body
-    }
     throw new SlackApiError({ status: res.status, slackError });
   }
-  return res.json();
+  if (!body || body.ok === false) {
+    throw new SlackApiError({
+      status: res.status,
+      slackError: slackError || "unknown_error",
+      message: `Slack API error (${slackError || "unknown_error"})`,
+    });
+  }
+  return body;
 }
 
 async function slackJson(url, botToken, body) {
@@ -109,10 +116,18 @@ async function uploadThreadFile(args) {
     }
   );
   if (!uploadUrl.ok || !uploadUrl.upload_url || !uploadUrl.file_id) {
-    return { ok: false, error: uploadUrl.error || "slack_upload_url_failed" };
+    throw new SlackApiError({
+      status: 200,
+      slackError: uploadUrl.error || "slack_upload_url_failed",
+      message: `Slack API error (${uploadUrl.error || "slack_upload_url_failed"})`,
+    });
   }
   if (!isSlackFileUploadUrl(uploadUrl.upload_url)) {
-    return { ok: false, error: "invalid_upload_url" };
+    throw new SlackApiError({
+      status: 200,
+      slackError: "invalid_upload_url",
+      message: "Slack API error (invalid_upload_url)",
+    });
   }
   const upload = await fetch(uploadUrl.upload_url, {
     method: "POST",

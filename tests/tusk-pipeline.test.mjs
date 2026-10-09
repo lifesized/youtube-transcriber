@@ -258,6 +258,80 @@ test("thread Q&A without a remembered video does not call the local API", async 
   assert.match(last[1].text, /Paste a supported link first/);
 });
 
+test("real slack-api.js sends Bearer botToken, hands off ts, and throws on ok:false", async () => {
+  const slackApi = require(path.join(root, "electron/tusk/slack-api.js"));
+  const calls = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    const path = String(url);
+    if (path.includes("chat.postMessage")) {
+      return { ok: true, status: 200, json: async () => ({ ok: true, ts: "1710000000.000200" }) };
+    }
+    if (path.includes("chat.update")) {
+      const body = JSON.parse(init.body);
+      return { ok: true, status: 200, json: async () => ({ ok: true, ts: body.ts }) };
+    }
+    if (path.includes("reactions.add")) {
+      return { ok: true, status: 200, json: async () => ({ ok: true }) };
+    }
+    return { ok: true, status: 200, json: async () => ({ ok: true }) };
+  };
+  try {
+    const pipeline = createPipeline({
+      slackApi,
+      localClient: {
+        createTranscript: async () => VIDEO,
+        createSummary: async () => ({
+          summary_md: "*✦ Summary*\nAdds Slack OAuth support.",
+          cached: false,
+        }),
+      },
+      botToken: BOT,
+    });
+    const result = await pipeline.handleSupportedLink(event());
+    assert.equal(result.ok, true);
+    const posted = calls.find((c) => c.url.includes("chat.postMessage"));
+    assert.ok(posted);
+    assert.equal(posted.init.headers.Authorization, `Bearer ${BOT}`);
+    assert.equal(posted.init.headers.Authorization.includes("undefined"), false);
+    const updated = calls.filter((c) => c.url.includes("chat.update"));
+    assert.ok(updated.length >= 1);
+    for (const call of updated) {
+      assert.equal(call.init.headers.Authorization, `Bearer ${BOT}`);
+      assert.equal(JSON.parse(call.init.body).ts, "1710000000.000200");
+    }
+
+    globalThis.fetch = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: false, error: "invalid_auth" }),
+    });
+    await assert.rejects(
+      () => slackApi.postMessage({ botToken: BOT, channel: "C01234567", text: "hi" }),
+      (err) => err && err.slackError === "invalid_auth"
+    );
+    await assert.rejects(
+      () => slackApi.updateMessage({ botToken: BOT, channel: "C01234567", ts: "1.2", text: "hi" }),
+      (err) => err && err.slackError === "invalid_auth"
+    );
+    await assert.rejects(
+      () =>
+        slackApi.uploadThreadFile({
+          botToken: BOT,
+          channel: "C01234567",
+          threadTs: "1.1",
+          filename: "t.txt",
+          title: "t",
+          content: "hi",
+        }),
+      (err) => err && err.slackError === "invalid_auth"
+    );
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 test("job gate dedupes one in-flight job per message and caps concurrency at 2", async () => {
   const gate = createJobGate({ concurrency: 2, timeoutMs: 5_000 });
   let started = 0;
