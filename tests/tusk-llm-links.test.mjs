@@ -50,6 +50,42 @@ test("only the three https signup URLs are allowed for openExternal", async () =
   );
   assert.equal(await links.openAllowedLlmKeyUrl(shell, "javascript:alert(1)"), false);
   assert.deepEqual(opened, [allowed[0]]);
+
+  const mixed = [];
+  const mixedShell = { openExternal: async (url) => mixed.push(url) };
+  assert.equal(
+    await links.openAllowedLlmKeyUrl(mixedShell, "https://Console.Anthropic.com/settings/keys"),
+    true
+  );
+  assert.deepEqual(mixed, [allowed[0]]);
+  assert.equal(links.canonicalLlmKeyUrl("https://Console.Anthropic.com/settings/keys"), allowed[0]);
+});
+
+test("no-key cooldown map is bounded (LRU prune)", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "tusk-nokey-lru-"));
+  let clock = 1_000;
+  try {
+    const notice = createNoKeyNotice({
+      stateDir: dir,
+      cooldownMs: 6 * 60 * 60 * 1000,
+      maxChannels: 3,
+      now: () => clock,
+    });
+    notice.markPosted("C1");
+    clock += 1;
+    notice.markPosted("C2");
+    clock += 1;
+    notice.markPosted("C3");
+    clock += 1;
+    notice.markPosted("C4");
+    const saved = JSON.parse(readFileSync(notice.path(), "utf8"));
+    assert.equal(Object.keys(saved.channels).length, 3);
+    assert.equal(saved.channels.C1, undefined);
+    assert.ok(saved.channels.C2);
+    assert.ok(saved.channels.C4);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("no-key notice persists per channel with 0600 and a 6h cooldown", () => {

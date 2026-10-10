@@ -16,18 +16,24 @@ const ALLOWED_LLM_KEY_ORIGINS = new Set([
   "https://openrouter.ai",
 ]);
 
-function isAllowedLlmKeyUrl(value) {
+function canonicalLlmKeyUrl(value) {
   let parsed;
   try {
     parsed = new URL(String(value || ""));
   } catch {
-    return false;
+    return null;
   }
-  if (parsed.protocol !== "https:") return false;
-  if (parsed.username || parsed.password || parsed.port) return false;
-  if (!LLM_KEY_LINKS.some((link) => link.url === parsed.href)) return false;
+  if (parsed.protocol !== "https:") return null;
+  if (parsed.username || parsed.password || parsed.port) return null;
+  const match = LLM_KEY_LINKS.find((link) => link.url === parsed.href);
+  if (!match) return null;
   const origin = `${parsed.protocol}//${parsed.hostname}`;
-  return ALLOWED_LLM_KEY_ORIGINS.has(origin);
+  if (!ALLOWED_LLM_KEY_ORIGINS.has(origin)) return null;
+  return match.url;
+}
+
+function isAllowedLlmKeyUrl(value) {
+  return Boolean(canonicalLlmKeyUrl(value));
 }
 
 function noKeySlackText() {
@@ -39,10 +45,11 @@ function noKeySlackText() {
 }
 
 async function openAllowedLlmKeyUrl(shell, url) {
-  if (!isAllowedLlmKeyUrl(url)) return false;
+  const canonical = canonicalLlmKeyUrl(url);
+  if (!canonical) return false;
   if (!shell || typeof shell.openExternal !== "function") return false;
   try {
-    await shell.openExternal(url);
+    await shell.openExternal(canonical);
     return true;
   } catch {
     return false;
@@ -75,6 +82,7 @@ module.exports = {
   NO_KEY_COPY,
   LLM_KEY_LINKS,
   ALLOWED_LLM_KEY_ORIGINS,
+  canonicalLlmKeyUrl,
   isAllowedLlmKeyUrl,
   noKeySlackText,
   openAllowedLlmKeyUrl,

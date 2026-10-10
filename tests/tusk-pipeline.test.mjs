@@ -224,6 +224,26 @@ test("no-key Slack notice posts at most once per channel per cooldown and respec
     ([kind, args]) => kind === "post" && /Anthropic console/.test(args.text)
   );
   assert.equal(blockedNotices.length, 0);
+
+  clock += 6 * 60 * 60 * 1000 + 1;
+  const allowAllLimiter = { allowAll: () => false, allowGlobal: () => true };
+  const qaBlocked = mocks(noKey, {}, { noKeyNotice: notice, rateLimit: allowAllLimiter });
+  qaBlocked.pipeline.rememberThread(
+    { channel: "C01234567", threadTs: "1710000000.000100", sourceUrl: VIDEO.videoUrl },
+    VIDEO
+  );
+  await qaBlocked.pipeline.handleThreadQuestion({
+    channel: "C01234567",
+    threadTs: "1710000000.000100",
+    ts: "1710000000.000300",
+    text: "<@Ubot> what was the decision?",
+    botUserId: "Ubot",
+    user: "Ujames",
+  });
+  const plain = qaBlocked.slack.calls.filter(
+    ([kind, args]) => kind === "post" && /Tusk needs an AI key/.test(args.text)
+  );
+  assert.equal(plain.length, 0, "plain no-key reply must go through rateLimit.allowAll");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -106,12 +106,23 @@ function createPipeline(options = {}) {
   const noKeyNotice = options.noKeyNotice || createNoKeyNotice();
   const rateLimit = options.rateLimit;
 
-  async function maybePostNoKeyNotice(channel, threadTs) {
+  function allowNoKeyReply(channel, userId) {
+    if (!rateLimit) return true;
+    if (typeof rateLimit.allowAll === "function") {
+      return rateLimit.allowAll({ channel, userId });
+    }
+    if (typeof rateLimit.allowGlobal === "function") {
+      return rateLimit.allowGlobal();
+    }
+    return true;
+  }
+
+  async function maybePostNoKeyNotice(channel, threadTs, userId) {
     if (!channel || !threadTs) return false;
     if (typeof noKeyNotice.shouldPost === "function" && !noKeyNotice.shouldPost(channel)) {
       return false;
     }
-    if (rateLimit && typeof rateLimit.allowGlobal === "function" && !rateLimit.allowGlobal()) {
+    if (!allowNoKeyReply(channel, userId)) {
       return false;
     }
     try {
@@ -269,7 +280,7 @@ function createPipeline(options = {}) {
         card.replyTs = await postOrUpdate(card, "uploading", { detail: COPY.no_llm });
         await uploadTranscript(card, video, segments);
         await postOrUpdate(card, "done", { detail: COPY.no_llm });
-        await maybePostNoKeyNotice(card.channel, card.threadTs);
+        await maybePostNoKeyNotice(card.channel, card.threadTs, card.user || card.userId);
         rememberThread(card, video);
         return { ok: true, mode: "transcript", reason: "no_llm" };
       }
@@ -366,8 +377,11 @@ function createPipeline(options = {}) {
       return { ok: true, mode: "qa", transcriptId: remembered.transcriptId };
     } catch (err) {
       if (isNoLlmError(err)) {
-        const posted = await maybePostNoKeyNotice(channel, threadTs);
+        const posted = await maybePostNoKeyNotice(channel, threadTs, evt && (evt.user || evt.userId));
         if (!posted) {
+          if (!allowNoKeyReply(channel, evt && (evt.user || evt.userId))) {
+            return { ok: false, error: "no_llm" };
+          }
           await slack.postMessage({
             botToken,
             channel,
