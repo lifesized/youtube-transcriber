@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { chmodSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,6 +9,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const helpers = require(path.join(root, "electron/helpers.js"));
+const tokens = require(path.join(root, "lib/helper-tokens.js"));
 
 const APP = "/Applications/Transcriber.app/Contents/MacOS/Transcriber";
 const EXE = "/Users/me/Library/Application Support/Transcriber/helpers/notes/bin/helper";
@@ -102,4 +105,56 @@ test("running PID must satisfy codesign --verify --strict -R for the Team ID", (
     helpers.verifyRunningPid(4242, "ABCD123456", () => ({ status: 1, stdout: "", stderr: "mismatch" })),
     false
   );
+});
+
+test("signature mismatch kills the process group and revokes the token", () => {
+  const dir = path.join(tmpdir(), `helper-pid-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  mkdirSync(dir, { recursive: true });
+  const stateDir = path.join(dir, "state");
+  mkdirSync(stateDir, { recursive: true });
+  const helperDir = path.join(stateDir, "helpers", "notes");
+  mkdirSync(path.join(helperDir, "bin"), { recursive: true });
+  chmodSync(helperDir, 0o755);
+  writeFileSync(path.join(helperDir, "bin", "helper"), "#!/bin/sh\n");
+  chmodSync(path.join(helperDir, "bin", "helper"), 0o755);
+  writeFileSync(
+    path.join(helperDir, "manifest.json"),
+    JSON.stringify({ id: "notes", displayName: "Notes", executable: "bin/helper", version: "1.0.0" })
+  );
+  const killed = [];
+  let minted = "";
+  const manager = helpers.createHelperManager({
+    stateDir,
+    helpersDir: path.join(stateDir, "helpers"),
+    logDir: path.join(dir, "logs"),
+    isPackaged: true,
+    appExecPath: APP,
+    uid: process.getuid(),
+    run: (_bin, args) => {
+      if (args.includes("--pid")) return { status: 1, stdout: "", stderr: "mismatch" };
+      if (args[0] === "--verify") return { status: 0, stdout: "", stderr: "" };
+      return { status: 0, stdout: "", stderr: "TeamIdentifier=ABCD123456\n" };
+    },
+    killProcess: (pid, signal) => killed.push({ pid, signal }),
+    spawn: (_exe, _args, opts) => {
+      minted = opts.env.TRANSCRIBER_HELPER_TOKEN;
+      return { pid: 7777, kill() {}, on() {} };
+    },
+  });
+  try {
+    manager.enable("notes");
+    manager.start("notes");
+    assert.equal(manager.listStatus()[0].state, "error");
+    assert.equal(manager.listStatus()[0].error, "signature_mismatch");
+    assert.deepEqual(killed, [{ pid: -7777, signal: "SIGTERM" }]);
+    assert.equal(
+      tokens.authorizeHelperFromStore(
+        { authorization: `Bearer ${minted}` },
+        { method: "GET", pathname: "/api/summaries", stateDir }
+      ).ok,
+      false
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

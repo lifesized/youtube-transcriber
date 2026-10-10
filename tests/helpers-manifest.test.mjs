@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const helpers = require(path.join(root, "electron/helpers.js"));
+const tokens = require(path.join(root, "lib/helper-tokens.js"));
 
 function tmp() {
   const dir = path.join(tmpdir(), `helpers-manifest-${Date.now()}-${Math.random().toString(16).slice(2)}`);
@@ -97,7 +98,8 @@ test("createHelperManager spawns with empty argv and stops without restart", () 
     JSON.stringify({ id: "notes", displayName: "Notes", executable: "bin/helper", version: "1.0.0" })
   );
   const spawned = [];
-  const child = { kill() { this.killed = true; }, on() {} };
+  const killed = [];
+  const child = { pid: 4242, kill() { this.killed = true; }, on() {} };
   const manager = helpers.createHelperManager({
     stateDir,
     helpersDir: path.join(stateDir, "helpers"),
@@ -105,6 +107,9 @@ test("createHelperManager spawns with empty argv and stops without restart", () 
     port: 19721,
     isPackaged: false,
     uid: process.getuid(),
+    killProcess: (pid, signal) => {
+      killed.push({ pid, signal });
+    },
     spawn: (exe, args, opts) => {
       spawned.push({ exe, args, env: opts.env, detached: opts.detached });
       return child;
@@ -120,9 +125,17 @@ test("createHelperManager spawns with empty argv and stops without restart", () 
     assert.equal(spawned[0].env.TRANSCRIBER_HELPER_TOKEN.length >= 32, true);
     assert.equal(spawned[0].env.TRANSCRIBER_LOCAL_TOKEN, undefined);
     assert.equal(manager.listStatus()[0].state, "running");
+    const minted = spawned[0].env.TRANSCRIBER_HELPER_TOKEN;
     manager.stop("notes");
-    assert.equal(child.killed, true);
+    assert.deepEqual(killed, [{ pid: -4242, signal: "SIGTERM" }]);
     assert.equal(manager.listStatus()[0].state, "stopped");
+    assert.equal(
+      tokens.authorizeHelperFromStore(
+        { authorization: `Bearer ${minted}` },
+        { method: "GET", pathname: "/api/summaries", stateDir }
+      ).ok,
+      false
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

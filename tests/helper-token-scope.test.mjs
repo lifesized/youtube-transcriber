@@ -67,20 +67,37 @@ test("middleware only shape-checks helper bearers and never reads env tokens", (
   }
 });
 
-test("Node handlers only enforce when the Bearer looks like a helper token", () => {
+test("Node gate fails closed for a missing header, garbage Bearer, or Basic", () => {
+  process.env.TRANSCRIBER_LOCAL_TOKEN = MAIN;
   const req = (authorization) => ({
     method: "POST",
     url: "http://127.0.0.1:19721/api/transcripts",
     headers: { get: (name) => (name === "authorization" ? authorization : null) },
   });
-  assert.equal(helperRequest.authorizeLocalOrHelper(req(null), { pathname: "/api/transcripts" }).kind, "local");
-  assert.equal(
-    helperRequest.authorizeLocalOrHelper(req(`Bearer ${"a".repeat(64)}`), {
-      method: "POST",
-      pathname: "/api/transcripts",
-    }).ok,
-    false
-  );
+  try {
+    assert.equal(helperRequest.authorizeLocalOrHelper(req(null), { pathname: "/api/transcripts" }).ok, false);
+    assert.equal(
+      helperRequest.authorizeLocalOrHelper(req("Bearer not-a-token"), { pathname: "/api/transcripts" }).ok,
+      false
+    );
+    assert.equal(
+      helperRequest.authorizeLocalOrHelper(req("Basic dXNlcjpwYXNz"), { pathname: "/api/transcripts" }).ok,
+      false
+    );
+    assert.equal(
+      helperRequest.authorizeLocalOrHelper(req(`Bearer ${MAIN}`), { pathname: "/api/transcripts" }).kind,
+      "local"
+    );
+    assert.equal(
+      helperRequest.authorizeLocalOrHelper(req(`Bearer ${"a".repeat(64)}`), {
+        method: "POST",
+        pathname: "/api/transcripts",
+      }).ok,
+      false
+    );
+  } finally {
+    restoreEnv();
+  }
 });
 
 test("Node handlers re-read the 0600 file: new token after startAll, revoke rejects both", () => {
@@ -122,8 +139,7 @@ test("Node handlers re-read the 0600 file: new token after startAll, revoke reje
   try {
     manager.persistTokens();
     assert.equal(process.env.TRANSCRIBER_HELPER_TOKENS.includes(oldToken), true, "env still holds the pre-start token");
-    const afterPersist = check(oldToken);
-    assert.equal(afterPersist.ok, true);
+    assert.equal(check(oldToken).ok, false, "disabled tokens are not authorized");
 
     manager.enable("notes");
     manager.startAll();
@@ -134,12 +150,61 @@ test("Node handlers re-read the 0600 file: new token after startAll, revoke reje
     assert.equal(check(minted).ok, true, "file re-read accepts the token minted at startAll");
     assert.equal(check(oldToken).ok, false, "pre-start token is no longer in the file");
 
-    tokens.revokeToken("notes", stateDir);
-    assert.equal(check(minted).ok, false);
+    manager.stop("notes");
+    assert.equal(check(minted).ok, false, "stop revokes the token");
     assert.equal(check(oldToken).ok, false);
     assert.doesNotMatch(JSON.stringify(check(minted)), new RegExp(minted));
   } finally {
     rmSync(dir, { recursive: true, force: true });
     restoreEnv();
+  }
+});
+
+test("disable revokes the helper token even if the process is already stopped", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "helper-disable-"));
+  const stateDir = path.join(dir, "state");
+  mkdirSync(stateDir, { recursive: true });
+  const helperDir = path.join(stateDir, "helpers", "notes");
+  mkdirSync(path.join(helperDir, "bin"), { recursive: true });
+  chmodSync(helperDir, 0o755);
+  writeFileSync(path.join(helperDir, "bin", "helper"), "#!/bin/sh\n");
+  chmodSync(path.join(helperDir, "bin", "helper"), 0o755);
+  writeFileSync(
+    path.join(helperDir, "manifest.json"),
+    JSON.stringify({ id: "notes", displayName: "Notes", executable: "bin/helper", version: "1.0.0" })
+  );
+  let minted = "";
+  const manager = helpers.createHelperManager({
+    stateDir,
+    helpersDir: path.join(stateDir, "helpers"),
+    logDir: path.join(dir, "logs"),
+    isPackaged: false,
+    uid: process.getuid(),
+    spawn: (_exe, _args, opts) => {
+      minted = opts.env.TRANSCRIBER_HELPER_TOKEN;
+      return { pid: 99, kill() {}, on() {} };
+    },
+  });
+  try {
+    manager.enable("notes");
+    manager.start("notes");
+    assert.equal(
+      tokens.authorizeHelperFromStore(
+        { authorization: `Bearer ${minted}` },
+        { method: "GET", pathname: "/api/summaries", stateDir }
+      ).ok,
+      true
+    );
+    manager.disable("notes");
+    assert.equal(tokens.isEnabled("notes", stateDir), false);
+    assert.equal(
+      tokens.authorizeHelperFromStore(
+        { authorization: `Bearer ${minted}` },
+        { method: "GET", pathname: "/api/summaries", stateDir }
+      ).ok,
+      false
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
