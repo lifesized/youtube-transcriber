@@ -270,7 +270,7 @@ test("main wires the updater gate and stops Next before quitAndInstall", () => {
   );
   assert.match(
     main,
-    /onInstallFailed:\s*\(\)\s*=>\s*\{[\s\S]*installingUpdate\s*=\s*false/
+    /onInstallFailed:\s*async\s*\(\)\s*=>\s*\{[\s\S]*installingUpdate\s*=\s*false[\s\S]*tuskManager\.sync\(\)/
   );
   assert.ok(main.includes("listExtensionIds"));
   assert.ok(main.includes("shouldRepointNativeHost"));

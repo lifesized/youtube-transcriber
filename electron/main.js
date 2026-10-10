@@ -80,8 +80,15 @@ async function attachUpdaterAfterTray({ extraResources, serverManager }) {
     onReadyToInstall: () => {
       installingUpdate = true;
     },
-    onInstallFailed: () => {
+    onInstallFailed: async () => {
       installingUpdate = false;
+      if (tuskManager) {
+        try {
+          await tuskManager.sync();
+        } catch (error) {
+          console.warn("updater: tusk restart failed:", error && error.message);
+        }
+      }
     },
   });
   if (trayManager) {

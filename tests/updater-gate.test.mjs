@@ -30,6 +30,7 @@ const {
   INITIAL_DELAY_MS,
   INTERVAL_MS,
   BEFORE_QUIT_HOOK_TIMEOUT_MS,
+  INSTALL_WATCHDOG_MS,
 } = require(path.join(root, "electron", "updater.js"));
 const { buildTrayMenuTemplate } = require(
   path.join(root, "electron", "tray-menu.js")
@@ -265,9 +266,11 @@ function quitUpdaterFixture({
   onReadyToInstall,
   onInstallFailed,
   beforeQuitHookTimeoutMs,
+  installWatchdogMs,
   order,
   quitAndInstall,
   start,
+  listeners,
 }) {
   const dir = mkdtempSync(path.join(tmpdir(), "ytt-quit-tusk-"));
   writeFileSync(
@@ -280,6 +283,7 @@ function quitUpdaterFixture({
     resourcesPath: dir,
     signature: developerId,
     beforeQuitHookTimeoutMs,
+    installWatchdogMs,
     serverManager: {
       async stop() {
         order.push("stop-server");
@@ -298,7 +302,9 @@ function quitUpdaterFixture({
       allowDowngrade: true,
       allowPrerelease: false,
       forceDevUpdateConfig: true,
-      on() {},
+      on(event, fn) {
+        if (listeners) listeners[event] = fn;
+      },
       setFeedURL() {},
       quitAndInstall:
         quitAndInstall ||
@@ -307,7 +313,7 @@ function quitUpdaterFixture({
         }),
     }),
   });
-  return { updater, dir };
+  return { updater, dir, listeners };
 }
 
 test("quitAndInstall awaits onBeforeQuitAndInstall before stopping the server", async () => {
@@ -473,6 +479,74 @@ test("quitAndInstall catch resets the flag and restarts the server", async () =>
     ]);
     assert.equal(installing, false);
   } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("error during in-flight install runs the same recovery", async () => {
+  const order = [];
+  const listeners = {};
+  let installing = false;
+  const { updater, dir } = quitUpdaterFixture({
+    order,
+    listeners,
+    quitAndInstall() {
+      order.push("install");
+    },
+    onReadyToInstall: () => {
+      installing = true;
+      order.push("flag");
+    },
+    onInstallFailed: async () => {
+      installing = false;
+      order.push("flag-reset");
+      order.push("start-tusk");
+    },
+  });
+  try {
+    await updater.quitAndInstall();
+    assert.equal(typeof listeners.error, "function");
+    await listeners.error(new Error("Squirrel has not fetched"));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(order, [
+      "stop-server",
+      "flag",
+      "install",
+      "flag-reset",
+      "start-tusk",
+      "start-server",
+    ]);
+    assert.equal(installing, false);
+  } finally {
+    updater.dispose();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("install watchdog recovers if Squirrel never errors", async () => {
+  assert.equal(INSTALL_WATCHDOG_MS, 60 * 1000);
+  const order = [];
+  const { updater, dir } = quitUpdaterFixture({
+    order,
+    installWatchdogMs: 20,
+    quitAndInstall() {
+      order.push("install");
+    },
+    onReadyToInstall: () => order.push("flag"),
+    onInstallFailed: async () => {
+      order.push("flag-reset");
+      order.push("start-tusk");
+    },
+  });
+  try {
+    await updater.quitAndInstall();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.ok(order.includes("install"));
+    assert.ok(order.includes("flag-reset"));
+    assert.ok(order.includes("start-tusk"));
+    assert.ok(order.includes("start-server"));
+  } finally {
+    updater.dispose();
     rmSync(dir, { recursive: true, force: true });
   }
 });
