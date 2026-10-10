@@ -38,6 +38,7 @@ type InstalledHelper = {
   displayName: string;
   version?: string;
   state: string;
+  enabled?: boolean;
 };
 
 const DAILY_LIMIT = 14_400;
@@ -746,39 +747,95 @@ export function SettingsPanel() {
             >
               <div>
                 <p className="text-sm font-semibold text-white/80">{helper.displayName}</p>
-                <p className="text-sm text-[hsl(var(--muted))]">{helper.state}</p>
+                <p className="text-sm text-[hsl(var(--muted))]">
+                  {helper.enabled ? helper.state : "disabled"}
+                </p>
               </div>
-              <button
-                type="button"
-                disabled={helperBusyId === helper.id}
-                aria-busy={helperBusyId === helper.id}
-                onClick={() => {
-                  void (async () => {
-                    setHelperBusyId(helper.id);
-                    try {
-                      const res = await fetch("/api/settings/helpers", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          id: helper.id,
-                          action: helper.state === "running" || helper.state === "starting" ? "stop" : "start",
-                        }),
-                      });
-                      const data = await res.json().catch(() => ({}));
-                      if (res.ok && Array.isArray(data.helpers)) setInstalledHelpers(data.helpers);
-                    } finally {
-                      setHelperBusyId("");
-                    }
-                  })();
-                }}
-                className="h-11 rounded-md bg-[hsl(var(--panel))] px-4 py-3 text-sm font-semibold text-white/90 shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)] disabled:cursor-not-allowed disabled:text-[hsl(var(--muted-2))] disabled:hover:bg-[hsl(var(--panel))]"
-              >
-                {helperBusyId === helper.id
-                  ? "Working…"
-                  : helper.state === "running" || helper.state === "starting"
-                    ? "Stop"
-                    : "Start"}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                {!helper.enabled ? (
+                  <button
+                    type="button"
+                    disabled={helperBusyId === helper.id}
+                    aria-busy={helperBusyId === helper.id}
+                    onClick={() => {
+                      void (async () => {
+                        setHelperBusyId(helper.id);
+                        try {
+                          const res = await fetch("/api/settings/helpers", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ id: helper.id, action: "enable" }),
+                          });
+                          const data = await res.json().catch(() => ({}));
+                          if (res.ok && Array.isArray(data.helpers)) setInstalledHelpers(data.helpers);
+                        } finally {
+                          setHelperBusyId("");
+                        }
+                      })();
+                    }}
+                    className="h-11 rounded-md bg-[hsl(var(--accent))] px-4 py-3 text-sm font-semibold text-black shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] disabled:cursor-not-allowed disabled:text-[hsl(var(--muted-2))]"
+                  >
+                    {helperBusyId === helper.id ? "Working…" : "Enable"}
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      disabled={helperBusyId === helper.id}
+                      aria-busy={helperBusyId === helper.id}
+                      onClick={() => {
+                        void (async () => {
+                          setHelperBusyId(helper.id);
+                          try {
+                            const res = await fetch("/api/settings/helpers", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                id: helper.id,
+                                action: helper.state === "running" || helper.state === "starting" ? "stop" : "start",
+                              }),
+                            });
+                            const data = await res.json().catch(() => ({}));
+                            if (res.ok && Array.isArray(data.helpers)) setInstalledHelpers(data.helpers);
+                          } finally {
+                            setHelperBusyId("");
+                          }
+                        })();
+                      }}
+                      className="h-11 rounded-md bg-[hsl(var(--panel))] px-4 py-3 text-sm font-semibold text-white/90 shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)] disabled:cursor-not-allowed disabled:text-[hsl(var(--muted-2))] disabled:hover:bg-[hsl(var(--panel))]"
+                    >
+                      {helperBusyId === helper.id
+                        ? "Working…"
+                        : helper.state === "running" || helper.state === "starting"
+                          ? "Stop"
+                          : "Start"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={helperBusyId === helper.id}
+                      onClick={() => {
+                        void (async () => {
+                          setHelperBusyId(helper.id);
+                          try {
+                            const res = await fetch("/api/settings/helpers", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ id: helper.id, action: "disable" }),
+                            });
+                            const data = await res.json().catch(() => ({}));
+                            if (res.ok && Array.isArray(data.helpers)) setInstalledHelpers(data.helpers);
+                          } finally {
+                            setHelperBusyId("");
+                          }
+                        })();
+                      }}
+                      className="h-11 rounded-md bg-[hsl(var(--panel))] px-4 py-3 text-sm font-semibold text-white/90 shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] disabled:cursor-not-allowed disabled:text-[hsl(var(--muted-2))]"
+                    >
+                      Disable
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           ))}
         </div>

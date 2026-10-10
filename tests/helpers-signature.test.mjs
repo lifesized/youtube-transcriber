@@ -89,3 +89,17 @@ test("packaged builds fail closed unless the helper Team ID matches the app", ()
     "app_unsigned"
   );
 });
+
+test("running PID must satisfy codesign --verify --strict -R for the Team ID", () => {
+  const ok = helpers.verifyRunningPid(4242, "ABCD123456", (_bin, args) => {
+    assert.deepEqual(args.slice(0, 4), ["--verify", "--strict", "-R", helpers.teamIdRequirement("ABCD123456")]);
+    assert.equal(args.includes("--pid"), true);
+    assert.equal(args.at(-1), "4242");
+    return { status: 0, stdout: "", stderr: "" };
+  });
+  assert.equal(ok, true);
+  assert.equal(
+    helpers.verifyRunningPid(4242, "ABCD123456", () => ({ status: 1, stdout: "", stderr: "mismatch" })),
+    false
+  );
+});

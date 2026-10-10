@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { NextRequest } from "next/server.js";
@@ -11,6 +12,7 @@ const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const scope = require(path.join(root, "lib/helper-scope.js"));
 const tokens = require(path.join(root, "lib/helper-tokens.js"));
+const helpers = require(path.join(root, "electron/helpers.js"));
 const { middleware } = await import("../middleware.ts");
 
 const PORT = 19721;
@@ -42,8 +44,8 @@ function send(url, headers, method = "GET") {
   return { res, passed: res.headers.get("x-middleware-next") === "1" };
 }
 
-test("helper token allows only transcribe, summarize, and non-secret settings read", () => {
-  const helperTok = "h".repeat(64);
+test("middleware only shape-checks helper bearers and never reads env tokens", () => {
+  const helperTok = "a".repeat(64);
   process.env.TRANSCRIBER_HELPER_TOKENS = JSON.stringify([{ id: "notes", token: helperTok }]);
   try {
     const auth = { authorization: `Bearer ${helperTok}`, "sec-fetch-site": "none" };
@@ -54,6 +56,8 @@ test("helper token allows only transcribe, summarize, and non-secret settings re
     assert.equal(send("/api/settings", auth, "PUT").passed, false);
     assert.equal(send("/api/settings/llm", auth).passed, false);
     assert.equal(send("/api/settings/helpers", auth, "POST").passed, false);
+    assert.equal(send("/api/summaries", { authorization: "Bearer not-hex", "sec-fetch-site": "none" }).passed, false);
+    assert.equal(scope.looksLikeHelperToken(`Bearer ${helperTok}`), true);
     assert.deepEqual(scope.stripSecretSettings({ groq_api_key: "••••ab", whisper_enabled: "true" }), {
       whisper_enabled: "true",
     });
@@ -62,23 +66,61 @@ test("helper token allows only transcribe, summarize, and non-secret settings re
   }
 });
 
-test("revoked helper tokens are rejected and values never appear in errors", () => {
-  const dir = mkdtempSync(path.join(tmpdir(), "helper-tok-"));
+test("Node handlers re-read the 0600 file: new token after startAll, revoke rejects both", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "helper-order-"));
+  const stateDir = path.join(dir, "state");
+  mkdirSync(stateDir, { recursive: true });
+  const helperDir = path.join(stateDir, "helpers", "notes");
+  mkdirSync(path.join(helperDir, "bin"), { recursive: true });
+  chmodSync(helperDir, 0o755);
+  writeFileSync(path.join(helperDir, "bin", "helper"), "#!/bin/sh\n");
+  chmodSync(path.join(helperDir, "bin", "helper"), 0o755);
+  writeFileSync(
+    path.join(helperDir, "manifest.json"),
+    JSON.stringify({ id: "notes", displayName: "Notes", executable: "bin/helper", version: "1.0.0" })
+  );
+  const oldToken = tokens.issueToken("notes", stateDir);
+  process.env.TRANSCRIBER_HELPER_TOKENS = JSON.stringify([{ id: "notes", token: oldToken }]);
+  const spawned = [];
+  const child = { pid: 4242, kill() {}, on() {} };
+  const manager = helpers.createHelperManager({
+    stateDir,
+    helpersDir: path.join(stateDir, "helpers"),
+    logDir: path.join(dir, "logs"),
+    port: 19721,
+    isPackaged: false,
+    autostart: true,
+    uid: process.getuid(),
+    spawn: (exe, args, opts) => {
+      spawned.push({ exe, args, env: opts.env });
+      return child;
+    },
+  });
+  function check(token) {
+    return tokens.authorizeHelperFromStore(
+      { authorization: `Bearer ${token}` },
+      { method: "GET", pathname: "/api/summaries", stateDir }
+    );
+  }
   try {
-    const token = tokens.issueToken("notes", dir);
-    assert.equal(tokens.listActiveRecords(dir).length, 1);
-    const allowed = scope.authorizeHelperBearer(
-      { authorization: `Bearer ${token}` },
-      { method: "GET", pathname: "/api/summaries", records: tokens.listActiveRecords(dir) }
-    );
-    assert.equal(allowed.ok, true);
-    tokens.revokeToken("notes", dir);
-    const denied = scope.authorizeHelperBearer(
-      { authorization: `Bearer ${token}` },
-      { method: "GET", pathname: "/api/summaries", records: tokens.listActiveRecords(dir) }
-    );
-    assert.equal(denied.ok, false);
-    assert.doesNotMatch(JSON.stringify(denied), new RegExp(token));
+    manager.persistTokens();
+    assert.equal(process.env.TRANSCRIBER_HELPER_TOKENS.includes(oldToken), true, "env still holds the pre-start token");
+    const afterPersist = check(oldToken);
+    assert.equal(afterPersist.ok, true);
+
+    manager.enable("notes");
+    manager.startAll();
+    assert.equal(spawned.length, 1);
+    const minted = spawned[0].env.TRANSCRIBER_HELPER_TOKEN;
+    assert.notEqual(minted, oldToken);
+    assert.equal(process.env.TRANSCRIBER_HELPER_TOKENS.includes(minted), false, "Next env never receives the new token");
+    assert.equal(check(minted).ok, true, "file re-read accepts the token minted at startAll");
+    assert.equal(check(oldToken).ok, false, "pre-start token is no longer in the file");
+
+    tokens.revokeToken("notes", stateDir);
+    assert.equal(check(minted).ok, false);
+    assert.equal(check(oldToken).ok, false);
+    assert.doesNotMatch(JSON.stringify(check(minted)), new RegExp(minted));
   } finally {
     rmSync(dir, { recursive: true, force: true });
     restoreEnv();

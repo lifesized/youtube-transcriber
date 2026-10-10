@@ -43,7 +43,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
   const id = typeof body.id === "string" ? body.id : "";
-  const action = body.action === "stop" || body.action === "revoke" ? body.action : "start";
+  const allowed = new Set(["start", "stop", "enable", "disable", "revoke"]);
+  const action = allowed.has(body.action || "") ? body.action : "";
+  if (!action) return NextResponse.json({ error: "action is required" }, { status: 400 });
   if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
   try {
     const payload = await requestFromMain("helpers-set", { id, action });

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripSecretSettings } from "@/lib/helper-scope.js";
+import { authorizeLocalOrHelper } from "@/lib/helper-request.js";
 import { prisma } from "@/lib/prisma";
 import {
   encryptApiKeyForStorage,
@@ -20,6 +21,10 @@ const ALLOWED_KEYS = [
 ];
 
 export async function GET(request: NextRequest) {
+  const gate = authorizeLocalOrHelper(request, { method: "GET", pathname: "/api/settings" });
+  if (!gate.ok) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
   try {
     const settings = await prisma.setting.findMany({
       where: { key: { in: ALLOWED_KEYS } },
@@ -31,7 +36,7 @@ export async function GET(request: NextRequest) {
         s.key === "groq_api_key" ? maskApiKeyForResponse(s.value) : s.value;
     }
 
-    if (request.headers.get("x-transcriber-helper")) {
+    if (gate.kind === "helper") {
       return NextResponse.json(stripSecretSettings(result));
     }
 

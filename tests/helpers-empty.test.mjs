@@ -59,6 +59,8 @@ test("Settings Helpers section is omitted unless helpers are installed", () => {
   assert.match(panel, /installedHelpers\.length > 0/);
   assert.match(panel, />Helpers</);
   assert.match(panel, /\/api\/settings\/helpers/);
+  assert.match(panel, /"Enable"/);
+  assert.match(panel, /action: "enable"/);
   const idx = panel.indexOf("/api/settings/helpers");
   const chunk = panel.slice(idx - 80, idx + 220);
   assert.doesNotMatch(chunk, /Authorization/);

@@ -223,7 +223,7 @@ app.whenReady().then(async () => {
     appExecPath: process.execPath,
     onStatus: (list) => trayManager.setHelpers(list),
   });
-  helperManager.syncEnv();
+  helperManager.persistTokens();
   trayManager.setHelpers(helperManager.listStatus());
 
   if (process.platform === "darwin") {
@@ -288,7 +288,7 @@ app.whenReady().then(async () => {
     }
   }
 
-  helperManager.startAll();
+  helperManager.startEnabled();
 
   // Monitor server health
   serverManager.on("status-change", (status) => {

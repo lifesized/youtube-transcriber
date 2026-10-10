@@ -17,6 +17,7 @@ import {
   isLinkedInMediaUrl,
   LinkedInMediaError,
 } from "@/lib/linkedin";
+import { authorizeLocalOrHelper } from "@/lib/helper-request.js";
 
 type ClientSegment = { start: number; duration?: number; text: string };
 
@@ -32,6 +33,10 @@ function isValidClientSegments(value: unknown): value is ClientSegment[] {
 }
 
 export async function POST(request: NextRequest) {
+  const gate = authorizeLocalOrHelper(request, { method: "POST", pathname: "/api/transcripts" });
+  if (!gate.ok) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
   let body: {
     url?: string;
     lang?: string;
