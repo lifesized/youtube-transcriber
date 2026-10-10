@@ -7,9 +7,9 @@ const { getStateDir, getLogDir } = require("../lib/local-api-token.js");
 const {
   issueToken,
   revokeToken,
+  setEnabled,
+  isEnabled,
   listActiveRecords,
-  serializeHelperTokensEnv,
-  ENV_NAME: HELPER_TOKENS_ENV,
 } = require("../lib/helper-tokens.js");
 const { parseCodesignVerbose, appBundleFromExecPath } = require("./code-signature.js");
 
@@ -18,6 +18,11 @@ const MANIFEST_NAME = "manifest.json";
 const ID_RE = /^[a-z][a-z0-9-]{0,62}$/;
 const VERSION_RE = /^[A-Za-z0-9._+-]{1,32}$/;
 const BACKOFF_MS = [1000, 2000, 4000, 8000, 16000, 30000];
+const MAX_MANIFEST_BYTES = 8192;
+const MAX_HELPERS = 8;
+const LOG_ROTATE_BYTES = 1024 * 1024;
+const AUTOSTART_ENV = "TRANSCRIBER_HELPER_AUTOSTART";
+const WRITABLE_MASK = 0o022;
 
 function helpersRoot(stateDir) {
   return path.join(stateDir || getStateDir(), HELPERS_DIR_NAME);
@@ -68,6 +73,19 @@ function validateManifest(raw, dirName) {
   return { ok: true, id, displayName, version, executable };
 }
 
+function validateHelperDir(helperDir, uid = process.getuid && process.getuid()) {
+  let st;
+  try {
+    st = fs.lstatSync(helperDir);
+  } catch {
+    return { ok: false, error: "missing_dir" };
+  }
+  if (!st.isDirectory() || st.isSymbolicLink()) return { ok: false, error: "not_a_dir" };
+  if (typeof uid === "number" && st.uid !== uid) return { ok: false, error: "bad_owner" };
+  if (st.mode & WRITABLE_MASK) return { ok: false, error: "dir_writable" };
+  return { ok: true };
+}
+
 function validateExecutable(helperDir, relative, uid = process.getuid && process.getuid()) {
   const resolved = path.resolve(helperDir, relative);
   let real;
@@ -89,7 +107,7 @@ function validateExecutable(helperDir, relative, uid = process.getuid && process
   if (typeof uid === "number" && st.uid !== uid) {
     return { ok: false, error: "bad_owner" };
   }
-  if (st.mode & 0o002) return { ok: false, error: "world_writable" };
+  if (st.mode & WRITABLE_MASK) return { ok: false, error: "writable" };
   return { ok: true, executable: real };
 }
 
@@ -105,6 +123,20 @@ function teamIdFromPath(target, run) {
   return parseCodesignVerbose(text).teamId || "";
 }
 
+function teamIdRequirement(teamId) {
+  return `=certificate leaf[subject.OU] = "${teamId}"`;
+}
+
+function verifyRunningPid(pid, teamId, run) {
+  if (!pid || !/^[A-Z0-9]{10}$/.test(teamId)) return false;
+  const result = run(
+    "/usr/bin/codesign",
+    ["--verify", "--strict", "-R", teamIdRequirement(teamId), "--pid", String(pid)],
+    { encoding: "utf8" }
+  );
+  return Boolean(result && result.status === 0);
+}
+
 function signatureAllowed(options = {}) {
   if (!options.isPackaged) return { ok: true };
   const run = options.run || spawnSync;
@@ -114,13 +146,21 @@ function signatureAllowed(options = {}) {
   if (!/^[A-Z0-9]{10}$/.test(appTeam)) return { ok: false, error: "app_unsigned" };
   const helperTeam = teamIdFromPath(options.executable, run);
   if (!helperTeam || helperTeam !== appTeam) return { ok: false, error: "signature_mismatch" };
-  return { ok: true };
+  return { ok: true, teamId: appTeam };
 }
 
 function readHelperDir(dirPath, options = {}) {
   const dirName = path.basename(dirPath);
+  const dirCheck = validateHelperDir(dirPath, options.uid);
+  if (!dirCheck.ok) return { ...dirCheck, dirName };
   const manifestPath = path.join(dirPath, MANIFEST_NAME);
-  if (!fs.existsSync(manifestPath)) return { ok: false, error: "missing_manifest", dirName };
+  let st;
+  try {
+    st = fs.statSync(manifestPath);
+  } catch {
+    return { ok: false, error: "missing_manifest", dirName };
+  }
+  if (st.size > MAX_MANIFEST_BYTES) return { ok: false, error: "manifest_too_large", dirName };
   let parsed;
   try {
     parsed = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
@@ -145,11 +185,13 @@ function readHelperDir(dirPath, options = {}) {
     version: manifest.version,
     executable: exe.executable,
     dir: dirPath,
+    teamId: sig.teamId || "",
   };
 }
 
 function discoverHelpers(options = {}) {
   const root = options.helpersDir || helpersRoot(options.stateDir);
+  const cap = Number.isFinite(options.maxHelpers) ? options.maxHelpers : MAX_HELPERS;
   if (!fs.existsSync(root)) return [];
   let names;
   try {
@@ -158,7 +200,8 @@ function discoverHelpers(options = {}) {
     return [];
   }
   const found = [];
-  for (const name of names) {
+  let accepted = 0;
+  for (const name of names.sort()) {
     const dirPath = path.join(root, name);
     let st;
     try {
@@ -167,15 +210,56 @@ function discoverHelpers(options = {}) {
       continue;
     }
     if (!st.isDirectory()) continue;
-    found.push(readHelperDir(dirPath, options));
+    const row = readHelperDir(dirPath, options);
+    if (row.ok) {
+      if (accepted >= cap) {
+        found.push({ ok: false, error: "helper_cap", dirName: name, id: row.id });
+        continue;
+      }
+      accepted += 1;
+    }
+    found.push(row);
   }
   return found;
 }
 
+function rotateHelperLog(file, maxBytes = LOG_ROTATE_BYTES) {
+  let st;
+  try {
+    st = fs.lstatSync(file);
+  } catch {
+    return;
+  }
+  if (st.isSymbolicLink()) {
+    fs.unlinkSync(file);
+    return;
+  }
+  if (!st.isFile() || st.size < maxBytes) return;
+  const rotated = `${file}.1`;
+  try {
+    fs.unlinkSync(rotated);
+  } catch {
+    // no previous rotation
+  }
+  fs.renameSync(file, rotated);
+}
+
 function openHelperLog(id, logDir) {
-  const file = helperLogPath(id, logDir);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const fd = fs.openSync(file, "a", 0o600);
+  const dir = path.join(logDir || getLogDir(), "helpers");
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  try {
+    fs.chmodSync(dir, 0o700);
+  } catch {
+    // Windows may ignore chmod
+  }
+  const file = path.join(dir, `${id}.log`);
+  rotateHelperLog(file);
+  const flags =
+    fs.constants.O_WRONLY |
+    fs.constants.O_CREAT |
+    fs.constants.O_APPEND |
+    (fs.constants.O_NOFOLLOW || 0);
+  const fd = fs.openSync(file, flags, 0o600);
   try {
     fs.fchmodSync(fd, 0o600);
   } catch {
@@ -214,6 +298,10 @@ function createHelperManager(options = {}) {
     clearTimeout: (id) => clearTimeout(id),
   };
   const uid = options.uid;
+  const autostart =
+    options.autostart !== undefined
+      ? Boolean(options.autostart)
+      : isPackaged || process.env[AUTOSTART_ENV] === "1";
   const running = new Map();
   let statusListener = options.onStatus || null;
 
@@ -241,6 +329,7 @@ function createHelperManager(options = {}) {
           id: row.id,
           displayName: row.displayName,
           version: row.version,
+          enabled: isEnabled(row.id, stateDir),
           state: live ? live.state : "stopped",
           error: live && live.error ? live.error : "",
         };
@@ -290,6 +379,17 @@ function createHelperManager(options = {}) {
       stdio: ["ignore", log.fd, log.fd],
     });
     entry.child = child;
+    if (isPackaged) {
+      const appBundle = appBundleFromExecPath(appExecPath);
+      const appTeam = appBundle ? teamIdFromPath(appBundle, run) : "";
+      if (!verifyRunningPid(child && child.pid, appTeam, run)) {
+        stopEntry(entry, { restart: false });
+        entry.state = "error";
+        entry.error = "signature_mismatch";
+        emit();
+        return;
+      }
+    }
     entry.state = "running";
     emit();
     const onExit = (code, signal) => {
@@ -315,7 +415,7 @@ function createHelperManager(options = {}) {
       entry.restartTimer = timers.setTimeout(() => {
         entry.restartTimer = null;
         const latest = listDiscovered().find((row) => row.ok && row.id === helper.id);
-        if (!latest || !entry.wanted) return;
+        if (!latest || !entry.wanted || !isEnabled(helper.id, stateDir)) return;
         spawnOne(latest, entry);
       }, delay);
       emit();
@@ -329,6 +429,7 @@ function createHelperManager(options = {}) {
   }
 
   function start(id) {
+    if (!isEnabled(id, stateDir)) return { ok: false, error: "disabled" };
     const helper = listDiscovered().find((row) => row.ok && row.id === id);
     if (!helper) return { ok: false, error: "not_found" };
     let entry = running.get(id);
@@ -341,7 +442,6 @@ function createHelperManager(options = {}) {
     entry.fails = 0;
     clearRestart(entry);
     spawnOne(helper, entry);
-    syncEnv();
     return { ok: true, state: entry.state };
   }
 
@@ -352,11 +452,29 @@ function createHelperManager(options = {}) {
     return { ok: true, state: "stopped" };
   }
 
-  function startAll() {
+  function enable(id) {
+    setEnabled(id, true, stateDir);
+    emit();
+    return { ok: true, enabled: true, helpers: listStatus() };
+  }
+
+  function disable(id) {
+    stop(id);
+    setEnabled(id, false, stateDir);
+    emit();
+    return { ok: true, enabled: false, helpers: listStatus() };
+  }
+
+  function startEnabled() {
+    if (!autostart) return listStatus();
     for (const row of listDiscovered()) {
-      if (row.ok) start(row.id);
+      if (row.ok && isEnabled(row.id, stateDir)) start(row.id);
     }
     return listStatus();
+  }
+
+  function startAll() {
+    return startEnabled();
   }
 
   function stopAll() {
@@ -364,8 +482,8 @@ function createHelperManager(options = {}) {
     return listStatus();
   }
 
-  function syncEnv() {
-    process.env[HELPER_TOKENS_ENV] = serializeHelperTokensEnv(listActiveRecords(stateDir));
+  function persistTokens() {
+    listActiveRecords(stateDir);
   }
 
   function publicView() {
@@ -385,13 +503,12 @@ function createHelperManager(options = {}) {
         const action = msg.payload && msg.payload.action;
         try {
           if (action === "stop") stop(id);
-          else if (action === "start") start(id);
+          else if (action === "enable") enable(id);
+          else if (action === "disable") disable(id);
           else if (action === "revoke") {
             stop(id);
             revokeToken(id, stateDir);
-            syncEnv();
-          }
-          syncEnv();
+          } else if (action === "start") start(id);
           child.send({ type: "helpers-set-result", requestId: msg.requestId, payload: publicView() });
         } catch (error) {
           child.send({
@@ -409,9 +526,12 @@ function createHelperManager(options = {}) {
     listStatus,
     start,
     stop,
+    enable,
+    disable,
+    startEnabled,
     startAll,
     stopAll,
-    syncEnv,
+    persistTokens,
     attachIpc,
     getPublic: publicView,
     setOnStatus(fn) {
@@ -423,14 +543,22 @@ function createHelperManager(options = {}) {
 module.exports = {
   HELPERS_DIR_NAME,
   MANIFEST_NAME,
+  MAX_MANIFEST_BYTES,
+  MAX_HELPERS,
+  AUTOSTART_ENV,
   helpersRoot,
   helperLogPath,
   validateManifest,
+  validateHelperDir,
   validateExecutable,
   signatureAllowed,
   teamIdFromPath,
+  teamIdRequirement,
+  verifyRunningPid,
   readHelperDir,
   discoverHelpers,
   helperEnv,
+  openHelperLog,
+  rotateHelperLog,
   createHelperManager,
 };

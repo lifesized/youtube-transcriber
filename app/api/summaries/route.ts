@@ -15,8 +15,13 @@ import { SUMMARY_PROMPT_VERSION } from "@/lib/transcript-pipeline";
 import { getSecretsFromMainOrEnv } from "@/lib/electron-ipc.js";
 import { beginServerJob } from "@/lib/in-flight-jobs";
 import { OverrideCapError, takeOverrideSlot } from "@/lib/override-budget";
+import { authorizeLocalOrHelper } from "@/lib/helper-request.js";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const gate = authorizeLocalOrHelper(request, { method: "GET", pathname: "/api/summaries" });
+  if (!gate.ok) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
   try {
     const secrets = await getSecretsFromMainOrEnv();
     const llmReady = Boolean(
@@ -39,6 +44,10 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const gate = authorizeLocalOrHelper(request, { method: "POST", pathname: "/api/summaries" });
+  if (!gate.ok) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
   let body: Record<string, unknown>;
   try {
     body = await request.json();

@@ -1,4 +1,3 @@
-export const HELPER_TOKENS_ENV: string;
 export const HELPER_ALLOWED_ROUTES: Array<{ method: string; pathname: string }>;
 export const SETTINGS_SECRET_KEYS: string[];
 export function normalizePathname(pathname: string | null | undefined): string;
@@ -6,10 +5,12 @@ export function isHelperAllowedRoute(
   method: string | null | undefined,
   pathname: string | null | undefined
 ): boolean;
-export function parseHelperTokensEnv(value: string | null | undefined): Array<{
-  id: string;
-  token: string;
-}>;
+export function looksLikeHelperToken(authorizationHeader: string | null | undefined): boolean;
+export function helperShapeAllowed(
+  headers: { authorization?: string | null },
+  method: string | null | undefined,
+  pathname: string | null | undefined
+): boolean;
 export function matchHelperToken(
   bearer: string | null | undefined,
   records: Array<{ id?: string; token?: string }> | null | undefined,
