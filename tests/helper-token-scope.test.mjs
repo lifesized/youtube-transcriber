@@ -12,6 +12,7 @@ const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const scope = require(path.join(root, "lib/helper-scope.js"));
 const tokens = require(path.join(root, "lib/helper-tokens.js"));
+const helperRequest = require(path.join(root, "lib/helper-request.js"));
 const helpers = require(path.join(root, "electron/helpers.js"));
 const { middleware } = await import("../middleware.ts");
 
@@ -64,6 +65,22 @@ test("middleware only shape-checks helper bearers and never reads env tokens", (
   } finally {
     restoreEnv();
   }
+});
+
+test("Node handlers only enforce when the Bearer looks like a helper token", () => {
+  const req = (authorization) => ({
+    method: "POST",
+    url: "http://127.0.0.1:19721/api/transcripts",
+    headers: { get: (name) => (name === "authorization" ? authorization : null) },
+  });
+  assert.equal(helperRequest.authorizeLocalOrHelper(req(null), { pathname: "/api/transcripts" }).kind, "local");
+  assert.equal(
+    helperRequest.authorizeLocalOrHelper(req(`Bearer ${"a".repeat(64)}`), {
+      method: "POST",
+      pathname: "/api/transcripts",
+    }).ok,
+    false
+  );
 });
 
 test("Node handlers re-read the 0600 file: new token after startAll, revoke rejects both", () => {
