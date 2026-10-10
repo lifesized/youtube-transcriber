@@ -16,10 +16,15 @@ const LEGACY_STATE_FILES = Object.freeze([
   "tusk-watch-seen.json",
   "tusk-no-key-notice.json",
 ]);
-const LEGACY_ENC_KEY = /^slack.*Enc$/i;
+const LEGACY_INTEGRATION_KEY_PREFIXES = Object.freeze(["slack"]);
 
-function isLegacyEncKey(key) {
-  return LEGACY_ENC_KEY.test(String(key || ""));
+function isLegacyIntegrationKey(key) {
+  const name = String(key || "");
+  if (!name) return false;
+  const lower = name.toLowerCase();
+  return LEGACY_INTEGRATION_KEY_PREFIXES.some((prefix) =>
+    lower.startsWith(String(prefix).toLowerCase())
+  );
 }
 
 function unlinkRegularFileNoFollow(filePath) {
@@ -35,14 +40,14 @@ function unlinkRegularFileNoFollow(filePath) {
   return true;
 }
 
-function purgeLegacyEncFields(data) {
+function purgeLegacyIntegrationFields(data) {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     return { next: data, changed: false };
   }
   const next = { ...data };
   let changed = false;
   for (const key of Object.keys(next)) {
-    if (isLegacyEncKey(key)) {
+    if (isLegacyIntegrationKey(key)) {
       delete next[key];
       changed = true;
     }
@@ -84,7 +89,7 @@ function purgeSecretsFile(stateDir) {
     err.code = "CORRUPT_SECRETS";
     throw err;
   }
-  const { next, changed } = purgeLegacyEncFields(parsed);
+  const { next, changed } = purgeLegacyIntegrationFields(parsed);
   if (!changed) return;
   writeFileAtomic(filePath, `${JSON.stringify(next, null, 2)}\n`, 0o600);
 }
@@ -107,9 +112,10 @@ function migrateLegacyIntegrationState(stateDir = getStateDir()) {
 
 module.exports = {
   migrateLegacyIntegrationState,
-  purgeLegacyEncFields,
+  purgeLegacyIntegrationFields,
   unlinkRegularFileNoFollow,
-  isLegacyEncKey,
+  isLegacyIntegrationKey,
+  LEGACY_INTEGRATION_KEY_PREFIXES,
   LEGACY_STATE_FILES,
   MARKER_FILE,
   SECRETS_FILE,
