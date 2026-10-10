@@ -268,6 +268,7 @@ test("dev Stop only signals the process group the host recorded", async () => {
       ELECTRON_RUN_AS_NODE: undefined,
       TRANSCRIBER_STATE_DIR: stateDir,
       TRANSCRIBER_LOG_DIR: path.join(stateDir, "logs"),
+      PORT: String(await freePort()),
     },
     async () => {
       assert.deepEqual(host.stopServer(), { stopped: false, reason: "not_running" });
@@ -280,11 +281,62 @@ test("dev Stop only signals the process group the host recorded", async () => {
         stdio: "ignore",
       });
       const exited = new Promise((resolve) => child.on("exit", resolve));
-      fs.writeFileSync(host.stateFile(), JSON.stringify({ pid: child.pid, startedAt: Date.now() }));
+      const live = host.inspectPidSoon(child.pid) || host.inspectPid(child.pid);
+      assert.ok(live, "can inspect the detached child");
+      fs.writeFileSync(
+        host.stateFile(),
+        JSON.stringify({
+          pid: child.pid,
+          startedAt: Date.now(),
+          startTime: live.startTime,
+          exe: live.exe,
+        })
+      );
       const r = host.stopServer();
       assert.deepEqual(r, { stopped: true, pid: child.pid });
       await exited;
       assert.deepEqual(JSON.parse(fs.readFileSync(host.stateFile(), "utf8")), {});
+
+      const legacy = spawn(process.execPath, ["-e", "setTimeout(()=>{},30000)"], {
+        detached: true,
+        stdio: "ignore",
+      });
+      legacy.unref();
+      fs.writeFileSync(host.stateFile(), JSON.stringify({ pid: legacy.pid, startedAt: Date.now() }));
+      assert.deepEqual(host.stopServer(), { stopped: false, reason: "not_ours" });
+      assert.deepEqual(JSON.parse(fs.readFileSync(host.stateFile(), "utf8")), {});
+      try {
+        process.kill(legacy.pid, 0);
+      } catch {
+        assert.fail("legacy Stop must not kill");
+      }
+      try {
+        process.kill(-legacy.pid, "SIGKILL");
+      } catch {
+        /* already gone */
+      }
+
+      const member = spawn(process.execPath, ["-e", "setTimeout(()=>{},30000)"], {
+        stdio: "ignore",
+      });
+      const memberLive = host.inspectPid(member.pid);
+      assert.ok(memberLive);
+      assert.notEqual(memberLive.pgid, member.pid, "non-detached child is not a group leader");
+      fs.writeFileSync(
+        host.stateFile(),
+        JSON.stringify({
+          pid: member.pid,
+          startedAt: Date.now(),
+          startTime: memberLive.startTime,
+          exe: memberLive.exe,
+        })
+      );
+      assert.deepEqual(host.stopServer(), { stopped: false, reason: "not_ours" });
+      try {
+        process.kill(member.pid, "SIGKILL");
+      } catch {
+        /* already gone */
+      }
     }
   );
 });
