@@ -82,7 +82,75 @@ const OPEN_TRANSCRIBER = "Open Transcriber";
 const OPEN_LIBRARY = "Open Library";
 const ADVANCED = "Advanced";
 const SHOW_DATA_IN_FINDER = "Show Data in Finder";
-// DESIGN REVIEW: updater labels live in updater-menu.js (placeholders).
+
+const UPDATER_COPY = Object.freeze({
+  check: "Check for Updates…",
+  checking: "Checking for Updates…",
+  upToDate: "Transcriber Is Up to Date",
+  available: "Update Available — {version}",
+  downloading: "Downloading Update… {n}%",
+  restart: "Restart to Update",
+  notifyUpToDateTitle: "You're up to date",
+  notifyUpToDateBody: "Transcriber {version} is the latest.",
+  notifyReadyTitle: "Update ready",
+  notifyReadyBody: "Restart Transcriber to finish updating to {version}.",
+  notifyErrorTitle: "Couldn't check for updates",
+  notifyErrorBody: "Check your connection and try again.",
+});
+
+const UPDATER_UP_TO_DATE_HOLD_MS = 5000;
+const UPDATER_DOWNLOAD_PERCENT_STEP = 5;
+
+function fillVersion(template, version) {
+  return String(template).replace("{version}", String(version || "").trim());
+}
+
+function updaterCheckLabel() {
+  return UPDATER_COPY.check;
+}
+
+function updaterCheckingLabel() {
+  return UPDATER_COPY.checking;
+}
+
+function updaterUpToDateLabel() {
+  return UPDATER_COPY.upToDate;
+}
+
+function updaterAvailableLabel(version) {
+  const v = String(version || "").trim();
+  return v ? fillVersion(UPDATER_COPY.available, v) : "Update Available —";
+}
+
+function updaterDownloadingLabel(percent) {
+  const n = Number.isFinite(percent) ? Math.max(0, Math.min(100, Math.round(percent))) : 0;
+  return UPDATER_COPY.downloading.replace("{n}", String(n));
+}
+
+function updaterRestartLabel() {
+  return UPDATER_COPY.restart;
+}
+
+function updaterUpToDateNotification(version) {
+  return {
+    title: UPDATER_COPY.notifyUpToDateTitle,
+    body: fillVersion(UPDATER_COPY.notifyUpToDateBody, version),
+  };
+}
+
+function updaterReadyNotification(version) {
+  return {
+    title: UPDATER_COPY.notifyReadyTitle,
+    body: fillVersion(UPDATER_COPY.notifyReadyBody, version),
+  };
+}
+
+function updaterErrorNotification() {
+  return {
+    title: UPDATER_COPY.notifyErrorTitle,
+    body: UPDATER_COPY.notifyErrorBody,
+  };
+}
 
 module.exports = {
   runningStatus,
@@ -103,4 +171,16 @@ module.exports = {
   SHOW_DATA_IN_FINDER,
   tuskStatusLine,
   AI_KEY_MISSING,
+  UPDATER_COPY,
+  UPDATER_UP_TO_DATE_HOLD_MS,
+  UPDATER_DOWNLOAD_PERCENT_STEP,
+  updaterCheckLabel,
+  updaterCheckingLabel,
+  updaterUpToDateLabel,
+  updaterAvailableLabel,
+  updaterDownloadingLabel,
+  updaterRestartLabel,
+  updaterUpToDateNotification,
+  updaterReadyNotification,
+  updaterErrorNotification,
 };

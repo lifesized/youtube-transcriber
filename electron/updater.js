@@ -16,6 +16,7 @@ const {
   UPDATE_FEED,
 } = require("./updater-gate.js");
 const { updaterMenuItem } = require("./updater-menu.js");
+const trayCopy = require("./tray-copy.js");
 const {
   UPDATE_CHANNEL,
   isBetaPrereleaseVersion,
@@ -197,7 +198,11 @@ function createUpdater(options) {
     onBeforeQuitAndInstall,
     onReadyToInstall,
     onInstallFailed,
+    onNotify,
+    currentVersion = "",
     beforeQuitHookTimeoutMs = BEFORE_QUIT_HOOK_TIMEOUT_MS,
+    upToDateHoldMs = trayCopy.UPDATER_UP_TO_DATE_HOLD_MS,
+    downloadPercentStep = trayCopy.UPDATER_DOWNLOAD_PERCENT_STEP,
     loadAutoUpdater,
     setIntervalFn = setInterval,
     setTimeoutFn = setTimeout,
@@ -216,18 +221,50 @@ function createUpdater(options) {
 
   let status = "idle";
   let percent = 0;
+  let version = "";
   let timers = [];
   let autoUpdater = null;
   let installInFlight = false;
+  let userRequestedCheck = false;
+  let upToDateTimer = null;
+  let lastProgressBucket = -1;
+  let readyNotified = false;
 
   const emit = () => {
     if (typeof onState === "function") {
-      onState({ enabled: gate.enabled, status, percent });
+      onState({ enabled: gate.enabled, status, percent, version });
     }
   };
 
+  function notify(payload) {
+    if (typeof onNotify === "function" && payload && payload.title) {
+      onNotify(payload);
+    }
+  }
+
+  function clearUpToDateTimer() {
+    if (upToDateTimer != null) {
+      clearTimeoutFn(upToDateTimer);
+      upToDateTimer = null;
+    }
+  }
+
+  function scheduleIdleAfterUpToDate() {
+    clearUpToDateTimer();
+    upToDateTimer = setTimeoutFn(() => {
+      upToDateTimer = null;
+      if (status === "up-to-date") {
+        status = "idle";
+        emit();
+      }
+    }, upToDateHoldMs);
+    if (upToDateTimer && typeof upToDateTimer.unref === "function") {
+      upToDateTimer.unref();
+    }
+  }
+
   const menu = () =>
-    updaterMenuItem({ enabled: gate.enabled, status, percent });
+    updaterMenuItem({ enabled: gate.enabled, status, percent, version });
 
   const disabled = (reason) => ({
     enabled: false,
@@ -259,43 +296,79 @@ function createUpdater(options) {
   }
 
   autoUpdater.on("checking-for-update", () => {
+    clearUpToDateTimer();
     status = "checking";
     emit();
   });
-  autoUpdater.on("update-not-available", () => {
+  autoUpdater.on("update-not-available", (info) => {
     status = "up-to-date";
+    version = (info && info.version) || currentVersion || version;
     emit();
+    if (userRequestedCheck) {
+      notify(trayCopy.updaterUpToDateNotification(currentVersion || version));
+    }
+    userRequestedCheck = false;
+    scheduleIdleAfterUpToDate();
   });
-  autoUpdater.on("update-available", () => {
+  autoUpdater.on("update-available", (info) => {
+    clearUpToDateTimer();
     status = "available";
+    version = (info && info.version) || version;
+    userRequestedCheck = false;
     emit();
-    autoUpdater.downloadUpdate().catch((error) => {
-      console.warn("updater: download failed:", error && error.message);
-      status = "available";
-      emit();
-    });
   });
   autoUpdater.on("download-progress", (progress) => {
-    status = "downloading";
-    percent = progress && Number.isFinite(progress.percent) ? progress.percent : 0;
-    emit();
+    const next = progress && Number.isFinite(progress.percent) ? progress.percent : 0;
+    const step = Number.isFinite(downloadPercentStep) && downloadPercentStep > 0
+      ? downloadPercentStep
+      : trayCopy.UPDATER_DOWNLOAD_PERCENT_STEP;
+    const bucket = Math.floor(next / step);
+    percent = next;
+    if (status !== "downloading") {
+      status = "downloading";
+      lastProgressBucket = bucket;
+      emit();
+      return;
+    }
+    if (bucket !== lastProgressBucket) {
+      lastProgressBucket = bucket;
+      emit();
+    }
   });
-  autoUpdater.on("update-downloaded", () => {
+  autoUpdater.on("update-downloaded", (info) => {
     status = "ready";
     percent = 100;
+    version =
+      (info && info.version) ||
+      (info && info.updateInfo && info.updateInfo.version) ||
+      version;
     emit();
+    if (!readyNotified) {
+      readyNotified = true;
+      notify(trayCopy.updaterReadyNotification(version));
+    }
   });
   autoUpdater.on("error", (error) => {
     console.warn("updater: error:", error && error.message);
-    if (status === "checking") status = "idle";
+    const wasChecking = status === "checking" || userRequestedCheck;
+    userRequestedCheck = false;
+    if (wasChecking) {
+      notify(trayCopy.updaterErrorNotification());
+    }
+    status = "idle";
     emit();
   });
 
-  function checkForUpdates() {
+  function requestCheck() {
     if (!autoUpdater) return;
     autoUpdater.checkForUpdates().catch((error) => {
       console.warn("updater: check failed:", error && error.message);
     });
+  }
+
+  function checkForUpdates() {
+    userRequestedCheck = true;
+    requestCheck();
   }
 
   function downloadUpdate() {
@@ -338,17 +411,18 @@ function createUpdater(options) {
 
   function startBackgroundChecks() {
     const initial = setTimeoutFn(() => {
-      checkForUpdates();
+      requestCheck();
     }, INITIAL_DELAY_MS);
     if (initial && typeof initial.unref === "function") initial.unref();
     const repeating = setIntervalFn(() => {
-      checkForUpdates();
+      requestCheck();
     }, INTERVAL_MS);
     if (repeating && typeof repeating.unref === "function") repeating.unref();
     timers = [initial, repeating];
   }
 
   function dispose() {
+    clearUpToDateTimer();
     for (const timer of timers) {
       clearTimeoutFn(timer);
       clearIntervalFn(timer);
@@ -387,4 +461,6 @@ module.exports = {
   INITIAL_DELAY_MS,
   INTERVAL_MS,
   UPDATE_FEED,
+  UPDATER_UP_TO_DATE_HOLD_MS: trayCopy.UPDATER_UP_TO_DATE_HOLD_MS,
+  UPDATER_DOWNLOAD_PERCENT_STEP: trayCopy.UPDATER_DOWNLOAD_PERCENT_STEP,
 };

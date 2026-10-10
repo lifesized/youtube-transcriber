@@ -2,6 +2,9 @@
 
 ## 2026-10-10
 
+### Changed
+- **Tray updater copy** — idle **Check for Updates…**; checking **Checking for Updates…** (disabled); up to date shows **Transcriber Is Up to Date** for 5s then returns to idle, and a user-clicked Check notifies **You're up to date**; available **Update Available — {version}** starts the download; downloading **Downloading Update… {n}%** (disabled, ~5% refresh); ready **Restart to Update** sits under the status line with one **Update ready** notification; errors notify **Couldn't check for updates** and return to idle. Strings live in `electron/tray-copy.js`.
+
 ### Fixed
 - **Extension messaging lastError (1.6.39)** — content-script `sendMessage`, the side-panel port, and native-host `postMessage` read `chrome.runtime.lastError`. A closed side panel or a content script that is not injected yet is quiet. The caption fast-path inject/retry log is `console.debug`.
 - **Hung / busy dev server (1.6.39)** — every health check has a 3s timeout. Native-host Start tells apart nothing listening, listening-but-hung, and healthy. A hung listener is killed only when recorded pid + `ps` start time + exe/cmdline match this repo's `next dev`. Anything else returns `Port 19720 is busy/stuck (pid X)` with no kill. A healthy launchd `com.transcribed.devserver` is left alone. `Starting…` is capped at 30s.

@@ -203,4 +203,17 @@ test("Restart to Update is active only when the updater is ready", () => {
   const update = item(t, "Restart to Update");
   assert.equal(update.enabled, true);
   assert.equal(update.click(), "restartToUpdate");
+  assert.equal(t[0].label, "Transcriber is running");
+  assert.equal(t[1].label, "Restart to Update");
+  assert.equal(labels(t).filter((label) => label === "Restart to Update").length, 1);
+  assert.equal(labels(t).includes("Check for Updates…"), false);
+});
+
+test("Update Available starts the download", () => {
+  const t = menu("running", {
+    updater: { enabled: true, status: "available", version: "0.2.0-beta.2" },
+  });
+  const update = item(t, "Update Available — 0.2.0-beta.2");
+  assert.equal(update.enabled, true);
+  assert.equal(update.click(), "downloadUpdate");
 });

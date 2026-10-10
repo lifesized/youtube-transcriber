@@ -108,7 +108,7 @@ function buildTrayMenuTemplate(state, actions) {
     }
   );
   const update = updaterMenuItem(state.updater);
-  template.push({
+  const updateItem = {
     label: update.label,
     enabled: update.enabled && !wrongLocation,
     click: () => {
@@ -117,7 +117,12 @@ function buildTrayMenuTemplate(state, actions) {
       if (update.action === "restart" && actions.restartToUpdate) return actions.restartToUpdate();
       return undefined;
     },
-  });
+  };
+  if (update.action === "restart") {
+    template.splice(1, 0, updateItem);
+  } else {
+    template.push(updateItem);
+  }
   template.push({ label: "Quit Transcriber", accelerator: "Command+Q", click: actions.quit });
   return template;
 }
