@@ -56,6 +56,8 @@
 
   /** Hosts older than this answer `version` with unknown_cmd or no protocol. */
   const MIN_HOST_PROTOCOL = 2;
+  const HEALTH_TIMEOUT_MS = 3000;
+  const STARTING_CAP_MS = 30000;
 
   /** Stop is off until Security signs off on it. */
   const FEATURES = Object.freeze({ stop: false });
@@ -129,7 +131,12 @@
         [APP]: "Transcriber isn't in your Applications folder. Move it there, then try again.",
       },
       port_conflict: "Port {port} is in use by another app. Quit that app, then try again.",
+      port_stuck: "Port {port} is busy/stuck (pid {pid}). Quit that process, then try again.",
       start_timeout: {
+        [APP]: "Transcriber didn't start. Open it from your Applications folder.",
+        [DEV]: "The dev server didn't start. Run npm run dev in your Transcriber folder, then try again.",
+      },
+      spawn_failed: {
         [APP]: "Transcriber didn't start. Open it from your Applications folder.",
         [DEV]: "The dev server didn't start. Run npm run dev in your Transcriber folder, then try again.",
       },
@@ -163,14 +170,14 @@
    * Human message for a host, auth or connection reason. Unknown reasons
    * fall back to the generic failure; host and auth reasons never do.
    */
-  function errorMessage(reason, id) {
+  function errorMessage(reason, id, vars = {}) {
     const t = TARGETS[normalize(id)];
     const entry = STRINGS.errors[reason] || STRINGS.errors.other;
     const text =
       typeof entry === "string"
         ? entry
         : entry[t.id] || entry[APP] || entry[DEV] || STRINGS.errors.other;
-    return fill(text, { port: t.port });
+    return fill(text, { port: t.port, pid: vars.pid || "?", ...vars });
   }
 
   function getTarget(id) {
@@ -225,7 +232,7 @@
    * `tone` colours the line under the rows: muted, warn (setup) or error.
    * `startFailure` is the reason from this panel's last failed Start, if any.
    */
-  function rowView(id, probe, { extId = "", startFailure = null } = {}) {
+  function rowView(id, probe, { extId = "", startFailure = null, startFailurePid } = {}) {
     const t = getTarget(id);
     const status = (probe && probe.status) || STATUS.UNKNOWN;
     const reason = (probe && probe.reason) || null;
@@ -286,7 +293,11 @@
         ? { kind: "start", label: STRINGS.start }
         : { kind: "retry", label: RETRY_LABEL };
     if (startFailure) {
-      return { action, message: errorMessage(startFailure, t.id), tone: "error" };
+      return {
+        action,
+        message: errorMessage(startFailure, t.id, { pid: startFailurePid }),
+        tone: "error",
+      };
     }
     return { action, message: unreachableMessage(t.id), tone: "muted" };
   }
@@ -306,6 +317,8 @@
     LOOPBACK_ORIGINS,
     STATUS,
     MIN_HOST_PROTOCOL,
+    HEALTH_TIMEOUT_MS,
+    STARTING_CAP_MS,
     FEATURES,
     STRINGS,
     normalize,

@@ -1803,7 +1803,8 @@ function paintSelectedRow(currentId) {
     { ...targetStatuses[currentId], status },
     {
       extId: HAS_EXTENSION_APIS ? chrome.runtime.id : "",
-      startFailure: rowStartFailures[currentId] || null,
+      startFailure: rowStartFailures[currentId]?.reason || rowStartFailures[currentId] || null,
+      startFailurePid: rowStartFailures[currentId]?.pid,
     }
   );
   const row = currentId === T.DEV ? el.connectRowDev : el.connectRowApp;
@@ -1863,7 +1864,10 @@ async function rowStartClicked() {
       // Stay in Settings; offline polling would call init() and close it.
       stopOfflinePolling();
     } else {
-      rowStartFailures[target.id] = res.reason || "start_timeout";
+      rowStartFailures[target.id] = {
+        reason: res.reason || "start_timeout",
+        pid: res.pid,
+      };
     }
   } finally {
     nativeStartInFlight = false;
@@ -2128,9 +2132,25 @@ async function startSelectedTarget() {
   const target = await currentConnectTarget();
   startingTargetId = target.id;
   paintTargetStatuses();
+  const capMs = T.STARTING_CAP_MS || 30000;
   try {
-    const res = await sendMsg({ type: "START_TARGET" });
+    const res = await Promise.race([
+      sendMsg({ type: "START_TARGET" }),
+      new Promise((resolve) => {
+        setTimeout(() => {
+          resolve({
+            success: false,
+            data: {
+              ok: false,
+              reason: "start_timeout",
+              message: T.errorMessage("start_timeout", target.id),
+            },
+          });
+        }, capMs);
+      }),
+    ]);
     if (res?.success && res.data) return res.data;
+    if (res?.data) return res.data;
     return { ok: false, reason: "start_timeout", message: T.errorMessage("start_timeout", target.id) };
   } finally {
     startingTargetId = null;

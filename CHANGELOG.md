@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-10
+
+### Fixed
+- **Extension messaging lastError (1.6.39)** — content-script `sendMessage`, the side-panel port, and native-host `postMessage` read `chrome.runtime.lastError`. A closed side panel or a content script that is not injected yet is quiet. The caption fast-path inject/retry log is `console.debug`.
+- **Hung / busy dev server (1.6.39)** — every health check has a 3s timeout. Native-host Start tells apart nothing listening, listening-but-hung, and healthy. A hung listener is killed only when recorded pid + `ps` start time + exe/cmdline match this repo's `next dev`. Anything else returns `Port 19720 is busy/stuck (pid X)` with no kill. A healthy launchd `com.transcribed.devserver` is left alone. `Starting…` is capped at 30s.
+- **Detached native-host Start (1.6.39)** — `npm run dev` is `detached: true` + `unref` (own process group), stdio to a `0600` `dev-server.log`, and pid/startTime/exe are recorded for the hung-server check.
+
 ## 2026-10-09
 
 ### Security

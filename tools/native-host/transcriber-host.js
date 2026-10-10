@@ -20,6 +20,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const http = require("http");
+const net = require("net");
 const { spawn, execFileSync, spawnSync } = require("child_process");
 const {
   ensureLocalApiToken,
@@ -50,6 +51,7 @@ const DEFAULT_APP_BUNDLE = "/Applications/Transcriber.app";
 const MAX_NATIVE_HOST_MESSAGE = 1024 * 1024;
 const LOG_FILE_MODE = 0o600;
 const LOG_MAX_BYTES = 5 * 1024 * 1024;
+const HEALTH_TIMEOUT_MS = 3000;
 const PROTOCOL_VERSION = 2;
 const COMMANDS = Object.freeze([
   "ping",
@@ -75,6 +77,10 @@ function stateFile() {
 
 function logFile() {
   return path.join(logDir(), "native-host.log");
+}
+
+function devServerLogFile() {
+  return path.join(logDir(), "dev-server.log");
 }
 
 function ensureDirs() {
@@ -142,11 +148,109 @@ function isPidAlive(pid) {
   }
 }
 
+/** Same identity shape Security accepted for tracked-child reaping: pid + lstart + exe. */
+function inspectPid(pid, run = execFileSync) {
+  if (!Number.isInteger(pid) || pid <= 1) return null;
+  try {
+    const startTime = run("/bin/ps", ["-o", "lstart=", "-p", String(pid)], {
+      encoding: "utf8",
+      timeout: 2000,
+    }).trim();
+    const exe = path.basename(
+      run("/bin/ps", ["-o", "comm=", "-p", String(pid)], {
+        encoding: "utf8",
+        timeout: 2000,
+      }).trim()
+    );
+    const command = run("/bin/ps", ["-o", "command=", "-p", String(pid)], {
+      encoding: "utf8",
+      timeout: 2000,
+    }).trim();
+    const pgid = Number(
+      run("/bin/ps", ["-o", "pgid=", "-p", String(pid)], {
+        encoding: "utf8",
+        timeout: 2000,
+      }).trim()
+    );
+    if (!startTime || !exe) return null;
+    return { pid, startTime, exe, command, pgid };
+  } catch {
+    return null;
+  }
+}
+
+function looksLikeOurNextDev(command, projectRoot) {
+  const cmd = String(command || "");
+  const root = String(projectRoot || "");
+  if (!root || !cmd.includes(root)) return false;
+  return /\bnext\b/.test(cmd) || /npm\s+run\s+dev/.test(cmd) || /run-with-local-token/.test(cmd);
+}
+
+function isOurRecordedServer(listenerPid, rec, projectRoot) {
+  if (!rec || !Number.isInteger(rec.pid) || rec.pid <= 1) return false;
+  if (typeof rec.startTime !== "string" || !rec.startTime) return false;
+  if (typeof rec.exe !== "string" || !rec.exe) return false;
+  const recordedLive = inspectPid(rec.pid);
+  if (
+    !recordedLive ||
+    recordedLive.startTime !== rec.startTime ||
+    recordedLive.exe !== rec.exe
+  ) {
+    return false;
+  }
+  const root = projectRoot || rec.projectRoot;
+  const recordedCmdOurs =
+    looksLikeOurNextDev(recordedLive.command, root) ||
+    (root && String(recordedLive.command || "").includes(root));
+  if (!recordedCmdOurs) return false;
+  if (!Number.isInteger(listenerPid) || listenerPid <= 1) return false;
+  if (listenerPid === rec.pid) return true;
+  const listener = inspectPid(listenerPid);
+  if (!listener) return false;
+  if (!looksLikeOurNextDev(listener.command, root)) return false;
+  return listener.pgid === rec.pid || listener.pgid === recordedLive.pgid;
+}
+
+function listenerPidsOnPort(port, run = execFileSync) {
+  const args = ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"];
+  for (const bin of ["/usr/sbin/lsof", "lsof"]) {
+    try {
+      const out = run(bin, args, { encoding: "utf8", timeout: 2000 });
+      return String(out)
+        .split(/\s+/)
+        .map((s) => Number(s))
+        .filter((n) => Number.isInteger(n) && n > 1);
+    } catch {
+      // try next binary
+    }
+  }
+  return [];
+}
+
+function tcpListening(port, timeoutMs = HEALTH_TIMEOUT_MS) {
+  return new Promise((resolve) => {
+    const sock = net.connect({ host: "127.0.0.1", port, timeout: timeoutMs });
+    const done = (listening) => {
+      try {
+        sock.destroy();
+      } catch {
+        /* ignore */
+      }
+      resolve(listening);
+    };
+    sock.once("connect", () => done(true));
+    sock.once("timeout", () => done(true));
+    sock.once("error", (err) => {
+      done(Boolean(err && err.code === "ETIMEDOUT"));
+    });
+  });
+}
+
 function authHeaders() {
   return { Authorization: `Bearer ${ensureLocalApiToken()}` };
 }
 
-function probeOnce(timeoutMs = 1500) {
+function probeOnce(timeoutMs = HEALTH_TIMEOUT_MS) {
   let headers;
   try {
     headers = authHeaders();
@@ -172,12 +276,31 @@ function probeOnce(timeoutMs = 1500) {
         });
       }
     );
-    req.on("error", () => resolve({ status: "down" }));
+    req.on("error", (err) => {
+      if (err && err.code === "ECONNREFUSED") resolve({ status: "down" });
+      else resolve({ status: "hung" });
+    });
     req.on("timeout", () => {
       req.destroy();
-      resolve({ status: "down" });
+      resolve({ status: "hung" });
     });
   });
+}
+
+async function classifyPort(timeoutMs = HEALTH_TIMEOUT_MS) {
+  const port = getPort();
+  const listening = await tcpListening(port, timeoutMs);
+  if (!listening) return { status: "closed", port };
+  const health = await probeOnce(timeoutMs);
+  const pids = listenerPidsOnPort(port);
+  const listenerPid = pids[0];
+  if (health.status === "ready") {
+    return { status: "ready", port, listenerPid, identity: health.identity, statusCode: health.statusCode };
+  }
+  if (health.status === "foreign") {
+    return { status: "foreign", port, listenerPid, statusCode: health.statusCode };
+  }
+  return { status: "hung", port, listenerPid };
 }
 
 async function probeWithRetry(attempts, intervalMs) {
@@ -333,14 +456,96 @@ function spawnDetached(command, args, options) {
   return child;
 }
 
+function spawnDevServer(launch, env) {
+  ensureDirs();
+  const logPath = devServerLogFile();
+  const fd = fs.openSync(logPath, "a", LOG_FILE_MODE);
+  try {
+    fs.fchmodSync(fd, LOG_FILE_MODE);
+  } catch {
+    try {
+      fs.chmodSync(logPath, LOG_FILE_MODE);
+    } catch {
+      /* best-effort 0600 */
+    }
+  }
+  const child = spawnDetached(launch.command, launch.args, {
+    cwd: launch.cwd,
+    detached: true,
+    stdio: ["ignore", fd, fd],
+    env,
+  });
+  child.unref();
+  try {
+    fs.closeSync(fd);
+  } catch {
+    /* fd stays with the child */
+  }
+  return child;
+}
+
+function inspectPidSoon(pid) {
+  const first = inspectPid(pid);
+  if (first) return first;
+  const until = Date.now() + 150;
+  while (Date.now() < until) {
+    const live = inspectPid(pid);
+    if (live) return live;
+  }
+  return null;
+}
+
+function recordSpawnedIdentity(child, projectRoot) {
+  const live = inspectPidSoon(child.pid) || {};
+  const rec = {
+    pid: child.pid,
+    startedAt: Date.now(),
+    startTime: live.startTime || "",
+    exe: live.exe || path.basename((child.spawnfile || launchName(child)) || "node"),
+    command: live.command || "",
+    projectRoot,
+  };
+  writeState(rec);
+  return rec;
+}
+
+function launchName(child) {
+  return (child && child.spawnargs && child.spawnargs[0]) || "";
+}
+
+function killOurRecordedServer() {
+  const rec = readState();
+  const listenerPid = listenerPidsOnPort(getPort())[0] || rec.pid;
+  if (!isOurRecordedServer(listenerPid, rec)) return false;
+  try {
+    process.kill(-rec.pid, "SIGTERM");
+  } catch (e) {
+    log("hung_kill_failed", { pid: rec.pid, message: e && e.message });
+    return false;
+  }
+  writeState({});
+  log("killed hung recorded server", { pid: rec.pid, listenerPid });
+  return true;
+}
+
 async function startServer() {
-  // First check if something is already on the port.
-  const probe = await probeOnce(800);
+  // closed | ready | foreign | hung. A healthy launchd listener is "ready".
+  const probe = await classifyPort();
   if (probe.status === "ready") {
     return { started: false, reason: "already_running" };
   }
   if (probe.status === "foreign") {
     return { started: false, reason: "port_conflict" };
+  }
+  if (probe.status === "hung") {
+    if (!killOurRecordedServer()) {
+      return {
+        started: false,
+        reason: "port_stuck",
+        pid: probe.listenerPid,
+        detail: `port ${probe.port} is busy/stuck (pid ${probe.listenerPid || "?"})`,
+      };
+    }
   }
 
   const resolved = resolveStartLaunch(process.env, process.execPath);
@@ -377,21 +582,35 @@ async function startServer() {
     log("token_ensure_failed", { message: e && e.message });
   }
 
-  const child = spawnDetached(launch.command, launch.args, {
-    cwd: launch.cwd,
-    detached: true,
-    stdio: "ignore",
-    env: { ...process.env, PATH: extendedPath, ...tokenEnv },
-  });
-  child.unref();
+  const env = { ...process.env, PATH: extendedPath, ...tokenEnv };
+  if (!bundle && launch.command && !fs.existsSync(launch.command)) {
+    launch.command = process.platform === "win32" ? "npm.cmd" : "npm";
+  }
+  const child = bundle
+    ? (() => {
+        const launched = spawnDetached(launch.command, launch.args, {
+          cwd: launch.cwd,
+          detached: true,
+          stdio: "ignore",
+          env,
+        });
+        launched.unref();
+        return launched;
+      })()
+    : spawnDevServer(launch, env);
+
+  if (!child.pid) {
+    log("spawn_failed", { command: launch.command, args: launch.args });
+    return { started: false, reason: "spawn_failed" };
+  }
 
   const startedAt = Date.now();
   log("spawned", { pid: child.pid, command: launch.command, args: launch.args, cwd: launch.cwd });
   // `open` exits once LaunchServices has the request, so its pid is not the app.
   if (bundle) return { started: true, startedAt };
 
-  writeState({ pid: child.pid, startedAt, projectRoot });
-  return { started: true, pid: child.pid, startedAt };
+  const rec = recordSpawnedIdentity(child, projectRoot);
+  return { started: true, pid: rec.pid, startedAt: rec.startedAt };
 }
 
 function isProcessGroupAlive(pgid) {
@@ -411,6 +630,11 @@ function stopServer() {
   if (!isProcessGroupAlive(state.pid)) {
     writeState({});
     return { stopped: false, reason: "not_running" };
+  }
+  const listenerPid = listenerPidsOnPort(getPort())[0] || state.pid;
+  if (state.startTime && state.exe && !isOurRecordedServer(listenerPid, state)) {
+    log("stop_refused_identity", { pid: state.pid, listenerPid });
+    return { stopped: false, reason: "not_ours" };
   }
   try {
     process.kill(-state.pid, "SIGTERM");
@@ -649,6 +873,17 @@ module.exports = {
   versionReply,
   handleMessage,
   spawnDetached,
+  spawnDevServer,
+  inspectPid,
+  looksLikeOurNextDev,
+  isOurRecordedServer,
+  listenerPidsOnPort,
+  tcpListening,
+  classifyPort,
+  probeOnce,
+  killOurRecordedServer,
+  HEALTH_TIMEOUT_MS,
+  devServerLogFile,
   parseCallerExtensionId,
   findCallerOriginArg,
   loadAllowedExtensionIds,

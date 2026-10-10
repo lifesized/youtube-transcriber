@@ -78,3 +78,9 @@ test("every chrome.runtime/tabs.sendMessage handles a missing receiver", () => {
     unchecked.map((s) => `${s.rel}:${s.line} ${s.snippet}`).join("\n")
   );
 });
+
+test("caption fast-path inject/retry is debug, not info", () => {
+  const src = fs.readFileSync(path.join(ROOT, "background.js"), "utf8");
+  assert.match(src, /console\.debug\(\s*"\[ytt-bg\] caption fast-path: no listener/);
+  assert.doesNotMatch(src, /console\.log\(\s*"\[ytt-bg\] caption fast-path: no listener/);
+});

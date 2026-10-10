@@ -127,6 +127,8 @@ const HOST_AND_AUTH_REASONS = [
   "unauthorized_caller",
   "app_not_found",
   "port_conflict",
+  "port_stuck",
+  "spawn_failed",
   "start_timeout",
   "host_timeout",
   "host_exited",
@@ -460,6 +462,27 @@ test("Start polls health until the server answers", async () => {
   assert.deepEqual(start.payload, {}, "Start never sends a path or command");
 });
 
+test("a hung health check fails in about 3s instead of hanging Starting", async () => {
+  assert.equal(TargetClient.HEALTH_TIMEOUT_MS, 3000);
+  assert.equal(TargetClient.STARTING_CAP_MS, 30000);
+  const world = fakeWorld({
+    hosts: { [DEV.nativeHostName]: currentHost(DEV, DEV_TOKEN) },
+    servers: {
+      [DEV.apiBase]: (_url, init) =>
+        new Promise((_, reject) => {
+          const signal = init && init.signal;
+          if (signal) {
+            signal.addEventListener("abort", () => reject(new Error("aborted")));
+          }
+        }),
+    },
+  });
+  const started = Date.now();
+  const r = await client(world, { now: () => Date.now(), sleep: async () => {} }).probe(DEV);
+  assert.equal(r.status, "stopped");
+  assert.ok(Date.now() - started < 8000, `probe hung for ${Date.now() - started}ms`);
+});
+
 test("Start gives up after about 20 seconds with a human reason", async () => {
   const world = fakeWorld({
     hosts: { [APP.nativeHostName]: { ...currentHost(APP, APP_TOKEN), start: { ok: true, started: true } } },
@@ -528,6 +551,7 @@ function loadBackground({ targetId, hosts = {}, servers = {} }) {
       id: "testextensionid",
       lastError: null,
       onMessage: { addListener: (fn) => (listeners.message = fn) },
+      onConnect: { addListener() {} },
       connectNative(hostName) {
         const handlers = { message: [], disconnect: [] };
         const port = {
@@ -571,7 +595,7 @@ function loadBackground({ targetId, hosts = {}, servers = {} }) {
   const sandbox = {
     chrome,
     fetch: world.fetch,
-    console: { log() {}, warn() {}, error() {} },
+    console: { log() {}, warn() {}, error() {}, debug() {} },
     setTimeout: (fn, ms) => (ms > 1000 ? 0 : setTimeout(fn, ms)),
     clearTimeout,
     URL,

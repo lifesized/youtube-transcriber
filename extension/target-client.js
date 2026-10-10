@@ -30,6 +30,8 @@
     "host_forbidden",
   ]);
   const PAIRABLE_REASONS = new Set(["host_not_found", "host_forbidden"]);
+  const HEALTH_TIMEOUT_MS = 3000;
+  const STARTING_CAP_MS = 30000;
 
   function classifyHostError(err) {
     const msg = String((err && err.message) || err || "");
@@ -112,6 +114,24 @@
       return url.href;
     }
 
+    function fetchWithTimeout(url, init, timeoutMs = HEALTH_TIMEOUT_MS) {
+      const ctrl = typeof AbortController === "function" ? new AbortController() : null;
+      let timer;
+      if (ctrl) {
+        timer = setTimeout(() => {
+          try {
+            ctrl.abort();
+          } catch {
+            /* ignore */
+          }
+        }, timeoutMs);
+      }
+      return Promise.resolve(fetchImpl(url, { ...init, signal: ctrl ? ctrl.signal : init && init.signal }))
+        .finally(() => {
+          if (timer) clearTimeout(timer);
+        });
+    }
+
     async function send(target, pathOrUrl, init, auth) {
       if (!auth || !auth.token) return { ok: false, reason: (auth && auth.reason) || "no_token" };
       const url = targetUrl(target, pathOrUrl);
@@ -147,9 +167,30 @@
       return { ok: false, reason: "unknown_cmd", outdated: true };
     }
 
+    async function healthFetch(target) {
+      const auth = await authFor(target);
+      if (!auth.ok) return auth;
+      const url = targetUrl(target, "/api/health");
+      const headers = { Authorization: `Bearer ${auth.token}` };
+      let res;
+      try {
+        res = await fetchWithTimeout(url, { method: "GET", headers, credentials: "omit" });
+      } catch {
+        return { ok: false, reason: "unreachable" };
+      }
+      if (res.status === 401) {
+        clearTokens(target.id);
+        return { ok: false, reason: "unauthorized" };
+      }
+      return { ok: true, res };
+    }
+
     async function isListening(target) {
       try {
-        await fetchImpl(targetUrl(target, "/api/health"), { method: "GET", credentials: "omit" });
+        await fetchWithTimeout(targetUrl(target, "/api/health"), {
+          method: "GET",
+          credentials: "omit",
+        });
         return true;
       } catch {
         return false;
@@ -162,7 +203,7 @@
      */
     async function probe(target) {
       const hs = await handshake(target);
-      const health = await apiFetch(target, "/api/health", { method: "GET" });
+      const health = await healthFetch(target);
       const base = {
         id: target.id,
         protocol: hs.ok ? hs.protocol : null,
@@ -193,16 +234,18 @@
         return { ok: false, reason: "unknown_cmd" };
       }
       if (!reply.started && reply.reason !== "already_running") {
-        return {
+        const out = {
           ok: false,
           reason: reply.reason || "start_timeout",
           detail: reply.detail,
           port: reply.port,
         };
+        if (reply.pid) out.pid = reply.pid;
+        return out;
       }
       const deadline = now() + timeoutMs;
       for (;;) {
-        const h = await apiFetch(target, "/api/health", { method: "GET" });
+        const h = await healthFetch(target);
         if (h.ok && isHealthy(h.res)) return { ok: true };
         if (!h.ok && h.reason !== "unreachable") return { ok: false, reason: h.reason };
         if (now() >= deadline) return { ok: false, reason: "start_timeout" };
@@ -230,5 +273,5 @@
     };
   }
 
-  return { create, classifyHostError };
+  return { create, classifyHostError, HEALTH_TIMEOUT_MS, STARTING_CAP_MS };
 });

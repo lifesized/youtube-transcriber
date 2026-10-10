@@ -561,7 +561,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               ok: false,
               targetId: target.id,
               reason: r.reason,
-              message: ConnectTarget.errorMessage(r.reason, target.id),
+              pid: r.pid,
+              message: ConnectTarget.errorMessage(r.reason, target.id, { pid: r.pid }),
             };
       }
 

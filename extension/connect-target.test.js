@@ -157,6 +157,25 @@ test("Settings row: Stopped shows Start for app and Retry for dev, muted", () =>
   });
 });
 
+test("port_stuck copy names the pid and Starting is capped", () => {
+  assert.equal(
+    ConnectTarget.errorMessage("port_stuck", "dev", { pid: 4242 }),
+    "Port 19720 is busy/stuck (pid 4242). Quit that process, then try again."
+  );
+  assert.match(
+    fs.readFileSync(path.join(ROOT, "popup.js"), "utf8"),
+    /STARTING_CAP_MS[\s\S]*Promise\.race\([\s\S]*START_TARGET/
+  );
+  assert.equal(ConnectTarget.STARTING_CAP_MS, 30000);
+  assert.equal(ConnectTarget.HEALTH_TIMEOUT_MS, 3000);
+  const v = row("dev", "stopped", "unreachable", {
+    startFailure: "port_stuck",
+    startFailurePid: 99,
+  });
+  assert.equal(v.tone, "error");
+  assert.match(v.message, /pid 99/);
+});
+
 test("Settings row: a failed Start is the only red line", () => {
   const v = row("app", "stopped", "unreachable", { startFailure: "start_timeout" });
   assert.equal(v.tone, "error");
