@@ -36,19 +36,26 @@ function isLiveStream() {
   return true;
 }
 
-function reportPageInfo() {
-  const videoId = extractVideoId(window.location.href);
+/** Fire-and-forget to the service worker. Side panel closed is normal. */
+function sendRuntimeMessage(msg) {
   try {
-    chrome.runtime.sendMessage({
-      type: "PAGE_INFO",
-      url: window.location.href,
-      title: getVideoTitle(),
-      videoId: videoId,
-      isLive: videoId ? isLiveStream() : false,
+    chrome.runtime.sendMessage(msg, () => {
+      void chrome.runtime.lastError;
     });
   } catch {
     observer?.disconnect();
   }
+}
+
+function reportPageInfo() {
+  const videoId = extractVideoId(window.location.href);
+  sendRuntimeMessage({
+    type: "PAGE_INFO",
+    url: window.location.href,
+    title: getVideoTitle(),
+    videoId: videoId,
+    isLive: videoId ? isLiveStream() : false,
+  });
 }
 
 reportPageInfo();
@@ -67,9 +74,7 @@ window.addEventListener("yt-navigate-finish", () => {
 });
 
 function closePanel() {
-  try {
-    chrome.runtime.sendMessage({ type: "CLOSE_PANEL" });
-  } catch { /* ignore */ }
+  sendRuntimeMessage({ type: "CLOSE_PANEL" });
 }
 
 function onFullscreenChange() {

@@ -60,7 +60,12 @@ function callNativeHostCmd(cmd, payload = {}, timeoutMs = 5000, hostName) {
       reject(new Error(err));
     });
     const id = Math.random().toString(36).slice(2);
-    port.postMessage({ id, cmd, ...payload });
+    try {
+      port.postMessage({ id, cmd, ...payload });
+    } catch {
+      clearTimeout(timer);
+      reject(new Error(chrome.runtime.lastError?.message || "disconnected"));
+    }
   });
 }
 
@@ -140,7 +145,7 @@ async function tryExtractCaptions(url, title) {
     CAPTION_EXTRACT_TIMEOUT_MS
   );
   if (response === null) {
-    console.log("[ytt-bg] caption fast-path: no listener — injecting + retrying", { tabId: tab.id });
+    console.debug("[ytt-bg] caption fast-path: no listener — injecting + retrying", { tabId: tab.id });
     try {
       await chrome.scripting.executeScript({
         target: { tabId: tab.id },
@@ -607,6 +612,18 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes[ConnectTarget.STORAGE_KEY]) {
     clearLocalTokenMemory();
   }
+});
+
+// Side panel / popup connect({ name: "sidepanel" }). Accept the port so
+// a missing receiver is not an unchecked lastError on every open.
+chrome.runtime.onConnect.addListener((port) => {
+  if (!port || port.name !== "sidepanel") return;
+  port.onMessage.addListener(() => {
+    void chrome.runtime.lastError;
+  });
+  port.onDisconnect.addListener(() => {
+    void chrome.runtime.lastError;
+  });
 });
 
 chrome.sidePanel.setOptions({ path: "popup.html", enabled: true }).catch(() => {});

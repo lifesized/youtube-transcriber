@@ -102,12 +102,17 @@ function connectPanelPort() {
   port = nextPort;
   nextPort.onMessage.addListener(handlePanelPortMessage);
   nextPort.onDisconnect.addListener(() => {
+    void chrome.runtime.lastError;
     if (port === nextPort) port = null;
   });
   const sendContext = (windowId) => {
     if (port !== nextPort || !Number.isInteger(windowId)) return;
     panelWindowId = windowId;
-    nextPort.postMessage({ type: "PANEL_CONTEXT", windowId });
+    try {
+      nextPort.postMessage({ type: "PANEL_CONTEXT", windowId });
+    } catch {
+      void chrome.runtime.lastError;
+    }
   };
   if (Number.isInteger(panelWindowId)) sendContext(panelWindowId);
   else chrome.windows.getCurrent().then((currentWindow) => {
@@ -1564,7 +1569,7 @@ function sendMsg(msg) {
     chrome.runtime.sendMessage(msg, (response) => {
       if (chrome.runtime.lastError) {
         const error = chrome.runtime.lastError.message || "runtime_send_failed";
-        console.warn("[ytt-popup] sendMessage failed", {
+        console.debug("[ytt-popup] sendMessage failed", {
           type: msg?.type,
           error,
           elapsedMs: Date.now() - startedAt,
@@ -1992,7 +1997,12 @@ async function callNativeHost(cmd, payload = {}, timeoutMs = 30000) {
     });
 
     const id = Math.random().toString(36).slice(2);
-    port.postMessage({ id, cmd, ...payload });
+    try {
+      port.postMessage({ id, cmd, ...payload });
+    } catch {
+      clearTimeout(timer);
+      reject(new Error(chrome.runtime.lastError?.message || "disconnected"));
+    }
   });
 }
 
