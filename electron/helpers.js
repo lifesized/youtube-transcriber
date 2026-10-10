@@ -293,6 +293,7 @@ function createHelperManager(options = {}) {
   const isPackaged = Boolean(options.isPackaged);
   const appExecPath = options.appExecPath || process.execPath;
   const run = options.run || spawnSync;
+  const killProcess = options.killProcess || ((pid, signal) => process.kill(pid, signal));
   const timers = options.timers || {
     setTimeout: (fn, ms) => setTimeout(fn, ms),
     clearTimeout: (id) => clearTimeout(id),
@@ -343,17 +344,30 @@ function createHelperManager(options = {}) {
     }
   }
 
-  function stopEntry(entry, { restart = false } = {}) {
-    if (!entry) return;
-    entry.wanted = Boolean(restart);
-    clearRestart(entry);
-    if (entry.child && typeof entry.child.kill === "function") {
+  function killHelperTree(child) {
+    const pid = child && child.pid;
+    if (typeof pid === "number" && pid > 0) {
       try {
-        entry.child.kill("SIGTERM");
+        killProcess(-pid, "SIGTERM");
+        return;
+      } catch {
+        // group may already be gone
+      }
+    }
+    if (child && typeof child.kill === "function") {
+      try {
+        child.kill("SIGTERM");
       } catch {
         // already gone
       }
     }
+  }
+
+  function stopEntry(entry, { restart = false } = {}) {
+    if (!entry) return;
+    entry.wanted = Boolean(restart);
+    clearRestart(entry);
+    killHelperTree(entry.child);
     if (entry.logFd != null) {
       try {
         fs.closeSync(entry.logFd);
@@ -384,6 +398,7 @@ function createHelperManager(options = {}) {
       const appTeam = appBundle ? teamIdFromPath(appBundle, run) : "";
       if (!verifyRunningPid(child && child.pid, appTeam, run)) {
         stopEntry(entry, { restart: false });
+        revokeToken(helper.id, stateDir);
         entry.state = "error";
         entry.error = "signature_mismatch";
         emit();
@@ -448,6 +463,7 @@ function createHelperManager(options = {}) {
   function stop(id) {
     const entry = running.get(id);
     if (entry) stopEntry(entry, { restart: false });
+    revokeToken(id, stateDir);
     emit();
     return { ok: true, state: "stopped" };
   }
