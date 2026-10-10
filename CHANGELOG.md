@@ -3,7 +3,7 @@
 ## 2026-10-10
 
 ### Removed
-- Removed the experimental Slack integration.
+- The Slack integration has moved out of this repo.
 
 ### Fixed
 - **Native-host Stop never kills a legacy or unverified pid** — a state record without `startTime`/`exe` returns `not_ours` and is cleared. Group kill requires `pgid === pid`. `lsof` failure does not treat the recorded pid as the listener; Start waits for the port to free after a verified hung kill. `dev-server.log` opens `O_NOFOLLOW`, dirs are `0700`, and the state file is `0600`.
