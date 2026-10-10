@@ -159,6 +159,118 @@ test("Start leaves a healthy listener alone (launchd / already running)", async 
   }
 });
 
+test("legacy Stop without startTime/exe is not_ours and does not kill", async () => {
+  await withHostEnv(async (stateDir) => {
+    const child = spawn(process.execPath, ["-e", "setTimeout(()=>{},30000)"], {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+    try {
+      fs.writeFileSync(
+        path.join(stateDir, "native-host-state.json"),
+        JSON.stringify({ pid: child.pid, startedAt: Date.now() })
+      );
+      assert.deepEqual(host.stopServer(), { stopped: false, reason: "not_ours" });
+      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(stateDir, "native-host-state.json"), "utf8")), {});
+      process.kill(child.pid, 0);
+    } finally {
+      try {
+        process.kill(-child.pid, "SIGKILL");
+      } catch {
+        /* already gone */
+      }
+    }
+  });
+});
+
+test("Stop with empty lsof still requires looksLikeOurNextDev", async () => {
+  await withHostEnv(async (stateDir) => {
+    const foreign = spawn(process.execPath, ["-e", "setTimeout(()=>{},30000)"], {
+      detached: true,
+      stdio: "ignore",
+    });
+    foreign.unref();
+    try {
+      const live = host.inspectPidSoon(foreign.pid) || host.inspectPid(foreign.pid);
+      assert.ok(live);
+      assert.equal(host.looksLikeOurNextDev(live.command, process.cwd()), false);
+      fs.writeFileSync(
+        path.join(stateDir, "native-host-state.json"),
+        JSON.stringify({
+          pid: foreign.pid,
+          startTime: live.startTime,
+          exe: live.exe,
+          projectRoot: process.cwd(),
+        })
+      );
+      assert.deepEqual(host.stopServer(), { stopped: false, reason: "not_ours" });
+      process.kill(foreign.pid, 0);
+    } finally {
+      try {
+        process.kill(-foreign.pid, "SIGKILL");
+      } catch {
+        /* already gone */
+      }
+    }
+  });
+});
+
+test("lsof miss does not treat rec.pid as the listener", async () => {
+  await withHostEnv(async (stateDir) => {
+    const live = host.inspectPid(process.pid);
+    fs.writeFileSync(
+      path.join(stateDir, "native-host-state.json"),
+      JSON.stringify({
+        pid: process.pid,
+        startTime: live.startTime,
+        exe: live.exe,
+        projectRoot: process.cwd(),
+      })
+    );
+    assert.equal(host.killOurRecordedServer(), false, "lsof empty → no kill");
+    const src = fs.readFileSync(path.join(repoRoot, "tools/native-host/transcriber-host.js"), "utf8");
+    assert.match(src, /if \(pids\.length === 0\) return false/);
+    assert.doesNotMatch(src, /listenerPidsOnPort\(getPort\(\)\)\[0\] \|\| rec\.pid/);
+    assert.doesNotMatch(src, /listenerPidsOnPort\(getPort\(\)\)\[0\] \|\| state\.pid/);
+  });
+});
+
+test("dev-server.log opens with O_NOFOLLOW, mkdir 0700, and rotates at LOG_MAX_BYTES", async () => {
+  await withHostEnv(async (stateDir) => {
+    const logPath = host.devServerLogFile();
+    fs.mkdirSync(path.dirname(logPath), { recursive: true });
+    fs.writeFileSync(logPath, "x".repeat(host.LOG_MAX_BYTES));
+    const fd = host.openDevServerLogFd();
+    fs.closeSync(fd);
+    assert.equal(fs.existsSync(`${logPath}.1`), true);
+    assert.equal(fs.statSync(`${logPath}.1`).size, host.LOG_MAX_BYTES);
+    assert.equal(fs.statSync(path.dirname(logPath)).mode & 0o777, 0o700);
+
+    const hijack = path.join(stateDir, "hijack");
+    fs.writeFileSync(hijack, "secret\n");
+    fs.rmSync(logPath, { force: true });
+    fs.symlinkSync(hijack, logPath);
+    assert.throws(() => host.openDevServerLogFd(), /ELOOP|EPERM|EINVAL/);
+    assert.equal(fs.readFileSync(hijack, "utf8"), "secret\n");
+  });
+});
+
+test("waitForPortFree returns true once the listener is gone", async () => {
+  const port = await freePort();
+  const hung = await listenHung(port);
+  try {
+    await withHostEnv(async () => {
+      assert.equal(await host.waitForPortFree(200), false);
+    }, port);
+  } finally {
+    hung.close();
+  }
+  await withHostEnv(async () => {
+    assert.equal(await host.waitForPortFree(500), true);
+  }, port);
+});
+
 test("Start on a hung foreign listener returns port_stuck and does not kill", async () => {
   const port = await freePort();
   const hung = await listenHung(port);
@@ -212,6 +324,9 @@ test("detached Start records pid/startTime/exe and writes a 0600 log", async () 
       assert.match(src, /detached:\s*true/);
       assert.match(src, /child\.unref\(\)/);
       assert.match(src, /dev-server\.log/);
+      assert.match(src, /O_NOFOLLOW/);
+      assert.equal(fs.statSync(stateDir).mode & 0o777, 0o700);
+      assert.equal(fs.statSync(path.join(stateDir, "native-host-state.json")).mode & 0o777, 0o600);
     } finally {
       if (r.pid) {
         try {

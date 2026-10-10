@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { createRequire } from "node:module";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -27,9 +28,11 @@ const {
   configureAutoUpdater,
   isBetaPrereleaseVersion,
   stopServerThenInstall,
+  detachNativeUpdateDownloaded,
   INITIAL_DELAY_MS,
   INTERVAL_MS,
   BEFORE_QUIT_HOOK_TIMEOUT_MS,
+  INSTALL_WATCHDOG_MS,
 } = require(path.join(root, "electron", "updater.js"));
 const { buildTrayMenuTemplate } = require(
   path.join(root, "electron", "tray-menu.js")
@@ -264,12 +267,16 @@ function quitUpdaterFixture({
   onBeforeQuitAndInstall,
   onReadyToInstall,
   onInstallFailed,
+  onState,
   beforeQuitHookTimeoutMs,
+  installWatchdogMs,
   order,
   quitAndInstall,
   start,
+  listeners,
+  nativeUpdater,
 }) {
-  const dir = mkdtempSync(path.join(tmpdir(), "ytt-quit-tusk-"));
+  const dir = mkdtempSync(path.join(tmpdir(), "ytt-quit-hook-"));
   writeFileSync(
     path.join(dir, "signing-identity.json"),
     JSON.stringify({ teamId: TEAM })
@@ -280,6 +287,7 @@ function quitUpdaterFixture({
     resourcesPath: dir,
     signature: developerId,
     beforeQuitHookTimeoutMs,
+    installWatchdogMs,
     serverManager: {
       async stop() {
         order.push("stop-server");
@@ -292,14 +300,24 @@ function quitUpdaterFixture({
     onBeforeQuitAndInstall,
     onReadyToInstall,
     onInstallFailed,
+    onState,
     loadAutoUpdater: () => ({
       autoDownload: true,
       autoInstallOnAppQuit: true,
       allowDowngrade: true,
       allowPrerelease: false,
       forceDevUpdateConfig: true,
-      on() {},
+      nativeUpdater,
+      on(event, fn) {
+        if (listeners) listeners[event] = fn;
+      },
       setFeedURL() {},
+      checkForUpdates() {
+        return Promise.resolve();
+      },
+      downloadUpdate() {
+        return Promise.resolve();
+      },
       quitAndInstall:
         quitAndInstall ||
         (() => {
@@ -307,7 +325,7 @@ function quitUpdaterFixture({
         }),
     }),
   });
-  return { updater, dir };
+  return { updater, dir, listeners };
 }
 
 test("quitAndInstall awaits onBeforeQuitAndInstall before stopping the server", async () => {
@@ -318,7 +336,7 @@ test("quitAndInstall awaits onBeforeQuitAndInstall before stopping the server", 
     onBeforeQuitAndInstall: async () => {
       await Promise.resolve();
       assert.equal(installing, false);
-      order.push("stop-tusk");
+      order.push("hook");
     },
     onReadyToInstall: () => {
       installing = true;
@@ -327,7 +345,7 @@ test("quitAndInstall awaits onBeforeQuitAndInstall before stopping the server", 
   });
   try {
     await updater.quitAndInstall();
-    assert.deepEqual(order, ["stop-tusk", "stop-server", "flag", "install"]);
+    assert.deepEqual(order, ["hook", "stop-server", "flag", "install"]);
     assert.equal(installing, true);
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -342,7 +360,7 @@ test("quitAndInstall still stops the server and installs when the hook throws", 
     onBeforeQuitAndInstall: async () => {
       assert.equal(installing, false);
       order.push("hook");
-      throw new Error("tusk stop failed");
+      throw new Error("before-quit hook failed");
     },
     onReadyToInstall: () => {
       installing = true;
@@ -473,6 +491,159 @@ test("quitAndInstall catch resets the flag and restarts the server", async () =>
     ]);
     assert.equal(installing, false);
   } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("error during in-flight install runs the same recovery", async () => {
+  const order = [];
+  const listeners = {};
+  let installing = false;
+  const { updater, dir } = quitUpdaterFixture({
+    order,
+    listeners,
+    quitAndInstall() {
+      order.push("install");
+    },
+    onReadyToInstall: () => {
+      installing = true;
+      order.push("flag");
+    },
+    onInstallFailed: async () => {
+      installing = false;
+      order.push("flag-reset");
+    },
+  });
+  try {
+    await updater.quitAndInstall();
+    assert.equal(typeof listeners.error, "function");
+    await listeners.error(new Error("Squirrel has not fetched"));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(order, [
+      "stop-server",
+      "flag",
+      "install",
+      "flag-reset",
+      "start-server",
+    ]);
+    assert.equal(installing, false);
+  } finally {
+    updater.dispose();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("install watchdog recovers if Squirrel never errors", async () => {
+  assert.equal(INSTALL_WATCHDOG_MS, 60 * 1000);
+  const order = [];
+  const { updater, dir } = quitUpdaterFixture({
+    order,
+    installWatchdogMs: 20,
+    quitAndInstall() {
+      order.push("install");
+    },
+    onReadyToInstall: () => order.push("flag"),
+    onInstallFailed: async () => {
+      order.push("flag-reset");
+    },
+  });
+  try {
+    await updater.quitAndInstall();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.ok(order.includes("install"));
+    assert.ok(order.includes("flag-reset"));
+    assert.ok(order.includes("start-server"));
+  } finally {
+    updater.dispose();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("after install recovery a late update-downloaded does not quit or install", async () => {
+  const order = [];
+  const listeners = {};
+  const states = [];
+  let installing = false;
+  const { updater, dir } = quitUpdaterFixture({
+    order,
+    listeners,
+    onState: (state) => {
+      states.push(state.status);
+    },
+    quitAndInstall() {
+      order.push("install");
+      throw new Error("Squirrel failed");
+    },
+    onReadyToInstall: () => {
+      installing = true;
+      order.push("flag");
+    },
+    onInstallFailed: () => {
+      installing = false;
+      order.push("flag-reset");
+    },
+  });
+  try {
+    await updater.quitAndInstall();
+    assert.equal(installing, false);
+    assert.ok(order.includes("flag-reset"));
+    const afterRecovery = order.length;
+    const statesAfterRecovery = states.length;
+    assert.equal(typeof listeners["update-downloaded"], "function");
+    listeners["update-downloaded"]();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(order.length, afterRecovery, "late download must not quit/install");
+    assert.equal(states.length, statesAfterRecovery, "late download must not mark ready");
+    assert.equal(order.filter((step) => step === "install").length, 1);
+
+    await updater.quitAndInstall();
+    assert.ok(order.filter((step) => step === "install").length >= 2, "a fresh click still installs");
+  } finally {
+    updater.dispose();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("recovery removes nativeUpdater update-downloaded so a late Squirrel download cannot install", async () => {
+  const order = [];
+  const nativeUpdater = new EventEmitter();
+  nativeUpdater.on("update-downloaded", () => {
+    order.push("native-auto-install");
+  });
+  assert.equal(typeof detachNativeUpdateDownloaded, "function");
+  const { updater, dir } = quitUpdaterFixture({
+    order,
+    nativeUpdater,
+    quitAndInstall() {
+      order.push("install");
+      throw new Error("Squirrel failed");
+    },
+    onReadyToInstall: () => order.push("flag"),
+    onInstallFailed: () => order.push("flag-reset"),
+  });
+  try {
+    await updater.quitAndInstall();
+    assert.ok(order.includes("flag-reset"));
+    assert.equal(nativeUpdater.listenerCount("update-downloaded"), 0);
+
+    nativeUpdater.emit("update-downloaded");
+    assert.equal(order.includes("native-auto-install"), false);
+
+    nativeUpdater.on("update-downloaded", () => {
+      order.push("rearmed-native-install");
+    });
+    updater.checkForUpdates();
+    updater.downloadUpdate();
+    assert.equal(nativeUpdater.listenerCount("update-downloaded"), 0);
+
+    nativeUpdater.emit("update-downloaded");
+    assert.equal(order.includes("rearmed-native-install"), false);
+    assert.equal(order.filter((step) => step === "install").length, 1);
+
+    await updater.quitAndInstall();
+    assert.ok(order.filter((step) => step === "install").length >= 2);
+  } finally {
+    updater.dispose();
     rmSync(dir, { recursive: true, force: true });
   }
 });

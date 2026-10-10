@@ -20,6 +20,7 @@ const {
   UPDATE_CHANNEL,
   isBetaPrereleaseVersion,
   isUpdateSupported,
+  currentMarketingOsVersion,
 } = require("./update-feed.js");
 const {
   parseCodesignVerbose,
@@ -148,11 +149,12 @@ function configureAutoUpdater(autoUpdater) {
   autoUpdater.forceDevUpdateConfig = false;
   autoUpdater.setFeedURL(pinnedFeed());
   autoUpdater.isUpdateSupported = (updateInfo) =>
-    isUpdateSupported(updateInfo, require("os").release());
+    isUpdateSupported(updateInfo, currentMarketingOsVersion());
   return autoUpdater;
 }
 
 const BEFORE_QUIT_HOOK_TIMEOUT_MS = 5000;
+const INSTALL_WATCHDOG_MS = 60 * 1000;
 
 async function runBeforeQuitHook(hook, timeoutMs, setTimeoutFn, clearTimeoutFn) {
   if (typeof hook !== "function") return;
@@ -184,6 +186,18 @@ async function stopServerThenInstall(serverManager, install) {
   if (typeof install === "function") await install();
 }
 
+/**
+ * MacUpdater.quitAndInstall registers nativeUpdater "update-downloaded"
+ * (electron-updater MacUpdater.js:247) which then quitAndInstalls.
+ * Recovery must drop that listener so a late Squirrel download cannot install.
+ */
+function detachNativeUpdateDownloaded(updater) {
+  const native = updater && updater.nativeUpdater;
+  if (!native || typeof native.removeAllListeners !== "function") return false;
+  native.removeAllListeners("update-downloaded");
+  return true;
+}
+
 function createUpdater(options) {
   const {
     isPackaged,
@@ -198,6 +212,7 @@ function createUpdater(options) {
     onReadyToInstall,
     onInstallFailed,
     beforeQuitHookTimeoutMs = BEFORE_QUIT_HOOK_TIMEOUT_MS,
+    installWatchdogMs = INSTALL_WATCHDOG_MS,
     loadAutoUpdater,
     setIntervalFn = setInterval,
     setTimeoutFn = setTimeout,
@@ -219,6 +234,47 @@ function createUpdater(options) {
   let timers = [];
   let autoUpdater = null;
   let installInFlight = false;
+  let installWatchdog = null;
+  let recoveringInstall = false;
+  let ignoreDownloadedUntilUserAction = false;
+
+  function clearInstallWatchdog() {
+    if (installWatchdog != null) {
+      clearTimeoutFn(installWatchdog);
+      installWatchdog = null;
+    }
+  }
+
+  async function recoverFromFailedInstall(reason) {
+    if (!installInFlight || recoveringInstall) return;
+    recoveringInstall = true;
+    clearInstallWatchdog();
+    console.warn("updater: install recovery:", reason);
+    try {
+      if (typeof onInstallFailed === "function") {
+        try {
+          await onInstallFailed();
+        } catch (error) {
+          console.warn("updater: onInstallFailed failed:", error && error.message);
+        }
+      }
+      installInFlight = false;
+      ignoreDownloadedUntilUserAction = true;
+      detachNativeUpdateDownloaded(autoUpdater);
+      if (serverManager && typeof serverManager.start === "function") {
+        try {
+          await serverManager.start();
+        } catch (startError) {
+          console.warn(
+            "updater: server restart failed:",
+            startError && startError.message
+          );
+        }
+      }
+    } finally {
+      recoveringInstall = false;
+    }
+  }
 
   const emit = () => {
     if (typeof onState === "function") {
@@ -274,6 +330,9 @@ function createUpdater(options) {
       status = "available";
       emit();
     });
+    if (ignoreDownloadedUntilUserAction) {
+      detachNativeUpdateDownloaded(autoUpdater);
+    }
   });
   autoUpdater.on("download-progress", (progress) => {
     status = "downloading";
@@ -281,6 +340,10 @@ function createUpdater(options) {
     emit();
   });
   autoUpdater.on("update-downloaded", () => {
+    if (ignoreDownloadedUntilUserAction) {
+      console.warn("updater: ignoring update-downloaded after install recovery");
+      return;
+    }
     status = "ready";
     percent = 100;
     emit();
@@ -289,6 +352,9 @@ function createUpdater(options) {
     console.warn("updater: error:", error && error.message);
     if (status === "checking") status = "idle";
     emit();
+    if (installInFlight) {
+      recoverFromFailedInstall(error && error.message).catch(() => {});
+    }
   });
 
   function checkForUpdates() {
@@ -296,6 +362,9 @@ function createUpdater(options) {
     autoUpdater.checkForUpdates().catch((error) => {
       console.warn("updater: check failed:", error && error.message);
     });
+    if (ignoreDownloadedUntilUserAction) {
+      detachNativeUpdateDownloaded(autoUpdater);
+    }
   }
 
   function downloadUpdate() {
@@ -303,11 +372,22 @@ function createUpdater(options) {
     autoUpdater.downloadUpdate().catch((error) => {
       console.warn("updater: download failed:", error && error.message);
     });
+    if (ignoreDownloadedUntilUserAction) {
+      detachNativeUpdateDownloaded(autoUpdater);
+    }
   }
 
   async function quitAndInstall() {
     if (installInFlight) return;
+    ignoreDownloadedUntilUserAction = false;
     installInFlight = true;
+    clearInstallWatchdog();
+    installWatchdog = setTimeoutFn(() => {
+      recoverFromFailedInstall("watchdog").catch(() => {});
+    }, installWatchdogMs);
+    if (installWatchdog && typeof installWatchdog.unref === "function") {
+      installWatchdog.unref();
+    }
     try {
       await runBeforeQuitHook(
         onBeforeQuitAndInstall,
@@ -321,18 +401,7 @@ function createUpdater(options) {
       });
     } catch (error) {
       console.warn("updater: quitAndInstall failed:", error && error.message);
-      if (typeof onInstallFailed === "function") onInstallFailed();
-      installInFlight = false;
-      if (serverManager && typeof serverManager.start === "function") {
-        try {
-          await serverManager.start();
-        } catch (startError) {
-          console.warn(
-            "updater: server restart failed:",
-            startError && startError.message
-          );
-        }
-      }
+      await recoverFromFailedInstall(error && error.message);
     }
   }
 
@@ -349,6 +418,7 @@ function createUpdater(options) {
   }
 
   function dispose() {
+    clearInstallWatchdog();
     for (const timer of timers) {
       clearTimeoutFn(timer);
       clearIntervalFn(timer);
@@ -382,8 +452,10 @@ module.exports = {
   configureAutoUpdater,
   isBetaPrereleaseVersion,
   stopServerThenInstall,
+  detachNativeUpdateDownloaded,
   runBeforeQuitHook,
   BEFORE_QUIT_HOOK_TIMEOUT_MS,
+  INSTALL_WATCHDOG_MS,
   INITIAL_DELAY_MS,
   INTERVAL_MS,
   UPDATE_FEED,

@@ -1,9 +1,5 @@
 "use strict";
 
-const { escapeSlackMrkdwn } = require("./format.js");
-
-const NO_KEY_COPY = "Tusk needs an AI key. Open Transcriber > Settings to add one.";
-
 const LLM_KEY_LINKS = [
   { label: "Anthropic console", url: "https://console.anthropic.com/settings/keys" },
   { label: "OpenAI platform", url: "https://platform.openai.com/api-keys" },
@@ -16,33 +12,44 @@ const ALLOWED_LLM_KEY_ORIGINS = new Set([
   "https://openrouter.ai",
 ]);
 
-function isAllowedLlmKeyUrl(value) {
+function matchAllowedLlmKeyLink(value) {
+  const raw = String(value ?? "");
+  if (!raw || raw.includes("\\")) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
   let parsed;
   try {
-    parsed = new URL(String(value || ""));
+    parsed = new URL(trimmed);
   } catch {
-    return false;
+    return null;
   }
-  if (parsed.protocol !== "https:") return false;
-  if (parsed.username || parsed.password || parsed.port) return false;
-  if (!LLM_KEY_LINKS.some((link) => link.url === parsed.href)) return false;
-  const origin = `${parsed.protocol}//${parsed.hostname}`;
-  return ALLOWED_LLM_KEY_ORIGINS.has(origin);
+  if (parsed.protocol !== "https:") return null;
+  if (parsed.username || parsed.password) return null;
+  if (parsed.port && parsed.port !== "443") return null;
+  let canonical;
+  try {
+    canonical = new URL(
+      `https://${parsed.hostname}${parsed.pathname}${parsed.search}${parsed.hash}`
+    );
+  } catch {
+    return null;
+  }
+  if (canonical.port) return null;
+  const origin = `${canonical.protocol}//${canonical.hostname}`;
+  if (!ALLOWED_LLM_KEY_ORIGINS.has(origin)) return null;
+  return LLM_KEY_LINKS.find((link) => link.url === canonical.href) || null;
 }
 
-function noKeySlackText() {
-  const lines = [escapeSlackMrkdwn(NO_KEY_COPY)];
-  for (const link of LLM_KEY_LINKS) {
-    lines.push(`<${link.url}|${escapeSlackMrkdwn(link.label)}>`);
-  }
-  return lines.join("\n");
+function isAllowedLlmKeyUrl(value) {
+  return matchAllowedLlmKeyLink(value) != null;
 }
 
 async function openAllowedLlmKeyUrl(shell, url) {
-  if (!isAllowedLlmKeyUrl(url)) return false;
+  const match = matchAllowedLlmKeyLink(url);
+  if (!match) return false;
   if (!shell || typeof shell.openExternal !== "function") return false;
   try {
-    await shell.openExternal(url);
+    await shell.openExternal(match.url);
     return true;
   } catch {
     return false;
@@ -72,11 +79,10 @@ function attachOpenExternalIpc(child, shellApi) {
 }
 
 module.exports = {
-  NO_KEY_COPY,
   LLM_KEY_LINKS,
   ALLOWED_LLM_KEY_ORIGINS,
+  matchAllowedLlmKeyLink,
   isAllowedLlmKeyUrl,
-  noKeySlackText,
   openAllowedLlmKeyUrl,
   attachOpenExternalIpc,
 };
