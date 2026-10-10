@@ -61,4 +61,4 @@ rm -rf ~/Library/Logs/Transcriber\ App
 
 ## Support
 
-Slack DM James, or james@transcribed.com. Include macOS version, Transcriber version, the error, and `~/Library/Logs/Transcriber App/native-host.log`.
+Email james@transcribed.com. Include macOS version, Transcriber version, the error, and `~/Library/Logs/Transcriber App/native-host.log`.

@@ -10,7 +10,7 @@
  * - Native messaging host installation
  */
 
-const { app, dialog, BrowserWindow, powerSaveBlocker, safeStorage, shell } = require("electron");
+const { app, powerSaveBlocker, safeStorage, shell } = require("electron");
 const path = require("path");
 const config = require("./config.js");
 const appLog = require("./app-log.js");
@@ -19,9 +19,7 @@ const TrayManager = require("./tray-manager.js");
 const PairingBridge = require("./pairing-bridge.js");
 const NativeHostInstaller = require("./native-host-installer.js");
 const { SecretsStore, attachSecretsIpc } = require("./secrets-store.js");
-const { createTuskManager } = require("./tusk/manager.js");
-const { attachOpenExternalIpc } = require("./tusk/llm-links.js");
-const { confirmTuskSensitiveChange } = require("./tusk/confirm.js");
+const { attachOpenExternalIpc } = require("./llm-links.js");
 const { checkIfTranslocated, shouldRepointNativeHost } = require("./utils.js");
 const { launchedByNativeHost, shouldRevealOnLaunch } = require("../lib/launch-source.js");
 const { createUpdater, readDarwinSignatureAsync } = require("./updater.js");
@@ -48,7 +46,6 @@ let serverManager = null;
 let trayManager = null;
 let pairingBridge = null;
 let secretsStore = null;
-let tuskManager = null;
 let updater = null;
 let powerSaveId = null;
 let pendingReveal = false;
@@ -74,9 +71,7 @@ async function attachUpdaterAfterTray({ extraResources, serverManager }) {
     onState: (state) => {
       if (trayManager) trayManager.setUpdaterState(state);
     },
-    onBeforeQuitAndInstall: async () => {
-      if (tuskManager) await tuskManager.stop();
-    },
+    onBeforeQuitAndInstall: async () => {},
     onReadyToInstall: () => {
       installingUpdate = true;
     },
@@ -145,10 +140,9 @@ app.on("before-quit", async (event) => {
   if (installingUpdate) {
     return;
   }
-  if ((tuskManager && tuskManager.getStatus().state !== "off") || (serverManager && serverManager.isRunning())) {
+  if (serverManager && serverManager.isRunning()) {
     event.preventDefault();
-    if (tuskManager) await tuskManager.stop();
-    if (serverManager && serverManager.isRunning()) await serverManager.stop();
+    await serverManager.stop();
     app.exit(0);
   }
 });
@@ -207,25 +201,7 @@ app.whenReady().then(async () => {
   // so a slow seal check cannot block the menu bar.
   void attachUpdaterAfterTray({ extraResources, serverManager });
 
-  tuskManager = createTuskManager({
-    store: secretsStore,
-    onStatus: (next) => trayManager.setTuskStatus(next),
-    confirmSensitiveChange: (info) =>
-      confirmTuskSensitiveChange(
-        {
-          dialog,
-          app,
-          getParentWindow: () => {
-            const focused = BrowserWindow.getFocusedWindow();
-            if (focused && !focused.isDestroyed()) return focused;
-            const open = BrowserWindow.getAllWindows().find((win) => win && !win.isDestroyed());
-            return open || null;
-          },
-        },
-        info
-      ),
-  });
-  trayManager.setTuskStatus(tuskManager.getStatus());
+  trayManager.setHasLlmKey(Boolean(secretsStore.getPublic().hasLlmKey));
 
   if (process.platform === "darwin") {
     const translocated = checkIfTranslocated(app.getAppPath());
@@ -261,9 +237,8 @@ app.whenReady().then(async () => {
   serverManager.on("spawned", (child) => {
     pairingBridge.attach(child);
     attachSecretsIpc(child, secretsStore, () => {
-      void tuskManager.refreshLlmReady();
+      trayManager.setHasLlmKey(Boolean(secretsStore.getPublic().hasLlmKey));
     });
-    tuskManager.attachIpc(child);
     attachOpenExternalIpc(child, shell);
   });
   
@@ -287,12 +262,6 @@ app.whenReady().then(async () => {
     } else {
       trayManager.showError(error && error.message);
     }
-  }
-
-  try {
-    await tuskManager.sync();
-  } catch (error) {
-    console.error("Failed to start Tusk:", error && error.message);
   }
 
   // Monitor server health

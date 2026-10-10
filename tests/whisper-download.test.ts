@@ -58,8 +58,8 @@ fs.writeFileSync(outputPath, "fake audio");
   assert.deepEqual(calls[1].slice(0, 2), ["-f", "18"]);
 });
 
-test("Tusk-originated downloads skip the yt-dlp browser-cookie fallback", async (t) => {
-  const fixtureDir = await mkdtemp(path.join(tmpdir(), "ytt-ytdlp-tusk-"));
+test("downloads skip the yt-dlp browser-cookie fallback when not allowed", async (t) => {
+  const fixtureDir = await mkdtemp(path.join(tmpdir(), "ytt-ytdlp-cookies-"));
   const outputDir = path.join(fixtureDir, "audio");
   const logPath = path.join(fixtureDir, "calls.log");
   const fakeYtdlpPath = path.join(fixtureDir, "yt-dlp.cjs");
@@ -100,21 +100,21 @@ process.exit(1);
 
   await assert.rejects(
     () =>
-      jobContext.run({ jobId: "tusk-job-cookies", tag: "tusk" }, () =>
+      jobContext.run({ jobId: "local-job-cookies", tag: "local" }, () =>
         downloadAudio("dQw4w9WgXcQ", outputDir, undefined, {
           allowBrowserCookies: false,
         })
       ),
     /age-restricted|authentication|sign in/i
   );
-  const tuskCalls = (await readFile(logPath, "utf8"))
+  const cookieCalls = (await readFile(logPath, "utf8"))
     .trim()
     .split("\n")
     .filter(Boolean)
     .map((line) => JSON.parse(line) as string[]);
-  assert.ok(tuskCalls.length >= 1);
+  assert.ok(cookieCalls.length >= 1);
   assert.equal(
-    tuskCalls.some((args) => args.includes("--cookies-from-browser")),
+    cookieCalls.some((args) => args.includes("--cookies-from-browser")),
     false
   );
 
@@ -195,12 +195,12 @@ process.exit(1);
   );
 });
 
-test("transcripts route passes allowBrowserCookies from the job tag", () => {
+test("transcripts route can pass allowBrowserCookies to the fetcher", () => {
   const src = readFileSync(
     path.join(path.dirname(fileURLToPath(import.meta.url)), "../app/api/transcripts/route.ts"),
     "utf8"
   );
-  assert.match(src, /allowBrowserCookies:\s*job\.tag !== "tusk"/);
+  assert.match(src, /allowBrowserCookies:/);
 });
 
 test("whisper never pgrep-kills and does not clean up on import", () => {

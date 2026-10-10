@@ -50,11 +50,3 @@ test("transcript-cache module exports expected functions", async () => {
   assert.ok(typeof cache.getCachedBaseSummary === "function");
   assert.ok(typeof cache.cacheBaseSummary === "function");
 });
-
-test("watchlist-dedupe module exists and exports functions", async () => {
-  const dedupe = await import("../lib/watchlist-dedupe.ts");
-  
-  assert.ok(typeof dedupe.getChannelFeed === "function");
-  assert.ok(typeof dedupe.invalidateChannelFeed === "function");
-  assert.ok(typeof dedupe.clearAllFeeds === "function");
-});

@@ -1,9 +1,5 @@
 "use strict";
 
-const { escapeSlackMrkdwn } = require("./format.js");
-
-const NO_KEY_COPY = "Tusk needs an AI key. Open Transcriber > Settings to add one.";
-
 const LLM_KEY_LINKS = [
   { label: "Anthropic console", url: "https://console.anthropic.com/settings/keys" },
   { label: "OpenAI platform", url: "https://platform.openai.com/api-keys" },
@@ -28,14 +24,6 @@ function isAllowedLlmKeyUrl(value) {
   if (!LLM_KEY_LINKS.some((link) => link.url === parsed.href)) return false;
   const origin = `${parsed.protocol}//${parsed.hostname}`;
   return ALLOWED_LLM_KEY_ORIGINS.has(origin);
-}
-
-function noKeySlackText() {
-  const lines = [escapeSlackMrkdwn(NO_KEY_COPY)];
-  for (const link of LLM_KEY_LINKS) {
-    lines.push(`<${link.url}|${escapeSlackMrkdwn(link.label)}>`);
-  }
-  return lines.join("\n");
 }
 
 async function openAllowedLlmKeyUrl(shell, url) {
@@ -72,11 +60,9 @@ function attachOpenExternalIpc(child, shellApi) {
 }
 
 module.exports = {
-  NO_KEY_COPY,
   LLM_KEY_LINKS,
   ALLOWED_LLM_KEY_ORIGINS,
   isAllowedLlmKeyUrl,
-  noKeySlackText,
   openAllowedLlmKeyUrl,
   attachOpenExternalIpc,
 };

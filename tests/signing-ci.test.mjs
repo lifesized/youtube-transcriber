@@ -257,7 +257,7 @@ test("main wires the updater gate and stops Next before quitAndInstall", () => {
   assert.ok(main.includes("installingUpdate"));
   assert.match(
     main,
-    /onBeforeQuitAndInstall:\s*async\s*\(\)\s*=>\s*\{[\s\S]*await tuskManager\.stop\(\)/
+    /onBeforeQuitAndInstall:\s*async\s*\(\)\s*=>\s*\{\s*\}/
   );
   const hook = main.slice(
     main.indexOf("onBeforeQuitAndInstall"),

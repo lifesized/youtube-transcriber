@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
   const job = beginServerJob({
     signal: request.signal,
     jobId: typeof body.jobId === "string" ? body.jobId : undefined,
-    tag: body.jobTag === "tusk" ? "tusk" : "local",
+    tag: "local",
   });
 
   try {
@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
       // Use cache-aware transcript lookup/creation
       const video = await getOrCreateTranscript(videoId, storedUrl, lang, platform, {
         fetcher,
-        allowBrowserCookies: job.tag !== "tusk",
+        allowBrowserCookies: true,
       });
       return NextResponse.json(video, { status: 201 });
     });

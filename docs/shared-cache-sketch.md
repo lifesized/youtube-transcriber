@@ -37,7 +37,7 @@ User B / Hosted → Check cache → HIT: serve (no YouTube fetch)
 
 ### 2. No User Data
 - **Allowed**: Video metadata (title, author), transcript segments, pipeline version
-- **Forbidden**: User ID, notes, summaries with user prompts, Slack content, base summaries
+- **Forbidden**: User ID, notes, summaries with user prompts, base summaries
 
 ### 3. YouTube ToS Risk
 - **Issue**: YouTube ToS prohibits redistribution. Caching public captions/Whisper output may be acceptable (similar to browser caches, RSS readers), but **needs legal review before enabling**.

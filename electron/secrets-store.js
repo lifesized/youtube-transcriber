@@ -113,81 +113,6 @@ class SecretsStore {
     }
   }
 
-  getSlackPlain() {
-    const stored = readFile();
-    return {
-      botToken: this._decryptField(stored, "slackBotTokenEnc", "Slack bot token"),
-      appToken: this._decryptField(stored, "slackAppTokenEnc", "Slack app token"),
-      enabled: stored.slackEnabled === true,
-      teamId: typeof stored.slackTeamId === "string" ? stored.slackTeamId : "",
-      teamName: typeof stored.slackTeamName === "string" ? stored.slackTeamName : "",
-      botUserId: typeof stored.slackBotUserId === "string" ? stored.slackBotUserId : "",
-      botName: typeof stored.slackBotName === "string" ? stored.slackBotName : "",
-      channelAllowlist: Array.isArray(stored.slackChannelAllowlist)
-        ? stored.slackChannelAllowlist.filter((id) => typeof id === "string")
-        : [],
-      watchFeeds: Array.isArray(stored.slackWatchFeeds)
-        ? stored.slackWatchFeeds.filter((feed) => feed && typeof feed === "object" && typeof feed.url === "string")
-        : [],
-      digestChannel: typeof stored.slackDigestChannel === "string" ? stored.slackDigestChannel : "",
-    };
-  }
-
-  getSlackPublic() {
-    const plain = this.getSlackPlain();
-    return {
-      hasBotToken: Boolean(plain.botToken),
-      botTokenMasked: plain.botToken ? maskSlackToken(plain.botToken) : "",
-      hasAppToken: Boolean(plain.appToken),
-      appTokenMasked: plain.appToken ? maskSlackToken(plain.appToken) : "",
-      enabled: plain.enabled,
-      teamId: plain.teamId,
-      teamName: plain.teamName,
-      botName: plain.botName,
-      channelAllowlist: plain.channelAllowlist,
-      watchFeeds: plain.watchFeeds,
-      digestChannel: plain.digestChannel,
-    };
-  }
-
-  setSlack(patch) {
-    const stored = readFile();
-    const current = this.getSlackPlain();
-    if (patch.botToken !== undefined && !isMasked(patch.botToken, maskKey(current.botToken))) {
-      stored.slackBotTokenEnc = patch.botToken ? this._encrypt(patch.botToken) : "";
-    }
-    if (patch.appToken !== undefined && !isMasked(patch.appToken, maskKey(current.appToken))) {
-      stored.slackAppTokenEnc = patch.appToken ? this._encrypt(patch.appToken) : "";
-    }
-    if (patch.enabled !== undefined) stored.slackEnabled = Boolean(patch.enabled);
-    if (patch.teamId !== undefined) stored.slackTeamId = String(patch.teamId || "");
-    if (patch.teamName !== undefined) stored.slackTeamName = String(patch.teamName || "");
-    if (patch.botUserId !== undefined) stored.slackBotUserId = String(patch.botUserId || "");
-    if (patch.botName !== undefined) stored.slackBotName = String(patch.botName || "");
-    if (patch.channelAllowlist !== undefined) {
-      stored.slackChannelAllowlist = Array.isArray(patch.channelAllowlist)
-        ? patch.channelAllowlist.map(String)
-        : [];
-    }
-    if (patch.watchFeeds !== undefined) {
-      stored.slackWatchFeeds = Array.isArray(patch.watchFeeds)
-        ? patch.watchFeeds
-            .filter((feed) => feed && typeof feed.url === "string")
-            .map((feed) => ({
-              kind: String(feed.kind || ""),
-              id: String(feed.id || ""),
-              url: String(feed.url),
-            }))
-            .slice(0, 10)
-        : [];
-    }
-    if (patch.digestChannel !== undefined) {
-      stored.slackDigestChannel = String(patch.digestChannel || "");
-    }
-    writeFile(stored);
-    return this.getSlackPublic();
-  }
-
   setPlain(patch) {
     const stored = readFile();
     const current = this.getPlain();
@@ -227,12 +152,6 @@ function maskKey(value) {
   const s = String(value);
   if (s.length <= 4) return "••••";
   return `••••${s.slice(-4)}`;
-}
-
-function maskSlackToken(value) {
-  const s = String(value);
-  if (s.length <= 4) return "saved ••••";
-  return `saved ••••${s.slice(-4)}`;
 }
 
 function isMasked(value, maskedPlaceholder) {
@@ -278,7 +197,6 @@ module.exports = {
   SecretsStore,
   attachSecretsIpc,
   maskKey,
-  maskSlackToken,
   isMasked,
   VALID_LLM,
 };

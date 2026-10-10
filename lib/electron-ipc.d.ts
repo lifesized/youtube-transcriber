@@ -1,5 +1,4 @@
 export const DEFAULT_IPC_TIMEOUT_MS: number;
-export const TUSK_SET_TIMEOUT_MS: number;
 
 export function requestFromMain(
   type: string,
@@ -21,4 +20,3 @@ export function secretsFromEnv(): {
   notionDatabaseId: string;
 };
 
-export function notifyTuskLlmChanged(): Promise<void>;
