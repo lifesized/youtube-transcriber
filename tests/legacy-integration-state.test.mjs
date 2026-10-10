@@ -10,9 +10,10 @@ const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const {
   migrateLegacyIntegrationState,
-  purgeLegacyEncFields,
+  purgeLegacyIntegrationFields,
   unlinkRegularFileNoFollow,
-  isLegacyEncKey,
+  isLegacyIntegrationKey,
+  LEGACY_INTEGRATION_KEY_PREFIXES,
   LEGACY_STATE_FILES,
   MARKER_FILE,
   SECRETS_FILE,
@@ -26,29 +27,46 @@ function modeOf(file) {
   return fs.statSync(file).mode & 0o777;
 }
 
-test("legacy Enc keys are identified without decrypting", () => {
-  assert.equal(isLegacyEncKey("slackBotTokenEnc"), true);
-  assert.equal(isLegacyEncKey("slackAppTokenEnc"), true);
-  assert.equal(isLegacyEncKey("llmApiKeyEnc"), false);
-  assert.equal(isLegacyEncKey("notionTokenEnc"), false);
+test("legacy integration keys match the prefix list without decrypting", () => {
+  assert.deepEqual(LEGACY_INTEGRATION_KEY_PREFIXES, ["slack"]);
+  assert.equal(isLegacyIntegrationKey("slackBotTokenEnc"), true);
+  assert.equal(isLegacyIntegrationKey("slackAppTokenEnc"), true);
+  assert.equal(isLegacyIntegrationKey("slackTeamName"), true);
+  assert.equal(isLegacyIntegrationKey("slackChannelAllowlist"), true);
+  assert.equal(isLegacyIntegrationKey("slackWatchFeeds"), true);
+  assert.equal(isLegacyIntegrationKey("slackEnabled"), true);
+  assert.equal(isLegacyIntegrationKey("llmApiKeyEnc"), false);
+  assert.equal(isLegacyIntegrationKey("notionTokenEnc"), false);
   const src = fs.readFileSync(path.join(root, "electron/legacy-integration-state.js"), "utf8");
   assert.doesNotMatch(src, /_decrypt|decryptString|safeStorage/);
-  assert.match(src, /legacy integration state/);
+  assert.match(src, /legacy integration/);
+  assert.match(src, /LEGACY_INTEGRATION_KEY_PREFIXES/);
 });
 
-test("purge drops leftover Enc fields and keeps the rest", () => {
-  const { next, changed } = purgeLegacyEncFields({
+test("purge drops every leftover integration key and keeps the rest", () => {
+  const { next, changed } = purgeLegacyIntegrationFields({
     llmProvider: "anthropic",
     llmApiKeyEnc: "keep-me",
     slackBotTokenEnc: "cipher-bot",
     slackAppTokenEnc: "cipher-app",
     slackEnabled: true,
+    slackTeamName: "Example",
+    slackChannelAllowlist: ["C1"],
+    slackWatchFeeds: [{ url: "https://example.com/feed" }],
   });
   assert.equal(changed, true);
   assert.equal(next.llmApiKeyEnc, "keep-me");
-  assert.equal(next.slackEnabled, true);
-  assert.equal("slackBotTokenEnc" in next, false);
-  assert.equal("slackAppTokenEnc" in next, false);
+  assert.equal(next.llmProvider, "anthropic");
+  for (const key of [
+    "slackBotTokenEnc",
+    "slackAppTokenEnc",
+    "slackEnabled",
+    "slackTeamName",
+    "slackChannelAllowlist",
+    "slackWatchFeeds",
+  ]) {
+    assert.equal(key in next, false, key);
+  }
 });
 
 test("startup migration rewrites secrets at 0600, deletes leftover files, and runs once", () => {
@@ -61,6 +79,9 @@ test("startup migration rewrites secrets at 0600, deletes leftover files, and ru
       llmApiKeyEnc: "keep-cipher",
       slackBotTokenEnc: "do-not-decrypt",
       slackAppTokenEnc: "also-secret",
+      slackTeamName: "Example",
+      slackChannelAllowlist: ["C1"],
+      slackWatchFeeds: [{ url: "https://example.com/feed" }],
     })
   );
   fs.chmodSync(secretsPath, 0o644);
@@ -78,8 +99,15 @@ test("startup migration rewrites secrets at 0600, deletes leftover files, and ru
     assert.deepEqual(migrateLegacyIntegrationState(stateDir), { skipped: false });
     const rewritten = JSON.parse(fs.readFileSync(secretsPath, "utf8"));
     assert.equal(rewritten.llmApiKeyEnc, "keep-cipher");
-    assert.equal("slackBotTokenEnc" in rewritten, false);
-    assert.equal("slackAppTokenEnc" in rewritten, false);
+    for (const key of [
+      "slackBotTokenEnc",
+      "slackAppTokenEnc",
+      "slackTeamName",
+      "slackChannelAllowlist",
+      "slackWatchFeeds",
+    ]) {
+      assert.equal(key in rewritten, false, key);
+    }
     assert.equal(modeOf(secretsPath), 0o600);
     for (const name of LEGACY_STATE_FILES) {
       assert.equal(fs.existsSync(path.join(stateDir, name)), false, name);
@@ -94,12 +122,12 @@ test("startup migration rewrites secrets at 0600, deletes leftover files, and ru
 
     fs.writeFileSync(
       secretsPath,
-      JSON.stringify({ slackBotTokenEnc: "reintroduced" })
+      JSON.stringify({ slackTeamName: "reintroduced" })
     );
     fs.writeFileSync(path.join(stateDir, LEGACY_STATE_FILES[0]), "again\n");
     assert.deepEqual(migrateLegacyIntegrationState(stateDir), { skipped: true });
     assert.equal(
-      JSON.parse(fs.readFileSync(secretsPath, "utf8")).slackBotTokenEnc,
+      JSON.parse(fs.readFileSync(secretsPath, "utf8")).slackTeamName,
       "reintroduced"
     );
     assert.equal(fs.existsSync(path.join(stateDir, LEGACY_STATE_FILES[0])), true);
