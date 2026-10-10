@@ -186,6 +186,18 @@ async function stopServerThenInstall(serverManager, install) {
   if (typeof install === "function") await install();
 }
 
+/**
+ * MacUpdater.quitAndInstall registers nativeUpdater "update-downloaded"
+ * (electron-updater MacUpdater.js:247) which then quitAndInstalls.
+ * Recovery must drop that listener so a late Squirrel download cannot install.
+ */
+function detachNativeUpdateDownloaded(updater) {
+  const native = updater && updater.nativeUpdater;
+  if (!native || typeof native.removeAllListeners !== "function") return false;
+  native.removeAllListeners("update-downloaded");
+  return true;
+}
+
 function createUpdater(options) {
   const {
     isPackaged,
@@ -248,6 +260,7 @@ function createUpdater(options) {
       }
       installInFlight = false;
       ignoreDownloadedUntilUserAction = true;
+      detachNativeUpdateDownloaded(autoUpdater);
       if (serverManager && typeof serverManager.start === "function") {
         try {
           await serverManager.start();
@@ -317,6 +330,9 @@ function createUpdater(options) {
       status = "available";
       emit();
     });
+    if (ignoreDownloadedUntilUserAction) {
+      detachNativeUpdateDownloaded(autoUpdater);
+    }
   });
   autoUpdater.on("download-progress", (progress) => {
     status = "downloading";
@@ -343,18 +359,22 @@ function createUpdater(options) {
 
   function checkForUpdates() {
     if (!autoUpdater) return;
-    ignoreDownloadedUntilUserAction = false;
     autoUpdater.checkForUpdates().catch((error) => {
       console.warn("updater: check failed:", error && error.message);
     });
+    if (ignoreDownloadedUntilUserAction) {
+      detachNativeUpdateDownloaded(autoUpdater);
+    }
   }
 
   function downloadUpdate() {
     if (!autoUpdater) return;
-    ignoreDownloadedUntilUserAction = false;
     autoUpdater.downloadUpdate().catch((error) => {
       console.warn("updater: download failed:", error && error.message);
     });
+    if (ignoreDownloadedUntilUserAction) {
+      detachNativeUpdateDownloaded(autoUpdater);
+    }
   }
 
   async function quitAndInstall() {
@@ -432,6 +452,7 @@ module.exports = {
   configureAutoUpdater,
   isBetaPrereleaseVersion,
   stopServerThenInstall,
+  detachNativeUpdateDownloaded,
   runBeforeQuitHook,
   BEFORE_QUIT_HOOK_TIMEOUT_MS,
   INSTALL_WATCHDOG_MS,

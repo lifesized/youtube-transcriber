@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { createRequire } from "node:module";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -27,6 +28,7 @@ const {
   configureAutoUpdater,
   isBetaPrereleaseVersion,
   stopServerThenInstall,
+  detachNativeUpdateDownloaded,
   INITIAL_DELAY_MS,
   INTERVAL_MS,
   BEFORE_QUIT_HOOK_TIMEOUT_MS,
@@ -272,6 +274,7 @@ function quitUpdaterFixture({
   quitAndInstall,
   start,
   listeners,
+  nativeUpdater,
 }) {
   const dir = mkdtempSync(path.join(tmpdir(), "ytt-quit-hook-"));
   writeFileSync(
@@ -304,10 +307,17 @@ function quitUpdaterFixture({
       allowDowngrade: true,
       allowPrerelease: false,
       forceDevUpdateConfig: true,
+      nativeUpdater,
       on(event, fn) {
         if (listeners) listeners[event] = fn;
       },
       setFeedURL() {},
+      checkForUpdates() {
+        return Promise.resolve();
+      },
+      downloadUpdate() {
+        return Promise.resolve();
+      },
       quitAndInstall:
         quitAndInstall ||
         (() => {
@@ -588,6 +598,50 @@ test("after install recovery a late update-downloaded does not quit or install",
 
     await updater.quitAndInstall();
     assert.ok(order.filter((step) => step === "install").length >= 2, "a fresh click still installs");
+  } finally {
+    updater.dispose();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("recovery removes nativeUpdater update-downloaded so a late Squirrel download cannot install", async () => {
+  const order = [];
+  const nativeUpdater = new EventEmitter();
+  nativeUpdater.on("update-downloaded", () => {
+    order.push("native-auto-install");
+  });
+  assert.equal(typeof detachNativeUpdateDownloaded, "function");
+  const { updater, dir } = quitUpdaterFixture({
+    order,
+    nativeUpdater,
+    quitAndInstall() {
+      order.push("install");
+      throw new Error("Squirrel failed");
+    },
+    onReadyToInstall: () => order.push("flag"),
+    onInstallFailed: () => order.push("flag-reset"),
+  });
+  try {
+    await updater.quitAndInstall();
+    assert.ok(order.includes("flag-reset"));
+    assert.equal(nativeUpdater.listenerCount("update-downloaded"), 0);
+
+    nativeUpdater.emit("update-downloaded");
+    assert.equal(order.includes("native-auto-install"), false);
+
+    nativeUpdater.on("update-downloaded", () => {
+      order.push("rearmed-native-install");
+    });
+    updater.checkForUpdates();
+    updater.downloadUpdate();
+    assert.equal(nativeUpdater.listenerCount("update-downloaded"), 0);
+
+    nativeUpdater.emit("update-downloaded");
+    assert.equal(order.includes("rearmed-native-install"), false);
+    assert.equal(order.filter((step) => step === "install").length, 1);
+
+    await updater.quitAndInstall();
+    assert.ok(order.filter((step) => step === "install").length >= 2);
   } finally {
     updater.dispose();
     rmSync(dir, { recursive: true, force: true });
