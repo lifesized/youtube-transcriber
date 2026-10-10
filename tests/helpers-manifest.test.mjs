@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { chmodSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { chmodSync, mkdirSync, symlinkSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
@@ -47,6 +47,9 @@ test("validateExecutable requires a user-owned, non-world-writable file inside t
     assert.equal(helpers.validateExecutable(helperDir, "bin/helper", uid).error, "world_writable");
     chmodSync(exe, 0o755);
     assert.equal(helpers.validateExecutable(helperDir, "bin/helper", uid + 1).error, "bad_owner");
+    const alias = path.join(dir, "alias-notes");
+    symlinkSync(helperDir, alias);
+    assert.equal(helpers.validateExecutable(alias, "bin/helper", uid).ok, true);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
