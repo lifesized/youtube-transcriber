@@ -15,6 +15,8 @@ const {
   channelFileName,
   isOsNewEnough,
   isUpdateSupported,
+  currentMarketingOsVersion,
+  darwinReleaseToMacos,
   renderUpdateYml,
 } = require(path.join(root, "electron", "update-feed.js"));
 const { getChannelFilename } = require("electron-updater/out/util.js");
@@ -58,7 +60,7 @@ test("update artifacts script publishes the channel file the app requests", () =
     }),
     isUpdateSupported(
       { version: "0.2.0-beta.2", minimumSystemVersion: "13.0.0" },
-      require("os").release()
+      currentMarketingOsVersion()
     )
   );
   const body = renderUpdateYml({
@@ -73,23 +75,33 @@ test("update artifacts script publishes the channel file the app requests", () =
   assert.equal(MINIMUM_MACOS_VERSION, "13.0.0");
 });
 
-test("isUpdateSupported restores electron-updater's minimumSystemVersion check", () => {
-  // Stock AppUpdater.checkIfUpdateSupported (electron-updater 6.8.9):
-  //   if (minimumSystemVersion && semver.lt(os.release(), minimumSystemVersion)) return false
-  //   compare errors fail open. Our override also requires a beta prerelease.
+test("isUpdateSupported compares marketing macOS and fails closed", () => {
+  assert.equal(darwinReleaseToMacos("22.6.0"), "13.6.0");
+  assert.equal(darwinReleaseToMacos("21.0.0"), "12.0.0");
+  assert.equal(darwinReleaseToMacos("6.12.94+"), null);
   assert.equal(
-    isUpdateSupported({ version: "1.0.0", minimumSystemVersion: "13.0.0" }, "22.0.0"),
+    currentMarketingOsVersion({ getSystemVersion: () => "13.6.1" }, "22.6.0"),
+    "13.6.1"
+  );
+  assert.equal(
+    currentMarketingOsVersion({}, "22.6.0"),
+    "13.6.0",
+    "Darwin major − 9 when getSystemVersion is missing"
+  );
+
+  assert.equal(
+    isUpdateSupported({ version: "1.0.0", minimumSystemVersion: "13.0.0" }, "13.6.1"),
     false
   );
   assert.equal(
     isUpdateSupported({ version: "0.2.0-beta.2" }, "12.0.0"),
     true,
-    "no minimumSystemVersion → stock check returns true"
+    "no minimumSystemVersion → allowed"
   );
   assert.equal(
     isUpdateSupported(
       { version: "0.2.0-beta.2", minimumSystemVersion: "13.0.0" },
-      "12.0.0"
+      "12.7.0"
     ),
     false
   );
@@ -103,14 +115,23 @@ test("isUpdateSupported restores electron-updater's minimumSystemVersion check",
   assert.equal(
     isUpdateSupported(
       { version: "0.2.0-beta.2", minimumSystemVersion: "13.0.0" },
-      "22.1.0"
+      darwinReleaseToMacos("22.1.0")
     ),
     true
+  );
+  assert.equal(
+    isUpdateSupported(
+      { version: "0.2.0-beta.2", minimumSystemVersion: "13.0.0" },
+      darwinReleaseToMacos("21.6.0")
+    ),
+    false,
+    "Darwin 21 → macOS 12 is below the floor"
   );
   assert.equal(isOsNewEnough("12.0.0", "13.0.0"), false);
   assert.equal(isOsNewEnough("13.0.0", "13.0.0"), true);
   assert.equal(isOsNewEnough("22.0.0", undefined), true);
-  assert.equal(isOsNewEnough("not-semver", "13.0.0"), true, "compare error fail-open");
+  assert.equal(isOsNewEnough("not-semver", "13.0.0"), false, "unparsable fails closed");
+  assert.equal(isOsNewEnough(null, "13.0.0"), false, "missing version fails closed");
 });
 
 test("electron-builder pins LSMinimumSystemVersion to Electron 44's floor", () => {
