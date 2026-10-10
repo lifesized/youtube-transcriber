@@ -224,6 +224,7 @@ function createUpdater(options) {
   let installInFlight = false;
   let installWatchdog = null;
   let recoveringInstall = false;
+  let ignoreDownloadedUntilUserAction = false;
 
   function clearInstallWatchdog() {
     if (installWatchdog != null) {
@@ -246,6 +247,7 @@ function createUpdater(options) {
         }
       }
       installInFlight = false;
+      ignoreDownloadedUntilUserAction = true;
       if (serverManager && typeof serverManager.start === "function") {
         try {
           await serverManager.start();
@@ -322,6 +324,10 @@ function createUpdater(options) {
     emit();
   });
   autoUpdater.on("update-downloaded", () => {
+    if (ignoreDownloadedUntilUserAction) {
+      console.warn("updater: ignoring update-downloaded after install recovery");
+      return;
+    }
     status = "ready";
     percent = 100;
     emit();
@@ -337,6 +343,7 @@ function createUpdater(options) {
 
   function checkForUpdates() {
     if (!autoUpdater) return;
+    ignoreDownloadedUntilUserAction = false;
     autoUpdater.checkForUpdates().catch((error) => {
       console.warn("updater: check failed:", error && error.message);
     });
@@ -344,6 +351,7 @@ function createUpdater(options) {
 
   function downloadUpdate() {
     if (!autoUpdater) return;
+    ignoreDownloadedUntilUserAction = false;
     autoUpdater.downloadUpdate().catch((error) => {
       console.warn("updater: download failed:", error && error.message);
     });
@@ -351,6 +359,7 @@ function createUpdater(options) {
 
   async function quitAndInstall() {
     if (installInFlight) return;
+    ignoreDownloadedUntilUserAction = false;
     installInFlight = true;
     clearInstallWatchdog();
     installWatchdog = setTimeoutFn(() => {

@@ -265,6 +265,7 @@ function quitUpdaterFixture({
   onBeforeQuitAndInstall,
   onReadyToInstall,
   onInstallFailed,
+  onState,
   beforeQuitHookTimeoutMs,
   installWatchdogMs,
   order,
@@ -296,6 +297,7 @@ function quitUpdaterFixture({
     onBeforeQuitAndInstall,
     onReadyToInstall,
     onInstallFailed,
+    onState,
     loadAutoUpdater: () => ({
       autoDownload: true,
       autoInstallOnAppQuit: true,
@@ -541,6 +543,51 @@ test("install watchdog recovers if Squirrel never errors", async () => {
     assert.ok(order.includes("install"));
     assert.ok(order.includes("flag-reset"));
     assert.ok(order.includes("start-server"));
+  } finally {
+    updater.dispose();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("after install recovery a late update-downloaded does not quit or install", async () => {
+  const order = [];
+  const listeners = {};
+  const states = [];
+  let installing = false;
+  const { updater, dir } = quitUpdaterFixture({
+    order,
+    listeners,
+    onState: (state) => {
+      states.push(state.status);
+    },
+    quitAndInstall() {
+      order.push("install");
+      throw new Error("Squirrel failed");
+    },
+    onReadyToInstall: () => {
+      installing = true;
+      order.push("flag");
+    },
+    onInstallFailed: () => {
+      installing = false;
+      order.push("flag-reset");
+    },
+  });
+  try {
+    await updater.quitAndInstall();
+    assert.equal(installing, false);
+    assert.ok(order.includes("flag-reset"));
+    const afterRecovery = order.length;
+    const statesAfterRecovery = states.length;
+    assert.equal(typeof listeners["update-downloaded"], "function");
+    listeners["update-downloaded"]();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(order.length, afterRecovery, "late download must not quit/install");
+    assert.equal(states.length, statesAfterRecovery, "late download must not mark ready");
+    assert.equal(order.filter((step) => step === "install").length, 1);
+
+    await updater.quitAndInstall();
+    assert.ok(order.filter((step) => step === "install").length >= 2, "a fresh click still installs");
   } finally {
     updater.dispose();
     rmSync(dir, { recursive: true, force: true });
