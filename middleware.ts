@@ -9,6 +9,8 @@ import {
   tokensEqual,
   unauthorizedJson,
 } from "./lib/local-api-auth.js";
+import { authorizeHelperBearer } from "./lib/helper-scope.js";
+import { loadHelperRecords } from "./lib/helper-tokens.js";
 
 function expectedToken(): string | null {
   const fromEnv = process.env[ENV_NAME];
@@ -77,7 +79,20 @@ export function middleware(request: NextRequest) {
   );
 
   if (!authorized) {
-    return NextResponse.json(unauthorizedJson(), { status: 401 });
+    const helper = authorizeHelperBearer(
+      { authorization: request.headers.get("authorization") },
+      {
+        method: request.method,
+        pathname,
+        records: loadHelperRecords(),
+      }
+    );
+    if (!helper.ok) {
+      return NextResponse.json(unauthorizedJson(), { status: 401 });
+    }
+    const headers = new Headers(request.headers);
+    headers.set("x-transcriber-helper", helper.id || "1");
+    return NextResponse.next({ request: { headers } });
   }
 
   return NextResponse.next();

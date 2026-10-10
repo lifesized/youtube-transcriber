@@ -25,6 +25,7 @@ const { checkIfTranslocated, shouldRepointNativeHost } = require("./utils.js");
 const { launchedByNativeHost, shouldRevealOnLaunch } = require("../lib/launch-source.js");
 const { createUpdater, readDarwinSignatureAsync } = require("./updater.js");
 const { appBundleFromExecPath, parseCodesignVerbose } = require("./code-signature.js");
+const { createHelperManager } = require("./helpers.js");
 
 const IS_DEV = process.env.NODE_ENV === "development";
 const PORT = config.port;
@@ -47,6 +48,7 @@ let serverManager = null;
 let trayManager = null;
 let pairingBridge = null;
 let secretsStore = null;
+let helperManager = null;
 let updater = null;
 let powerSaveId = null;
 let pendingReveal = false;
@@ -148,6 +150,7 @@ app.on("before-quit", async (event) => {
   }
   if (serverManager && serverManager.isRunning()) {
     event.preventDefault();
+    if (helperManager) helperManager.stopAll();
     await serverManager.stop();
     app.exit(0);
   }
@@ -214,6 +217,15 @@ app.whenReady().then(async () => {
 
   trayManager.setHasLlmKey(Boolean(secretsStore.getPublic().hasLlmKey));
 
+  helperManager = createHelperManager({
+    port: PORT,
+    isPackaged: app.isPackaged,
+    appExecPath: process.execPath,
+    onStatus: (list) => trayManager.setHelpers(list),
+  });
+  helperManager.syncEnv();
+  trayManager.setHelpers(helperManager.listStatus());
+
   if (process.platform === "darwin") {
     const translocated = checkIfTranslocated(app.getAppPath());
     if (translocated) {
@@ -251,6 +263,7 @@ app.whenReady().then(async () => {
       trayManager.setHasLlmKey(Boolean(secretsStore.getPublic().hasLlmKey));
     });
     attachOpenExternalIpc(child, shell);
+    helperManager.attachIpc(child);
   });
   
   // Start power save blocker. isStarted() rejects null; id is null until first start.
@@ -274,6 +287,8 @@ app.whenReady().then(async () => {
       trayManager.showError(error && error.message);
     }
   }
+
+  helperManager.startAll();
 
   // Monitor server health
   serverManager.on("status-change", (status) => {

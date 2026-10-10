@@ -33,6 +33,13 @@ type FallbackItem =
 
 type ProviderType = "openrouter" | "groq" | "custom";
 
+type InstalledHelper = {
+  id: string;
+  displayName: string;
+  version?: string;
+  state: string;
+};
+
 const DAILY_LIMIT = 14_400;
 const GROQ_COST_PER_SECOND = 0.0001; // $0.006/min beyond free tier
 
@@ -287,6 +294,8 @@ export function SettingsPanel() {
   const [summariesAvailable, setSummariesAvailable] = useState<boolean | null>(null);
   const [llmSaving, setLlmSaving] = useState(false);
   const [llmError, setLlmError] = useState("");
+  const [installedHelpers, setInstalledHelpers] = useState<InstalledHelper[]>([]);
+  const [helperBusyId, setHelperBusyId] = useState("");
   const [llmLinkError, setLlmLinkError] = useState("");
   const [notionToken, setNotionToken] = useState("");
   const [notionDatabaseId, setNotionDatabaseId] = useState("");
@@ -307,6 +316,7 @@ export function SettingsPanel() {
         fetch("/api/settings/notion"),
         fetch("/api/summaries"),
       ]);
+      const helpersRes = await fetch("/api/settings/helpers");
 
       if (settingsRes.ok) {
         const data: SettingsData = await settingsRes.json();
@@ -373,6 +383,11 @@ export function SettingsPanel() {
         setNotionToken(data.tokenMasked || "");
         setNotionDatabaseId(data.databaseId || "");
       }
+      if (helpersRes.ok) {
+        const data = await helpersRes.json();
+        setInstalledHelpers(Array.isArray(data.helpers) ? data.helpers : []);
+      }
+
     } catch {
       // Settings may not exist yet
     } finally {
@@ -716,6 +731,59 @@ export function SettingsPanel() {
           <p className="text-sm text-white/30">Token is stored in the app Keychain.</p>
         ) : null}
       </div>
+
+
+      {installedHelpers.length > 0 ? (
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-white/80">Helpers</h2>
+          <p className="text-sm text-white/40">
+            Optional local processes that talk to Transcriber over the loopback API.
+          </p>
+          {installedHelpers.map((helper) => (
+            <div
+              key={helper.id}
+              className="flex flex-col gap-2 rounded-lg bg-[hsl(var(--panel-2))] p-4 shadow-[var(--edge)] sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div>
+                <p className="text-sm font-semibold text-white/80">{helper.displayName}</p>
+                <p className="text-sm text-[hsl(var(--muted))]">{helper.state}</p>
+              </div>
+              <button
+                type="button"
+                disabled={helperBusyId === helper.id}
+                aria-busy={helperBusyId === helper.id}
+                onClick={() => {
+                  void (async () => {
+                    setHelperBusyId(helper.id);
+                    try {
+                      const res = await fetch("/api/settings/helpers", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          id: helper.id,
+                          action: helper.state === "running" || helper.state === "starting" ? "stop" : "start",
+                        }),
+                      });
+                      const data = await res.json().catch(() => ({}));
+                      if (res.ok && Array.isArray(data.helpers)) setInstalledHelpers(data.helpers);
+                    } finally {
+                      setHelperBusyId("");
+                    }
+                  })();
+                }}
+                className="h-11 rounded-md bg-[hsl(var(--panel))] px-4 py-3 text-sm font-semibold text-white/90 shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)] disabled:cursor-not-allowed disabled:text-[hsl(var(--muted-2))] disabled:hover:bg-[hsl(var(--panel))]"
+              >
+                {helperBusyId === helper.id
+                  ? "Working…"
+                  : helper.state === "running" || helper.state === "starting"
+                    ? "Stop"
+                    : "Start"}
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
 
       {/* Fallback order summary */}
       <p className="text-sm text-white/40">
