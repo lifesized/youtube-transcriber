@@ -3,10 +3,22 @@
 /**
  * MAIN-world helper. Isolated content.js cannot see ytInitialPlayerResponse
  * or do a same-origin youtube.com fetch. CustomEvents cross the world bridge.
+ *
+ * Install mark is a non-enumerable Symbol.for key so page scripts cannot
+ * detect the helper via a well-known window flag.
  */
 (function () {
-  if (window.__yttCaptionMain) return;
-  window.__yttCaptionMain = true;
+  const MAX_TIMEDTEXT_BYTES = 5 * 1024 * 1024;
+  const INSTALL_MARK = Symbol.for("7f3c2e91b0d4e68a");
+  if (Object.prototype.hasOwnProperty.call(window, INSTALL_MARK) || window[INSTALL_MARK]) {
+    return;
+  }
+  Object.defineProperty(window, INSTALL_MARK, {
+    value: 1,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
 
   function playerResponse() {
     try {
@@ -63,7 +75,24 @@
         credentials: "same-origin",
         redirect: "error",
       });
+      const declared = Number(res.headers.get("content-length"));
+      if (Number.isFinite(declared) && declared > MAX_TIMEDTEXT_BYTES) {
+        window.dispatchEvent(
+          new CustomEvent("ytt-timedtext-result", {
+            detail: { requestId, ok: false, error: "oversized", status: res.status },
+          })
+        );
+        return;
+      }
       const text = await res.text();
+      if (typeof text === "string" && text.length > MAX_TIMEDTEXT_BYTES) {
+        window.dispatchEvent(
+          new CustomEvent("ytt-timedtext-result", {
+            detail: { requestId, ok: false, error: "oversized", status: res.status },
+          })
+        );
+        return;
+      }
       window.dispatchEvent(
         new CustomEvent("ytt-timedtext-result", {
           detail: {

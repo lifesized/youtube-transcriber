@@ -92,3 +92,51 @@ test("hard cap returns timeout when the result never arrives", async () => {
   const result = await h.extract.extractFromTab(3);
   assert.deepEqual(result, { ok: false, error: "timeout" });
 });
+
+test("result requestId must match exactly; missing or other ids are ignored", async () => {
+  let h;
+  h = harness({
+    timeoutMs: 25,
+    requestId: "req-strict",
+    onSend(_tabId, message, cb) {
+      cb({ accepted: true, requestId: message.requestId });
+      setTimeout(() => {
+        h.emit({
+          type: "EXTRACT_CAPTIONS_RESULT",
+          ok: true,
+          segments: [{ start: 0, duration: 1, text: "no-id" }],
+        });
+        h.emit({
+          type: "EXTRACT_CAPTIONS_RESULT",
+          requestId: "other",
+          ok: true,
+          segments: [{ start: 0, duration: 1, text: "other" }],
+        });
+        h.emit({
+          type: "EXTRACT_CAPTIONS_RESULT",
+          requestId: message.requestId,
+          ok: true,
+          segments: [{ start: 0, duration: 1, text: "match" }],
+        });
+      }, 5);
+    },
+  });
+  const result = await h.extract.extractFromTab(3);
+  assert.equal(result.ok, true);
+  assert.equal(result.segments[0].text, "match");
+
+  const ignored = harness({
+    timeoutMs: 20,
+    requestId: "req-strict",
+    onSend(_tabId, _message, cb) {
+      cb({ accepted: true });
+      ignored.emit({
+        type: "EXTRACT_CAPTIONS_RESULT",
+        ok: true,
+        segments: [{ start: 0, duration: 1, text: "no-id" }],
+      });
+    },
+  });
+  const timedOut = await ignored.extract.extractFromTab(4);
+  assert.deepEqual(timedOut, { ok: false, error: "timeout" });
+});

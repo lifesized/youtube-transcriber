@@ -39,7 +39,7 @@ function createCaptionExtract(deps) {
 
       unsubscribe = addResultListener((msg) => {
         if (!msg || msg.type !== EXTRACT_CAPTIONS_RESULT) return;
-        if (msg.requestId && msg.requestId !== requestId) return;
+        if (msg.requestId !== requestId) return;
         finish(msg);
       });
 

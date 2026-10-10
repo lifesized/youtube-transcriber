@@ -434,7 +434,7 @@ function requestFromPage(eventName, resultName, detail, timeoutMs) {
   });
 }
 
-async function tryExtractFromCaptionTracks() {
+async function tryExtractFromCaptionTracks(currentVid) {
   const tracksApi = globalThis.CaptionTracks;
   if (!tracksApi) return { ok: false, error: "no_tracks" };
   const tracksResult = await requestFromPage(
@@ -443,6 +443,9 @@ async function tryExtractFromCaptionTracks() {
     {},
     2000
   );
+  if (!tracksApi.tracksMatchCurrentVideo(tracksResult, currentVid)) {
+    return { ok: false, error: "stale_video" };
+  }
   const tracks = tracksResult && Array.isArray(tracksResult.tracks) ? tracksResult.tracks : [];
   if (!tracks.length) return { ok: false, error: "no_tracks" };
   const track = tracksApi.selectCaptionTrack(tracks, ["en"]);
@@ -461,6 +464,7 @@ async function tryExtractFromCaptionTracks() {
       4000
     );
     if (!fetched || !fetched.ok || !fetched.text) continue;
+    if (!tracksApi.timedtextWithinLimit(fetched.text)) continue;
     const segments = tracksApi.parseTimedText(fetched.text, fmt);
     if (segments.length) {
       return {
@@ -511,7 +515,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         if (panel.ok) {
           result = panel;
         } else {
-          const tracks = await tryExtractFromCaptionTracks();
+          const tracks = await tryExtractFromCaptionTracks(currentVid);
           result = tracks.ok
             ? tracks
             : { ok: false, error: panel.error || tracks.error || "no_captions" };
