@@ -84,3 +84,21 @@ test("caption fast-path inject/retry is debug, not info", () => {
   assert.match(src, /console\.debug\(\s*"\[ytt-bg\] caption fast-path: no listener/);
   assert.doesNotMatch(src, /console\.log\(\s*"\[ytt-bg\] caption fast-path: no listener/);
 });
+
+test("content.js acks EXTRACT_CAPTIONS and names panel/track errors", () => {
+  const src = fs.readFileSync(path.join(ROOT, "content.js"), "utf8");
+  assert.match(src, /sendResponse\(\s*\{\s*accepted:\s*true/);
+  assert.match(src, /EXTRACT_CAPTIONS_RESULT/);
+  assert.match(src, /error:\s*"no_panel"/);
+  assert.match(src, /error:\s*"no_segments"/);
+  assert.match(src, /error:\s*"not_video_page"/);
+  assert.match(src, /tryExtractFromCaptionTracks/);
+});
+
+test("caption fallback logs the content-script reason at info", () => {
+  const src = fs.readFileSync(path.join(ROOT, "background.js"), "utf8");
+  assert.match(src, /console\.log\(\s*"\[ytt-bg\] caption fast-path fallback"/);
+  assert.match(src, /logCaptionFallback\(reason/);
+  assert.match(src, /findYouTubeTabByVideoId/);
+  assert.doesNotMatch(src, /tabs\.find\(\s*\(t\)\s*=>\s*t\.url\s*===\s*targetUrl/);
+});
