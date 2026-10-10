@@ -63,8 +63,9 @@ test("electron-builder packs the helper and background into the DMG, not asar", 
   assert.ok(appEntry, "dmg.contents must still include Transcriber.app (file, no path)");
   const apps = contents.find((c) => c.type === "link" && c.path === "/Applications");
   assert.equal(apps, undefined, "no /Applications link: a manual drag leaves the unsigned app 'damaged'");
+  assert.equal(config.dmg.icon, "electron/resources/icon.icns");
   assert.equal(config.dmg.iconSize, 128);
-  assert.deepEqual(config.dmg.window, { width: 660, height: 420 });
+  assert.deepEqual(config.dmg.window, { width: 660, height: 440 });
   assert.equal(helper.x, 330);
   assert.equal(helper.y, 200);
   assert.equal(appEntry.x, 330);
@@ -121,9 +122,9 @@ test("DMG background PNG exists", () => {
   );
   assert.ok(buf.length > 500);
   assert.equal(buf.readUInt32BE(16), 660);
-  assert.equal(buf.readUInt32BE(20), 420);
+  assert.equal(buf.readUInt32BE(20), 440);
   assert.equal(buf2x.readUInt32BE(16), 1320);
-  assert.equal(buf2x.readUInt32BE(20), 840);
+  assert.equal(buf2x.readUInt32BE(20), 880);
   const gen = fs.readFileSync(
     path.join(projectRoot, "electron", "dmg", "generate-background.py"),
     "utf8"
@@ -183,7 +184,7 @@ test("CI mounts the DMG and checks for the helper", () => {
   );
   assert.match(shot, /screencapture/);
   assert.match(shot, /660/);
-  assert.match(shot, /420/);
+  assert.match(shot, /440/);
   const assertPy = fs.readFileSync(
     path.join(projectRoot, "electron", "dmg", "assert-helper-icon.py"),
     "utf8"

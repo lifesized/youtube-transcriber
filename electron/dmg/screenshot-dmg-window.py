@@ -5,8 +5,8 @@ import subprocess
 import sys
 import time
 
-# Match electron-builder dmg.window: 660×420.
-WINDOW_W, WINDOW_H = 660, 420
+# Match electron-builder dmg.window: 660×440.
+WINDOW_W, WINDOW_H = 660, 440
 ORIGIN_X, ORIGIN_Y = 80, 80
 
 
