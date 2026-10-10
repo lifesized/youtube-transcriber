@@ -229,7 +229,7 @@ test("token cookie is minted for same-origin loads and top-level document naviga
   assert.equal(mint("", "", ""), false);
 });
 
-test("Tusk settings writes need the port cookie and same-origin, not Bearer", () => {
+test("Settings writes need the port cookie and same-origin, not Bearer", () => {
   const expected = "t".repeat(64);
   const cookie = `${auth.cookieName(19721)}=${expected}`;
   const call = (headers, port = 19721) =>

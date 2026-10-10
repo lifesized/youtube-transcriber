@@ -33,6 +33,14 @@ type FallbackItem =
 
 type ProviderType = "openrouter" | "groq" | "custom";
 
+type InstalledHelper = {
+  id: string;
+  displayName: string;
+  version?: string;
+  state: string;
+  enabled?: boolean;
+};
+
 const DAILY_LIMIT = 14_400;
 const GROQ_COST_PER_SECOND = 0.0001; // $0.006/min beyond free tier
 
@@ -287,90 +295,29 @@ export function SettingsPanel() {
   const [summariesAvailable, setSummariesAvailable] = useState<boolean | null>(null);
   const [llmSaving, setLlmSaving] = useState(false);
   const [llmError, setLlmError] = useState("");
+  const [installedHelpers, setInstalledHelpers] = useState<InstalledHelper[]>([]);
+  const [helperBusyId, setHelperBusyId] = useState("");
   const [llmLinkError, setLlmLinkError] = useState("");
   const [notionToken, setNotionToken] = useState("");
   const [notionDatabaseId, setNotionDatabaseId] = useState("");
   const [notionHasToken, setNotionHasToken] = useState(false);
   const [notionSaving, setNotionSaving] = useState(false);
   const [notionError, setNotionError] = useState("");
-  const [tuskBotToken, setTuskBotToken] = useState("");
-  const [tuskAppToken, setTuskAppToken] = useState("");
-  const [tuskAllowlist, setTuskAllowlist] = useState("");
-  const [tuskWatchlist, setTuskWatchlist] = useState("");
-  const [tuskDigestChannel, setTuskDigestChannel] = useState("");
-  const [tuskEnabled, setTuskEnabled] = useState(false);
-  const [tuskHasBotToken, setTuskHasBotToken] = useState(false);
-  const [tuskHasAppToken, setTuskHasAppToken] = useState(false);
-  const [tuskBotMasked, setTuskBotMasked] = useState("");
-  const [tuskAppMasked, setTuskAppMasked] = useState("");
-  const [tuskTeamName, setTuskTeamName] = useState("");
-  const [tuskBotName, setTuskBotName] = useState("");
-  const [tuskConnection, setTuskConnection] = useState("");
-  const [tuskDigestStatus, setTuskDigestStatus] = useState("");
-  const [tuskDigestPaused, setTuskDigestPaused] = useState(false);
-  const [tuskSaving, setTuskSaving] = useState(false);
-  const [tuskError, setTuskError] = useState("");
-  const [tuskResetWorkspace, setTuskResetWorkspace] = useState(false);
-
   // Drag state
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
 
-  function applyTuskPublic(data: {
-    hasBotToken?: boolean;
-    hasAppToken?: boolean;
-    botTokenMasked?: string;
-    appTokenMasked?: string;
-    enabled?: boolean;
-    teamName?: string;
-    botName?: string;
-    channelAllowlist?: string[];
-    watchFeeds?: Array<{ url?: string }>;
-    digestChannel?: string;
-    connection?: {
-      state?: string;
-      workspace?: string;
-      digest?: { paused?: boolean; reason?: string; message?: string };
-    };
-  }) {
-    setTuskHasBotToken(!!data.hasBotToken);
-    setTuskHasAppToken(!!data.hasAppToken);
-    setTuskBotMasked(data.botTokenMasked || "");
-    setTuskAppMasked(data.appTokenMasked || "");
-    setTuskEnabled(!!data.enabled);
-    setTuskTeamName(data.teamName || "");
-    setTuskBotName(data.botName || "");
-    setTuskAllowlist((data.channelAllowlist || []).join(", "));
-    setTuskWatchlist((data.watchFeeds || []).map((feed) => feed.url).filter(Boolean).join("\n"));
-    setTuskDigestChannel(data.digestChannel || "");
-    setTuskBotToken("");
-    setTuskAppToken("");
-    setTuskResetWorkspace(false);
-    const conn = data.connection?.state || "";
-    const workspace = data.connection?.workspace || data.teamName || "";
-    if (conn === "connected" && workspace) setTuskConnection(`connected to ${workspace}`);
-    else if (conn === "error") setTuskConnection("error");
-    else setTuskConnection(conn || (data.enabled ? "off" : "off"));
-    const digest = data.connection?.digest;
-    setTuskDigestPaused(Boolean(digest?.paused));
-    setTuskDigestStatus(
-      digest?.paused
-        ? digest.message || `Digest paused (${digest.reason || "error"})`
-        : digest?.message || ""
-    );
-  }
-
   const loadSettings = useCallback(async () => {
     try {
-      const [settingsRes, providersRes, usageRes, llmRes, notionRes, tuskRes, summariesRes] = await Promise.all([
+      const [settingsRes, providersRes, usageRes, llmRes, notionRes, summariesRes] = await Promise.all([
         fetch("/api/settings"),
         fetch("/api/settings/providers"),
         fetch("/api/usage"),
         fetch("/api/settings/llm"),
         fetch("/api/settings/notion"),
-        fetch("/api/settings/tusk"),
         fetch("/api/summaries"),
       ]);
+      const helpersRes = await fetch("/api/settings/helpers");
 
       if (settingsRes.ok) {
         const data: SettingsData = await settingsRes.json();
@@ -437,11 +384,11 @@ export function SettingsPanel() {
         setNotionToken(data.tokenMasked || "");
         setNotionDatabaseId(data.databaseId || "");
       }
-
-      if (tuskRes.ok) {
-        const data = await tuskRes.json();
-        applyTuskPublic(data);
+      if (helpersRes.ok) {
+        const data = await helpersRes.json();
+        setInstalledHelpers(Array.isArray(data.helpers) ? data.helpers : []);
       }
+
     } catch {
       // Settings may not exist yet
     } finally {
@@ -670,7 +617,7 @@ export function SettingsPanel() {
           <div className="space-y-3 rounded-lg bg-[hsl(var(--panel-2))] p-4 shadow-[var(--edge)]">
             <p className="text-sm font-semibold text-white/80">AI key missing</p>
             <p className="text-sm text-[hsl(var(--muted))]">
-              Tusk needs an AI key. Add Anthropic, OpenAI, or OpenRouter below.
+              Add Anthropic, OpenAI, or OpenRouter below.
             </p>
             <div className="flex flex-col gap-2 sm:flex-row">
               {LLM_KEY_LINKS.map((link) => (
@@ -786,181 +733,114 @@ export function SettingsPanel() {
         ) : null}
       </div>
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-white/80">Slack (Tusk)</h2>
-          <Toggle
-            checked={tuskEnabled}
-            disabled={!tuskHasBotToken || !tuskHasAppToken || tuskSaving}
-            onChange={(val) => {
-              void (async () => {
-                setTuskSaving(true);
-                setTuskError("");
-                try {
-                  const res = await fetch("/api/settings/tusk", {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ enabled: val }),
-                  });
-                  const data = await res.json().catch(() => ({}));
-                  if (!res.ok) {
-                    setTuskError(data.error || "Could not update Tusk");
-                    return;
-                  }
-                  applyTuskPublic(data);
-                } catch {
-                  setTuskError("Could not update Tusk");
-                } finally {
-                  setTuskSaving(false);
-                }
-              })();
-            }}
-          />
-        </div>
-        <p className="text-sm text-white/40">
-          Socket Mode bot for #youtube-notes. Paste the bot token (xoxb) and app-level token (xapp). After save the page only shows saved ••••last4 — never the token again.
-        </p>
-        <input
-          type="password"
-          value={tuskBotToken}
-          onChange={(e) => setTuskBotToken(e.target.value)}
-          placeholder={tuskHasBotToken ? "Bot token saved" : "Bot token (xoxb-…)"}
-          autoComplete="off"
-          className="h-11 w-full rounded-md bg-[hsl(var(--panel-2))] px-3 py-3 text-sm text-white/90 placeholder:text-[hsl(var(--muted-2))] shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)]"
-        />
-        <input
-          type="password"
-          value={tuskAppToken}
-          onChange={(e) => setTuskAppToken(e.target.value)}
-          placeholder={tuskHasAppToken ? "App-level token saved" : "App-level token (xapp-…)"}
-          autoComplete="off"
-          className="h-11 w-full rounded-md bg-[hsl(var(--panel-2))] px-3 py-3 text-sm text-white/90 placeholder:text-[hsl(var(--muted-2))] shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)]"
-        />
-        <input
-          type="text"
-          value={tuskAllowlist}
-          onChange={(e) => setTuskAllowlist(e.target.value)}
-          placeholder="Channel IDs (C…), empty = deny all"
-          autoComplete="off"
-          className="h-11 w-full rounded-md bg-[hsl(var(--panel-2))] px-3 py-3 text-sm text-white/90 placeholder:text-[hsl(var(--muted-2))] shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)]"
-        />
-        <textarea
-          value={tuskWatchlist}
-          onChange={(e) => setTuskWatchlist(e.target.value)}
-          placeholder="Watchlist: YouTube channel IDs, playlist IDs, or videos.xml URLs (one per line)"
-          autoComplete="off"
-          rows={3}
-          className="w-full rounded-md bg-[hsl(var(--panel-2))] px-3 py-3 text-sm text-white/90 placeholder:text-[hsl(var(--muted-2))] shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)]"
-        />
-        <input
-          type="text"
-          value={tuskDigestChannel}
-          onChange={(e) => setTuskDigestChannel(e.target.value)}
-          placeholder="Digest channel ID (C…), must be on the allowlist"
-          autoComplete="off"
-          className="h-11 w-full rounded-md bg-[hsl(var(--panel-2))] px-3 py-3 text-sm text-white/90 placeholder:text-[hsl(var(--muted-2))] shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)]"
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={async () => {
-              setTuskSaving(true);
-              setTuskError("");
-              try {
-                const res = await fetch("/api/settings/tusk", {
-                  method: "PUT",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    botToken: tuskBotToken,
-                    appToken: tuskAppToken,
-                    enabled: tuskEnabled || Boolean(tuskBotToken && tuskAppToken),
-                    channelAllowlist: tuskAllowlist,
-                    watchlist: tuskWatchlist,
-                    digestChannel: tuskDigestChannel,
-                    resetWorkspace: tuskResetWorkspace,
-                  }),
-                });
-                const data = await res.json().catch(() => ({}));
-                if (!res.ok) {
-                  setTuskError(data.error || "Could not save");
-                  return;
-                }
-                applyTuskPublic(data);
-              } catch {
-                setTuskError("Could not save");
-              } finally {
-                setTuskSaving(false);
-              }
-            }}
-            disabled={tuskSaving}
-            aria-busy={tuskSaving}
-            className="h-11 rounded-md bg-[hsl(var(--accent))] px-4 py-3 text-sm font-semibold text-black shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] disabled:cursor-not-allowed disabled:text-[hsl(var(--muted-2))] disabled:hover:bg-[hsl(var(--accent))]"
-          >
-            {tuskSaving ? "Saving…" : "Save Tusk"}
-          </button>
-          {tuskDigestPaused ? (
-            <button
-              type="button"
-              onClick={async () => {
-                setTuskSaving(true);
-                setTuskError("");
-                try {
-                  const res = await fetch("/api/settings/tusk", {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ resumeDigest: true }),
-                  });
-                  const data = await res.json().catch(() => ({}));
-                  if (!res.ok) {
-                    setTuskError(data.error || "Could not resume digest");
-                    return;
-                  }
-                  applyTuskPublic(data);
-                } catch {
-                  setTuskError("Could not resume digest");
-                } finally {
-                  setTuskSaving(false);
-                }
-              }}
-              disabled={tuskSaving}
-              aria-busy={tuskSaving}
-              className="h-11 rounded-md bg-[hsl(var(--panel-2))] px-4 py-3 text-sm font-semibold text-white/80 shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)] disabled:cursor-not-allowed disabled:text-[hsl(var(--muted-2))] disabled:hover:bg-[hsl(var(--panel-2))]"
+
+      {installedHelpers.length > 0 ? (
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-white/80">Helpers</h2>
+          <p className="text-sm text-white/40">
+            Optional local processes that talk to Transcriber over the loopback API.
+          </p>
+          {installedHelpers.map((helper) => (
+            <div
+              key={helper.id}
+              className="flex flex-col gap-2 rounded-lg bg-[hsl(var(--panel-2))] p-4 shadow-[var(--edge)] sm:flex-row sm:items-center sm:justify-between"
             >
-              {tuskSaving ? "Resuming…" : "Resume digest"}
-            </button>
-          ) : null}
+              <div>
+                <p className="text-sm font-semibold text-white/80">{helper.displayName}</p>
+                <p className="text-sm text-[hsl(var(--muted))]">
+                  {helper.enabled ? helper.state : "disabled"}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {!helper.enabled ? (
+                  <button
+                    type="button"
+                    disabled={helperBusyId === helper.id}
+                    aria-busy={helperBusyId === helper.id}
+                    onClick={() => {
+                      void (async () => {
+                        setHelperBusyId(helper.id);
+                        try {
+                          const res = await fetch("/api/settings/helpers", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ id: helper.id, action: "enable" }),
+                          });
+                          const data = await res.json().catch(() => ({}));
+                          if (res.ok && Array.isArray(data.helpers)) setInstalledHelpers(data.helpers);
+                        } finally {
+                          setHelperBusyId("");
+                        }
+                      })();
+                    }}
+                    className="h-11 rounded-md bg-[hsl(var(--accent))] px-4 py-3 text-sm font-semibold text-black shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] disabled:cursor-not-allowed disabled:text-[hsl(var(--muted-2))]"
+                  >
+                    {helperBusyId === helper.id ? "Working…" : "Enable"}
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      disabled={helperBusyId === helper.id}
+                      aria-busy={helperBusyId === helper.id}
+                      onClick={() => {
+                        void (async () => {
+                          setHelperBusyId(helper.id);
+                          try {
+                            const res = await fetch("/api/settings/helpers", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                id: helper.id,
+                                action: helper.state === "running" || helper.state === "starting" ? "stop" : "start",
+                              }),
+                            });
+                            const data = await res.json().catch(() => ({}));
+                            if (res.ok && Array.isArray(data.helpers)) setInstalledHelpers(data.helpers);
+                          } finally {
+                            setHelperBusyId("");
+                          }
+                        })();
+                      }}
+                      className="h-11 rounded-md bg-[hsl(var(--panel))] px-4 py-3 text-sm font-semibold text-white/90 shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)] disabled:cursor-not-allowed disabled:text-[hsl(var(--muted-2))] disabled:hover:bg-[hsl(var(--panel))]"
+                    >
+                      {helperBusyId === helper.id
+                        ? "Working…"
+                        : helper.state === "running" || helper.state === "starting"
+                          ? "Stop"
+                          : "Start"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={helperBusyId === helper.id}
+                      onClick={() => {
+                        void (async () => {
+                          setHelperBusyId(helper.id);
+                          try {
+                            const res = await fetch("/api/settings/helpers", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ id: helper.id, action: "disable" }),
+                            });
+                            const data = await res.json().catch(() => ({}));
+                            if (res.ok && Array.isArray(data.helpers)) setInstalledHelpers(data.helpers);
+                          } finally {
+                            setHelperBusyId("");
+                          }
+                        })();
+                      }}
+                      className="h-11 rounded-md bg-[hsl(var(--panel))] px-4 py-3 text-sm font-semibold text-white/90 shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] disabled:cursor-not-allowed disabled:text-[hsl(var(--muted-2))]"
+                    >
+                      Disable
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
-        {tuskTeamName ? (
-          <label className="flex items-start gap-2 text-sm text-white/40">
-            <input
-              type="checkbox"
-              checked={tuskResetWorkspace}
-              onChange={(e) => setTuskResetWorkspace(e.target.checked)}
-              className="mt-1 h-4 w-4 rounded-sm bg-[hsl(var(--panel-2))] accent-[hsl(var(--accent))] shadow-[var(--edge)]"
-            />
-            <span>
-              Reset workspace pin. Required before a token from a different Slack team will save.
-              Currently pinned to {tuskTeamName}.
-            </span>
-          </label>
-        ) : null}
-        {tuskError ? (
-          <p className="text-sm text-red-400">{tuskError}</p>
-        ) : (
-          <div className="space-y-1 text-sm text-white/30">
-            {tuskHasBotToken ? <p>Bot token {tuskBotMasked || "saved ••••"}</p> : null}
-            {tuskHasAppToken ? <p>App-level token {tuskAppMasked || "saved ••••"}</p> : null}
-            {tuskTeamName || tuskBotName ? (
-              <p>
-                {tuskBotName ? `@${tuskBotName.replace(/^@/, "")}` : "Bot"}
-                {tuskTeamName ? ` in ${tuskTeamName}` : ""}
-              </p>
-            ) : null}
-            <p>Status: {tuskConnection || "off"}</p>
-            {tuskDigestStatus ? <p>{tuskDigestStatus}</p> : null}
-          </div>
-        )}
-      </div>
+      ) : null}
+
 
       {/* Fallback order summary */}
       <p className="text-sm text-white/40">

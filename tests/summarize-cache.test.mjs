@@ -72,7 +72,7 @@ test("summarize caches baseSummary and only calls the provider once", async () =
     return {
       ok: true,
       json: async () => ({
-        choices: [{ message: { content: "The decision was to ship Tusk." } }],
+        choices: [{ message: { content: "The decision was to ship the feature." } }],
       }),
     };
   };
@@ -82,7 +82,7 @@ test("summarize caches baseSummary and only calls the provider once", async () =
     apiKey: "sk-test",
     promptOverride: "Answer only: what was the decision?",
   });
-  assert.equal(qa, "The decision was to ship Tusk.");
+  assert.equal(qa, "The decision was to ship the feature.");
   assert.match(JSON.stringify(bodies[0]), /what was the decision/);
   const third = await summarize(row, 1, {
     fetchImpl: qaFetch,
@@ -90,6 +90,6 @@ test("summarize caches baseSummary and only calls the provider once", async () =
     apiKey: "sk-test",
   });
   assert.equal(third, "Cached summary body");
-  assert.equal(third.includes("ship Tusk"), false);
+  assert.equal(third.includes("ship the feature"), false);
   assert.equal(calls, 2);
 });

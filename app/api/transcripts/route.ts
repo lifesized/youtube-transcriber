@@ -17,6 +17,7 @@ import {
   isLinkedInMediaUrl,
   LinkedInMediaError,
 } from "@/lib/linkedin";
+import { authorizeLocalOrHelper } from "@/lib/helper-request.js";
 
 type ClientSegment = { start: number; duration?: number; text: string };
 
@@ -32,6 +33,10 @@ function isValidClientSegments(value: unknown): value is ClientSegment[] {
 }
 
 export async function POST(request: NextRequest) {
+  const gate = authorizeLocalOrHelper(request, { method: "POST", pathname: "/api/transcripts" });
+  if (!gate.ok) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
   let body: {
     url?: string;
     lang?: string;
@@ -159,7 +164,7 @@ export async function POST(request: NextRequest) {
   const job = beginServerJob({
     signal: request.signal,
     jobId: typeof body.jobId === "string" ? body.jobId : undefined,
-    tag: body.jobTag === "tusk" ? "tusk" : "local",
+    tag: "local",
   });
 
   try {
@@ -167,7 +172,7 @@ export async function POST(request: NextRequest) {
       // Use cache-aware transcript lookup/creation
       const video = await getOrCreateTranscript(videoId, storedUrl, lang, platform, {
         fetcher,
-        allowBrowserCookies: job.tag !== "tusk",
+        allowBrowserCookies: true,
       });
       return NextResponse.json(video, { status: 201 });
     });

@@ -70,6 +70,8 @@ fs.writeFileSync(path.join(outDir, base + ".json"), JSON.stringify({
 `
 );
 
+const LOCAL_TOKEN = "c".repeat(64);
+
 Object.assign(process.env, {
   DATABASE_URL: `file:${path.join(dir, "linkedin.db")}`,
   YTDLP_PATH: fakeYtdlp,
@@ -77,6 +79,7 @@ Object.assign(process.env, {
   WHISPER_BACKEND: "openai",
   WHISPER_DEVICE: "cpu",
   WHISPER_PYTHON_BIN: path.join(dir, "no-python"),
+  TRANSCRIBER_LOCAL_TOKEN: LOCAL_TOKEN,
 });
 
 let POST;
@@ -102,7 +105,10 @@ async function post(body) {
   const res = await POST(
     new Request("http://127.0.0.1:19720/api/transcripts", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        authorization: `Bearer ${LOCAL_TOKEN}`,
+      },
       body: JSON.stringify(body),
     })
   );

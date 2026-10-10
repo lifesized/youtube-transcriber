@@ -53,7 +53,7 @@ function currentChildMeta(): ChildMeta {
   const ctx = currentJobContext();
   return {
     jobId: ctx?.jobId || "",
-    tag: ctx?.tag === "tusk" ? "tusk" : "local",
+    tag: "local",
   };
 }
 
@@ -472,8 +472,6 @@ function classifyYtdlpError(raw: string): string {
  * Retries once on transient network errors.
  */
 function browserCookiesAllowed(explicit?: boolean): boolean {
-  // Second guard: a lost ALS context must not re-enable cookies for Tusk.
-  if (currentJobContext()?.tag === "tusk") return false;
   return explicit === true;
 }
 
@@ -521,7 +519,7 @@ export async function downloadAudio(
         continue;
       }
 
-      // If auth-related, retry once with browser cookies — never for Tusk URLs.
+      // If auth-related, retry once with browser cookies when the caller allows it.
       const isAuthError = /sign in to confirm|age-restricted/i.test(raw);
       if (
         isAuthError &&

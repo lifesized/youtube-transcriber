@@ -30,7 +30,7 @@ const appLog = require("./app-log.js");
 const productDefaults = require("./product-defaults.js");
 const trayCopy = require("./tray-copy.js");
 const { buildTrayMenuTemplate, transcriberUrl, libraryUrl } = require("./tray-menu.js");
-const { openAllowedLlmKeyUrl } = require("./tusk/llm-links.js");
+const { openAllowedLlmKeyUrl } = require("./llm-links.js");
 const trayPng = require("./tray-png.js");
 
 // Strong module-level pin. V8 can otherwise GC the Tray and the
@@ -84,9 +84,8 @@ class TrayManager {
     this.status = "stopped";
     this.errorMessage = "";
     this.portHolder = null;
-    this.tuskState = "off";
-    this.tuskWorkspace = "";
     this.hasLlmKey = true;
+    this.helpers = [];
     this._restarting = false;
     this._healthTimer = null;
     this.updater = options.updater || null;
@@ -101,16 +100,13 @@ class TrayManager {
     this._startHealthWatch();
   }
 
-  setTuskStatus(next = {}) {
-    if (Object.prototype.hasOwnProperty.call(next, "state")) {
-      this.tuskState = next.state || "off";
-    }
-    if (Object.prototype.hasOwnProperty.call(next, "workspace")) {
-      this.tuskWorkspace = next.workspace || "";
-    }
-    if (Object.prototype.hasOwnProperty.call(next, "hasLlmKey")) {
-      this.hasLlmKey = Boolean(next.hasLlmKey);
-    }
+  setHasLlmKey(hasKey) {
+    this.hasLlmKey = Boolean(hasKey);
+    this._updateMenu();
+  }
+
+  setHelpers(list = []) {
+    this.helpers = Array.isArray(list) ? list : [];
     this._updateMenu();
   }
 
@@ -374,9 +370,8 @@ class TrayManager {
         portHolder: this.portHolder,
         openAtLogin: app.getLoginItemSettings().openAtLogin,
         showImport: this._shouldShowImport(),
-        tuskState: this.tuskState,
-        tuskWorkspace: this.tuskWorkspace,
         hasLlmKey: this.hasLlmKey,
+        helpers: this.helpers,
         updater: this.updaterState,
       },
       {

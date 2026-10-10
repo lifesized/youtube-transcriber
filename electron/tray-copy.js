@@ -64,15 +64,17 @@ function trayImageName(state) {
   }
 }
 
-function tuskStatusLine(state, workspace) {
-  if (state === "connected") {
-    return workspace ? `Tusk: connected to ${workspace}` : "Tusk: connected";
-  }
-  if (state === "error") return "Tusk: error";
-  return "Tusk: off";
-}
-
 const AI_KEY_MISSING = "AI key missing";
+
+function helperStatusLine(displayName, state) {
+  const name = String(displayName || "Helper")
+    .replace(/[\r\n\t]+/g, " ")
+    .trim()
+    .slice(0, 40) || "Helper";
+  const allowed = new Set(["running", "stopped", "error", "starting"]);
+  const st = allowed.has(state) ? state : "stopped";
+  return `${name}: ${st}`;
+}
 
 const TRY_AGAIN = "Try Again";
 const RESTART = "Start Transcriber";
@@ -101,6 +103,6 @@ module.exports = {
   OPEN_LIBRARY,
   ADVANCED,
   SHOW_DATA_IN_FINDER,
-  tuskStatusLine,
   AI_KEY_MISSING,
+  helperStatusLine,
 };
