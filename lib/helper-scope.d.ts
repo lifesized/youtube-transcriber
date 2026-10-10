@@ -1,3 +1,4 @@
+export const HELPER_TOKENS_ENV: string;
 export const HELPER_ALLOWED_ROUTES: Array<{ method: string; pathname: string }>;
 export const SETTINGS_SECRET_KEYS: string[];
 export function normalizePathname(pathname: string | null | undefined): string;

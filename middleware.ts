@@ -9,8 +9,7 @@ import {
   tokensEqual,
   unauthorizedJson,
 } from "./lib/local-api-auth.js";
-import { authorizeHelperBearer } from "./lib/helper-scope.js";
-import { loadHelperRecords } from "./lib/helper-tokens.js";
+import { authorizeHelperBearer, parseHelperTokensEnv, HELPER_TOKENS_ENV } from "./lib/helper-scope.js";
 
 function expectedToken(): string | null {
   const fromEnv = process.env[ENV_NAME];
@@ -84,7 +83,7 @@ export function middleware(request: NextRequest) {
       {
         method: request.method,
         pathname,
-        records: loadHelperRecords(),
+        records: parseHelperTokensEnv(process.env[HELPER_TOKENS_ENV] || ""),
       }
     );
     if (!helper.ok) {
