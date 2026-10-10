@@ -46,19 +46,18 @@ const BODY = [
 
 test("running: status line with the library sublabel, then the exact order", () => {
   const t = menu("running");
-  assert.deepEqual(labels(t), ["Transcriber is running", "Tusk: off", ...BODY]);
+  assert.deepEqual(labels(t), ["Transcriber is running", ...BODY]);
   assert.equal(t[0].sublabel, "App library · Port 19721");
   assert.equal(t[0].enabled, false);
-  assert.equal(t[1].enabled, false);
 });
 
 test("stopped and error: Transcriber is stopped, same sublabel, then Start Transcriber", () => {
   for (const status of ["stopped", "error"]) {
     const t = menu(status);
-    assert.deepEqual(labels(t), ["Transcriber is stopped", "Tusk: off", "Start Transcriber", ...BODY]);
+    assert.deepEqual(labels(t), ["Transcriber is stopped", "Start Transcriber", ...BODY]);
     assert.equal(t[0].sublabel, "App library · Port 19721");
     assert.equal(t[0].enabled, false);
-    assert.equal(t[2].click(), "start");
+    assert.equal(t[1].click(), "start");
   }
 });
 
@@ -73,30 +72,23 @@ test("without menu sublabels the library line folds into the status label", () =
 
 test("starting and port conflict keep their own status lines", () => {
   const starting = menu("starting");
-  assert.deepEqual(labels(starting), ["Starting…", "Tusk: off", ...BODY]);
+  assert.deepEqual(labels(starting), ["Starting…", ...BODY]);
   assert.equal(starting[0].sublabel, undefined);
   const conflict = menu("port-conflict", { portHolder: { process: "node", pid: "4242" } });
-  assert.deepEqual(labels(conflict), ["Port 19721 is in use", "Tusk: off", "Try Again", ...BODY]);
+  assert.deepEqual(labels(conflict), ["Port 19721 is in use", "Try Again", ...BODY]);
   assert.equal(conflict[0].sublabel, "Used by node (PID 4242). Quit it, then try again.");
-  assert.equal(conflict[2].click(), "tryAgain");
+  assert.equal(conflict[1].click(), "tryAgain");
 });
 
 test("wrong location offers Move to Applications and disables setup items", () => {
   const t = menu("wrong-location");
   assert.deepEqual(labels(t), [
     "Move Transcriber to Applications, then reopen it.",
-    "Tusk: off",
     "Move to Applications and Reopen",
     ...BODY,
   ]);
   assert.equal(item(t, "Reinstall Browser Connection").enabled, false);
   assert.equal(item(t, "Start at Login").enabled, false);
-});
-
-test("Tusk connected line uses the workspace name", () => {
-  const t = menu("running", { tuskState: "connected", tuskWorkspace: "Personal" });
-  assert.equal(t[1].label, "Tusk: connected to Personal");
-  assert.equal(t[1].enabled, false);
 });
 
 test("AI key missing submenu lists the three signup links", () => {

@@ -122,50 +122,32 @@ test("callLlmProvider forwards an abort signal to fetch", async () => {
 });
 
 test("cancelJob aborts only that job and leaves others running", async () => {
-  const { beginServerJob, cancelJob, cancelInFlightJobs, cancelJobsByTag } =
-    await import("../lib/in-flight-jobs.ts");
-  const tusk = beginServerJob({ jobId: "tusk-job-aa", tag: "tusk" });
-  const otherTusk = beginServerJob({ jobId: "tusk-job-bb", tag: "tusk" });
-  const local = beginServerJob({ jobId: "local-job-cc", tag: "local" });
-  assert.equal(tusk.signal.aborted, false);
-  assert.equal(otherTusk.signal.aborted, false);
-  assert.equal(local.signal.aborted, false);
+  const { beginServerJob, cancelJob } = await import("../lib/in-flight-jobs.ts");
+  const first = beginServerJob({ jobId: "local-job-aa", tag: "local" });
+  const second = beginServerJob({ jobId: "local-job-bb", tag: "local" });
+  assert.equal(first.signal.aborted, false);
+  assert.equal(second.signal.aborted, false);
 
-  const refused = cancelJob("local-job-cc", { tag: "tusk" });
-  assert.equal(refused.ok, false);
-  assert.equal(local.signal.aborted, false);
-
-  const one = cancelJob("tusk-job-aa", { tag: "tusk" });
-  assert.equal(tusk.signal.aborted, true);
-  assert.equal(otherTusk.signal.aborted, false);
-  assert.equal(local.signal.aborted, false);
+  const one = cancelJob("local-job-aa");
+  assert.equal(first.signal.aborted, true);
+  assert.equal(second.signal.aborted, false);
   assert.ok(one.llm >= 1);
 
-  const tagged = cancelJobsByTag("tusk");
-  assert.equal(otherTusk.signal.aborted, true);
-  assert.equal(local.signal.aborted, false);
-  assert.ok(tagged.llm >= 1);
-
-  const leftover = cancelInFlightJobs();
-  assert.equal(local.signal.aborted, false);
-  assert.equal(leftover.llm, 0);
-
-  tusk.finish();
-  otherTusk.finish();
-  local.finish();
+  first.finish();
+  second.finish();
 });
 
-test("an existing job is never retagged when a later request reuses the id", async () => {
+test("an existing job is reused when a later request reuses the id", async () => {
   const { beginServerJob, cancelJob } = await import("../lib/in-flight-jobs.ts");
-  const local = beginServerJob({ jobId: "shared-job-id", tag: "local" });
-  const tusk = beginServerJob({ jobId: "shared-job-id", tag: "tusk" });
-  assert.equal(local.tag, "local");
-  assert.equal(tusk.tag, "tusk");
-  assert.equal(local.signal.aborted, false);
-  const cancelled = cancelJob("shared-job-id", { tag: "tusk" });
+  const first = beginServerJob({ jobId: "shared-job-id", tag: "local" });
+  const second = beginServerJob({ jobId: "shared-job-id", tag: "local" });
+  assert.equal(first.tag, "local");
+  assert.equal(second.tag, "local");
+  assert.equal(first.signal.aborted, false);
+  const cancelled = cancelJob("shared-job-id");
   assert.ok(cancelled.ok);
-  assert.equal(tusk.signal.aborted, true);
-  assert.equal(local.signal.aborted, false);
-  local.finish();
-  tusk.finish();
+  assert.equal(first.signal.aborted, true);
+  assert.equal(second.signal.aborted, true);
+  first.finish();
+  second.finish();
 });

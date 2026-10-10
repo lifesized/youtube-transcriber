@@ -12,7 +12,7 @@ export class OverrideCapError extends Error {
 }
 
 export function overrideHourlyLimit(env: NodeJS.ProcessEnv = process.env): number {
-  const raw = env.TUSK_OVERRIDE_HOURLY_CAP ?? env.OVERRIDE_HOURLY_CAP;
+  const raw = env.OVERRIDE_HOURLY_CAP;
   const parsed = raw ? Number(raw) : NaN;
   if (Number.isFinite(parsed) && parsed > 0) return Math.floor(parsed);
   return DEFAULT_HOURLY;

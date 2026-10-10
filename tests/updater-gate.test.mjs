@@ -269,7 +269,7 @@ function quitUpdaterFixture({
   quitAndInstall,
   start,
 }) {
-  const dir = mkdtempSync(path.join(tmpdir(), "ytt-quit-tusk-"));
+  const dir = mkdtempSync(path.join(tmpdir(), "ytt-quit-hook-"));
   writeFileSync(
     path.join(dir, "signing-identity.json"),
     JSON.stringify({ teamId: TEAM })
@@ -318,7 +318,7 @@ test("quitAndInstall awaits onBeforeQuitAndInstall before stopping the server", 
     onBeforeQuitAndInstall: async () => {
       await Promise.resolve();
       assert.equal(installing, false);
-      order.push("stop-tusk");
+      order.push("hook");
     },
     onReadyToInstall: () => {
       installing = true;
@@ -327,7 +327,7 @@ test("quitAndInstall awaits onBeforeQuitAndInstall before stopping the server", 
   });
   try {
     await updater.quitAndInstall();
-    assert.deepEqual(order, ["stop-tusk", "stop-server", "flag", "install"]);
+    assert.deepEqual(order, ["hook", "stop-server", "flag", "install"]);
     assert.equal(installing, true);
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -342,7 +342,7 @@ test("quitAndInstall still stops the server and installs when the hook throws", 
     onBeforeQuitAndInstall: async () => {
       assert.equal(installing, false);
       order.push("hook");
-      throw new Error("tusk stop failed");
+      throw new Error("before-quit hook failed");
     },
     onReadyToInstall: () => {
       installing = true;
