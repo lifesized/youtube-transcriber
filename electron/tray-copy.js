@@ -66,6 +66,16 @@ function trayImageName(state) {
 
 const AI_KEY_MISSING = "AI key missing";
 
+function helperStatusLine(displayName, state) {
+  const name = String(displayName || "Helper")
+    .replace(/[\r\n\t]+/g, " ")
+    .trim()
+    .slice(0, 40) || "Helper";
+  const allowed = new Set(["running", "stopped", "error", "starting"]);
+  const st = allowed.has(state) ? state : "stopped";
+  return `${name}: ${st}`;
+}
+
 const TRY_AGAIN = "Try Again";
 const RESTART = "Start Transcriber";
 const MOVE_TO_APPLICATIONS = "Move to Applications and Reopen";
@@ -94,4 +104,5 @@ module.exports = {
   ADVANCED,
   SHOW_DATA_IN_FINDER,
   AI_KEY_MISSING,
+  helperStatusLine,
 };

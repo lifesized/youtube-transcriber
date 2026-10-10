@@ -85,6 +85,7 @@ class TrayManager {
     this.errorMessage = "";
     this.portHolder = null;
     this.hasLlmKey = true;
+    this.helpers = [];
     this._restarting = false;
     this._healthTimer = null;
     this.updater = options.updater || null;
@@ -101,6 +102,11 @@ class TrayManager {
 
   setHasLlmKey(hasKey) {
     this.hasLlmKey = Boolean(hasKey);
+    this._updateMenu();
+  }
+
+  setHelpers(list = []) {
+    this.helpers = Array.isArray(list) ? list : [];
     this._updateMenu();
   }
 
@@ -365,6 +371,7 @@ class TrayManager {
         openAtLogin: app.getLoginItemSettings().openAtLogin,
         showImport: this._shouldShowImport(),
         hasLlmKey: this.hasLlmKey,
+        helpers: this.helpers,
         updater: this.updaterState,
       },
       {

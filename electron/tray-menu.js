@@ -69,6 +69,13 @@ function buildTrayMenuTemplate(state, actions) {
   }
   const recovery = recoveryItem(state.status, actions);
   if (recovery) template.push(recovery);
+  const helpers = Array.isArray(state.helpers) ? state.helpers : [];
+  for (const helper of helpers) {
+    template.push({
+      label: trayCopy.helperStatusLine(helper.displayName, helper.state),
+      enabled: false,
+    });
+  }
 
   const advanced = [{ label: trayCopy.SHOW_DATA_IN_FINDER, click: actions.showDataInFinder }];
   if (state.showImport) {

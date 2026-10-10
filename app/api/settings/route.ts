@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { stripSecretSettings } from "@/lib/helper-scope.js";
 import { prisma } from "@/lib/prisma";
 import {
   encryptApiKeyForStorage,
@@ -18,7 +19,7 @@ const ALLOWED_KEYS = [
   "groq_rate_limit",
 ];
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const settings = await prisma.setting.findMany({
       where: { key: { in: ALLOWED_KEYS } },
@@ -28,6 +29,10 @@ export async function GET() {
     for (const s of settings) {
       result[s.key] =
         s.key === "groq_api_key" ? maskApiKeyForResponse(s.value) : s.value;
+    }
+
+    if (request.headers.get("x-transcriber-helper")) {
+      return NextResponse.json(stripSecretSettings(result));
     }
 
     return NextResponse.json(result);

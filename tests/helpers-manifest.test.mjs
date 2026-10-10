@@ -75,3 +75,45 @@ test("discoverHelpers skips invalid dirs and helperEnv never puts the token on a
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("createHelperManager spawns with empty argv and stops without restart", () => {
+  const dir = tmp();
+  const stateDir = path.join(dir, "state");
+  mkdirSync(stateDir, { recursive: true });
+  const helperDir = path.join(stateDir, "helpers", "notes");
+  mkdirSync(path.join(helperDir, "bin"), { recursive: true });
+  writeFileSync(path.join(helperDir, "bin", "helper"), "#!/bin/sh\n");
+  chmodSync(path.join(helperDir, "bin", "helper"), 0o755);
+  writeFileSync(
+    path.join(helperDir, "manifest.json"),
+    JSON.stringify({ id: "notes", displayName: "Notes", executable: "bin/helper", version: "1.0.0" })
+  );
+  const spawned = [];
+  const child = { kill() { this.killed = true; }, on() {} };
+  const manager = helpers.createHelperManager({
+    stateDir,
+    helpersDir: path.join(stateDir, "helpers"),
+    logDir: path.join(dir, "logs"),
+    port: 19721,
+    isPackaged: false,
+    uid: process.getuid(),
+    spawn: (exe, args, opts) => {
+      spawned.push({ exe, args, env: opts.env, detached: opts.detached });
+      return child;
+    },
+  });
+  try {
+    manager.start("notes");
+    assert.equal(spawned.length, 1);
+    assert.deepEqual(spawned[0].args, []);
+    assert.equal(spawned[0].detached, true);
+    assert.equal(spawned[0].env.TRANSCRIBER_HELPER_TOKEN.length >= 32, true);
+    assert.equal(spawned[0].env.TRANSCRIBER_LOCAL_TOKEN, undefined);
+    assert.equal(manager.listStatus()[0].state, "running");
+    manager.stop("notes");
+    assert.equal(child.killed, true);
+    assert.equal(manager.listStatus()[0].state, "stopped");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

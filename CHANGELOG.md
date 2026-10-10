@@ -2,6 +2,9 @@
 
 ## 2026-10-10
 
+### Added
+- **Optional helpers** — Transcriber can spawn a separately installed helper from `Application Support/Transcriber/helpers/<id>/`. Manifests are validated, packaged builds require a matching code-signature Team ID, and each helper gets a revocable loopback token scoped to transcribe, summarize, and non-secret settings reads. The tray and Settings › Helpers stay hidden when none are installed.
+
 ### Removed
 - Removed the experimental Slack integration.
 
