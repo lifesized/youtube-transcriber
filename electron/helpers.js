@@ -27,9 +27,17 @@ function helperLogPath(id, logDir) {
   return path.join(logDir || getLogDir(), "helpers", `${id}.log`);
 }
 
+function resolvedPath(p) {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return path.resolve(p);
+  }
+}
+
 function isInsideDir(root, candidate) {
-  const base = path.resolve(root);
-  const target = path.resolve(candidate);
+  const base = resolvedPath(root);
+  const target = resolvedPath(candidate);
   const prefix = base.endsWith(path.sep) ? base : `${base}${path.sep}`;
   return target === base || target.startsWith(prefix);
 }
@@ -68,7 +76,7 @@ function validateExecutable(helperDir, relative, uid = process.getuid && process
   } catch {
     return { ok: false, error: "missing_executable" };
   }
-  if (!isInsideDir(helperDir, real)) {
+  if (!isInsideDir(resolvedPath(helperDir), real)) {
     return { ok: false, error: "path_traversal" };
   }
   let st;
