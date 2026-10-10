@@ -184,6 +184,38 @@ test("legacy Stop without startTime/exe is not_ours and does not kill", async ()
   });
 });
 
+test("Stop with empty lsof still requires looksLikeOurNextDev", async () => {
+  await withHostEnv(async (stateDir) => {
+    const foreign = spawn(process.execPath, ["-e", "setTimeout(()=>{},30000)"], {
+      detached: true,
+      stdio: "ignore",
+    });
+    foreign.unref();
+    try {
+      const live = host.inspectPidSoon(foreign.pid) || host.inspectPid(foreign.pid);
+      assert.ok(live);
+      assert.equal(host.looksLikeOurNextDev(live.command, process.cwd()), false);
+      fs.writeFileSync(
+        path.join(stateDir, "native-host-state.json"),
+        JSON.stringify({
+          pid: foreign.pid,
+          startTime: live.startTime,
+          exe: live.exe,
+          projectRoot: process.cwd(),
+        })
+      );
+      assert.deepEqual(host.stopServer(), { stopped: false, reason: "not_ours" });
+      process.kill(foreign.pid, 0);
+    } finally {
+      try {
+        process.kill(-foreign.pid, "SIGKILL");
+      } catch {
+        /* already gone */
+      }
+    }
+  });
+});
+
 test("lsof miss does not treat rec.pid as the listener", async () => {
   await withHostEnv(async (stateDir) => {
     const live = host.inspectPid(process.pid);

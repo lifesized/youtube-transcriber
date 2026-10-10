@@ -276,13 +276,18 @@ test("dev Stop only signals the process group the host recorded", async () => {
       fs.writeFileSync(host.stateFile(), JSON.stringify({ pid: 1 }));
       assert.deepEqual(host.stopServer(), { stopped: false, reason: "not_running" }, "never pid 1");
 
-      const child = spawn(process.execPath, ["-e", "setTimeout(()=>{},30000)"], {
+      const projectRoot = path.join(stateDir, "proj");
+      const nextBin = path.join(projectRoot, "node_modules", "next", "dist", "bin", "next");
+      fs.mkdirSync(path.dirname(nextBin), { recursive: true });
+      fs.writeFileSync(nextBin, "setTimeout(()=>{},30000)\n");
+      const child = spawn(process.execPath, [nextBin], {
         detached: true,
         stdio: "ignore",
       });
       const exited = new Promise((resolve) => child.on("exit", resolve));
       const live = host.inspectPidSoon(child.pid) || host.inspectPid(child.pid);
       assert.ok(live, "can inspect the detached child");
+      assert.equal(host.looksLikeOurNextDev(live.command, projectRoot), true);
       fs.writeFileSync(
         host.stateFile(),
         JSON.stringify({
@@ -290,6 +295,7 @@ test("dev Stop only signals the process group the host recorded", async () => {
           startedAt: Date.now(),
           startTime: live.startTime,
           exe: live.exe,
+          projectRoot,
         })
       );
       const r = host.stopServer();

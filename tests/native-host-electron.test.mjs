@@ -318,6 +318,28 @@ test("native host never calls the local API without a Bearer token", () => {
   });
 });
 
+test("rotateLogIfFull uses lstat and fchmod on an O_NOFOLLOW fd", () => {
+  const src = fs.readFileSync(hostScript, "utf8");
+  const start = src.indexOf("function fchmodNoFollow");
+  const fn = src.slice(start, src.indexOf("function log("));
+  assert.match(fn, /lstatSync/);
+  assert.match(fn, /O_NOFOLLOW/);
+  assert.match(fn, /fchmodSync/);
+  assert.doesNotMatch(fn, /fs\.statSync\(/);
+  assert.doesNotMatch(fn, /fs\.chmodSync\(/);
+  withHostLogDir((h, logDir) => {
+    const file = h.logFile();
+    const hijack = path.join(logDir, "hijack.log");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(hijack, "x".repeat(host.LOG_MAX_BYTES));
+    fs.symlinkSync(hijack, file);
+    h.rotateLogIfFull(file);
+    assert.equal(fs.lstatSync(file).isSymbolicLink(), true);
+    assert.equal(fs.existsSync(`${file}.1`), false);
+    assert.equal(fs.statSync(hijack).size, host.LOG_MAX_BYTES);
+  });
+});
+
 test("rotation chmods a 0644 native-host.log so the .1 is 0600", () => {
   withHostLogDir(() => {
     const file = host.logFile();
