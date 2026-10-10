@@ -83,6 +83,10 @@ async function attachUpdaterAfterTray({ extraResources, serverManager }) {
     onInstallFailed: () => {
       installingUpdate = false;
     },
+    currentVersion: app.getVersion(),
+    onNotify: (payload) => {
+      if (trayManager && payload) trayManager.notifyUpdater(payload.title, payload.body);
+    },
   });
   if (trayManager) {
     trayManager.updater = updater;
@@ -90,6 +94,7 @@ async function attachUpdaterAfterTray({ extraResources, serverManager }) {
       enabled: updater.enabled,
       status: "idle",
       percent: 0,
+      version: "",
     });
   }
   if (updater.enabled) {

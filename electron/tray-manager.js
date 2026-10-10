@@ -94,6 +94,7 @@ class TrayManager {
       enabled: !!(this.updater && this.updater.enabled),
       status: "idle",
       percent: 0,
+      version: "",
     };
 
     this._createTray();
@@ -644,8 +645,13 @@ class TrayManager {
       enabled: !!(state && state.enabled),
       status: (state && state.status) || "idle",
       percent: state && Number.isFinite(state.percent) ? state.percent : 0,
+      version: (state && state.version) || "",
     };
     this._updateMenu();
+  }
+
+  notifyUpdater(title, body) {
+    this._notify(String(title || ""), String(body || ""), { modalFallback: false });
   }
 
   _checkForUpdates() {

@@ -63,6 +63,29 @@ test("Tusk tray line uses Design placeholders", () => {
   assert.equal(copy.AI_KEY_MISSING, "AI key missing");
 });
 
+test("updater copy and notifications live in tray-copy.js", () => {
+  assert.equal(copy.updaterCheckLabel(), "Check for Updates…");
+  assert.equal(copy.updaterCheckingLabel(), "Checking for Updates…");
+  assert.equal(copy.updaterUpToDateLabel(), "Transcriber Is Up to Date");
+  assert.equal(copy.updaterAvailableLabel("0.2.0-beta.2"), "Update Available — 0.2.0-beta.2");
+  assert.equal(copy.updaterDownloadingLabel(17), "Downloading Update… 17%");
+  assert.equal(copy.updaterRestartLabel(), "Restart to Update");
+  assert.deepEqual(copy.updaterUpToDateNotification("0.2.0-beta.1"), {
+    title: "You're up to date",
+    body: "Transcriber 0.2.0-beta.1 is the latest.",
+  });
+  assert.deepEqual(copy.updaterReadyNotification("0.2.0-beta.2"), {
+    title: "Update ready",
+    body: "Restart Transcriber to finish updating to 0.2.0-beta.2.",
+  });
+  assert.deepEqual(copy.updaterErrorNotification(), {
+    title: "Couldn't check for updates",
+    body: "Check your connection and try again.",
+  });
+  assert.equal(copy.UPDATER_UP_TO_DATE_HOLD_MS, 5000);
+  assert.equal(copy.UPDATER_DOWNLOAD_PERCENT_STEP, 5);
+});
+
 test("menu names the library it serves and offers its data folder under Advanced", () => {
   assert.equal(copy.servingLabel(19721), "App library · Port 19721");
   assert.equal(copy.OPEN_TRANSCRIBER, "Open Transcriber");
