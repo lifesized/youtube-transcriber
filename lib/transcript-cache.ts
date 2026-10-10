@@ -4,7 +4,7 @@
  * Provides cache-aware transcript lookup and creation keyed by
  * (videoId, captionLanguage, pipelineVersion).
  * 
- * Every transcription path (API, extension, future Tusk/watchlist)
+ * Every transcription path (API, extension)
  * should use getOrCreateTranscript() to check the cache before
  * fetching from YouTube or running Whisper.
  */

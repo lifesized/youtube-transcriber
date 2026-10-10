@@ -44,8 +44,8 @@ export function normalizeJobId(raw?: string | null): string {
   return randomUUID();
 }
 
-export function normalizeJobTag(raw?: string | null): JobTag {
-  return raw === "tusk" ? "tusk" : "local";
+export function normalizeJobTag(_raw?: string | null): JobTag {
+  return "local";
 }
 
 export function beginServerJob(
@@ -119,7 +119,7 @@ export function cancelJob(
   const id = typeof jobId === "string" ? jobId.trim() : "";
   if (!id) return { llm: 0, whisper: 0, ok: false };
 
-  const requiredTag = opts?.tag ? normalizeJobTag(opts.tag) : "tusk";
+  const requiredTag = normalizeJobTag(opts?.tag);
   const job = jobs.get(jobKey(requiredTag, id));
   if (!job) {
     const whisper = cancelTranscriptionForJob(id, { tag: requiredTag });
@@ -158,7 +158,3 @@ export function cancelJobsByTag(tag: JobTag): { llm: number; whisper: number } {
   return { llm, whisper };
 }
 
-/** Cancels Tusk-tagged jobs only. Local / untagged work is left running. */
-export function cancelInFlightJobs(): { llm: number; whisper: number } {
-  return cancelJobsByTag("tusk");
-}
