@@ -7,7 +7,7 @@
 
 const trayCopy = require("./tray-copy.js");
 const { updaterMenuItem } = require("./updater-menu.js");
-const { LLM_KEY_LINKS } = require("./tusk/llm-links.js");
+const { LLM_KEY_LINKS } = require("./llm-links.js");
 
 function transcriberUrl(port) {
   return `http://127.0.0.1:${port}`;
@@ -57,10 +57,6 @@ function buildTrayMenuTemplate(state, actions) {
 
   const template = [
     { label: status.label, sublabel: status.sublabel, enabled: false },
-    {
-      label: trayCopy.tuskStatusLine(state.tuskState, state.tuskWorkspace),
-      enabled: false,
-    },
   ];
   if (state.hasLlmKey === false) {
     template.push({

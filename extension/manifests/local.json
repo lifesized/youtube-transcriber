@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Transcriber for YouTube",
   "short_name": "Transcriber",
-  "version": "1.6.39",
+  "version": "1.6.40",
   "description": "Send the current page URL to Transcriber on this computer.",
   "content_security_policy": {
     "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:19721 http://127.0.0.1:19720; object-src 'none'; base-uri 'none'; form-action 'none'"
@@ -32,8 +32,21 @@
         "https://www.youtube.com/*",
         "https://m.youtube.com/*"
       ],
-      "js": ["content.js"],
+      "js": [
+        "youtube-video-id.js",
+        "caption-tracks.js",
+        "content.js"
+      ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://m.youtube.com/*"
+      ],
+      "js": ["content-captions-main.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
     },
     {
       "matches": [

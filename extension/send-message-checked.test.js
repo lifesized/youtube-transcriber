@@ -84,3 +84,32 @@ test("caption fast-path inject/retry is debug, not info", () => {
   assert.match(src, /console\.debug\(\s*"\[ytt-bg\] caption fast-path: no listener/);
   assert.doesNotMatch(src, /console\.log\(\s*"\[ytt-bg\] caption fast-path: no listener/);
 });
+
+test("content.js acks EXTRACT_CAPTIONS and names panel/track errors", () => {
+  const src = fs.readFileSync(path.join(ROOT, "content.js"), "utf8");
+  assert.match(src, /sendResponse\(\s*\{\s*accepted:\s*true/);
+  assert.match(src, /EXTRACT_CAPTIONS_RESULT/);
+  assert.match(src, /error:\s*"no_panel"/);
+  assert.match(src, /error:\s*"no_segments"/);
+  assert.match(src, /error:\s*"not_video_page"/);
+  assert.match(src, /tryExtractFromCaptionTracks/);
+  assert.match(src, /tracksMatchCurrentVideo\(\s*tracksResult,\s*currentVid\s*\)/);
+  assert.match(src, /tryExtractFromCaptionTracks\(\s*currentVid\s*\)/);
+});
+
+test("caption fallback logs the content-script reason at info", () => {
+  const src = fs.readFileSync(path.join(ROOT, "background.js"), "utf8");
+  assert.match(src, /console\.log\(\s*"\[ytt-bg\] caption fast-path fallback"/);
+  assert.match(src, /logCaptionFallback\(reason/);
+  assert.match(src, /findYouTubeTabByVideoId/);
+  assert.doesNotMatch(src, /tabs\.find\(\s*\(t\)\s*=>\s*t\.url\s*===\s*targetUrl/);
+});
+
+test("reinjection includes content-captions-main.js in the MAIN world", () => {
+  const src = fs.readFileSync(path.join(ROOT, "background.js"), "utf8");
+  assert.match(src, /CAPTION_MAIN_INJECT_FILES\s*=\s*\[\s*"content-captions-main\.js"\s*\]/);
+  assert.match(
+    src,
+    /executeScript\(\s*\{[\s\S]*files:\s*CAPTION_MAIN_INJECT_FILES[\s\S]*world:\s*"MAIN"/
+  );
+});

@@ -4,6 +4,8 @@
 
 **YouTube & Spotify podcast to LLM-ready transcript in one click. Runs locally, costs nothing.**
 
+The Slack integration has moved out of this repo.
+
 
 https://github.com/user-attachments/assets/32491284-5c78-4a74-a580-ff3a8c256243
 

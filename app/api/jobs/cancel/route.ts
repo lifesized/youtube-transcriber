@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cancelJob, cancelJobsByTag } from "@/lib/in-flight-jobs";
+import { cancelJob } from "@/lib/in-flight-jobs";
 
 export async function POST(request: NextRequest) {
-  let body: { jobId?: unknown; tag?: unknown } = {};
+  let body: { jobId?: unknown } = {};
   try {
     const text = await request.text();
     if (text) body = JSON.parse(text);
@@ -11,20 +11,10 @@ export async function POST(request: NextRequest) {
   }
 
   const jobId = typeof body.jobId === "string" ? body.jobId.trim() : "";
-  const tag = typeof body.tag === "string" ? body.tag.trim() : "";
-
-  if (jobId) {
-    const cancelled = cancelJob(jobId, { tag: "tusk" });
-    return NextResponse.json(cancelled);
+  if (!jobId) {
+    return NextResponse.json({ error: "jobId is required" }, { status: 400 });
   }
 
-  if (tag === "tusk") {
-    const cancelled = cancelJobsByTag("tusk");
-    return NextResponse.json({ ok: true, ...cancelled });
-  }
-
-  return NextResponse.json(
-    { error: "jobId is required, or tag must be tusk" },
-    { status: 400 }
-  );
+  const cancelled = cancelJob(jobId);
+  return NextResponse.json(cancelled);
 }

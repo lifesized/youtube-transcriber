@@ -2,7 +2,11 @@
 
 ## 2026-10-10
 
+### Removed
+- The Slack integration has moved out of this repo.
+
 ### Fixed
+- **YouTube caption fast path (1.6.40)** — content.js acks `EXTRACT_CAPTIONS` immediately, then returns the result over a port or a second message. Background waits up to 12s (hard cap) and still reads `lastError`. Tabs match by video id (`watch`, `youtu.be`, Shorts, embed), not exact URL. If the transcript panel is missing, the page fetches same-origin `youtube.com` timedtext (`json3`/`vtt`), preferring a manual track. Fallback logs `no_panel`, `timeout`, `no_segments`, `not_injected`, and similar reasons at info. Track results must match the current video id; result `requestId`s compare strictly; timedtext bodies cap at ~5 MB / 20k segments; MAIN-world reinjection includes `content-captions-main.js`; the install mark is a hidden Symbol instead of a well-known window flag.
 - **Extension messaging lastError (1.6.39)** — content-script `sendMessage`, the side-panel port, and native-host `postMessage` read `chrome.runtime.lastError`. A closed side panel or a content script that is not injected yet is quiet. The caption fast-path inject/retry log is `console.debug`.
 - **Hung / busy dev server (1.6.39)** — every health check has a 3s timeout. Native-host Start tells apart nothing listening, listening-but-hung, and healthy. A hung listener is killed only when recorded pid + `ps` start time + exe/cmdline match this repo's `next dev`. Anything else returns `Port 19720 is busy/stuck (pid X)` with no kill. A healthy launchd `com.transcribed.devserver` is left alone. `Starting…` is capped at 30s.
 - **Detached native-host Start (1.6.39)** — `npm run dev` is `detached: true` + `unref` (own process group), stdio to a `0600` `dev-server.log`, and pid/startTime/exe are recorded for the hung-server check.
@@ -11,17 +15,9 @@
 
 ### Security
 - **Signing keychain re-unlocks before DMG codesign** — `notarytool --wait` can exceed 15 minutes, so the sign job unlocks the temporary keychain immediately before `macos-codesign-dmg.sh` and uses `-lut 3600` as a backstop. The `keychain.password` file is deleted after that unlock.
-- **Quit-and-install stops Tusk without blocking install** — Restart to Update still calls `tuskManager.stop()`, but a throw or ~5s hang cannot skip Next stop or the install. `installingUpdate` is set only at install time so a failed hook still lets a normal Quit tear down Tusk and the server.
+- **Quit-and-install hook cannot block install** — a throw or ~5s hang in `onBeforeQuitAndInstall` cannot skip Next stop or the install. `installingUpdate` is set only at install time so a failed hook still lets a normal Quit tear down the server.
 - **Failed quitAndInstall recovers the tray** — if `autoUpdater.quitAndInstall()` throws, the updater logs it, clears `installingUpdate`, and restarts Next so Restart to Update cannot leave an unhandled rejection and a stopped server. A second click while a restart is in flight is ignored.
 - **Sign job requires the SHA on beta** — the same `git merge-base --is-ancestor` check as the release job.
-- **Tusk M-1 posting** — Progress `postOrUpdate` sends the bot token. Slack `ok: false` on HTTP 200 throws in `postMessage`, `updateMessage`, and `uploadThreadFile`, so a missing `ts` cannot be handed to `chat.update`.
-- **Tusk M-2 markup** — Video titles in the transcript `initial_comment` and failure `detail` are passed through `escapeSlackMrkdwn`, so `<!channel>`, `<@U…>`, and `<https://evil|Click>` stay literal.
-- **Tusk M-3 Q&A** — `/api/summaries` passes `promptOverride` on every path. A thread question is never written or read back as the video’s cached summary.
-- **Tusk L-4 docs** — README, manifests, setup, and the extension privacy policy say summaries and transcript files are visible to everyone in an allowlisted channel (including Slack Connect if listed) and that questions and transcripts go to the configured LLM provider.
-- **Tusk L-1 confirm** — One native confirm at a time (409 while a dialog is open). After Change, the store is re-read and the patch is applied to that fresh state. Allowlist adds and enabling Tusk also confirm. The dialog shows team ID, `auth.test` URL, and current pin vs new pin. `app.focus({ steal: true })` plus a parent window when one exists. `tusk-set` IPC waits 15 minutes; a timed-out request sends a cancel and never writes.
-- **Tusk L-2 sources** — Slack jobs skip LinkedIn, Spotify, `client_panel_scrape`, and any non-YouTube library entry so signed-in captures are not posted to a channel.
-- **Tusk L-3 caps** — 20 LLM calls per hour and 80 per day. The job queue is bounded. The 180s duration cap aborts the client and `POST /api/jobs/cancel`, which aborts in-flight LLM fetches and SIGTERMs live Whisper/yt-dlp children.
-- **Tusk info hardening** — Bullet lists are escaped once. File uploads use `redirect: "error"` and refuse `upload_url` values with userinfo or any port. Prompts wrap question and transcript in data delimiters. `is_ext_shared_channel` is denied unless the channel is allowlisted. An empty `Authorization` header is rejected on Settings writes.
 
 ### Changed
 - **Beta feed file is `beta-mac.yml`** — electron-updater 6.8.9's GitHub provider requests `beta-mac.yml` when `channel` is `beta`. Docs and the privacy policy say that. The sign job still also writes `latest-mac.yml` because `allowPrerelease` falls back to it on 404.
@@ -29,14 +25,9 @@
 - **James docs name the two self-review settings separately** — Environment `release` → Prevent self-review stays OFF; the `beta/electron-menubar` branch rule “Require approval from someone other than the last pusher” stays OFF. Those repo settings are required before setting `SIGNING_ENABLED`.
 
 ### Added
-- **Tusk no-key UX** — When no Anthropic, OpenAI, or OpenRouter key is set, Slack paste and `@tusk` Q&A post a threaded setup notice (once per channel per 6 hours, also under the global rate limit) with the three signup links. The watch digest pauses with that reason instead of spending video tries. Settings and the tray show **AI key missing** and open those same https URLs via `shell.openExternal`. `/tusk status` reports `AI key: set` or `AI key: missing` and never the value.
 - **First signed-release dry-run plan** — `docs/signing-and-updates.md` lists the throwaway `v*-beta.*` steps, Gatekeeper checks, `beta.0` → `beta.1` update, rollback, and the blockers (ancestry, tag equals version, drafts, no blockmap).
-- **Tusk M4 watchlist digest** — Settings › Slack (Tusk) accepts YouTube channel / playlist IDs or `videos.xml` URLs and a digest channel. Tusk polls the public Atom feed (ETag / If-Modified-Since), stores seen video IDs on disk (`0600`), and posts one escaped digest to that allowlisted channel. First poll seeds history. Signed-in library captures are skipped.
 
 ## 2026-10-08
-
-### Added
-- **Tusk v0 (milestones 1–3)** — a Slack Socket Mode bot inside the Electron menu-bar app. James pastes `xoxb` / `xapp` tokens in Settings › Slack (Tusk); they are encrypted with `safeStorage` and the page only shows `saved ••••last4`. Tray line: `Tusk: connected to <workspace>` / `off` / `error` (Design placeholders). `/tusk help`, `/tusk status`, a 👀 reaction plus a threaded summary (or transcript file) on a supported YouTube / Spotify episode / LinkedIn URL, and `@Tusk <question>` in that thread answering only from that video. No public endpoint. Manifest and setup: `docs/tusk/`.
 
 ### Security
 - **Sign executes nothing from the build artifact** — fuse check is a dependency-free sentinel reader; DMG/zip use `hdiutil` / `ditto` / `codesign`. The `.p12` is deleted after `security import -x`, the `.p8` after the last notarytool call, the keychain is locked after codesign and deleted in `always()` teardown, and `set-keychain-settings -lut` is 900s.
@@ -70,13 +61,6 @@
 - **Packaged app update check** — a Developer ID–signed build may call GitHub Releases for `lifesized/youtube-transcriber` only. Documented in `extension/privacy-policy.md`. Privacy policy and store justifications now mention both `127.0.0.1:19721` (packaged) and `127.0.0.1:19720` (checkout).
 - **Native-host log rotation keeps the `.1` private** — `rotateLogIfFull` chmods the live `native-host.log` to 0600 before rename and the `.1` after, so a leftover 0644 file does not stay world-readable as the archive.
 - **Packaged frame-header CI is stale-proof** — each curl writes a fresh header file, fails on unexpected HTTP status, and also checks unauthenticated `/api/health` (401, one CSP + one XFO) and a bad `Host` (421).
-- **Tusk M1 review (T1/T2/Lows)** — Socket Mode is single-flight with a generation counter; only the current socket reschedules, with jitter and Retry-After; `invalid_auth` / `token_revoked` / `account_inactive` / `link_disabled` stop permanently and leave the tray in error. Socket URLs must be `wss:` on `*.slack.com`. Tusk settings PUT accepts only the Settings page (port-scoped cookie and `Sec-Fetch-Site: same-origin`); extension / MCP / native-host Bearer callers get 401. Team pin comes from `auth.test` before any event; a different workspace needs **Reset workspace**. Empty allowlist is public channels Tusk is in, not allow-all. Per-user and global rate limits cover slash commands. Slack links use only the `<target|label>` target, decode `&amp;` last, and rebuild canonical URLs. Slack Connect externals are ignored.
-- **Tusk L-A1 empty allowlist denies all** — An empty channel allowlist denies every conversation, including public `C…` ids. Missing `channel_type` is unknown (not inferred public from the id). Slash commands also use `channel_name` to deny `privategroup`, `directmessage`, and `mpdm-*` unless that channel ID is on the list.
-- **Tusk L-A4 settings writes** — The Tusk settings route rejects any request that carries an `Authorization` header. Changing Slack tokens or resetting the workspace pin shows a native confirmation dialog (Cancel is the default); cancel returns 409 and writes nothing.
-- **Tusk L-A2 Retry-After clamp** — Socket Mode reconnect delay is `max(backoff, min(Retry-After, 300000))` ms.
-- **Tusk L-A3 link_disabled** — A Socket Mode disconnect with reason `link_disabled` calls `stopPermanently` instead of reconnecting every 30s.
-- **Tusk rate-limit order** — `allowAll` checks the per-user bucket before taking from the global one, so a user who is already limited does not drain the shared budget.
-- **Tusk M2/M3 posting** — Titles and model output are escaped (`&`, `<`, `>`) before Slack. The model is never asked for `<url|label>`; Tusk builds every link. File uploads refuse any `upload_url` that is not `https://files.slack.com/...`. Local calls are only transcribe and summarize with the rebuilt URL. Replies stay in the source channel and thread. `@Tusk` Q&A uses only that thread’s cached transcript id.
 - **Pages cannot be framed** — Every HTML/document response from the local app (Dev 19720 and App 19721 share `next.config.ts`) sends `Content-Security-Policy: frame-ancestors 'none'` and `X-Frame-Options: DENY`. Nothing in the app or extension iframes those pages; the side panel talks to the API with `fetch`. Packaged-app CI curls `/`, the Library tab, `/settings`, and a 404.
 - **Native-host log is private and capped** — `native-host.log` is created 0600 (an existing one is chmodded on write) and rotates at 5 MB, keeping one `native-host.log.1`.
 - **Tray errors go through app-log** — tray `_logError` writes one rotated `main.log` line via `app-log.error` and does not append the file itself.

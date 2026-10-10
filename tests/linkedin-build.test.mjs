@@ -98,11 +98,19 @@ test("store justification and privacy policy describe LinkedIn capture as shippe
   assert.match(policy, /fetches the public post page itself/);
 });
 
-test("no content script runs in the page's MAIN world", () => {
-  for (const entry of manifest.content_scripts) {
+test("LinkedIn stays isolated; only the YouTube timedtext helper is MAIN-world", () => {
+  const linkedIn = manifest.content_scripts.filter((entry) =>
+    entry.matches.some((match) => match.includes("linkedin"))
+  );
+  for (const entry of linkedIn) {
     assert.ok(!("world" in entry) || entry.world === "ISOLATED", `${entry.js.join(", ")} world=${entry.world}`);
   }
-  for (const file of fs.readdirSync(dist).filter((name) => name.endsWith(".js"))) {
+  const mainEntries = manifest.content_scripts.filter((entry) => entry.world === "MAIN");
+  assert.deepEqual(
+    mainEntries.map((entry) => entry.js),
+    [["content-captions-main.js"]]
+  );
+  for (const file of LINKEDIN_FILES) {
     assert.doesNotMatch(read(file), MAIN_WORLD, file);
   }
 });
