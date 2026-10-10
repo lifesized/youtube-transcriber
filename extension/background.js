@@ -109,6 +109,7 @@ const CAPTION_INJECT_FILES = [
   "caption-tracks.js",
   "content.js",
 ];
+const CAPTION_MAIN_INJECT_FILES = ["content-captions-main.js"];
 
 async function findYouTubeTabForUrl(targetUrl) {
   if (!youtubeVideoId(targetUrl)) return null;
@@ -141,7 +142,7 @@ async function tryExtractCaptions(url, title) {
       });
       await chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        files: ["content-captions-main.js"],
+        files: CAPTION_MAIN_INJECT_FILES,
         world: "MAIN",
         injectImmediately: true,
       });

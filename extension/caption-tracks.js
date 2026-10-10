@@ -1,5 +1,20 @@
 "use strict";
 
+const MAX_TIMEDTEXT_BYTES = 5 * 1024 * 1024;
+const MAX_TIMEDTEXT_SEGMENTS = 20_000;
+
+function timedtextWithinLimit(text) {
+  return typeof text === "string" && text.length <= MAX_TIMEDTEXT_BYTES;
+}
+
+function tracksMatchCurrentVideo(tracksResult, currentVid) {
+  return Boolean(
+    tracksResult &&
+      currentVid &&
+      tracksResult.videoId === currentVid
+  );
+}
+
 function isAsrTrack(track) {
   if (!track || typeof track !== "object") return false;
   const vss = String(track.vssId || "");
@@ -99,6 +114,7 @@ function parseJson3(raw) {
       duration: Number(event.dDurationMs || 0) / 1000,
       text,
     });
+    if (segments.length >= MAX_TIMEDTEXT_SEGMENTS) break;
   }
   return segments;
 }
@@ -140,6 +156,7 @@ function parseVtt(vtt) {
       duration: Math.max(0, end - start),
       text: cueText,
     });
+    if (segments.length >= MAX_TIMEDTEXT_SEGMENTS) break;
   }
   return segments;
 }
@@ -160,6 +177,10 @@ if (typeof module !== "undefined" && module.exports) {
     parseJson3,
     parseVtt,
     parseTimedText,
+    timedtextWithinLimit,
+    tracksMatchCurrentVideo,
+    MAX_TIMEDTEXT_BYTES,
+    MAX_TIMEDTEXT_SEGMENTS,
   };
 } else {
   globalThis.CaptionTracks = {
@@ -170,5 +191,9 @@ if (typeof module !== "undefined" && module.exports) {
     parseJson3,
     parseVtt,
     parseTimedText,
+    timedtextWithinLimit,
+    tracksMatchCurrentVideo,
+    MAX_TIMEDTEXT_BYTES,
+    MAX_TIMEDTEXT_SEGMENTS,
   };
 }
