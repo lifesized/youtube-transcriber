@@ -3,7 +3,7 @@
 ## 2026-10-10
 
 ### Removed
-- Removed the experimental Slack integration.
+- The Slack integration has moved out of this repo.
 
 ### Fixed
 - **Extension messaging lastError (1.6.39)** — content-script `sendMessage`, the side-panel port, and native-host `postMessage` read `chrome.runtime.lastError`. A closed side panel or a content script that is not injected yet is quiet. The caption fast-path inject/retry log is `console.debug`.
