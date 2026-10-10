@@ -19,6 +19,7 @@ const TrayManager = require("./tray-manager.js");
 const PairingBridge = require("./pairing-bridge.js");
 const NativeHostInstaller = require("./native-host-installer.js");
 const { SecretsStore, attachSecretsIpc } = require("./secrets-store.js");
+const { migrateLegacyIntegrationState } = require("./legacy-integration-state.js");
 const { attachOpenExternalIpc } = require("./llm-links.js");
 const { checkIfTranslocated, shouldRepointNativeHost } = require("./utils.js");
 const { launchedByNativeHost, shouldRevealOnLaunch } = require("../lib/launch-source.js");
@@ -150,6 +151,11 @@ app.on("before-quit", async (event) => {
 app.whenReady().then(async () => {
   if (process.platform === "darwin" && app.dock) {
     app.dock.hide();
+  }
+  try {
+    migrateLegacyIntegrationState();
+  } catch (error) {
+    console.warn("legacy integration state failed:", error && error.message);
   }
   console.log("Transcriber starting...");
   console.log("App path:", app.getAppPath());
