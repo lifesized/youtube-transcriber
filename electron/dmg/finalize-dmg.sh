@@ -11,11 +11,19 @@
 #
 # Destination in repo: electron/dmg/finalize-dmg.sh   (chmod +x)
 # Usage: electron/dmg/finalize-dmg.sh [dist-electron/Transcriber-x.y.z-arm64.dmg]
+#        electron/dmg/finalize-dmg.sh --volume-icon-only <signed.dmg>
+# --volume-icon-only stamps the iconutil volume icon + custom-icon flag and
+# leaves helper / .payload / Applications alone (signed drag-to-Apps layout).
 # macOS only (hdiutil, osascript/JXA, SetFile, GetFileInfo). No Homebrew tools needed.
 # Uses only built-in macOS tools (hdiutil, JXA, SetFile, GetFileInfo, xattr).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+VOLUME_ICON_ONLY=0
+if [ "${1:-}" = "--volume-icon-only" ]; then
+  VOLUME_ICON_ONLY=1
+  shift
+fi
 DMG="${1:-$(ls "$ROOT"/dist-electron/*.dmg 2>/dev/null | head -1)}"
 ICON="$ROOT/electron/dmg/install-helper.icns"
 HELPER="Install Transcriber.command"
@@ -24,7 +32,9 @@ PAYLOAD=".payload"
 
 [ "$(uname)" = "Darwin" ] || { echo "finalize-dmg: macOS only"; exit 1; }
 [ -f "$DMG" ] || { echo "finalize-dmg: no DMG found (${DMG:-dist-electron/*.dmg})"; exit 1; }
-[ -f "$ICON" ] || { echo "finalize-dmg: missing $ICON"; exit 1; }
+if [ "$VOLUME_ICON_ONLY" != 1 ]; then
+  [ -f "$ICON" ] || { echo "finalize-dmg: missing $ICON"; exit 1; }
+fi
 
 WORK="$(mktemp -d)"
 MNT=""
@@ -48,13 +58,15 @@ hdiutil resize -sectors "$NEW" "$RW" >/dev/null
 
 MNT="$(hdiutil attach -readwrite -nobrowse -noautoopen "$RW" | awk -F'\t' '/\/Volumes\// {print $NF; exit}')"
 [ -n "$MNT" ] || { echo "finalize-dmg: could not mount $RW"; exit 1; }
-[ -f "$MNT/$HELPER" ] || { echo "finalize-dmg: $HELPER missing in image"; exit 1; }
-[ -d "$MNT/$APP" ] || { echo "finalize-dmg: $APP missing in image"; exit 1; }
 
-# Data fork must stay byte-identical; Finder icon lives only in the resource fork.
-DATA_BEFORE="$(shasum -a 256 "$MNT/$HELPER" | awk '{print $1}')"
+if [ "$VOLUME_ICON_ONLY" != 1 ]; then
+  [ -f "$MNT/$HELPER" ] || { echo "finalize-dmg: $HELPER missing in image"; exit 1; }
+  [ -d "$MNT/$APP" ] || { echo "finalize-dmg: $APP missing in image"; exit 1; }
 
-cat > "$WORK/seticon.js" <<'JXA'
+  # Data fork must stay byte-identical; Finder icon lives only in the resource fork.
+  DATA_BEFORE="$(shasum -a 256 "$MNT/$HELPER" | awk '{print $1}')"
+
+  cat > "$WORK/seticon.js" <<'JXA'
 ObjC.import('AppKit');
 function run(argv) {
   const icon = argv[0], target = argv[1];
@@ -66,56 +78,56 @@ function run(argv) {
   return 'ok';
 }
 JXA
-osascript -l JavaScript "$WORK/seticon.js" "$ICON" "$MNT/$HELPER" >/dev/null
+  osascript -l JavaScript "$WORK/seticon.js" "$ICON" "$MNT/$HELPER" >/dev/null
 
-# Belt-and-braces: SetFile is a built-in on the Xcode CLT image the runner ships.
-if command -v SetFile >/dev/null 2>&1; then
-  SetFile -a C "$MNT/$HELPER"
-  SetFile -a E "$MNT/$HELPER"
+  # Belt-and-braces: SetFile is a built-in on the Xcode CLT image the runner ships.
+  if command -v SetFile >/dev/null 2>&1; then
+    SetFile -a C "$MNT/$HELPER"
+    SetFile -a E "$MNT/$HELPER"
+  fi
+
+  DATA_AFTER="$(shasum -a 256 "$MNT/$HELPER" | awk '{print $1}')"
+  if [ "$DATA_BEFORE" != "$DATA_AFTER" ]; then
+    echo "finalize-dmg: helper data fork changed (was $DATA_BEFORE, now $DATA_AFTER)"
+    exit 1
+  fi
+
+  # Hide the .app by folder, not by flag: Finder never shows a dot-folder, so
+  # the bundle carries no hidden flag. Still strip wrapper FinderInfo: codesign
+  # --verify --deep --strict rejects it, and the helper's ditto would carry it
+  # into /Applications. Never touch Contents/.
+  mkdir "$MNT/$PAYLOAD"
+  mv "$MNT/$APP" "$MNT/$PAYLOAD/"
+  xattr -c "$MNT/$PAYLOAD/$APP" 2>/dev/null || true
+  xattr -d com.apple.FinderInfo "$MNT/$PAYLOAD/$APP" 2>/dev/null || true
+  if [ -e "$MNT/Applications" ]; then rm -f "$MNT/Applications"; fi
+else
+  echo "finalize-dmg: volume-icon-only (leave helper / .payload / Applications alone)"
 fi
-
-DATA_AFTER="$(shasum -a 256 "$MNT/$HELPER" | awk '{print $1}')"
-if [ "$DATA_BEFORE" != "$DATA_AFTER" ]; then
-  echo "finalize-dmg: helper data fork changed (was $DATA_BEFORE, now $DATA_AFTER)"
-  exit 1
-fi
-
-# Hide the .app by folder, not by flag: Finder never shows a dot-folder, so
-# the bundle carries no hidden flag. Still strip wrapper FinderInfo: codesign
-# --verify --deep --strict rejects it, and the helper's ditto would carry it
-# into /Applications. Never touch Contents/.
-mkdir "$MNT/$PAYLOAD"
-mv "$MNT/$APP" "$MNT/$PAYLOAD/"
-xattr -c "$MNT/$PAYLOAD/$APP" 2>/dev/null || true
-xattr -d com.apple.FinderInfo "$MNT/$PAYLOAD/$APP" 2>/dev/null || true
-if [ -e "$MNT/Applications" ]; then rm -f "$MNT/Applications"; fi
 
 # Title-bar proxy reads the 16px volume icon. PNG-only .icns (electron-builder
 # copies icon.icns as-is) decodes as colored noise there. iconutil writes the
 # ARGB slots Finder expects. Then SetFile -a C on the volume, not the helper.
-APP_ICON_ICNS="$ROOT/electron/resources/icon.icns"
+# Fail loudly if iconutil/sips/icon.png are missing — do not copy the PNG-only icns.
 APP_ICON_PNG="$ROOT/electron/resources/icon.png"
 VOLUME_ICNS="$WORK/VolumeIcon.icns"
-if command -v iconutil >/dev/null 2>&1 && command -v sips >/dev/null 2>&1 && [ -f "$APP_ICON_PNG" ]; then
-  ICONSET="$WORK/volume.iconset"
-  mkdir "$ICONSET"
-  sips -z 16 16 "$APP_ICON_PNG" --out "$ICONSET/icon_16x16.png" >/dev/null
-  sips -z 32 32 "$APP_ICON_PNG" --out "$ICONSET/icon_16x16@2x.png" >/dev/null
-  sips -z 32 32 "$APP_ICON_PNG" --out "$ICONSET/icon_32x32.png" >/dev/null
-  sips -z 64 64 "$APP_ICON_PNG" --out "$ICONSET/icon_32x32@2x.png" >/dev/null
-  sips -z 128 128 "$APP_ICON_PNG" --out "$ICONSET/icon_128x128.png" >/dev/null
-  sips -z 256 256 "$APP_ICON_PNG" --out "$ICONSET/icon_128x128@2x.png" >/dev/null
-  sips -z 256 256 "$APP_ICON_PNG" --out "$ICONSET/icon_256x256.png" >/dev/null
-  sips -z 512 512 "$APP_ICON_PNG" --out "$ICONSET/icon_256x256@2x.png" >/dev/null
-  sips -z 512 512 "$APP_ICON_PNG" --out "$ICONSET/icon_512x512.png" >/dev/null
-  sips -z 1024 1024 "$APP_ICON_PNG" --out "$ICONSET/icon_512x512@2x.png" >/dev/null
-  iconutil -c icns "$ICONSET" -o "$VOLUME_ICNS"
-  echo "finalize-dmg: rebuilt volume icns via iconutil from icon.png"
-else
-  [ -f "$APP_ICON_ICNS" ] || { echo "finalize-dmg: missing $APP_ICON_ICNS"; exit 1; }
-  cp "$APP_ICON_ICNS" "$VOLUME_ICNS"
-  echo "finalize-dmg: iconutil unavailable; copied $APP_ICON_ICNS"
-fi
+command -v iconutil >/dev/null 2>&1 || { echo "finalize-dmg: iconutil is required (no PNG-only fallback)"; exit 1; }
+command -v sips >/dev/null 2>&1 || { echo "finalize-dmg: sips is required (no PNG-only fallback)"; exit 1; }
+[ -f "$APP_ICON_PNG" ] || { echo "finalize-dmg: missing $APP_ICON_PNG (no PNG-only fallback)"; exit 1; }
+ICONSET="$WORK/volume.iconset"
+mkdir "$ICONSET"
+sips -z 16 16 "$APP_ICON_PNG" --out "$ICONSET/icon_16x16.png" >/dev/null
+sips -z 32 32 "$APP_ICON_PNG" --out "$ICONSET/icon_16x16@2x.png" >/dev/null
+sips -z 32 32 "$APP_ICON_PNG" --out "$ICONSET/icon_32x32.png" >/dev/null
+sips -z 64 64 "$APP_ICON_PNG" --out "$ICONSET/icon_32x32@2x.png" >/dev/null
+sips -z 128 128 "$APP_ICON_PNG" --out "$ICONSET/icon_128x128.png" >/dev/null
+sips -z 256 256 "$APP_ICON_PNG" --out "$ICONSET/icon_128x128@2x.png" >/dev/null
+sips -z 256 256 "$APP_ICON_PNG" --out "$ICONSET/icon_256x256.png" >/dev/null
+sips -z 512 512 "$APP_ICON_PNG" --out "$ICONSET/icon_256x256@2x.png" >/dev/null
+sips -z 512 512 "$APP_ICON_PNG" --out "$ICONSET/icon_512x512.png" >/dev/null
+sips -z 1024 1024 "$APP_ICON_PNG" --out "$ICONSET/icon_512x512@2x.png" >/dev/null
+iconutil -c icns "$ICONSET" -o "$VOLUME_ICNS"
+echo "finalize-dmg: rebuilt volume icns via iconutil from icon.png"
 MAGIC="$(dd if="$VOLUME_ICNS" bs=4 count=1 2>/dev/null | LC_ALL=C tr -d '\0')"
 [ "$MAGIC" = "icns" ] || { echo "finalize-dmg: volume icns magic is '$MAGIC' not icns"; exit 1; }
 cp "$VOLUME_ICNS" "$MNT/.VolumeIcon.icns"
@@ -127,38 +139,42 @@ fi
 echo "finalize-dmg: stamped $MNT/.VolumeIcon.icns ($(wc -c < "$MNT/.VolumeIcon.icns") bytes)"
 
 # Verify before sealing. Built-in macOS tools only — no Python xattr.
-xattr -p com.apple.ResourceFork "$MNT/$HELPER" >/dev/null 2>&1 || { echo "finalize-dmg: icon not set"; exit 1; }
-xattr -p com.apple.FinderInfo "$MNT/$HELPER" >/dev/null 2>&1 || { echo "finalize-dmg: FinderInfo not set"; exit 1; }
-RF_SIZE=$(stat -f%z "$MNT/$HELPER/..namedfork/rsrc" 2>/dev/null || echo 0)
-if [ "${RF_SIZE:-0}" -lt 100 ]; then
-  echo "finalize-dmg: resource fork too small ($RF_SIZE)"
-  exit 1
+if [ "$VOLUME_ICON_ONLY" != 1 ]; then
+  xattr -p com.apple.ResourceFork "$MNT/$HELPER" >/dev/null 2>&1 || { echo "finalize-dmg: icon not set"; exit 1; }
+  xattr -p com.apple.FinderInfo "$MNT/$HELPER" >/dev/null 2>&1 || { echo "finalize-dmg: FinderInfo not set"; exit 1; }
+  RF_SIZE=$(stat -f%z "$MNT/$HELPER/..namedfork/rsrc" 2>/dev/null || echo 0)
+  if [ "${RF_SIZE:-0}" -lt 100 ]; then
+    echo "finalize-dmg: resource fork too small ($RF_SIZE)"
+    exit 1
+  fi
+  if command -v GetFileInfo >/dev/null 2>&1; then
+    HAS_C=$(GetFileInfo -aC "$MNT/$HELPER" || true)
+    HAS_E=$(GetFileInfo -ae "$MNT/$HELPER" || true)
+    echo "finalize-dmg: GetFileInfo -aC=$HAS_C -ae=$HAS_E"
+    [ "$HAS_C" = "1" ] || { echo "finalize-dmg: custom-icon flag not set"; exit 1; }
+    [ "$HAS_E" = "1" ] || { echo "finalize-dmg: extension-hidden flag not set"; exit 1; }
+  fi
+  [ ! -e "$MNT/$APP" ] || { echo "finalize-dmg: $APP still at the volume root"; exit 1; }
+  [ -d "$MNT/$PAYLOAD/$APP" ] || { echo "finalize-dmg: $APP missing from $PAYLOAD/"; exit 1; }
+  if xattr -p com.apple.FinderInfo "$MNT/$PAYLOAD/$APP" >/dev/null 2>&1; then
+    echo "finalize-dmg: FinderInfo still on $APP after strip"
+    xattr -l "$MNT/$PAYLOAD/$APP" || true
+    exit 1
+  fi
+  [ -x "$MNT/$HELPER" ] || { echo "finalize-dmg: helper lost its exec bit"; exit 1; }
+  [ ! -e "$MNT/Applications" ] || { echo "finalize-dmg: Applications link still present"; exit 1; }
+  if command -v codesign >/dev/null 2>&1; then
+    codesign --verify --deep --strict "$MNT/$PAYLOAD/$APP" || {
+      echo "finalize-dmg: codesign --verify --deep --strict failed for $APP"
+      xattr -l "$MNT/$PAYLOAD/$APP" || true
+      exit 1
+    }
+  fi
 fi
 if command -v GetFileInfo >/dev/null 2>&1; then
-  HAS_C=$(GetFileInfo -aC "$MNT/$HELPER" || true)
-  HAS_E=$(GetFileInfo -ae "$MNT/$HELPER" || true)
-  echo "finalize-dmg: GetFileInfo -aC=$HAS_C -ae=$HAS_E"
-  [ "$HAS_C" = "1" ] || { echo "finalize-dmg: custom-icon flag not set"; exit 1; }
-  [ "$HAS_E" = "1" ] || { echo "finalize-dmg: extension-hidden flag not set"; exit 1; }
   VOL_C=$(GetFileInfo -aC "$MNT" || true)
   echo "finalize-dmg: volume GetFileInfo -aC=$VOL_C"
   [ "$VOL_C" = "1" ] || { echo "finalize-dmg: volume custom-icon flag not set"; exit 1; }
-fi
-[ ! -e "$MNT/$APP" ] || { echo "finalize-dmg: $APP still at the volume root"; exit 1; }
-[ -d "$MNT/$PAYLOAD/$APP" ] || { echo "finalize-dmg: $APP missing from $PAYLOAD/"; exit 1; }
-if xattr -p com.apple.FinderInfo "$MNT/$PAYLOAD/$APP" >/dev/null 2>&1; then
-  echo "finalize-dmg: FinderInfo still on $APP after strip"
-  xattr -l "$MNT/$PAYLOAD/$APP" || true
-  exit 1
-fi
-[ -x "$MNT/$HELPER" ] || { echo "finalize-dmg: helper lost its exec bit"; exit 1; }
-[ ! -e "$MNT/Applications" ] || { echo "finalize-dmg: Applications link still present"; exit 1; }
-if command -v codesign >/dev/null 2>&1; then
-  codesign --verify --deep --strict "$MNT/$PAYLOAD/$APP" || {
-    echo "finalize-dmg: codesign --verify --deep --strict failed for $APP"
-    xattr -l "$MNT/$PAYLOAD/$APP" || true
-    exit 1
-  }
 fi
 
 sync

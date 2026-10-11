@@ -104,6 +104,10 @@ test("finalize-dmg.sh sets the helper icon and hides the app in .payload/", () =
   assert.ok(text.includes("iconutil"));
   assert.ok(text.includes('SetFile -a C "$MNT"'));
   assert.ok(text.includes("assert-volume-icon.py"));
+  assert.ok(text.includes("--volume-icon-only"));
+  assert.ok(text.includes("iconutil is required"));
+  assert.doesNotMatch(text, /iconutil unavailable/);
+  assert.doesNotMatch(text, /copied \$APP_ICON_ICNS/);
   const icns = path.join(projectRoot, "electron", "dmg", "install-helper.icns");
   assert.ok(fs.existsSync(icns), "electron/dmg/install-helper.icns is Design's helper icon");
   const buf = fs.readFileSync(icns);

@@ -237,6 +237,8 @@ test("signed DMG is drag-to-Applications and does not reuse the helper payload",
   assert.match(script, /background-signed\.png/);
   assert.match(script, /helper must not be on the signed DMG/);
   assert.match(script, /\.payload must not be on the signed DMG/);
+  assert.match(script, /finalize-dmg\.sh --volume-icon-only/);
+  assert.doesNotMatch(script, /MACOS_CERT|APPLE_API_KEY|APPLE_ID|APPLE_APP_SPECIFIC_PASSWORD/);
   assert.ok(fs.existsSync(path.join(root, "electron", "dmg", "background-signed.png")));
   assert.ok(fs.existsSync(path.join(root, "electron", "dmg", "background-signed@2x.png")));
   const buf = fs.readFileSync(path.join(root, "electron", "dmg", "background-signed.png"));
