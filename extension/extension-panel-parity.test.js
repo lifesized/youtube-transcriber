@@ -122,7 +122,7 @@ test('background.js should handle LOCAL messages', () => {
 test('manifest should have correct version', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'dist', 'manifest.json'), 'utf8'));
   
-  assert.strictEqual(manifest.version, '1.6.40', 'version must be 1.6.40');
+  assert.strictEqual(manifest.version, '1.6.41', 'version must be 1.6.41');
 });
 
 test('manifest should have LOCAL permissions', () => {

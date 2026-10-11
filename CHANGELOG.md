@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-11
+
+### Fixed
+- **Side-panel footer stays in view (1.6.41)** — the panel is a `100vh` flex column. Library and Settings stay `flex-shrink: 0` while the content area (`flex: 1; min-height: 0; overflow-y: auto`) scrolls, including an expanded Recent transcript.
+
 ## 2026-10-10
 
 ### Removed
