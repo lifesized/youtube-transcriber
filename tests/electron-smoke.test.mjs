@@ -415,6 +415,7 @@ test("electron-builder sets mac.icon, LSUIElement, and unpacks tray templates", 
   ]) {
     assert.ok(builder.asarUnpack.includes(name), name);
   }
+  assert.equal(builder.dmg.icon, "electron/resources/icon.icns");
   assert.equal(builder.dmg.iconSize, 128);
   assert.equal(builder.dmg.iconTextSize, 13);
 });

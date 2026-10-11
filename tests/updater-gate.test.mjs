@@ -1027,16 +1027,36 @@ test("a check error notifies and returns the menu to idle", () => {
   }
 });
 
-test("error keeps ready and downloading instead of flipping to idle", () => {
+test("download error returns to available with the item enabled", () => {
   const { updater, listeners, dir } = eventUpdaterFixture();
   try {
     listeners["update-available"]({ version: "0.2.0-beta.2" });
     listeners["download-progress"]({ percent: 40 });
-    listeners["error"](new Error("stall"));
     assert.equal(updater.getMenuItem().label, "Downloading Update… 40%");
+    assert.equal(updater.getMenuItem().enabled, false);
+    listeners["error"](new Error("stall"));
+    assert.deepEqual(updater.getMenuItem(), {
+      label: "Update Available — 0.2.0-beta.2",
+      enabled: true,
+      action: "download",
+    });
+  } finally {
+    updater.dispose();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("error keeps ready instead of flipping to idle", () => {
+  const { updater, listeners, dir } = eventUpdaterFixture();
+  try {
+    listeners["update-available"]({ version: "0.2.0-beta.2" });
     listeners["update-downloaded"]({ version: "0.2.0-beta.2" });
     listeners["error"](new Error("late"));
-    assert.equal(updater.getMenuItem().label, "Restart to Update");
+    assert.deepEqual(updater.getMenuItem(), {
+      label: "Restart to Update",
+      enabled: true,
+      action: "restart",
+    });
   } finally {
     updater.dispose();
     rmSync(dir, { recursive: true, force: true });

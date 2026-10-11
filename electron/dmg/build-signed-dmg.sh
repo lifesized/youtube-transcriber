@@ -103,3 +103,9 @@ mkdir -p "$(dirname "$OUT")"
 rm -f "$OUT"
 hdiutil convert "$RW" -format UDZO -imagekey zlib-level=9 -o "$OUT" -quiet
 echo "signed-dmg: wrote $OUT ($(du -h "$OUT" | cut -f1))"
+
+# Volume icon + custom-icon flag. Same iconutil path as the ad-hoc DMG.
+# No secrets: finalize --volume-icon-only does not read env or keychain, and
+# does not touch helper / .payload / Applications (signed layout stays drag-to-Apps).
+echo "signed-dmg: stamp volume icon via finalize-dmg.sh --volume-icon-only"
+bash "$ROOT/electron/dmg/finalize-dmg.sh" --volume-icon-only "$OUT"

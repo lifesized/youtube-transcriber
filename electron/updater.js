@@ -438,7 +438,11 @@ function createUpdater(options) {
     if (wasChecking) {
       notify(trayCopy.updaterErrorNotification());
     }
-    if (status !== "ready" && status !== "downloading") {
+    if (status === "ready") {
+      // Stay ready so Restart to Update remains after a late / unrelated error.
+    } else if (status === "downloading") {
+      status = "available";
+    } else {
       status = "idle";
     }
     emit();
