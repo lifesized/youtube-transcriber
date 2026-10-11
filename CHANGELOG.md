@@ -10,7 +10,7 @@
 - **LLM key links open only the allowlist URL** — `openExternal` uses the matched `LLM_KEY_LINKS` constant, never the raw input, including uppercase scheme, default `:443`, `/./`, and surrounding whitespace.
 
 ### Fixed
-- **Late `update-downloaded` after a failed install is ignored** — recovery drops electron-updater's native `update-downloaded` listener (the one that quit-and-installs) and ignores the JS event. A 6h background check does not re-arm it. A fresh Restart to Update click is required.
+- **Late `update-downloaded` after a failed install is ignored** — recovery drops electron-updater's native `update-downloaded` listener (the one that quit-and-installs) and ignores the JS event. A 6h background check does not re-arm it. A user-initiated download, or `update-available` for a different version, clears the ignore so Restart to Update can appear without a relaunch. The native listener stays detached.
 - **Native-host Stop empty-lsof path requires `looksLikeOurNextDev`** — if `lsof` lists no listener, Stop still refuses unless the recorded pid's command is this repo's Next/dev server.
 - **`rotateLogIfFull` no longer follows symlinks** — size comes from `lstat`, and mode is set with `O_NOFOLLOW` + `fchmod` on the fd.
 - **Native-host Stop never kills a legacy or unverified pid** — a state record without `startTime`/`exe` returns `not_ours` and is cleared. Group kill requires `pgid === pid`. `lsof` failure does not treat the recorded pid as the listener; Start waits for the port to free after a verified hung kill. `dev-server.log` opens `O_NOFOLLOW`, dirs are `0700`, and the state file is `0600`.

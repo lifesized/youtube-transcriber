@@ -237,6 +237,8 @@ function createUpdater(options) {
   let installWatchdog = null;
   let recoveringInstall = false;
   let ignoreDownloadedUntilUserAction = false;
+  let keepNativeDetached = false;
+  let availableVersion = "";
 
   function clearInstallWatchdog() {
     if (installWatchdog != null) {
@@ -260,6 +262,7 @@ function createUpdater(options) {
       }
       installInFlight = false;
       ignoreDownloadedUntilUserAction = true;
+      keepNativeDetached = true;
       detachNativeUpdateDownloaded(autoUpdater);
       if (serverManager && typeof serverManager.start === "function") {
         try {
@@ -322,7 +325,16 @@ function createUpdater(options) {
     status = "up-to-date";
     emit();
   });
-  autoUpdater.on("update-available", () => {
+  autoUpdater.on("update-available", (info) => {
+    const nextVersion = (info && info.version) || "";
+    if (
+      ignoreDownloadedUntilUserAction &&
+      nextVersion &&
+      nextVersion !== availableVersion
+    ) {
+      ignoreDownloadedUntilUserAction = false;
+    }
+    if (nextVersion) availableVersion = nextVersion;
     status = "available";
     emit();
     autoUpdater.downloadUpdate().catch((error) => {
@@ -330,7 +342,7 @@ function createUpdater(options) {
       status = "available";
       emit();
     });
-    if (ignoreDownloadedUntilUserAction) {
+    if (keepNativeDetached) {
       detachNativeUpdateDownloaded(autoUpdater);
     }
   });
@@ -339,7 +351,12 @@ function createUpdater(options) {
     percent = progress && Number.isFinite(progress.percent) ? progress.percent : 0;
     emit();
   });
-  autoUpdater.on("update-downloaded", () => {
+  autoUpdater.on("update-downloaded", (info) => {
+    const nextVersion =
+      (info && info.version) ||
+      (info && info.updateInfo && info.updateInfo.version) ||
+      "";
+    if (nextVersion) availableVersion = nextVersion;
     if (ignoreDownloadedUntilUserAction) {
       console.warn("updater: ignoring update-downloaded after install recovery");
       return;
@@ -362,17 +379,18 @@ function createUpdater(options) {
     autoUpdater.checkForUpdates().catch((error) => {
       console.warn("updater: check failed:", error && error.message);
     });
-    if (ignoreDownloadedUntilUserAction) {
+    if (keepNativeDetached) {
       detachNativeUpdateDownloaded(autoUpdater);
     }
   }
 
   function downloadUpdate() {
     if (!autoUpdater) return;
+    ignoreDownloadedUntilUserAction = false;
     autoUpdater.downloadUpdate().catch((error) => {
       console.warn("updater: download failed:", error && error.message);
     });
-    if (ignoreDownloadedUntilUserAction) {
+    if (keepNativeDetached) {
       detachNativeUpdateDownloaded(autoUpdater);
     }
   }
