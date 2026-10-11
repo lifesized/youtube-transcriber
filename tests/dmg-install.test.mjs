@@ -100,6 +100,10 @@ test("finalize-dmg.sh sets the helper icon and hides the app in .payload/", () =
   assert.doesNotMatch(text, /\$MNT\/\$APP\/Contents/);
   assert.ok(text.includes("Must not modify Transcriber.app contents"));
   assert.ok(text.includes("install-helper.icns"));
+  assert.ok(text.includes(".VolumeIcon.icns"));
+  assert.ok(text.includes("iconutil"));
+  assert.ok(text.includes('SetFile -a C "$MNT"'));
+  assert.ok(text.includes("assert-volume-icon.py"));
   const icns = path.join(projectRoot, "electron", "dmg", "install-helper.icns");
   assert.ok(fs.existsSync(icns), "electron/dmg/install-helper.icns is Design's helper icon");
   const buf = fs.readFileSync(icns);
@@ -167,6 +171,8 @@ test("CI mounts the DMG and checks for the helper", () => {
   assert.match(workflow, /GetFileInfo -aC/);
   assert.match(workflow, /GetFileInfo -ae/);
   assert.match(workflow, /assert-helper-icon\.py/);
+  assert.match(workflow, /assert-volume-icon\.py/);
+  assert.match(workflow, /GetFileInfo -aC "\$MOUNT"/);
   assert.match(workflow, /test -d "\$MOUNT\/\.payload\/Transcriber\.app"/);
   assert.match(workflow, /if \[ -e "\$MOUNT\/Transcriber\.app" \]; then/);
   assert.doesNotMatch(workflow, /off-canvas/);
@@ -185,11 +191,20 @@ test("CI mounts the DMG and checks for the helper", () => {
   assert.match(shot, /screencapture/);
   assert.match(shot, /660/);
   assert.match(shot, /440/);
+  assert.match(shot, /dmg-volume-icon/);
+  assert.match(shot, /sips/);
   const assertPy = fs.readFileSync(
     path.join(projectRoot, "electron", "dmg", "assert-helper-icon.py"),
     "utf8"
   );
   assert.match(assertPy, /\.\.namedfork\/rsrc/);
+  const volPy = fs.readFileSync(
+    path.join(projectRoot, "electron", "dmg", "assert-volume-icon.py"),
+    "utf8"
+  );
+  assert.match(volPy, /\.VolumeIcon\.icns/);
+  assert.match(volPy, /GetFileInfo.*-aC/);
+  assert.match(volPy, /ic04/);
 });
 
 test("CI reads the fuses and CDHash of the app inside the mounted DMG", () => {
