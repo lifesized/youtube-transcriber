@@ -106,14 +106,25 @@ function tightenLogMode(file = logFile()) {
   }
 }
 
+function fchmodNoFollow(file, mode) {
+  const flags = fs.constants.O_WRONLY | fs.constants.O_NOFOLLOW;
+  const fd = fs.openSync(file, flags);
+  try {
+    fs.fchmodSync(fd, mode);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 /** Keep one previous file: native-host.log.1 is replaced each time. */
 function rotateLogIfFull(file = logFile()) {
   try {
-    if (fs.statSync(file).size < LOG_MAX_BYTES) return;
-    tightenLogMode(file);
+    const st = fs.lstatSync(file);
+    if (!st.isFile() || st.size < LOG_MAX_BYTES) return;
+    fchmodNoFollow(file, LOG_FILE_MODE);
     const rotated = `${file}.1`;
     fs.renameSync(file, rotated);
-    tightenLogMode(rotated);
+    fchmodNoFollow(rotated, LOG_FILE_MODE);
   } catch {
     // No log yet / chmod or rename race; never throw.
   }
@@ -700,9 +711,17 @@ function stopServer() {
     return { stopped: false, reason: "not_ours" };
   }
   const pids = listenerPidsOnPort(getPort());
-  if (pids.length > 0 && !isOurRecordedServer(pids[0], state)) {
-    log("stop_refused_identity", { pid: state.pid, listenerPid: pids[0] });
-    return { stopped: false, reason: "not_ours" };
+  if (pids.length > 0) {
+    if (!isOurRecordedServer(pids[0], state)) {
+      log("stop_refused_identity", { pid: state.pid, listenerPid: pids[0] });
+      return { stopped: false, reason: "not_ours" };
+    }
+  } else {
+    const live = inspectPid(state.pid);
+    if (!live || !looksLikeOurNextDev(live.command, state.projectRoot)) {
+      log("stop_refused_identity", { pid: state.pid, listenerPid: null });
+      return { stopped: false, reason: "not_ours" };
+    }
   }
   try {
     process.kill(-state.pid, "SIGTERM");
@@ -968,6 +987,7 @@ module.exports = {
   stateDir,
   logDir,
   logFile,
+  rotateLogIfFull,
   log,
   authHeaders,
   stateFile,
