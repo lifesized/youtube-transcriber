@@ -27,7 +27,7 @@ test("override budget returns 429 after the hourly cap", async () => {
   now = 1_200;
   assert.equal(budget.take(), true);
   assert.equal(overrideHourlyLimit({}), 20);
-  assert.equal(overrideHourlyLimit({ TUSK_OVERRIDE_HOURLY_CAP: "5" }), 5);
+  assert.equal(overrideHourlyLimit({ OVERRIDE_HOURLY_CAP: "5" }), 5);
 });
 
 test("summaries routes take an override slot before the paid call", () => {

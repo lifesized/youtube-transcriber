@@ -64,14 +64,6 @@ function trayImageName(state) {
   }
 }
 
-function tuskStatusLine(state, workspace) {
-  if (state === "connected") {
-    return workspace ? `Tusk: connected to ${workspace}` : "Tusk: connected";
-  }
-  if (state === "error") return "Tusk: error";
-  return "Tusk: off";
-}
-
 const AI_KEY_MISSING = "AI key missing";
 
 const TRY_AGAIN = "Try Again";
@@ -101,6 +93,5 @@ module.exports = {
   OPEN_LIBRARY,
   ADVANCED,
   SHOW_DATA_IN_FINDER,
-  tuskStatusLine,
   AI_KEY_MISSING,
 };

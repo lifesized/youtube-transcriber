@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
   const job = beginServerJob({
     signal: request.signal,
     jobId: typeof body.jobId === "string" ? body.jobId : undefined,
-    tag: body.jobTag === "tusk" ? "tusk" : "local",
+    tag: "local",
   });
 
   try {

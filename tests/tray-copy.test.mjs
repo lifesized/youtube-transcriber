@@ -55,11 +55,7 @@ test("tooltips and template image names follow spec §4.3", () => {
   assert.equal(copy.RUNNING_IN_MENU_BAR, "Transcriber is running in the menu bar");
 });
 
-test("Tusk tray line uses Design placeholders", () => {
-  assert.equal(copy.tuskStatusLine("off"), "Tusk: off");
-  assert.equal(copy.tuskStatusLine("error"), "Tusk: error");
-  assert.equal(copy.tuskStatusLine("connected", "Personal"), "Tusk: connected to Personal");
-  assert.equal(copy.tuskStatusLine("connected"), "Tusk: connected");
+test("AI key missing tray copy", () => {
   assert.equal(copy.AI_KEY_MISSING, "AI key missing");
 });
 

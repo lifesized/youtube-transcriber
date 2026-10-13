@@ -5,7 +5,7 @@ import { isSettingsPageWrite } from "@/lib/local-api-auth.js";
 import { getExpectedToken } from "@/lib/local-api-token.js";
 
 const require = createRequire(import.meta.url);
-const { isAllowedLlmKeyUrl } = require("../../../../electron/tusk/llm-links.js") as {
+const { isAllowedLlmKeyUrl } = require("../../../../electron/llm-links.js") as {
   isAllowedLlmKeyUrl: (value: unknown) => boolean;
 };
 

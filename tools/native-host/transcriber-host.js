@@ -83,9 +83,18 @@ function devServerLogFile() {
   return path.join(logDir(), "dev-server.log");
 }
 
+function mkdir0700(dir) {
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  try {
+    fs.chmodSync(dir, 0o700);
+  } catch {
+    /* already exists with a tighter or equal mode */
+  }
+}
+
 function ensureDirs() {
-  fs.mkdirSync(stateDir(), { recursive: true });
-  fs.mkdirSync(logDir(), { recursive: true });
+  mkdir0700(stateDir());
+  mkdir0700(logDir());
 }
 
 /** Builds before 0600 created native-host.log 0644. */
@@ -135,7 +144,22 @@ function readState() {
 
 function writeState(state) {
   ensureDirs();
-  fs.writeFileSync(stateFile(), JSON.stringify(state, null, 2));
+  const file = stateFile();
+  fs.writeFileSync(file, JSON.stringify(state, null, 2), { mode: 0o600 });
+  try {
+    fs.chmodSync(file, 0o600);
+  } catch {
+    /* best-effort 0600 */
+  }
+}
+
+function recordedGroupIsOurs(rec) {
+  if (!rec || !Number.isInteger(rec.pid) || rec.pid <= 1) return false;
+  if (typeof rec.startTime !== "string" || !rec.startTime) return false;
+  if (typeof rec.exe !== "string" || !rec.exe) return false;
+  const live = inspectPid(rec.pid);
+  if (!live || live.startTime !== rec.startTime || live.exe !== rec.exe) return false;
+  return live.pgid === rec.pid;
 }
 
 function isPidAlive(pid) {
@@ -456,10 +480,16 @@ function spawnDetached(command, args, options) {
   return child;
 }
 
-function spawnDevServer(launch, env) {
+function openDevServerLogFd() {
   ensureDirs();
   const logPath = devServerLogFile();
-  const fd = fs.openSync(logPath, "a", LOG_FILE_MODE);
+  rotateLogIfFull(logPath);
+  const flags =
+    fs.constants.O_WRONLY |
+    fs.constants.O_APPEND |
+    fs.constants.O_CREAT |
+    fs.constants.O_NOFOLLOW;
+  const fd = fs.openSync(logPath, flags, LOG_FILE_MODE);
   try {
     fs.fchmodSync(fd, LOG_FILE_MODE);
   } catch {
@@ -469,6 +499,11 @@ function spawnDevServer(launch, env) {
       /* best-effort 0600 */
     }
   }
+  return fd;
+}
+
+function spawnDevServer(launch, env) {
+  const fd = openDevServerLogFd();
   const child = spawnDetached(launch.command, launch.args, {
     cwd: launch.cwd,
     detached: true,
@@ -515,8 +550,11 @@ function launchName(child) {
 
 function killOurRecordedServer() {
   const rec = readState();
-  const listenerPid = listenerPidsOnPort(getPort())[0] || rec.pid;
+  const pids = listenerPidsOnPort(getPort());
+  if (pids.length === 0) return false;
+  const listenerPid = pids[0];
   if (!isOurRecordedServer(listenerPid, rec)) return false;
+  if (!recordedGroupIsOurs(rec)) return false;
   try {
     process.kill(-rec.pid, "SIGTERM");
   } catch (e) {
@@ -526,6 +564,18 @@ function killOurRecordedServer() {
   writeState({});
   log("killed hung recorded server", { pid: rec.pid, listenerPid });
   return true;
+}
+
+function waitForPortFree(timeoutMs = HEALTH_TIMEOUT_MS) {
+  const port = getPort();
+  const deadline = Date.now() + timeoutMs;
+  const poll = () =>
+    tcpListening(port, Math.min(200, Math.max(50, deadline - Date.now()))).then((listening) => {
+      if (!listening) return true;
+      if (Date.now() >= deadline) return false;
+      return new Promise((resolve) => setTimeout(resolve, 50)).then(poll);
+    });
+  return poll();
 }
 
 async function startServer() {
@@ -539,6 +589,14 @@ async function startServer() {
   }
   if (probe.status === "hung") {
     if (!killOurRecordedServer()) {
+      return {
+        started: false,
+        reason: "port_stuck",
+        pid: probe.listenerPid,
+        detail: `port ${probe.port} is busy/stuck (pid ${probe.listenerPid || "?"})`,
+      };
+    }
+    if (!(await waitForPortFree())) {
       return {
         started: false,
         reason: "port_stuck",
@@ -627,13 +685,23 @@ function isProcessGroupAlive(pgid) {
 function stopServer() {
   if (isElectronHost()) return { stopped: false, reason: "stop_unsupported" };
   const state = readState();
-  if (!isProcessGroupAlive(state.pid)) {
+  if (!state.startTime || !state.exe) {
+    const alive = isProcessGroupAlive(state.pid) || isPidAlive(state.pid);
     writeState({});
-    return { stopped: false, reason: "not_running" };
+    if (!alive) return { stopped: false, reason: "not_running" };
+    log("stop_refused_legacy", { pid: state.pid });
+    return { stopped: false, reason: "not_ours" };
   }
-  const listenerPid = listenerPidsOnPort(getPort())[0] || state.pid;
-  if (state.startTime && state.exe && !isOurRecordedServer(listenerPid, state)) {
-    log("stop_refused_identity", { pid: state.pid, listenerPid });
+  if (!recordedGroupIsOurs(state)) {
+    const alive = isProcessGroupAlive(state.pid) || isPidAlive(state.pid);
+    writeState({});
+    if (!alive) return { stopped: false, reason: "not_running" };
+    log("stop_refused_pgid", { pid: state.pid });
+    return { stopped: false, reason: "not_ours" };
+  }
+  const pids = listenerPidsOnPort(getPort());
+  if (pids.length > 0 && !isOurRecordedServer(pids[0], state)) {
+    log("stop_refused_identity", { pid: state.pid, listenerPid: pids[0] });
     return { stopped: false, reason: "not_ours" };
   }
   try {
@@ -875,6 +943,7 @@ module.exports = {
   spawnDetached,
   spawnDevServer,
   inspectPid,
+  inspectPidSoon,
   looksLikeOurNextDev,
   isOurRecordedServer,
   listenerPidsOnPort,
@@ -882,6 +951,10 @@ module.exports = {
   classifyPort,
   probeOnce,
   killOurRecordedServer,
+  recordedGroupIsOurs,
+  waitForPortFree,
+  openDevServerLogFd,
+  writeState,
   HEALTH_TIMEOUT_MS,
   devServerLogFile,
   parseCallerExtensionId,

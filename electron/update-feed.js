@@ -35,13 +35,52 @@ function isBetaPrereleaseVersion(version) {
   return pre === "beta" || pre.startsWith("beta.");
 }
 
+function parseOsVersion(value) {
+  const m = String(value || "").trim().match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?/);
+  if (!m) return null;
+  return {
+    major: Number(m[1]),
+    minor: Number(m[2] || 0),
+    patch: Number(m[3] || 0),
+  };
+}
+
+function toSemver(parsed) {
+  if (!parsed) return null;
+  return `${parsed.major}.${parsed.minor}.${parsed.patch}`;
+}
+
+/** Darwin 22 → macOS 13. Darwin majors below 9 cannot use this mapping. */
+function darwinReleaseToMacos(darwinRelease) {
+  const parsed = parseOsVersion(darwinRelease);
+  if (!parsed || parsed.major < 9) return null;
+  return toSemver({
+    major: parsed.major - 9,
+    minor: parsed.minor,
+    patch: parsed.patch,
+  });
+}
+
+function currentMarketingOsVersion(processLike = process, osRelease) {
+  if (processLike && typeof processLike.getSystemVersion === "function") {
+    const marketing = String(processLike.getSystemVersion() || "").trim();
+    if (parseOsVersion(marketing)) return marketing;
+  }
+  const release =
+    osRelease !== undefined ? osRelease : require("os").release();
+  return darwinReleaseToMacos(release);
+}
+
 function isOsNewEnough(currentOsVersion, minimumSystemVersion) {
   if (!minimumSystemVersion) return true;
+  const current = parseOsVersion(currentOsVersion);
+  const minimum = parseOsVersion(minimumSystemVersion);
+  if (!current || !minimum) return false;
   try {
     const semver = require("semver");
-    return !semver.lt(String(currentOsVersion), String(minimumSystemVersion));
+    return !semver.lt(toSemver(current), toSemver(minimum));
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -80,6 +119,9 @@ module.exports = {
   MINIMUM_MACOS_VERSION,
   channelFileName,
   isBetaPrereleaseVersion,
+  parseOsVersion,
+  darwinReleaseToMacos,
+  currentMarketingOsVersion,
   isOsNewEnough,
   isUpdateSupported,
   renderUpdateYml,

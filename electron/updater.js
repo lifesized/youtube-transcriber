@@ -20,6 +20,7 @@ const {
   UPDATE_CHANNEL,
   isBetaPrereleaseVersion,
   isUpdateSupported,
+  currentMarketingOsVersion,
 } = require("./update-feed.js");
 const {
   parseCodesignVerbose,
@@ -148,11 +149,12 @@ function configureAutoUpdater(autoUpdater) {
   autoUpdater.forceDevUpdateConfig = false;
   autoUpdater.setFeedURL(pinnedFeed());
   autoUpdater.isUpdateSupported = (updateInfo) =>
-    isUpdateSupported(updateInfo, require("os").release());
+    isUpdateSupported(updateInfo, currentMarketingOsVersion());
   return autoUpdater;
 }
 
 const BEFORE_QUIT_HOOK_TIMEOUT_MS = 5000;
+const INSTALL_WATCHDOG_MS = 60 * 1000;
 
 async function runBeforeQuitHook(hook, timeoutMs, setTimeoutFn, clearTimeoutFn) {
   if (typeof hook !== "function") return;
@@ -198,6 +200,7 @@ function createUpdater(options) {
     onReadyToInstall,
     onInstallFailed,
     beforeQuitHookTimeoutMs = BEFORE_QUIT_HOOK_TIMEOUT_MS,
+    installWatchdogMs = INSTALL_WATCHDOG_MS,
     loadAutoUpdater,
     setIntervalFn = setInterval,
     setTimeoutFn = setTimeout,
@@ -219,6 +222,44 @@ function createUpdater(options) {
   let timers = [];
   let autoUpdater = null;
   let installInFlight = false;
+  let installWatchdog = null;
+  let recoveringInstall = false;
+
+  function clearInstallWatchdog() {
+    if (installWatchdog != null) {
+      clearTimeoutFn(installWatchdog);
+      installWatchdog = null;
+    }
+  }
+
+  async function recoverFromFailedInstall(reason) {
+    if (!installInFlight || recoveringInstall) return;
+    recoveringInstall = true;
+    clearInstallWatchdog();
+    console.warn("updater: install recovery:", reason);
+    try {
+      if (typeof onInstallFailed === "function") {
+        try {
+          await onInstallFailed();
+        } catch (error) {
+          console.warn("updater: onInstallFailed failed:", error && error.message);
+        }
+      }
+      installInFlight = false;
+      if (serverManager && typeof serverManager.start === "function") {
+        try {
+          await serverManager.start();
+        } catch (startError) {
+          console.warn(
+            "updater: server restart failed:",
+            startError && startError.message
+          );
+        }
+      }
+    } finally {
+      recoveringInstall = false;
+    }
+  }
 
   const emit = () => {
     if (typeof onState === "function") {
@@ -289,6 +330,9 @@ function createUpdater(options) {
     console.warn("updater: error:", error && error.message);
     if (status === "checking") status = "idle";
     emit();
+    if (installInFlight) {
+      recoverFromFailedInstall(error && error.message).catch(() => {});
+    }
   });
 
   function checkForUpdates() {
@@ -308,6 +352,13 @@ function createUpdater(options) {
   async function quitAndInstall() {
     if (installInFlight) return;
     installInFlight = true;
+    clearInstallWatchdog();
+    installWatchdog = setTimeoutFn(() => {
+      recoverFromFailedInstall("watchdog").catch(() => {});
+    }, installWatchdogMs);
+    if (installWatchdog && typeof installWatchdog.unref === "function") {
+      installWatchdog.unref();
+    }
     try {
       await runBeforeQuitHook(
         onBeforeQuitAndInstall,
@@ -321,18 +372,7 @@ function createUpdater(options) {
       });
     } catch (error) {
       console.warn("updater: quitAndInstall failed:", error && error.message);
-      if (typeof onInstallFailed === "function") onInstallFailed();
-      installInFlight = false;
-      if (serverManager && typeof serverManager.start === "function") {
-        try {
-          await serverManager.start();
-        } catch (startError) {
-          console.warn(
-            "updater: server restart failed:",
-            startError && startError.message
-          );
-        }
-      }
+      await recoverFromFailedInstall(error && error.message);
     }
   }
 
@@ -349,6 +389,7 @@ function createUpdater(options) {
   }
 
   function dispose() {
+    clearInstallWatchdog();
     for (const timer of timers) {
       clearTimeoutFn(timer);
       clearIntervalFn(timer);
@@ -384,6 +425,7 @@ module.exports = {
   stopServerThenInstall,
   runBeforeQuitHook,
   BEFORE_QUIT_HOOK_TIMEOUT_MS,
+  INSTALL_WATCHDOG_MS,
   INITIAL_DELAY_MS,
   INTERVAL_MS,
   UPDATE_FEED,

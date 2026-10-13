@@ -188,7 +188,7 @@ Electron 44 dropped macOS 12. The v44.0.0 notes say: “macOS 13 (Ventura) or la
 
 - `electron-builder.json` `mac.minimumSystemVersion` is `"13.0.0"`. electron-builder writes that as `LSMinimumSystemVersion` in `Info.plist`.
 - `scripts/macos-update-artifacts.sh` writes the same value as `minimumSystemVersion` in `beta-mac.yml` and `latest-mac.yml` (via `renderUpdateYml` in `electron/update-feed.js`).
-- The in-app `isUpdateSupported` override still rejects a non-beta version, and also runs electron-updater 6.8.9’s stock check: if `updateInfo.minimumSystemVersion` is set and `semver.lt(os.release(), minimumSystemVersion)`, the update is skipped. A compare error fails open (`AppUpdater.checkIfUpdateSupported`). `os.release()` on macOS is the Darwin kernel (Ventura is 22.x), not the marketing version; that is the same comparison electron-updater itself uses.
+- The in-app `isUpdateSupported` override still rejects a non-beta version, and then compares the running OS to `updateInfo.minimumSystemVersion` when that field is set. It uses Electron’s `process.getSystemVersion()` (marketing version, e.g. `13.6.1`). If that is missing it falls back to Darwin major − 9 from `os.release()` (Darwin 22 → macOS 13). When `minimumSystemVersion` is set and the running version cannot be parsed, the update is skipped (fail closed).
 
 ## First signed release dry run
 
