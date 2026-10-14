@@ -9,6 +9,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const { updaterMenuItem, UPDATER_COPY, downloadingLabel } = require(
   path.join(root, "electron", "updater-menu.js")
 );
+const trayCopy = require(path.join(root, "electron", "tray-copy.js"));
 
 test("disabled updater never shows the item as active", () => {
   for (const state of [null, undefined, { enabled: false }, { enabled: false, status: "ready" }]) {
@@ -19,7 +20,8 @@ test("disabled updater never shows the item as active", () => {
   }
 });
 
-test("menu states match the placeholder labels", () => {
+test("menu states use Design's final updater copy", () => {
+  assert.equal(UPDATER_COPY.check, trayCopy.updaterCheckLabel());
   assert.deepEqual(updaterMenuItem({ enabled: true, status: "idle" }), {
     label: "Check for Updates…",
     enabled: true,
@@ -31,17 +33,20 @@ test("menu states match the placeholder labels", () => {
     action: "none",
   });
   assert.deepEqual(updaterMenuItem({ enabled: true, status: "up-to-date" }), {
-    label: "Up to Date",
-    enabled: true,
-    action: "check",
+    label: "Transcriber Is Up to Date",
+    enabled: false,
+    action: "none",
   });
-  assert.deepEqual(updaterMenuItem({ enabled: true, status: "available" }), {
-    label: "Update Available…",
-    enabled: true,
-    action: "download",
-  });
+  assert.deepEqual(
+    updaterMenuItem({ enabled: true, status: "available", version: "0.2.0-beta.2" }),
+    {
+      label: "Update Available — 0.2.0-beta.2",
+      enabled: true,
+      action: "download",
+    }
+  );
   assert.deepEqual(updaterMenuItem({ enabled: true, status: "downloading", percent: 42.2 }), {
-    label: "Downloading Update 42%",
+    label: "Downloading Update… 42%",
     enabled: false,
     action: "none",
   });
@@ -53,7 +58,7 @@ test("menu states match the placeholder labels", () => {
 });
 
 test("downloading percent is clamped", () => {
-  assert.equal(downloadingLabel(-4), "Downloading Update 0%");
-  assert.equal(downloadingLabel(140), "Downloading Update 100%");
-  assert.equal(downloadingLabel(undefined), "Downloading Update 0%");
+  assert.equal(downloadingLabel(-4), "Downloading Update… 0%");
+  assert.equal(downloadingLabel(140), "Downloading Update… 100%");
+  assert.equal(downloadingLabel(undefined), "Downloading Update… 0%");
 });
