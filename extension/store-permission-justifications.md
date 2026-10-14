@@ -37,7 +37,7 @@ LOCAL build. Paste these into the Chrome Web Store developer console.
 ## Optional host permissions
 
 ### `https://www.youtube.com/*` and `https://m.youtube.com/*`
-> Optional. Requested only when you transcribe a YouTube video. Content script reads YouTube's native transcript panel DOM (if captions exist) to extract segments locally instead of downloading audio. Segments are sent to the local API (`127.0.0.1:19721` packaged, or `127.0.0.1:19720` checkout) only. Read-only — no cookies, no credentials, no external fetch from content script.
+> Optional. Requested only when you transcribe a YouTube video. Content script reads YouTube's native transcript panel DOM when captions exist, and if that panel is missing it reads the page's caption-track list and fetches same-origin `youtube.com` timedtext (`json3` or `vtt`) instead of downloading audio. Segments are sent to the local API (`127.0.0.1:19721` packaged, or `127.0.0.1:19720` checkout) only. Read-only — no cookies, no credentials, no off-site fetch. No new host permissions.
 
 ### `https://claude.ai/*` and `https://chatgpt.com/*`
 > Optional. Requested only when you use **Summarize** with Claude or ChatGPT. Opens that site and places the summarize instruction **plus the full transcript** into the chat composer so you don't paste by hand. Does not read your Claude/ChatGPT history, does not store those accounts' credentials, and does not send transcript text to any server other than the provider page you already use.
@@ -58,4 +58,4 @@ Not declared: `cookies`, `webRequest`, `identity`, `notifications`, `<all_urls>`
 | Location | No | |
 | Web history | No | Only the single page URL the user chooses to send is posted to local Transcriber. General history is not read. |
 | User activity | No | |
-| Website content | Yes | Optionally reads YouTube caption/transcript panel text when you transcribe a YouTube page (sent only to local Transcriber). When you transcribe a LinkedIn post or event, reads that video's LinkedIn CDN address, title, and author from the tab (sent only to local Transcriber). Optionally places the summarize instruction plus the full transcript into Claude or ChatGPT when you use Summarize. Does not read other page content or browsing history. |
+| Website content | Yes | Optionally reads YouTube caption/transcript panel text, or same-origin YouTube timedtext, when you transcribe a YouTube page (sent only to local Transcriber). When you transcribe a LinkedIn post or event, reads that video's LinkedIn CDN address, title, and author from the tab (sent only to local Transcriber). Optionally places the summarize instruction plus the full transcript into Claude or ChatGPT when you use Summarize. Does not read other page content or browsing history. |
