@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { createRequire } from "node:module";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -27,6 +28,7 @@ const {
   configureAutoUpdater,
   isBetaPrereleaseVersion,
   stopServerThenInstall,
+  detachNativeUpdateDownloaded,
   INITIAL_DELAY_MS,
   INTERVAL_MS,
   BEFORE_QUIT_HOOK_TIMEOUT_MS,
@@ -265,12 +267,14 @@ function quitUpdaterFixture({
   onBeforeQuitAndInstall,
   onReadyToInstall,
   onInstallFailed,
+  onState,
   beforeQuitHookTimeoutMs,
   installWatchdogMs,
   order,
   quitAndInstall,
   start,
   listeners,
+  nativeUpdater,
 }) {
   const dir = mkdtempSync(path.join(tmpdir(), "ytt-quit-hook-"));
   writeFileSync(
@@ -296,16 +300,24 @@ function quitUpdaterFixture({
     onBeforeQuitAndInstall,
     onReadyToInstall,
     onInstallFailed,
+    onState,
     loadAutoUpdater: () => ({
       autoDownload: true,
       autoInstallOnAppQuit: true,
       allowDowngrade: true,
       allowPrerelease: false,
       forceDevUpdateConfig: true,
+      nativeUpdater,
       on(event, fn) {
         if (listeners) listeners[event] = fn;
       },
       setFeedURL() {},
+      checkForUpdates() {
+        return Promise.resolve();
+      },
+      downloadUpdate() {
+        return Promise.resolve();
+      },
       quitAndInstall:
         quitAndInstall ||
         (() => {
@@ -541,6 +553,191 @@ test("install watchdog recovers if Squirrel never errors", async () => {
     assert.ok(order.includes("install"));
     assert.ok(order.includes("flag-reset"));
     assert.ok(order.includes("start-server"));
+  } finally {
+    updater.dispose();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("after install recovery a late update-downloaded does not quit or install", async () => {
+  const order = [];
+  const listeners = {};
+  const states = [];
+  let installing = false;
+  const { updater, dir } = quitUpdaterFixture({
+    order,
+    listeners,
+    onState: (state) => {
+      states.push(state.status);
+    },
+    quitAndInstall() {
+      order.push("install");
+      throw new Error("Squirrel failed");
+    },
+    onReadyToInstall: () => {
+      installing = true;
+      order.push("flag");
+    },
+    onInstallFailed: () => {
+      installing = false;
+      order.push("flag-reset");
+    },
+  });
+  try {
+    await updater.quitAndInstall();
+    assert.equal(installing, false);
+    assert.ok(order.includes("flag-reset"));
+    const afterRecovery = order.length;
+    const statesAfterRecovery = states.length;
+    assert.equal(typeof listeners["update-downloaded"], "function");
+    listeners["update-downloaded"]();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(order.length, afterRecovery, "late download must not quit/install");
+    assert.equal(states.length, statesAfterRecovery, "late download must not mark ready");
+    assert.equal(order.filter((step) => step === "install").length, 1);
+
+    await updater.quitAndInstall();
+    assert.ok(order.filter((step) => step === "install").length >= 2, "a fresh click still installs");
+  } finally {
+    updater.dispose();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("recovery removes nativeUpdater update-downloaded so a late Squirrel download cannot install", async () => {
+  const order = [];
+  const nativeUpdater = new EventEmitter();
+  nativeUpdater.on("update-downloaded", () => {
+    order.push("native-auto-install");
+  });
+  assert.equal(typeof detachNativeUpdateDownloaded, "function");
+  const { updater, dir } = quitUpdaterFixture({
+    order,
+    nativeUpdater,
+    quitAndInstall() {
+      order.push("install");
+      throw new Error("Squirrel failed");
+    },
+    onReadyToInstall: () => order.push("flag"),
+    onInstallFailed: () => order.push("flag-reset"),
+  });
+  try {
+    await updater.quitAndInstall();
+    assert.ok(order.includes("flag-reset"));
+    assert.equal(nativeUpdater.listenerCount("update-downloaded"), 0);
+
+    nativeUpdater.emit("update-downloaded");
+    assert.equal(order.includes("native-auto-install"), false);
+
+    nativeUpdater.on("update-downloaded", () => {
+      order.push("rearmed-native-install");
+    });
+    updater.checkForUpdates();
+    updater.downloadUpdate();
+    assert.equal(nativeUpdater.listenerCount("update-downloaded"), 0);
+
+    nativeUpdater.emit("update-downloaded");
+    assert.equal(order.includes("rearmed-native-install"), false);
+    assert.equal(order.filter((step) => step === "install").length, 1);
+
+    await updater.quitAndInstall();
+    assert.ok(order.filter((step) => step === "install").length >= 2);
+  } finally {
+    updater.dispose();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("after a failed install a newer update reaches Restart to Update without relaunch", async () => {
+  const order = [];
+  const listeners = {};
+  const states = [];
+  const nativeUpdater = new EventEmitter();
+  nativeUpdater.on("update-downloaded", () => {
+    order.push("native-auto-install");
+  });
+  const { updater, dir } = quitUpdaterFixture({
+    order,
+    listeners,
+    nativeUpdater,
+    onState: (state) => {
+      states.push(state.status);
+    },
+    quitAndInstall() {
+      order.push("install");
+      throw new Error("Squirrel failed");
+    },
+    onReadyToInstall: () => order.push("flag"),
+    onInstallFailed: () => order.push("flag-reset"),
+  });
+  try {
+    listeners["update-available"]({ version: "0.2.1-beta.1" });
+    listeners["update-downloaded"]({ version: "0.2.1-beta.1" });
+    assert.equal(updater.getMenuItem().label, "Restart to Update");
+
+    await updater.quitAndInstall();
+    assert.ok(order.includes("flag-reset"));
+    assert.equal(nativeUpdater.listenerCount("update-downloaded"), 0);
+
+    listeners["checking-for-update"]();
+    listeners["update-available"]({ version: "0.2.1-beta.1" });
+    listeners["update-downloaded"]({ version: "0.2.1-beta.1" });
+    assert.notEqual(
+      updater.getMenuItem().label,
+      "Restart to Update",
+      "same version after recovery stays ignored"
+    );
+    assert.equal(states.at(-1), "available");
+
+    listeners["update-available"]({ version: "0.2.1-beta.2" });
+    assert.equal(nativeUpdater.listenerCount("update-downloaded"), 0);
+    listeners["update-downloaded"]({ version: "0.2.1-beta.2" });
+    assert.equal(updater.getMenuItem().label, "Restart to Update");
+    assert.equal(states.at(-1), "ready");
+    assert.equal(order.includes("native-auto-install"), false);
+
+    updater.downloadUpdate();
+    nativeUpdater.on("update-downloaded", () => {
+      order.push("rearmed-native-install");
+    });
+    updater.downloadUpdate();
+    assert.equal(nativeUpdater.listenerCount("update-downloaded"), 0);
+    nativeUpdater.emit("update-downloaded");
+    assert.equal(order.includes("rearmed-native-install"), false);
+  } finally {
+    updater.dispose();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("user downloadUpdate after recovery reaches ready and keeps native detach", async () => {
+  const order = [];
+  const listeners = {};
+  const nativeUpdater = new EventEmitter();
+  const { updater, dir } = quitUpdaterFixture({
+    order,
+    listeners,
+    nativeUpdater,
+    quitAndInstall() {
+      order.push("install");
+      throw new Error("Squirrel failed");
+    },
+    onReadyToInstall: () => order.push("flag"),
+    onInstallFailed: () => order.push("flag-reset"),
+  });
+  try {
+    listeners["update-available"]({ version: "0.2.1-beta.1" });
+    listeners["update-downloaded"]({ version: "0.2.1-beta.1" });
+    await updater.quitAndInstall();
+    listeners["checking-for-update"]();
+    listeners["update-available"]({ version: "0.2.1-beta.1" });
+    listeners["update-downloaded"]({ version: "0.2.1-beta.1" });
+    assert.notEqual(updater.getMenuItem().label, "Restart to Update");
+
+    updater.downloadUpdate();
+    assert.equal(nativeUpdater.listenerCount("update-downloaded"), 0);
+    listeners["update-downloaded"]({ version: "0.2.1-beta.1" });
+    assert.equal(updater.getMenuItem().label, "Restart to Update");
   } finally {
     updater.dispose();
     rmSync(dir, { recursive: true, force: true });

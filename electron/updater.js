@@ -186,6 +186,18 @@ async function stopServerThenInstall(serverManager, install) {
   if (typeof install === "function") await install();
 }
 
+/**
+ * MacUpdater.quitAndInstall registers nativeUpdater "update-downloaded"
+ * (electron-updater MacUpdater.js:247) which then quitAndInstalls.
+ * Recovery must drop that listener so a late Squirrel download cannot install.
+ */
+function detachNativeUpdateDownloaded(updater) {
+  const native = updater && updater.nativeUpdater;
+  if (!native || typeof native.removeAllListeners !== "function") return false;
+  native.removeAllListeners("update-downloaded");
+  return true;
+}
+
 function createUpdater(options) {
   const {
     isPackaged,
@@ -224,6 +236,9 @@ function createUpdater(options) {
   let installInFlight = false;
   let installWatchdog = null;
   let recoveringInstall = false;
+  let ignoreDownloadedUntilUserAction = false;
+  let keepNativeDetached = false;
+  let availableVersion = "";
 
   function clearInstallWatchdog() {
     if (installWatchdog != null) {
@@ -246,6 +261,9 @@ function createUpdater(options) {
         }
       }
       installInFlight = false;
+      ignoreDownloadedUntilUserAction = true;
+      keepNativeDetached = true;
+      detachNativeUpdateDownloaded(autoUpdater);
       if (serverManager && typeof serverManager.start === "function") {
         try {
           await serverManager.start();
@@ -307,7 +325,16 @@ function createUpdater(options) {
     status = "up-to-date";
     emit();
   });
-  autoUpdater.on("update-available", () => {
+  autoUpdater.on("update-available", (info) => {
+    const nextVersion = (info && info.version) || "";
+    if (
+      ignoreDownloadedUntilUserAction &&
+      nextVersion &&
+      nextVersion !== availableVersion
+    ) {
+      ignoreDownloadedUntilUserAction = false;
+    }
+    if (nextVersion) availableVersion = nextVersion;
     status = "available";
     emit();
     autoUpdater.downloadUpdate().catch((error) => {
@@ -315,13 +342,25 @@ function createUpdater(options) {
       status = "available";
       emit();
     });
+    if (keepNativeDetached) {
+      detachNativeUpdateDownloaded(autoUpdater);
+    }
   });
   autoUpdater.on("download-progress", (progress) => {
     status = "downloading";
     percent = progress && Number.isFinite(progress.percent) ? progress.percent : 0;
     emit();
   });
-  autoUpdater.on("update-downloaded", () => {
+  autoUpdater.on("update-downloaded", (info) => {
+    const nextVersion =
+      (info && info.version) ||
+      (info && info.updateInfo && info.updateInfo.version) ||
+      "";
+    if (nextVersion) availableVersion = nextVersion;
+    if (ignoreDownloadedUntilUserAction) {
+      console.warn("updater: ignoring update-downloaded after install recovery");
+      return;
+    }
     status = "ready";
     percent = 100;
     emit();
@@ -340,17 +379,25 @@ function createUpdater(options) {
     autoUpdater.checkForUpdates().catch((error) => {
       console.warn("updater: check failed:", error && error.message);
     });
+    if (keepNativeDetached) {
+      detachNativeUpdateDownloaded(autoUpdater);
+    }
   }
 
   function downloadUpdate() {
     if (!autoUpdater) return;
+    ignoreDownloadedUntilUserAction = false;
     autoUpdater.downloadUpdate().catch((error) => {
       console.warn("updater: download failed:", error && error.message);
     });
+    if (keepNativeDetached) {
+      detachNativeUpdateDownloaded(autoUpdater);
+    }
   }
 
   async function quitAndInstall() {
     if (installInFlight) return;
+    ignoreDownloadedUntilUserAction = false;
     installInFlight = true;
     clearInstallWatchdog();
     installWatchdog = setTimeoutFn(() => {
@@ -423,6 +470,7 @@ module.exports = {
   configureAutoUpdater,
   isBetaPrereleaseVersion,
   stopServerThenInstall,
+  detachNativeUpdateDownloaded,
   runBeforeQuitHook,
   BEFORE_QUIT_HOOK_TIMEOUT_MS,
   INSTALL_WATCHDOG_MS,

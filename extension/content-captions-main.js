@@ -1,0 +1,119 @@
+"use strict";
+
+/**
+ * MAIN-world helper. Isolated content.js cannot see ytInitialPlayerResponse
+ * or do a same-origin youtube.com fetch. CustomEvents cross the world bridge.
+ *
+ * Install mark is a non-enumerable Symbol.for key so page scripts cannot
+ * detect the helper via a well-known window flag.
+ */
+(function () {
+  const MAX_TIMEDTEXT_BYTES = 5 * 1024 * 1024;
+  const INSTALL_MARK = Symbol.for("7f3c2e91b0d4e68a");
+  if (Object.prototype.hasOwnProperty.call(window, INSTALL_MARK) || window[INSTALL_MARK]) {
+    return;
+  }
+  Object.defineProperty(window, INSTALL_MARK, {
+    value: 1,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+
+  function playerResponse() {
+    try {
+      const player = document.getElementById("movie_player");
+      if (player && typeof player.getPlayerResponse === "function") {
+        const live = player.getPlayerResponse();
+        if (live && typeof live === "object") return live;
+      }
+    } catch {
+      /* player not ready */
+    }
+    if (window.ytInitialPlayerResponse && typeof window.ytInitialPlayerResponse === "object") {
+      return window.ytInitialPlayerResponse;
+    }
+    return null;
+  }
+
+  window.addEventListener("ytt-caption-tracks-request", (event) => {
+    const requestId = event && event.detail && event.detail.requestId;
+    try {
+      const response = playerResponse();
+      const tracks =
+        (response &&
+          response.captions &&
+          response.captions.playerCaptionsTracklistRenderer &&
+          response.captions.playerCaptionsTracklistRenderer.captionTracks) ||
+        [];
+      window.dispatchEvent(
+        new CustomEvent("ytt-caption-tracks-result", {
+          detail: {
+            requestId,
+            tracks: Array.isArray(tracks) ? tracks : [],
+            videoId:
+              (response && response.videoDetails && response.videoDetails.videoId) ||
+              null,
+          },
+        })
+      );
+    } catch (error) {
+      window.dispatchEvent(
+        new CustomEvent("ytt-caption-tracks-result", {
+          detail: { requestId, tracks: [], error: String(error && error.message || error) },
+        })
+      );
+    }
+  });
+
+  window.addEventListener("ytt-timedtext-request", async (event) => {
+    const detail = (event && event.detail) || {};
+    const requestId = detail.requestId;
+    const url = detail.url;
+    try {
+      const res = await fetch(url, {
+        credentials: "same-origin",
+        redirect: "error",
+      });
+      const declared = Number(res.headers.get("content-length"));
+      if (Number.isFinite(declared) && declared > MAX_TIMEDTEXT_BYTES) {
+        window.dispatchEvent(
+          new CustomEvent("ytt-timedtext-result", {
+            detail: { requestId, ok: false, error: "oversized", status: res.status },
+          })
+        );
+        return;
+      }
+      const text = await res.text();
+      if (typeof text === "string" && text.length > MAX_TIMEDTEXT_BYTES) {
+        window.dispatchEvent(
+          new CustomEvent("ytt-timedtext-result", {
+            detail: { requestId, ok: false, error: "oversized", status: res.status },
+          })
+        );
+        return;
+      }
+      window.dispatchEvent(
+        new CustomEvent("ytt-timedtext-result", {
+          detail: {
+            requestId,
+            ok: res.ok,
+            status: res.status,
+            text,
+            contentType: res.headers.get("content-type") || "",
+          },
+        })
+      );
+    } catch (error) {
+      window.dispatchEvent(
+        new CustomEvent("ytt-timedtext-result", {
+          detail: {
+            requestId,
+            ok: false,
+            error: String(error && error.message || error),
+          },
+        })
+      );
+    }
+  });
+})();

@@ -44,7 +44,7 @@ The page URL is shown in the side panel only while that panel is open.
 
 ### Optional host permissions (requested only when used)
 
-- **`https://www.youtube.com/*` and `https://m.youtube.com/*`** — requested only when you transcribe a YouTube video. Content script reads YouTube's native transcript panel DOM (if captions exist) to extract segments locally. Read-only — no cookies, no credentials, no external fetch.
+- **`https://www.youtube.com/*` and `https://m.youtube.com/*`** — requested only when you transcribe a YouTube video. Content script reads YouTube's native transcript panel DOM when captions exist, and if that panel is missing it reads the page's caption-track list and fetches same-origin `youtube.com` timedtext (`json3` or `vtt`). Read-only — no cookies, no credentials, no off-site fetch.
 - **`https://claude.ai/*` and `https://chatgpt.com/*`** — requested only when you use **Summarize** with Claude or ChatGPT. Opens that site and places the summarize instruction plus the full transcript into the chat composer. Does not read your Claude/ChatGPT history or store credentials.
 
 ## What we don't do

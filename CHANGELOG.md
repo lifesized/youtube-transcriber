@@ -1,11 +1,24 @@
 # Changelog
 
+## 2026-10-11
+
+### Fixed
+- **Side-panel footer stays in view (1.6.41)** — the panel is a `100vh` flex column. Library and Settings stay `flex-shrink: 0` while the content area (`flex: 1; min-height: 0; overflow-y: auto`) scrolls, including an expanded Recent transcript.
+
 ## 2026-10-10
 
 ### Removed
 - The Slack integration has moved out of this repo.
 
+### Security
+- **One-time legacy integration state cleanup** — on startup the app rewrites `electron-secrets.json` at `0600` to drop leftover integration keys (never decrypts, never logs them), deletes leftover state files without following symlinks, and records a once-only marker.
+- **LLM key links open only the allowlist URL** — `openExternal` uses the matched `LLM_KEY_LINKS` constant, never the raw input, including uppercase scheme, default `:443`, `/./`, and surrounding whitespace.
+
 ### Fixed
+- **YouTube caption fast path (1.6.40)** — content.js acks `EXTRACT_CAPTIONS` immediately, then returns the result over a port or a second message. Background waits up to 12s (hard cap) and still reads `lastError`. Tabs match by video id (`watch`, `youtu.be`, Shorts, embed), not exact URL. If the transcript panel is missing, the page fetches same-origin `youtube.com` timedtext (`json3`/`vtt`), preferring a manual track. Fallback logs `no_panel`, `timeout`, `no_segments`, `not_injected`, and similar reasons at info. Track results must match the current video id; result `requestId`s compare strictly; timedtext bodies cap at ~5 MB / 20k segments; MAIN-world reinjection includes `content-captions-main.js`; the install mark is a hidden Symbol instead of a well-known window flag.
+- **Late `update-downloaded` after a failed install is ignored** — recovery drops electron-updater's native `update-downloaded` listener (the one that quit-and-installs) and ignores the JS event. A 6h background check does not re-arm it. A user-initiated download, or `update-available` for a different version, clears the ignore so Restart to Update can appear without a relaunch. The native listener stays detached.
+- **Native-host Stop empty-lsof path requires `looksLikeOurNextDev`** — if `lsof` lists no listener, Stop still refuses unless the recorded pid's command is this repo's Next/dev server.
+- **`rotateLogIfFull` no longer follows symlinks** — size comes from `lstat`, and mode is set with `O_NOFOLLOW` + `fchmod` on the fd.
 - **Native-host Stop never kills a legacy or unverified pid** — a state record without `startTime`/`exe` returns `not_ours` and is cleared. Group kill requires `pgid === pid`. `lsof` failure does not treat the recorded pid as the listener; Start waits for the port to free after a verified hung kill. `dev-server.log` opens `O_NOFOLLOW`, dirs are `0700`, and the state file is `0600`.
 - **Failed Restart to Update recovers from Squirrel `error` and a 60s watchdog** — if `quitAndInstall` returns early because the update is not fetched yet, the later `error` event (or a 60s watchdog) resets the flag and restarts Next. Optional integrations are not restarted after a failed install yet.
 - **Updater OS gate uses marketing macOS** — `isUpdateSupported` compares `process.getSystemVersion()`, or Darwin major − 9 from `os.release()`. An unparsable version fails closed when `minimumSystemVersion` is set.
