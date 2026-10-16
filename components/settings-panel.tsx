@@ -303,19 +303,24 @@ export function SettingsPanel() {
   const [notionHasToken, setNotionHasToken] = useState(false);
   const [notionSaving, setNotionSaving] = useState(false);
   const [notionError, setNotionError] = useState("");
+  const [canStopServer, setCanStopServer] = useState(false);
+  const [serverStopping, setServerStopping] = useState(false);
+  const [serverStopError, setServerStopError] = useState("");
+  const [serverStopHint, setServerStopHint] = useState("");
   // Drag state
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   const loadSettings = useCallback(async () => {
     try {
-      const [settingsRes, providersRes, usageRes, llmRes, notionRes, summariesRes] = await Promise.all([
+      const [settingsRes, providersRes, usageRes, llmRes, notionRes, summariesRes, stopRes] = await Promise.all([
         fetch("/api/settings"),
         fetch("/api/settings/providers"),
         fetch("/api/usage"),
         fetch("/api/settings/llm"),
         fetch("/api/settings/notion"),
         fetch("/api/summaries"),
+        fetch("/api/settings/stop"),
       ]);
       const helpersRes = await fetch("/api/settings/helpers");
 
@@ -389,6 +394,12 @@ export function SettingsPanel() {
         setInstalledHelpers(Array.isArray(data.helpers) ? data.helpers : []);
       }
 
+      if (stopRes.ok) {
+        const data = await stopRes.json();
+        setCanStopServer(!!data.canStop);
+      } else {
+        setCanStopServer(false);
+      }
     } catch {
       // Settings may not exist yet
     } finally {
@@ -588,6 +599,30 @@ export function SettingsPanel() {
       setLlmError("Could not save");
     } finally {
       setLlmSaving(false);
+    }
+  }
+
+  async function handleStopServer() {
+    if (serverStopping || !canStopServer) return;
+    setServerStopping(true);
+    setServerStopError("");
+    setServerStopHint("");
+    try {
+      const res = await fetch("/api/settings/stop", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setServerStopError(
+          typeof data.error === "string" ? data.error : "Couldn't stop the server."
+        );
+        return;
+      }
+      setServerStopHint("Server stopped. Start it again from the menu bar.");
+      setCanStopServer(false);
+    } catch {
+      setServerStopHint("Server stopped. Start it again from the menu bar.");
+      setCanStopServer(false);
+    } finally {
+      setServerStopping(false);
     }
   }
 
@@ -1109,6 +1144,28 @@ export function SettingsPanel() {
       </div>
 
       <div className="border-t border-white/5" />
+
+      {canStopServer ? (
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-white/80">Server</h2>
+          <p className="text-sm text-white/40">
+            Stops the Transcriber server. Start it again from the menu bar.
+          </p>
+          <button
+            type="button"
+            onClick={() => void handleStopServer()}
+            disabled={serverStopping}
+            aria-busy={serverStopping}
+            className="h-11 rounded-md bg-[hsl(var(--panel))] px-4 py-3 text-sm font-semibold text-white/90 shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)] disabled:cursor-not-allowed disabled:text-[hsl(var(--muted-2))]"
+          >
+            {serverStopping ? "Stopping…" : "Stop server"}
+          </button>
+          {serverStopError ? <p className="text-sm text-red-400">{serverStopError}</p> : null}
+          {serverStopHint ? <p className="text-sm text-white/30">{serverStopHint}</p> : null}
+        </div>
+      ) : null}
+
+      {canStopServer ? <div className="border-t border-white/5" /> : null}
 
       {/* API Key instructions */}
       <div className="space-y-4">

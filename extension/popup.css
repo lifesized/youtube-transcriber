@@ -175,6 +175,7 @@ body {
 
 /* Transcribe button */
 .btn-transcribe {
+  position: relative;
   width: 100%;
   height: 40px;
   border: 1px solid rgba(255, 255, 255, 0.20);
@@ -1014,18 +1015,21 @@ body {
 
 /* Inline spinner for any .btn-transcribe used as a "starting…" affordance.
    Hidden by default via [hidden]; toggled in JS when an async action runs.
-   The [hidden] override is required because `display: inline-block` here is
-   more specific than the browser's user-agent `[hidden] { display: none }`. */
+   Pin to the right with margin-top (not transform) so rotate animation stays
+   centered. The [hidden] override beats `display: block` here. */
 .btn-transcribe .start-spinner {
-  display: inline-block;
-  vertical-align: -1px;
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  margin-top: -6px;
+  margin-left: 0;
+  display: block;
   width: 12px;
   height: 12px;
   border: 2px solid rgba(255, 255, 255, 0.25);
   border-top-color: rgba(255, 255, 255, 0.85);
   border-radius: 50%;
   animation: start-spin 0.7s linear infinite;
-  margin-left: 6px;
 }
 .btn-transcribe .start-spinner[hidden] {
   display: none !important;

@@ -5,7 +5,8 @@ importScripts(
   "local-mode-lock.js",
   "target-client.js",
   "youtube-video-id.js",
-  "caption-extract.js"
+  "caption-extract.js",
+  "side-panel-close.js"
 );
 
 let _pairAttempted = false;
@@ -576,6 +577,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           : { ok: false, reason: r.reason, message: ConnectTarget.errorMessage(r.reason, target.id) };
       }
 
+      case "CLOSE_PANEL": {
+        await SidePanelClose.closeSidePanel(
+          chrome,
+          sidePanelPorts,
+          sender?.tab?.windowId
+        );
+        return { ok: true };
+      }
+
       case "CLEAR_LOCAL_TOKEN":
         clearLocalTokenMemory();
         return { ok: true };
@@ -619,6 +629,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 // Side panel / popup connect({ name: "sidepanel" }). Accept the port so
 // a missing receiver is not an unchecked lastError on every open.
+// CLOSE_PANEL (content script / Chrome window fullscreen) posts CLOSE here.
+const sidePanelPorts = new Set();
 chrome.runtime.onConnect.addListener((port) => {
   if (!port) return;
   if (port.name === "extract-captions") {
@@ -634,13 +646,25 @@ chrome.runtime.onConnect.addListener((port) => {
     return;
   }
   if (port.name !== "sidepanel") return;
-  port.onMessage.addListener(() => {
+  sidePanelPorts.add(port);
+  port.onMessage.addListener((msg) => {
     void chrome.runtime.lastError;
+    if (msg && msg.type === "PANEL_CONTEXT" && Number.isInteger(msg.windowId)) {
+      port.windowId = msg.windowId;
+    }
   });
   port.onDisconnect.addListener(() => {
     void chrome.runtime.lastError;
+    sidePanelPorts.delete(port);
   });
 });
+
+if (chrome.windows?.onBoundsChanged) {
+  chrome.windows.onBoundsChanged.addListener((win) => {
+    if (!SidePanelClose.isFullscreenWindow(win)) return;
+    SidePanelClose.closeSidePanel(chrome, sidePanelPorts, win.id).catch(() => {});
+  });
+}
 
 chrome.sidePanel.setOptions({ path: "popup.html", enabled: true }).catch(() => {});
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-16
+
+### Added
+- **Stop server in app Settings** — Packaged Transcriber Settings shows **Stop server** when the menu-bar app can actually stop Next. The button POSTs `/api/settings/stop`, which accepts only the Settings page cookie plus `Sec-Fetch-Site: same-origin` (same gate as other Settings writes; Bearer is refused). Electron main then stops the server; the tray stays so you can start again. Hidden on the checkout `npm run dev` server and in the Chrome extension.
+
+### Fixed
+- **Side panel hides in fullscreen (1.6.42)** — YouTube document/player fullscreen and Chrome window fullscreen now close the side panel. `CLOSE_PANEL` is handled in the service worker; `window.close()` alone does not hide a side panel. Only the fullscreen window's panel is closed.
+- **Start Transcriber spinner alignment (1.6.42)** — The in-button spinner sits on the right edge, vertically centered, without fighting the rotate animation.
+
 ## 2026-10-11
 
 ### Fixed

@@ -32,6 +32,7 @@ const COPY_FILES = [
   "connect-target.js",
   "local-mode-lock.js",
   "target-client.js",
+  "side-panel-close.js",
   "background.js",
   "youtube-video-id.js",
   "caption-tracks.js",

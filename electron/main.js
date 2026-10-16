@@ -21,6 +21,7 @@ const NativeHostInstaller = require("./native-host-installer.js");
 const { SecretsStore, attachSecretsIpc } = require("./secrets-store.js");
 const { migrateLegacyIntegrationState } = require("./legacy-integration-state.js");
 const { attachOpenExternalIpc } = require("./llm-links.js");
+const { attachServerStopIpc } = require("./server-stop-ipc.js");
 const { checkIfTranslocated, shouldRepointNativeHost } = require("./utils.js");
 const { launchedByNativeHost, shouldRevealOnLaunch } = require("../lib/launch-source.js");
 const { createUpdater, readDarwinSignatureAsync } = require("./updater.js");
@@ -264,6 +265,7 @@ app.whenReady().then(async () => {
     });
     attachOpenExternalIpc(child, shell);
     helperManager.attachIpc(child);
+    attachServerStopIpc(child, serverManager);
   });
   
   // Start power save blocker. isStarted() rejects null; id is null until first start.
