@@ -616,10 +616,10 @@ export function SettingsPanel() {
         );
         return;
       }
-      setServerStopHint("Server stopped. Start it again from the menu bar.");
+      setServerStopHint("Server stopped.");
       setCanStopServer(false);
     } catch {
-      setServerStopHint("Server stopped. Start it again from the menu bar.");
+      setServerStopHint("Server stopped.");
       setCanStopServer(false);
     } finally {
       setServerStopping(false);
