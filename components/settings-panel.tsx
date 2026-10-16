@@ -33,6 +33,14 @@ type FallbackItem =
 
 type ProviderType = "openrouter" | "groq" | "custom";
 
+type InstalledHelper = {
+  id: string;
+  displayName: string;
+  version?: string;
+  state: string;
+  enabled?: boolean;
+};
+
 const DAILY_LIMIT = 14_400;
 const GROQ_COST_PER_SECOND = 0.0001; // $0.006/min beyond free tier
 
@@ -287,26 +295,34 @@ export function SettingsPanel() {
   const [summariesAvailable, setSummariesAvailable] = useState<boolean | null>(null);
   const [llmSaving, setLlmSaving] = useState(false);
   const [llmError, setLlmError] = useState("");
+  const [installedHelpers, setInstalledHelpers] = useState<InstalledHelper[]>([]);
+  const [helperBusyId, setHelperBusyId] = useState("");
   const [llmLinkError, setLlmLinkError] = useState("");
   const [notionToken, setNotionToken] = useState("");
   const [notionDatabaseId, setNotionDatabaseId] = useState("");
   const [notionHasToken, setNotionHasToken] = useState(false);
   const [notionSaving, setNotionSaving] = useState(false);
   const [notionError, setNotionError] = useState("");
+  const [canStopServer, setCanStopServer] = useState(false);
+  const [serverStopping, setServerStopping] = useState(false);
+  const [serverStopError, setServerStopError] = useState("");
+  const [serverStopHint, setServerStopHint] = useState("");
   // Drag state
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   const loadSettings = useCallback(async () => {
     try {
-      const [settingsRes, providersRes, usageRes, llmRes, notionRes, summariesRes] = await Promise.all([
+      const [settingsRes, providersRes, usageRes, llmRes, notionRes, summariesRes, stopRes] = await Promise.all([
         fetch("/api/settings"),
         fetch("/api/settings/providers"),
         fetch("/api/usage"),
         fetch("/api/settings/llm"),
         fetch("/api/settings/notion"),
         fetch("/api/summaries"),
+        fetch("/api/settings/stop"),
       ]);
+      const helpersRes = await fetch("/api/settings/helpers");
 
       if (settingsRes.ok) {
         const data: SettingsData = await settingsRes.json();
@@ -372,6 +388,17 @@ export function SettingsPanel() {
         setNotionHasToken(!!data.hasToken);
         setNotionToken(data.tokenMasked || "");
         setNotionDatabaseId(data.databaseId || "");
+      }
+      if (helpersRes.ok) {
+        const data = await helpersRes.json();
+        setInstalledHelpers(Array.isArray(data.helpers) ? data.helpers : []);
+      }
+
+      if (stopRes.ok) {
+        const data = await stopRes.json();
+        setCanStopServer(!!data.canStop);
+      } else {
+        setCanStopServer(false);
       }
     } catch {
       // Settings may not exist yet
@@ -575,6 +602,30 @@ export function SettingsPanel() {
     }
   }
 
+  async function handleStopServer() {
+    if (serverStopping || !canStopServer) return;
+    setServerStopping(true);
+    setServerStopError("");
+    setServerStopHint("");
+    try {
+      const res = await fetch("/api/settings/stop", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setServerStopError(
+          typeof data.error === "string" ? data.error : "Couldn't stop the server."
+        );
+        return;
+      }
+      setServerStopHint("Server stopped.");
+      setCanStopServer(false);
+    } catch {
+      setServerStopHint("Server stopped.");
+      setCanStopServer(false);
+    } finally {
+      setServerStopping(false);
+    }
+  }
+
   async function openLlmKeyLink(url: string) {
     setLlmLinkError("");
     try {
@@ -716,6 +767,115 @@ export function SettingsPanel() {
           <p className="text-sm text-white/30">Token is stored in the app Keychain.</p>
         ) : null}
       </div>
+
+
+      {installedHelpers.length > 0 ? (
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-white/80">Helpers</h2>
+          <p className="text-sm text-white/40">
+            Optional local processes that talk to Transcriber over the loopback API.
+          </p>
+          {installedHelpers.map((helper) => (
+            <div
+              key={helper.id}
+              className="flex flex-col gap-2 rounded-lg bg-[hsl(var(--panel-2))] p-4 shadow-[var(--edge)] sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div>
+                <p className="text-sm font-semibold text-white/80">{helper.displayName}</p>
+                <p className="text-sm text-[hsl(var(--muted))]">
+                  {helper.enabled ? helper.state : "disabled"}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {!helper.enabled ? (
+                  <button
+                    type="button"
+                    disabled={helperBusyId === helper.id}
+                    aria-busy={helperBusyId === helper.id}
+                    onClick={() => {
+                      void (async () => {
+                        setHelperBusyId(helper.id);
+                        try {
+                          const res = await fetch("/api/settings/helpers", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ id: helper.id, action: "enable" }),
+                          });
+                          const data = await res.json().catch(() => ({}));
+                          if (res.ok && Array.isArray(data.helpers)) setInstalledHelpers(data.helpers);
+                        } finally {
+                          setHelperBusyId("");
+                        }
+                      })();
+                    }}
+                    className="h-11 rounded-md bg-[hsl(var(--accent))] px-4 py-3 text-sm font-semibold text-black shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] disabled:cursor-not-allowed disabled:text-[hsl(var(--muted-2))]"
+                  >
+                    {helperBusyId === helper.id ? "Working…" : "Enable"}
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      disabled={helperBusyId === helper.id}
+                      aria-busy={helperBusyId === helper.id}
+                      onClick={() => {
+                        void (async () => {
+                          setHelperBusyId(helper.id);
+                          try {
+                            const res = await fetch("/api/settings/helpers", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                id: helper.id,
+                                action: helper.state === "running" || helper.state === "starting" ? "stop" : "start",
+                              }),
+                            });
+                            const data = await res.json().catch(() => ({}));
+                            if (res.ok && Array.isArray(data.helpers)) setInstalledHelpers(data.helpers);
+                          } finally {
+                            setHelperBusyId("");
+                          }
+                        })();
+                      }}
+                      className="h-11 rounded-md bg-[hsl(var(--panel))] px-4 py-3 text-sm font-semibold text-white/90 shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)] disabled:cursor-not-allowed disabled:text-[hsl(var(--muted-2))] disabled:hover:bg-[hsl(var(--panel))]"
+                    >
+                      {helperBusyId === helper.id
+                        ? "Working…"
+                        : helper.state === "running" || helper.state === "starting"
+                          ? "Stop"
+                          : "Start"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={helperBusyId === helper.id}
+                      onClick={() => {
+                        void (async () => {
+                          setHelperBusyId(helper.id);
+                          try {
+                            const res = await fetch("/api/settings/helpers", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ id: helper.id, action: "disable" }),
+                            });
+                            const data = await res.json().catch(() => ({}));
+                            if (res.ok && Array.isArray(data.helpers)) setInstalledHelpers(data.helpers);
+                          } finally {
+                            setHelperBusyId("");
+                          }
+                        })();
+                      }}
+                      className="h-11 rounded-md bg-[hsl(var(--panel))] px-4 py-3 text-sm font-semibold text-white/90 shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] disabled:cursor-not-allowed disabled:text-[hsl(var(--muted-2))]"
+                    >
+                      Disable
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
 
       {/* Fallback order summary */}
       <p className="text-sm text-white/40">
@@ -984,6 +1144,28 @@ export function SettingsPanel() {
       </div>
 
       <div className="border-t border-white/5" />
+
+      {canStopServer ? (
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-white/80">Server</h2>
+          <p className="text-sm text-white/40">
+            Stops the Transcriber server. Start it again from the menu bar.
+          </p>
+          <button
+            type="button"
+            onClick={() => void handleStopServer()}
+            disabled={serverStopping}
+            aria-busy={serverStopping}
+            className="h-11 rounded-md bg-[hsl(var(--panel))] px-4 py-3 text-sm font-semibold text-white/90 shadow-[var(--edge)] transition-[box-shadow,background,color] duration-150 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(var(--accent))] focus-visible:shadow-[var(--edge-accent)] disabled:cursor-not-allowed disabled:text-[hsl(var(--muted-2))]"
+          >
+            {serverStopping ? "Stopping…" : "Stop server"}
+          </button>
+          {serverStopError ? <p className="text-sm text-red-400">{serverStopError}</p> : null}
+          {serverStopHint ? <p className="text-sm text-white/30">{serverStopHint}</p> : null}
+        </div>
+      ) : null}
+
+      {canStopServer ? <div className="border-t border-white/5" /> : null}
 
       {/* API Key instructions */}
       <div className="space-y-4">

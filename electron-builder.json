@@ -82,11 +82,12 @@
   "dmg": {
     "title": "Transcriber",
     "background": "electron/dmg/background.png",
+    "icon": "electron/resources/icon.icns",
     "iconSize": 128,
     "iconTextSize": 13,
     "window": {
       "width": 660,
-      "height": 420
+      "height": 440
     },
     "contents": [
       {

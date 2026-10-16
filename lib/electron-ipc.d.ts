@@ -1,5 +1,10 @@
 export const DEFAULT_IPC_TIMEOUT_MS: number;
 
+export function canStopViaElectronIpc(
+  env?: NodeJS.ProcessEnv,
+  proc?: { send?: unknown }
+): boolean;
+
 export function requestFromMain(
   type: string,
   payload?: unknown,

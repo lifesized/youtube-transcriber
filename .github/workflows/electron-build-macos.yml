@@ -170,7 +170,12 @@ jobs:
           fi
           echo "Mounted at $MOUNT"
           ls -la "$MOUNT"
-          ls -lO "$MOUNT"
+          ls -lOa "$MOUNT"
+          python3 electron/dmg/assert-volume-icon.py "$MOUNT"
+          echo "----- volume icon verification -----"
+          xxd -l 16 "$MOUNT/.VolumeIcon.icns" || true
+          GetFileInfo -a "$MOUNT" || true
+          GetFileInfo -aC "$MOUNT" || true
           test -d "$MOUNT/.payload/Transcriber.app"
           test -f "$MOUNT/Install Transcriber.command"
           test -x "$MOUNT/Install Transcriber.command"
@@ -260,6 +265,7 @@ jobs:
           name: dmg-window
           path: |
             dist-electron/dmg-window.png
+            dist-electron/dmg-volume-icon.png
             dist-electron/signed/dmg-window.png
           if-no-files-found: warn
           retention-days: 14
@@ -1216,6 +1222,7 @@ jobs:
           path: |
             dist-electron/screenshots/
             dist-electron/dmg-window.png
+            dist-electron/dmg-volume-icon.png
             dist-electron/signed/dmg-window.png
           if-no-files-found: warn
           retention-days: 14

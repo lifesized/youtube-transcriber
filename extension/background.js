@@ -3,10 +3,11 @@ importScripts(
   "send-url.js",
   "connect-target.js",
   "local-mode-lock.js",
-  "target-client.js"
+  "target-client.js",
+  "youtube-video-id.js",
+  "caption-extract.js",
+  "side-panel-close.js"
 );
-
-const CAPTION_EXTRACT_TIMEOUT_MS = 2500;
 
 let _pairAttempted = false;
 
@@ -78,98 +79,94 @@ const targetClient = TargetClient.create({
   pair: requestNativeHostPairOnce,
 });
 
-function youtubeVideoId(url) {
-  try {
-    const u = new URL(url);
-    const host = u.hostname.replace(/^www\./, "");
-    if (host !== "youtube.com" && host !== "m.youtube.com") return null;
-    if (u.pathname === "/watch") return u.searchParams.get("v");
-    if (u.pathname.startsWith("/shorts/"))
-      return u.pathname.split("/shorts/")[1]?.split("/")[0];
-    if (u.pathname.startsWith("/embed/"))
-      return u.pathname.split("/embed/")[1]?.split("/")[0];
-  } catch { /* ignore */ }
-  return null;
+const captionResultListeners = new Set();
+
+function addCaptionResultListener(fn) {
+  captionResultListeners.add(fn);
+  return () => captionResultListeners.delete(fn);
 }
 
+function notifyCaptionResult(msg) {
+  for (const fn of captionResultListeners) {
+    try {
+      fn(msg);
+    } catch {
+      /* listener must not break extract */
+    }
+  }
+}
+
+const captionExtract = createCaptionExtract({
+  sendMessage: (tabId, message, cb) => {
+    chrome.tabs.sendMessage(tabId, message, cb);
+  },
+  addResultListener: addCaptionResultListener,
+  lastError: () => chrome.runtime.lastError || null,
+  timeoutMs: CAPTION_EXTRACT_TIMEOUT_MS,
+});
+
+const CAPTION_INJECT_FILES = [
+  "youtube-video-id.js",
+  "caption-tracks.js",
+  "content.js",
+];
+const CAPTION_MAIN_INJECT_FILES = ["content-captions-main.js"];
+
 async function findYouTubeTabForUrl(targetUrl) {
-  const targetVid = youtubeVideoId(targetUrl);
-  if (!targetVid) return null;
+  if (!youtubeVideoId(targetUrl)) return null;
   try {
-    const tabs = await chrome.tabs.query({ url: ["*://*.youtube.com/*", "*://m.youtube.com/*"] });
-    const exact = tabs.find((t) => t.url === targetUrl);
-    if (exact) return exact;
-    return tabs.find((t) => youtubeVideoId(t.url || "") === targetVid) || null;
+    const tabs = await chrome.tabs.query({ url: YOUTUBE_TAB_QUERY_URLS });
+    return findYouTubeTabByVideoId(tabs, targetUrl);
   } catch {
     return null;
   }
 }
 
-function sendMessageWithTimeout(tabId, message, timeoutMs) {
-  return new Promise((resolve) => {
-    let settled = false;
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      resolve(null);
-    }, timeoutMs);
-    try {
-      chrome.tabs.sendMessage(tabId, message, (response) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        if (chrome.runtime.lastError) {
-          resolve(null);
-          return;
-        }
-        resolve(response ?? null);
-      });
-    } catch {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(null);
-    }
-  });
+function logCaptionFallback(reason, extra) {
+  console.log("[ytt-bg] caption fast-path fallback", { reason, ...extra });
 }
 
 async function tryExtractCaptions(url, title) {
   const tab = await findYouTubeTabForUrl(url);
   if (!tab?.id) {
-    console.log("[ytt-bg] caption fast-path: no matching youtube tab", { url });
+    logCaptionFallback("no_tab");
     return null;
   }
-  let response = await sendMessageWithTimeout(
-    tab.id,
-    { type: "EXTRACT_CAPTIONS" },
-    CAPTION_EXTRACT_TIMEOUT_MS
-  );
+  let response = await captionExtract.extractFromTab(tab.id);
   if (response === null) {
     console.debug("[ytt-bg] caption fast-path: no listener — injecting + retrying", { tabId: tab.id });
     try {
       await chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        files: ["content.js"],
+        files: CAPTION_INJECT_FILES,
+        injectImmediately: true,
+      });
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: CAPTION_MAIN_INJECT_FILES,
+        world: "MAIN",
         injectImmediately: true,
       });
       await new Promise((r) => setTimeout(r, 100));
-      response = await sendMessageWithTimeout(
-        tab.id,
-        { type: "EXTRACT_CAPTIONS" },
-        CAPTION_EXTRACT_TIMEOUT_MS
-      );
+      response = await captionExtract.extractFromTab(tab.id);
     } catch (err) {
-      console.log("[ytt-bg] caption fast-path: inject failed", err?.message || err);
+      logCaptionFallback("inject_failed", { error: err?.message || String(err) });
       return null;
     }
   }
+  if (response === null) {
+    logCaptionFallback("not_injected", { tabId: tab.id });
+    return null;
+  }
+  const reason = response?.error || (!response?.ok ? "no_captions" : null);
   console.log("[ytt-bg] caption fast-path response", {
     tabId: tab.id,
     ok: !!response?.ok,
     segments: Array.isArray(response?.segments) ? response.segments.length : 0,
-    error: response?.error || null,
+    error: reason,
   });
   if (!response?.ok || !Array.isArray(response.segments) || !response.segments.length) {
+    logCaptionFallback(reason || "no_segments", { tabId: tab.id });
     return null;
   }
   return {
@@ -458,6 +455,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
 
+  if (message && message.type === EXTRACT_CAPTIONS_RESULT) {
+    notifyCaptionResult(message);
+    sendResponse({ ok: true });
+    return false;
+  }
+
   const handle = async () => {
     switch (message.type) {
       case "SEND_PAGE_URL":
@@ -574,6 +577,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           : { ok: false, reason: r.reason, message: ConnectTarget.errorMessage(r.reason, target.id) };
       }
 
+      case "CLOSE_PANEL": {
+        await SidePanelClose.closeSidePanel(
+          chrome,
+          sidePanelPorts,
+          sender?.tab?.windowId
+        );
+        return { ok: true };
+      }
+
       case "CLEAR_LOCAL_TOKEN":
         clearLocalTokenMemory();
         return { ok: true };
@@ -617,15 +629,42 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 // Side panel / popup connect({ name: "sidepanel" }). Accept the port so
 // a missing receiver is not an unchecked lastError on every open.
+// CLOSE_PANEL (content script / Chrome window fullscreen) posts CLOSE here.
+const sidePanelPorts = new Set();
 chrome.runtime.onConnect.addListener((port) => {
-  if (!port || port.name !== "sidepanel") return;
-  port.onMessage.addListener(() => {
+  if (!port) return;
+  if (port.name === "extract-captions") {
+    port.onMessage.addListener((msg) => {
+      void chrome.runtime.lastError;
+      if (msg && msg.type === EXTRACT_CAPTIONS_RESULT) {
+        notifyCaptionResult(msg);
+      }
+    });
+    port.onDisconnect.addListener(() => {
+      void chrome.runtime.lastError;
+    });
+    return;
+  }
+  if (port.name !== "sidepanel") return;
+  sidePanelPorts.add(port);
+  port.onMessage.addListener((msg) => {
     void chrome.runtime.lastError;
+    if (msg && msg.type === "PANEL_CONTEXT" && Number.isInteger(msg.windowId)) {
+      port.windowId = msg.windowId;
+    }
   });
   port.onDisconnect.addListener(() => {
     void chrome.runtime.lastError;
+    sidePanelPorts.delete(port);
   });
 });
+
+if (chrome.windows?.onBoundsChanged) {
+  chrome.windows.onBoundsChanged.addListener((win) => {
+    if (!SidePanelClose.isFullscreenWindow(win)) return;
+    SidePanelClose.closeSidePanel(chrome, sidePanelPorts, win.id).catch(() => {});
+  });
+}
 
 chrome.sidePanel.setOptions({ path: "popup.html", enabled: true }).catch(() => {});
 

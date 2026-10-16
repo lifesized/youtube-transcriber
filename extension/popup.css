@@ -21,31 +21,20 @@
   box-sizing: border-box;
 }
 
+html {
+  height: 100%;
+}
+
 body {
   width: 100%;
   min-height: 200px;
   height: 100vh;
-  overflow-y: auto;
+  overflow: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
-}
-body::-webkit-scrollbar {
-  width: 6px;
-}
-body::-webkit-scrollbar-track {
-  background: transparent;
-}
-body::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 3px;
-}
-body::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.15);
 }
 
 .popup {
@@ -53,8 +42,34 @@ body::-webkit-scrollbar-thumb:hover {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
   box-sizing: border-box;
+  overflow: hidden;
+}
+
+.panel-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+.panel-content::-webkit-scrollbar {
+  width: 6px;
+}
+.panel-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+.panel-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+.panel-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 /* HTML-first startup state. Keep this independent of popup.js so Chrome can
@@ -160,6 +175,7 @@ body::-webkit-scrollbar-thumb:hover {
 
 /* Transcribe button */
 .btn-transcribe {
+  position: relative;
   width: 100%;
   height: 40px;
   border: 1px solid rgba(255, 255, 255, 0.20);
@@ -999,18 +1015,21 @@ body::-webkit-scrollbar-thumb:hover {
 
 /* Inline spinner for any .btn-transcribe used as a "starting…" affordance.
    Hidden by default via [hidden]; toggled in JS when an async action runs.
-   The [hidden] override is required because `display: inline-block` here is
-   more specific than the browser's user-agent `[hidden] { display: none }`. */
+   Pin to the right with margin-top (not transform) so rotate animation stays
+   centered. The [hidden] override beats `display: block` here. */
 .btn-transcribe .start-spinner {
-  display: inline-block;
-  vertical-align: -1px;
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  margin-top: -6px;
+  margin-left: 0;
+  display: block;
   width: 12px;
   height: 12px;
   border: 2px solid rgba(255, 255, 255, 0.25);
   border-top-color: rgba(255, 255, 255, 0.85);
   border-radius: 50%;
   animation: start-spin 0.7s linear infinite;
-  margin-left: 6px;
 }
 .btn-transcribe .start-spinner[hidden] {
   display: none !important;
@@ -2507,7 +2526,8 @@ body::-webkit-scrollbar-thumb:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: auto;
+  flex-shrink: 0;
+  margin-top: 0;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   padding-top: 16px;
 }

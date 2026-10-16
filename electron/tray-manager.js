@@ -85,6 +85,7 @@ class TrayManager {
     this.errorMessage = "";
     this.portHolder = null;
     this.hasLlmKey = true;
+    this.helpers = [];
     this._restarting = false;
     this._healthTimer = null;
     this.updater = options.updater || null;
@@ -92,6 +93,7 @@ class TrayManager {
       enabled: !!(this.updater && this.updater.enabled),
       status: "idle",
       percent: 0,
+      version: "",
     };
 
     this._createTray();
@@ -101,6 +103,11 @@ class TrayManager {
 
   setHasLlmKey(hasKey) {
     this.hasLlmKey = Boolean(hasKey);
+    this._updateMenu();
+  }
+
+  setHelpers(list = []) {
+    this.helpers = Array.isArray(list) ? list : [];
     this._updateMenu();
   }
 
@@ -365,6 +372,7 @@ class TrayManager {
         openAtLogin: app.getLoginItemSettings().openAtLogin,
         showImport: this._shouldShowImport(),
         hasLlmKey: this.hasLlmKey,
+        helpers: this.helpers,
         updater: this.updaterState,
       },
       {
@@ -632,8 +640,13 @@ class TrayManager {
       enabled: !!(state && state.enabled),
       status: (state && state.status) || "idle",
       percent: state && Number.isFinite(state.percent) ? state.percent : 0,
+      version: (state && state.version) || "",
     };
     this._updateMenu();
+  }
+
+  notifyUpdater(title, body) {
+    this._notify(String(title || ""), String(body || ""), { modalFallback: false });
   }
 
   _checkForUpdates() {

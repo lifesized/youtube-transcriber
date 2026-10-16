@@ -5,8 +5,8 @@ import subprocess
 import sys
 import time
 
-# Match electron-builder dmg.window: 660×420.
-WINDOW_W, WINDOW_H = 660, 420
+# Match electron-builder dmg.window: 660×440.
+WINDOW_W, WINDOW_H = 660, 440
 ORIGIN_X, ORIGIN_Y = 80, 80
 
 
@@ -46,6 +46,27 @@ def main() -> int:
             timeout=15,
         )
         print("screenshot wrote", out)
+        # Title-bar proxy sits just left of the centered window title.
+        proxy = 24
+        px = ORIGIN_X + WINDOW_W // 2 - 56
+        py = ORIGIN_Y + 4
+        stem = str(out).rsplit(".", 1)[0]
+        zoomed = stem.replace("dmg-window", "dmg-volume-icon") + ".png"
+        if zoomed == str(out):
+            zoomed = stem + "-volume-icon.png"
+        raw = stem + "-volume-icon.raw.png"
+        subprocess.run(
+            ["screencapture", "-x", f"-R{px},{py},{proxy},{proxy}", raw],
+            check=False,
+            timeout=15,
+        )
+        subprocess.run(
+            ["sips", "-z", "192", "192", raw, "--out", zoomed],
+            check=False,
+            timeout=15,
+            stdout=subprocess.DEVNULL,
+        )
+        print("screenshot wrote", zoomed)
     except Exception as e:
         print("screenshot skipped:", e)
     return 0

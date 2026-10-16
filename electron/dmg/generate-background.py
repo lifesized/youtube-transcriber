@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Render the Transcriber DMG window background: background.png (660x420) and background@2x.png (1320x840).
+"""Render the Transcriber DMG window background: background.png (660x440) and background@2x.png (1320x880).
 
 Drop-in replacement for electron/dmg/generate-background.py. It writes next to itself.
 Layout (points; electron-builder dmg.contents uses the same coordinates):
   header   0..104   espresso, baked title + one instruction line
   body   104..316   flat mid-tone bronze #83735e. The installer icon sits at (330,200), iconSize 128.
                     Its Finder label lands on this flat bronze; black and white text both pass 4.58:1.
-  footer 316..420   espresso, the first-open Gatekeeper steps
+  footer 316..440   espresso, the first-open Gatekeeper steps
 No text is baked anywhere a Finder label is drawn (x 200..460, y 252..306).
 Needs Inter (variable or static). Set INTER_TTF to override. Fails loudly instead of falling back to a bitmap font.
 """
@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
-W, H = 660, 420
+W, H = 660, 440
 HERE = Path(__file__).resolve().parent
 OUT, OUT_2X = HERE / "background.png", HERE / "background@2x.png"
 

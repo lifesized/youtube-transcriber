@@ -9,6 +9,7 @@ import {
   tokensEqual,
   unauthorizedJson,
 } from "./lib/local-api-auth.js";
+import { helperShapeAllowed } from "./lib/helper-scope.js";
 
 function expectedToken(): string | null {
   const fromEnv = process.env[ENV_NAME];
@@ -77,7 +78,16 @@ export function middleware(request: NextRequest) {
   );
 
   if (!authorized) {
-    return NextResponse.json(unauthorizedJson(), { status: 401 });
+    if (
+      !helperShapeAllowed(
+        { authorization: request.headers.get("authorization") },
+        request.method,
+        pathname
+      )
+    ) {
+      return NextResponse.json(unauthorizedJson(), { status: 401 });
+    }
+    return NextResponse.next();
   }
 
   return NextResponse.next();

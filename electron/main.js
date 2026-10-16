@@ -19,11 +19,14 @@ const TrayManager = require("./tray-manager.js");
 const PairingBridge = require("./pairing-bridge.js");
 const NativeHostInstaller = require("./native-host-installer.js");
 const { SecretsStore, attachSecretsIpc } = require("./secrets-store.js");
+const { migrateLegacyIntegrationState } = require("./legacy-integration-state.js");
 const { attachOpenExternalIpc } = require("./llm-links.js");
+const { attachServerStopIpc } = require("./server-stop-ipc.js");
 const { checkIfTranslocated, shouldRepointNativeHost } = require("./utils.js");
 const { launchedByNativeHost, shouldRevealOnLaunch } = require("../lib/launch-source.js");
 const { createUpdater, readDarwinSignatureAsync } = require("./updater.js");
 const { appBundleFromExecPath, parseCodesignVerbose } = require("./code-signature.js");
+const { createHelperManager } = require("./helpers.js");
 
 const IS_DEV = process.env.NODE_ENV === "development";
 const PORT = config.port;
@@ -46,6 +49,7 @@ let serverManager = null;
 let trayManager = null;
 let pairingBridge = null;
 let secretsStore = null;
+let helperManager = null;
 let updater = null;
 let powerSaveId = null;
 let pendingReveal = false;
@@ -78,6 +82,10 @@ async function attachUpdaterAfterTray({ extraResources, serverManager }) {
     onInstallFailed: () => {
       installingUpdate = false;
     },
+    currentVersion: app.getVersion(),
+    onNotify: (payload) => {
+      if (trayManager && payload) trayManager.notifyUpdater(payload.title, payload.body);
+    },
   });
   if (trayManager) {
     trayManager.updater = updater;
@@ -85,6 +93,7 @@ async function attachUpdaterAfterTray({ extraResources, serverManager }) {
       enabled: updater.enabled,
       status: "idle",
       percent: 0,
+      version: "",
     });
   }
   if (updater.enabled) {
@@ -142,6 +151,7 @@ app.on("before-quit", async (event) => {
   }
   if (serverManager && serverManager.isRunning()) {
     event.preventDefault();
+    if (helperManager) helperManager.stopAll();
     await serverManager.stop();
     app.exit(0);
   }
@@ -150,6 +160,11 @@ app.on("before-quit", async (event) => {
 app.whenReady().then(async () => {
   if (process.platform === "darwin" && app.dock) {
     app.dock.hide();
+  }
+  try {
+    migrateLegacyIntegrationState();
+  } catch (error) {
+    console.warn("legacy integration state failed:", error && error.message);
   }
   console.log("Transcriber starting...");
   console.log("App path:", app.getAppPath());
@@ -203,6 +218,15 @@ app.whenReady().then(async () => {
 
   trayManager.setHasLlmKey(Boolean(secretsStore.getPublic().hasLlmKey));
 
+  helperManager = createHelperManager({
+    port: PORT,
+    isPackaged: app.isPackaged,
+    appExecPath: process.execPath,
+    onStatus: (list) => trayManager.setHelpers(list),
+  });
+  helperManager.persistTokens();
+  trayManager.setHelpers(helperManager.listStatus());
+
   if (process.platform === "darwin") {
     const translocated = checkIfTranslocated(app.getAppPath());
     if (translocated) {
@@ -240,6 +264,8 @@ app.whenReady().then(async () => {
       trayManager.setHasLlmKey(Boolean(secretsStore.getPublic().hasLlmKey));
     });
     attachOpenExternalIpc(child, shell);
+    helperManager.attachIpc(child);
+    attachServerStopIpc(child, serverManager);
   });
   
   // Start power save blocker. isStarted() rejects null; id is null until first start.
@@ -263,6 +289,8 @@ app.whenReady().then(async () => {
       trayManager.showError(error && error.message);
     }
   }
+
+  helperManager.startEnabled();
 
   // Monitor server health
   serverManager.on("status-change", (status) => {
