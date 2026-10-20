@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-20
+
+### Changed
+- **Summaries** now use `anthropic/claude-haiku-5.5` instead of `google/gemini-2.5-flash-lite`, which OpenRouter retires on 2026-10-20. In a blind test on 4 transcripts it scored highest with two judges and invented the fewest quotes.
+- **OpenRouter transcription** now defaults to `google/gemini-3.1-flash-lite`. Saved settings that name a retired Gemini model fall back to the default instead of failing.
+
+### Removed
+- Gemini 2.5 Flash, 2.5 Flash Lite and 2.0 Flash from the model pickers.
+
 ## 2026-10-08
 
 ### Changed
