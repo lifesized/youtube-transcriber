@@ -107,3 +107,47 @@ test("MCP summarize_transcript no longer accepts or forwards apiKey", () => {
 test("LOCAL_SUMMARY_MODEL is pinned", () => {
   assert.equal(core.LOCAL_SUMMARY_MODEL, "anthropic/claude-haiku-5.5");
 });
+
+test("resolveModel maps retired Gemini ids to the OpenRouter default", () => {
+  const src = readFileSync(path.join(repoRoot, "lib/providers.ts"), "utf8");
+  const start = src.indexOf("export const DEFAULT_MODELS");
+  const end = src.indexOf("export const OPENROUTER_MODELS");
+  assert.ok(start > 0 && end > start);
+  const slice = src
+    .slice(start, end)
+    .replace(/export /g, "")
+    .replace(/: Record<Exclude<ProviderType, "custom">, string>/g, "")
+    .replace(/: string \| null \| undefined/g, "")
+    .replace(/: string/g, "");
+  const { resolveModel, DEFAULT_MODELS } = new Function(
+    `${slice}; return { resolveModel, DEFAULT_MODELS };`
+  )();
+  const fallback = DEFAULT_MODELS.openrouter;
+  assert.equal(fallback, "google/gemini-3.1-flash-lite");
+  assert.equal(resolveModel(null, fallback), fallback);
+  assert.equal(resolveModel(undefined, fallback), fallback);
+  assert.equal(resolveModel("", fallback), fallback);
+  assert.equal(resolveModel("google/gemini-2.5-flash", fallback), fallback);
+  assert.equal(resolveModel("google/gemini-2.5-flash-lite", fallback), fallback);
+  assert.equal(resolveModel("google/gemini-2.0-flash-001", fallback), fallback);
+  assert.equal(
+    resolveModel("google/gemini-3.1-flash-lite", fallback),
+    "google/gemini-3.1-flash-lite"
+  );
+  assert.equal(
+    resolveModel("mistralai/voxtral-small-24b-2507", fallback),
+    "mistralai/voxtral-small-24b-2507"
+  );
+  assert.match(src, /model = resolveModel\(row\.model, DEFAULT_MODELS\[p\]\);/);
+  assert.match(
+    src,
+    /model: resolveModel\(legacyConfig\.model, DEFAULT_MODELS\[p\]\),/
+  );
+  assert.doesNotMatch(src, /id: "google\/gemini-2\.[05]/);
+  const picker = readFileSync(
+    path.join(repoRoot, "components/settings-panel.tsx"),
+    "utf8"
+  );
+  assert.match(picker, /id: "google\/gemini-3\.1-flash-lite"/);
+  assert.doesNotMatch(picker, /gemini-2\.[05]/);
+});

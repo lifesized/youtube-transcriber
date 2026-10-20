@@ -143,7 +143,7 @@ POST /api/summaries
 ```json
 {
   "summary_md": "## TL;DR\n...",
-  "model": "google/gemini-2.5-flash-lite",
+  "model": "anthropic/claude-haiku-5.5",
   "cached": false,
   "cost_usd": 0.0001,
   "prompt_hash": "…"
