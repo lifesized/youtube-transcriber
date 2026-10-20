@@ -49,9 +49,7 @@ const LLM_KEY_LINKS = [
 ] as const;
 
 const OPENROUTER_MODELS = [
-  { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash", tag: "recommended" },
-  { id: "google/gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", tag: "budget" },
-  { id: "google/gemini-2.0-flash-001", label: "Gemini 2.0 Flash", tag: "google" },
+  { id: "google/gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite", tag: "recommended" },
   { id: "mistralai/voxtral-small-24b-2507", label: "Voxtral Small 24B", tag: "transcription" },
   { id: "openai/gpt-audio-mini", label: "GPT Audio Mini", tag: "openai" },
 ];
@@ -804,7 +802,7 @@ export function SettingsPanel() {
                   <ModelSelect
                     value={item.model || ""}
                     onChange={(val) => handleUpdateModel(item.id, val)}
-                    placeholder="google/gemini-2.5-flash"
+                    placeholder="google/gemini-3.1-flash-lite"
                     models={OPENROUTER_MODELS}
                   />
                 </div>
