@@ -105,5 +105,5 @@ test("MCP summarize_transcript no longer accepts or forwards apiKey", () => {
 });
 
 test("LOCAL_SUMMARY_MODEL is pinned", () => {
-  assert.equal(core.LOCAL_SUMMARY_MODEL, "google/gemini-2.5-flash-lite");
+  assert.equal(core.LOCAL_SUMMARY_MODEL, "anthropic/claude-haiku-5.5");
 });

@@ -37,13 +37,24 @@ const PROVIDER_MODELS_ENDPOINTS: Record<Exclude<ProviderType, "custom">, string>
 
 export const DEFAULT_MODELS: Record<Exclude<ProviderType, "custom">, string> = {
   groq: "whisper-large-v3-turbo",
-  openrouter: "google/gemini-2.5-flash",
+  openrouter: "google/gemini-3.1-flash-lite",
 };
 
+// Models OpenRouter has removed. Saved provider configs that still name one
+// fall back to the provider default instead of failing every transcription.
+const RETIRED_MODELS = new Set([
+  "google/gemini-2.5-flash",
+  "google/gemini-2.5-flash-lite",
+  "google/gemini-2.0-flash-001",
+]);
+
+export function resolveModel(saved: string | null | undefined, fallback: string): string {
+  if (!saved || RETIRED_MODELS.has(saved)) return fallback;
+  return saved;
+}
+
 export const OPENROUTER_MODELS = [
-  { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash", tag: "recommended" },
-  { id: "google/gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", tag: "budget" },
-  { id: "google/gemini-2.0-flash-001", label: "Gemini 2.0 Flash", tag: "google" },
+  { id: "google/gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite", tag: "recommended" },
   { id: "mistralai/voxtral-small-24b-2507", label: "Voxtral Small 24B", tag: "transcription" },
   { id: "openai/gpt-audio-mini", label: "GPT Audio Mini", tag: "openai" },
 ];
@@ -74,7 +85,7 @@ export async function getEnabledProviders(): Promise<ProviderEndpointConfig[]> {
       } else {
         const p = row.provider as Exclude<ProviderType, "custom">;
         endpoint = PROVIDER_TRANSCRIPTION_ENDPOINTS[p];
-        model = row.model || DEFAULT_MODELS[p];
+        model = resolveModel(row.model, DEFAULT_MODELS[p]);
       }
 
       return {
@@ -96,7 +107,7 @@ export async function getEnabledProviders(): Promise<ProviderEndpointConfig[]> {
       provider: p,
       endpoint: PROVIDER_TRANSCRIPTION_ENDPOINTS[p],
       apiKey: legacyConfig.apiKey,
-      model: legacyConfig.model || DEFAULT_MODELS[p],
+      model: resolveModel(legacyConfig.model, DEFAULT_MODELS[p]),
     }];
   }
 
