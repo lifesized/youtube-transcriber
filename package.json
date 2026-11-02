@@ -33,6 +33,7 @@
     "test:local-auth": "node --test tests/local-api-auth.test.mjs tools/native-host/*.test.mjs extension/local-auth-headers.test.js",
     "test:extension": "node --test extension/*.test.js",
     "test:summarize-auth": "node --test tests/summarize-no-client-apikey.test.mjs",
+    "test:llm-launcher": "tsx --test tests/llm-launcher-menu.test.ts",
     "test:secrets": "node --test tests/secrets-at-rest.test.mjs",
     "test:provider-url": "node --test tests/provider-url-policy.test.mjs",
     "migrate:secrets": "tsx scripts/migrate-secrets.ts",
