@@ -11,6 +11,30 @@ export interface ParsedUrl {
 const SPOTIFY_EPISODE_REGEX = /^[a-zA-Z0-9]{22}$/;
 
 /**
+ * Spotify web player episode IDs from open.spotify.com paths.
+ * Handles locale prefixes (/intl-en/, /intl-pt-br/), embed URLs, trailing
+ * slashes, and query strings (?si=).
+ */
+const SPOTIFY_EPISODE_PATH =
+  /^(?:\/intl-[a-z]{2}(?:-[a-z0-9]+)?)?(?:\/embed(?:-podcast)?)?\/episode\/([a-zA-Z0-9]{22})(?:\/|$)/i;
+
+export function extractSpotifyEpisodeId(url: string): string | null {
+  if (!url || typeof url !== "string") return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(url.trim());
+  } catch {
+    return null;
+  }
+  const host = parsed.hostname.replace(/^www\./, "");
+  if (host !== "open.spotify.com") return null;
+  const match = parsed.pathname.match(SPOTIFY_EPISODE_PATH);
+  const episodeId = match?.[1];
+  if (!episodeId || !SPOTIFY_EPISODE_REGEX.test(episodeId)) return null;
+  return episodeId;
+}
+
+/**
  * Parse a content URL and detect the platform.
  * Supports YouTube and Spotify episode URLs.
  */
@@ -28,12 +52,13 @@ export function parseContentUrl(url: string): ParsedUrl {
 
   const host = parsed.hostname.replace(/^www\./, "");
 
-  // Spotify episode URL: open.spotify.com/episode/{id}
-  if (host === "open.spotify.com" && parsed.pathname.startsWith("/episode/")) {
-    const episodeId = parsed.pathname.split("/episode/")[1]?.split("/")[0]?.split("?")[0];
-    if (!episodeId || !SPOTIFY_EPISODE_REGEX.test(episodeId)) {
+  // Spotify — never fall through to generic yt-dlp. yt-dlp cannot extract
+  // Spotify, so locale/embed URLs used to fail with a misleading yt-dlp error.
+  if (host === "open.spotify.com") {
+    const episodeId = extractSpotifyEpisodeId(url);
+    if (!episodeId) {
       throw new Error(
-        `Could not extract episode ID from URL. Supported format: open.spotify.com/episode/{id}`
+        `Could not extract episode ID from URL. Open a specific episode page (open.spotify.com/episode/{id}), including locale prefixes like /intl-en/.`
       );
     }
     return { platform: "spotify", contentId: episodeId, originalUrl: url };

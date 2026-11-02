@@ -67,6 +67,22 @@ test("buildLocalSendRequest body is always exactly {url:...} even with secret qu
   assert.equal(parsed.url.includes("v=123"), true);
 });
 
+test("buildLocalSendRequest includes a page title without caption segments", () => {
+  const spotify =
+    "https://open.spotify.com/intl-en/episode/2Cc8LDSoGmgL8sBkt4hSlt?si=abc";
+  const request = buildLocalSendRequest(spotify, TOKEN, {
+    title: "Why the Self Became Our God | Tara Isabella Burton | Spotify",
+  });
+  assert.equal(request.ok, true);
+  const parsed = JSON.parse(request.body);
+  assert.equal(parsed.url, spotify);
+  assert.equal(
+    parsed.title,
+    "Why the Self Became Our God | Tara Isabella Burton | Spotify"
+  );
+  assert.equal(parsed.segments, undefined);
+});
+
 test("buildLocalSendRequest includes validated segments when provided", () => {
   const captions = {
     segments: [

@@ -115,7 +115,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await getVideoTranscript(url, lang);
+    const titleHint = typeof body.title === "string" ? body.title : undefined;
+    const result = await getVideoTranscript(url, lang, titleHint);
 
     const data = {
       videoId: result.videoId,
@@ -156,6 +157,7 @@ export async function POST(request: NextRequest) {
     }
 
     const message = err instanceof Error ? err.message : "Unknown error";
+    const spotifyError = /spotify|rss feed|itunes search|podcast/i.test(message);
 
     if (
       message.includes("disabled") ||
@@ -163,7 +165,10 @@ export async function POST(request: NextRequest) {
       message.includes("not found") ||
       message.includes("unavailable")
     ) {
-      return NextResponse.json({ error: message }, { status: 404 });
+      return NextResponse.json(
+        { error: message, ...(spotifyError ? { errorCode: "spotify" } : {}) },
+        { status: 404 }
+      );
     }
 
     if (message.includes("No transcription services enabled")) {
@@ -171,7 +176,10 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: `Failed to fetch transcript: ${message}` },
+      {
+        error: `Failed to fetch transcript: ${message}`,
+        ...(spotifyError ? { errorCode: "spotify" } : {}),
+      },
       { status: 500 }
     );
   }

@@ -903,12 +903,13 @@ async function fetchTranscript(
  */
 export async function getVideoTranscript(
   url: string,
-  lang?: string
+  lang?: string,
+  titleHint?: string
 ): Promise<VideoTranscriptResult & { source: string }> {
   const parsed = parseContentUrl(url);
 
   if (parsed.platform === "spotify") {
-    return getSpotifyTranscript(parsed.contentId, parsed.originalUrl);
+    return getSpotifyTranscript(parsed.contentId, parsed.originalUrl, titleHint);
   }
 
   if (parsed.platform === "generic") {

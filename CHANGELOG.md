@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-02
+
+### Fixed
+- **Spotify episodes from the extension side panel (YTT-458)** — `open.spotify.com` URLs with locale prefixes (`/intl-en/`, `/intl-pt-br/`), embed paths, and `?si=` query strings are parsed as Spotify instead of falling through to yt-dlp. Video-podcast RSS items that only expose `media:content` or a `video/mp4` enclosure are treated as downloadable audio. If the Spotify Web API is missing or 404s (common for video episodes), the server falls back to iTunes episode search using the tab title the side panel already had. Spotify failures now show their real message in the panel instead of a generic "Transcription failed."
+
+### Changed
+- **Extension 1.6.40** — Side panel detects locale-prefixed Spotify episode URLs, sends the page title with the transcribe request, and does not prompt for YouTube host permissions on Spotify pages.
+
 ## 2026-10-20
 
 ### Changed

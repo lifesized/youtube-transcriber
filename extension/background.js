@@ -190,10 +190,15 @@ async function sendPageUrl(pageUrl, title) {
     return { ok: false, reason: "other" };
   }
   
-  // Try caption extraction for YouTube URLs
-  const captions = youtubeVideoId(pageUrl) ? await tryExtractCaptions(pageUrl, title) : null;
-  
-  // Build request with token and optional segments
+  // Try caption extraction for YouTube URLs. Always forward the tab title so
+  // Spotify (and other non-YouTube pages) can resolve audio without the
+  // Spotify Web API.
+  const youtubeCaptions = youtubeVideoId(pageUrl)
+    ? await tryExtractCaptions(pageUrl, title)
+    : null;
+  const captions = youtubeCaptions || (title ? { title } : null);
+
+  // Build request with token and optional segments / title
   const request = buildLocalSendRequest(pageUrl, tokenResult.token, captions);
   if (!request.ok) {
     // Token present but request build failed (bad URL etc.)
@@ -219,7 +224,16 @@ async function sendPageUrl(pageUrl, title) {
   }
   
   if (!res.ok) {
-    // YTT-448: Never return server error text
+    // YTT-448: do not leak raw server text by default. Spotify errors are
+    // already written for users (credentials / RSS / episode match).
+    try {
+      const data = await res.json();
+      if (data?.errorCode === "spotify" && typeof data.error === "string" && data.error.trim()) {
+        return { ok: false, reason: "other", error: data.error.trim().slice(0, 500) };
+      }
+    } catch {
+      /* ignore */
+    }
     return { ok: false, reason: "other" };
   }
   
@@ -327,7 +341,7 @@ async function doTranscribe(url, title) {
   await setState(state);
   setBadge("...", "#a58959");
 
-  const result = await sendPageUrl(url);
+  const result = await sendPageUrl(url, title);
   
   if (result.ok) {
     state.status = "done";

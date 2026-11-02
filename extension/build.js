@@ -34,6 +34,7 @@ const COPY_FILES = [
   "content-llm-handoff.js",
   "popup.html",
   "popup.js",
+  "page-id.js",
   "popup.css",
   "panel-diagnostics.js",
   "setup-link.css",

@@ -201,14 +201,40 @@ async function findRssFeed(showName: string): Promise<RssFeedResult> {
 // RSS feed parsing — find episode audio URL
 // ---------------------------------------------------------------------------
 
-interface RssEpisode {
+export interface RssEpisode {
   title: string;
   audioUrl: string;
   durationMs: number;
   pubDate: string;
 }
 
-function parseRssFeed(xml: string): RssEpisode[] {
+function attr(tag: string, name: string): string {
+  return tag.match(new RegExp(`\\b${name}=["']([^"']+)["']`, "i"))?.[1] ?? "";
+}
+
+/**
+ * Prefer an audio enclosure; fall back to video/mp4 or media:content so
+ * video-podcast RSS feeds still yield a downloadable file (ffmpeg -vn).
+ */
+function pickMediaUrl(item: string): string {
+  const tags = [
+    ...item.matchAll(/<enclosure\b[^>]*>/gi),
+    ...item.matchAll(/<media:content\b[^>]*>/gi),
+  ].map((m) => m[0]);
+
+  const parsed = tags
+    .map((tag) => ({ url: attr(tag, "url"), type: attr(tag, "type").toLowerCase() }))
+    .filter((entry) => entry.url);
+
+  const audio = parsed.find(
+    (entry) =>
+      entry.type.startsWith("audio/") ||
+      /\.(mp3|m4a|aac)(\?|$)/i.test(entry.url)
+  );
+  return (audio ?? parsed[0])?.url ?? "";
+}
+
+export function parseRssFeed(xml: string): RssEpisode[] {
   const episodes: RssEpisode[] = [];
   const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/g;
   let match;
@@ -217,7 +243,7 @@ function parseRssFeed(xml: string): RssEpisode[] {
     const item = match[1];
 
     const title = item.match(/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/)?.[1]?.trim() ?? "";
-    const enclosure = item.match(/<enclosure[^>]+url=["']([^"']+)["'][^>]*>/)?.[1] ?? "";
+    const mediaUrl = pickMediaUrl(item);
     const pubDate = item.match(/<pubDate>([^<]+)<\/pubDate>/)?.[1]?.trim() ?? "";
 
     // Duration can be in <itunes:duration> as seconds or HH:MM:SS
@@ -234,10 +260,10 @@ function parseRssFeed(xml: string): RssEpisode[] {
       durationMs = parseInt(durationRaw, 10) * 1000;
     }
 
-    if (title && enclosure) {
+    if (title && mediaUrl) {
       episodes.push({
         title: decodeXmlEntities(title),
-        audioUrl: enclosure,
+        audioUrl: mediaUrl,
         durationMs,
         pubDate,
       });
@@ -262,7 +288,7 @@ function decodeXmlEntities(text: string): string {
 /**
  * Match a Spotify episode to an RSS episode by title similarity and duration.
  */
-function findMatchingEpisode(
+export function findMatchingEpisode(
   rssEpisodes: RssEpisode[],
   spotifyTitle: string,
   spotifyDurationMs: number
@@ -305,6 +331,87 @@ function findMatchingEpisode(
   }
 
   return null;
+}
+
+export function sanitizeSpotifyTitleHint(title?: string | null): string | null {
+  if (!title || typeof title !== "string") return null;
+  const cleaned = title
+    .replace(/\s*[|\-–—]\s*Spotify\s*$/i, "")
+    .replace(/\s+on Spotify\s*$/i, "")
+    .trim();
+  return cleaned || null;
+}
+
+export interface ItunesEpisodeMatch {
+  title: string;
+  audioUrl: string;
+  durationMs: number;
+  collectionName: string;
+  feedUrl: string;
+  artworkUrl: string;
+}
+
+/**
+ * Resolve a public podcast episode via iTunes Search when the Spotify API
+ * is missing, 404s (common for video podcasts), or RSS matching fails.
+ * Uses the episode title from the page/tab — no Spotify credentials.
+ */
+export async function findItunesEpisode(
+  title: string
+): Promise<ItunesEpisodeMatch | null> {
+  const query = sanitizeSpotifyTitleHint(title) || title.trim();
+  if (!query) return null;
+
+  const res = await fetch(
+    `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=podcast&entity=podcastEpisode&limit=10`,
+    { signal: AbortSignal.timeout(10000) }
+  );
+  if (!res.ok) {
+    throw new Error(`iTunes Search API failed (HTTP ${res.status}).`);
+  }
+
+  const data = await res.json();
+  const results = (data.results ?? []) as Array<{
+    trackName?: string;
+    collectionName?: string;
+    episodeUrl?: string;
+    feedUrl?: string;
+    trackTimeMillis?: number;
+    artworkUrl600?: string;
+  }>;
+
+  const candidates: RssEpisode[] = [];
+  const extra = new Map<string, { collectionName: string; feedUrl: string; artworkUrl: string }>();
+
+  for (const item of results) {
+    const audioUrl = item.episodeUrl;
+    const epTitle = item.trackName;
+    if (!audioUrl || !epTitle) continue;
+    const episode: RssEpisode = {
+      title: epTitle,
+      audioUrl,
+      durationMs: item.trackTimeMillis ?? 0,
+      pubDate: "",
+    };
+    candidates.push(episode);
+    extra.set(audioUrl, {
+      collectionName: item.collectionName ?? "",
+      feedUrl: item.feedUrl ?? "",
+      artworkUrl: item.artworkUrl600 ?? "",
+    });
+  }
+
+  const matched = findMatchingEpisode(candidates, query, 0);
+  if (!matched) return null;
+  const meta = extra.get(matched.audioUrl);
+  return {
+    title: matched.title,
+    audioUrl: matched.audioUrl,
+    durationMs: matched.durationMs,
+    collectionName: meta?.collectionName ?? "",
+    feedUrl: meta?.feedUrl ?? "",
+    artworkUrl: meta?.artworkUrl ?? "",
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -449,28 +556,7 @@ async function transcribeSpotifyAudio(
 // Main entry point
 // ---------------------------------------------------------------------------
 
-export async function getSpotifyTranscript(
-  episodeId: string,
-  originalUrl: string
-): Promise<VideoTranscriptResult & { source: string; platform: string; videoUrl: string }> {
-  // 1. Fetch metadata from Spotify API
-  transcriptionProgress.emit("progress", {
-    stage: "fetching_captions",
-    progress: 5,
-    statusText: "Fetching episode info from Spotify...",
-    videoId: episodeId,
-  });
-
-  const metadata = await fetchSpotifyMetadata(episodeId);
-
-  // 2. Find RSS feed via iTunes
-  transcriptionProgress.emit("progress", {
-    stage: "fetching_captions",
-    progress: 10,
-    statusText: "Finding podcast feed...",
-    videoId: episodeId,
-  });
-
+async function resolveFromRss(metadata: SpotifyEpisodeData): Promise<RssEpisode> {
   let rssFeed: RssFeedResult;
   try {
     rssFeed = await findRssFeed(metadata.showName);
@@ -481,14 +567,6 @@ export async function getSpotifyTranscript(
   }
 
   console.log(`[spotify] Found RSS feed for "${rssFeed.collectionName}": ${rssFeed.feedUrl}`);
-
-  // 3. Fetch and parse RSS feed
-  transcriptionProgress.emit("progress", {
-    stage: "fetching_captions",
-    progress: 15,
-    statusText: "Searching for episode in feed...",
-    videoId: episodeId,
-  });
 
   const feedRes = await fetch(rssFeed.feedUrl, {
     signal: AbortSignal.timeout(15000),
@@ -510,12 +588,106 @@ export async function getSpotifyTranscript(
 
   console.log(`[spotify] Parsed ${rssEpisodes.length} episodes from RSS feed`);
 
-  // 4. Match Spotify episode to RSS episode
   const matched = findMatchingEpisode(rssEpisodes, metadata.title, metadata.durationMs);
 
   if (!matched) {
     throw new Error(
       `Could not find "${metadata.title}" in the podcast's RSS feed. The episode may be Spotify-exclusive or the feed may be outdated.`
+    );
+  }
+
+  return matched;
+}
+
+export async function getSpotifyTranscript(
+  episodeId: string,
+  originalUrl: string,
+  titleHint?: string
+): Promise<VideoTranscriptResult & { source: string; platform: string; videoUrl: string }> {
+  // 1. Fetch metadata from Spotify API (optional — video podcasts often 404
+  // here with client-credentials, and credentials may be unset).
+  transcriptionProgress.emit("progress", {
+    stage: "fetching_captions",
+    progress: 5,
+    statusText: "Fetching episode info from Spotify...",
+    videoId: episodeId,
+  });
+
+  let metadata: SpotifyEpisodeData | null = null;
+  let metadataError: Error | null = null;
+  try {
+    metadata = await fetchSpotifyMetadata(episodeId);
+  } catch (err) {
+    metadataError = err instanceof Error ? err : new Error(String(err));
+    console.log(`[spotify] metadata failed: ${metadataError.message}`);
+  }
+
+  transcriptionProgress.emit("progress", {
+    stage: "fetching_captions",
+    progress: 10,
+    statusText: "Finding podcast feed...",
+    videoId: episodeId,
+  });
+
+  let matched: RssEpisode | null = null;
+  let rssError: Error | null = null;
+
+  if (metadata) {
+    try {
+      matched = await resolveFromRss(metadata);
+    } catch (err) {
+      rssError = err instanceof Error ? err : new Error(String(err));
+      console.log(`[spotify] RSS path failed: ${rssError.message}`);
+    }
+  }
+
+  if (!matched) {
+    const hint = sanitizeSpotifyTitleHint(titleHint) || metadata?.title;
+    if (hint) {
+      transcriptionProgress.emit("progress", {
+        stage: "fetching_captions",
+        progress: 15,
+        statusText: "Searching public podcast directories...",
+        videoId: episodeId,
+      });
+      try {
+        const itunes = await findItunesEpisode(hint);
+        if (itunes) {
+          matched = {
+            title: itunes.title,
+            audioUrl: itunes.audioUrl,
+            durationMs: itunes.durationMs,
+            pubDate: "",
+          };
+          if (!metadata) {
+            metadata = {
+              videoId: episodeId,
+              title: itunes.title,
+              author: itunes.collectionName || "Unknown Show",
+              channelUrl: itunes.feedUrl,
+              thumbnailUrl: itunes.artworkUrl,
+              showName: itunes.collectionName,
+              durationMs: itunes.durationMs,
+              releaseDate: "",
+              isExternallyHosted: true,
+            };
+          }
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.log(`[spotify] iTunes episode search failed: ${msg}`);
+        rssError = rssError ?? (err instanceof Error ? err : new Error(msg));
+      }
+    }
+  }
+
+  if (!matched || !metadata) {
+    const details = [metadataError?.message, rssError?.message]
+      .filter(Boolean)
+      .join(" ");
+    throw new Error(
+      details ||
+        `Could not resolve Spotify episode "${episodeId}". Video podcasts need a public RSS feed, or add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET to .env.`
     );
   }
 
