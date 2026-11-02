@@ -8,7 +8,7 @@ import {
   migrateLlmLauncherLastProvider,
   resolveLlmLauncherLastProvider,
   sortLlmLauncherMenuProviders,
-} from "../lib/llm-launcher-menu.js";
+} from "../lib/llm-launcher-menu";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -79,4 +79,6 @@ test("YTT-459: sparkle menu source has no built-in server-key option", () => {
   assert.match(src, /Open transcript in/);
   assert.match(src, /migrateLlmLauncherLastProvider/);
   assert.match(src, /menuProviders\.length > 0/);
+  assert.match(src, /from ["']@\/lib\/llm-launcher-menu["']/);
+  assert.doesNotMatch(src, /llm-launcher-menu\.js/);
 });

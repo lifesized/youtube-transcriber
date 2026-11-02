@@ -5,7 +5,7 @@ import {
   LLM_LAUNCHER_MENU_PROVIDERS,
   migrateLlmLauncherLastProvider,
   sortLlmLauncherMenuProviders,
-} from "@/lib/llm-launcher-menu.js";
+} from "@/lib/llm-launcher-menu";
 
 interface LlmProvider {
   id: string;
