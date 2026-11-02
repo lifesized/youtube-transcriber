@@ -2214,23 +2214,9 @@ function renderRecentList(items) {
 // ---------------------------------------------------------------------------
 
 function extractVideoId(url) {
-  try {
-    const u = new URL(url);
-    const host = u.hostname.replace(/^www\./, "");
-
-    // YouTube
-    if (host === "youtube.com" || host === "m.youtube.com") {
-      if (u.pathname === "/watch") return u.searchParams.get("v");
-      if (u.pathname.startsWith("/shorts/")) return u.pathname.split("/shorts/")[1]?.split("/")[0];
-      if (u.pathname.startsWith("/embed/")) return u.pathname.split("/embed/")[1]?.split("/")[0];
-    }
-
-    // Spotify episode
-    if (host === "open.spotify.com") {
-      const match = u.pathname.match(/^\/episode\/([a-zA-Z0-9]{22})/);
-      if (match) return match[1];
-    }
-  } catch { /* ignore */ }
+  if (typeof globalThis.extractPageContentId === "function") {
+    return globalThis.extractPageContentId(url);
+  }
   return null;
 }
 
@@ -2651,15 +2637,17 @@ async function doTranscribe() {
     videoId: pageInfo.videoId || null,
   });
 
-  // Request YouTube permissions on user gesture (YTT-458 security requirement)
-  if (pageInfo.videoId) {
-    try {
+  // Request YouTube permissions on user gesture for YouTube pages only.
+  // Spotify episode IDs also set pageInfo.videoId — do not prompt for youtube.com there.
+  try {
+    const host = new URL(pageInfo.url).hostname.replace(/^www\./, "");
+    if (host === "youtube.com" || host === "m.youtube.com") {
       await chrome.permissions.request({
         origins: ["https://www.youtube.com/*", "https://m.youtube.com/*"],
       });
-    } catch (err) {
-      console.warn("[ytt-popup] YouTube permissions request failed", err);
     }
+  } catch (err) {
+    console.warn("[ytt-popup] YouTube permissions request failed", err);
   }
 
   isTranscribing = true;

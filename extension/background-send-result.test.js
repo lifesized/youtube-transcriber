@@ -92,6 +92,30 @@ test("sendPageUrl returns { ok: false, reason: 'unauthorized' } on 401 and clear
   assert.equal(global._localTokenMemoryTest, null);
 });
 
+test("sendPageUrl surfaces allowlisted Spotify server errors", async () => {
+  resetMocks();
+  const { sendPageUrl } = await loadBackgroundModule();
+
+  global.getLocalApiTokenMock = async () => ({ ok: true, token: "a".repeat(64) });
+  global.fetch = async () => ({
+    status: 500,
+    ok: false,
+    json: async () => ({
+      errorCode: "spotify",
+      error:
+        "Spotify transcription requires API credentials. Add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET to your .env file.",
+    }),
+  });
+
+  const result = await sendPageUrl(
+    "https://open.spotify.com/episode/2Cc8LDSoGmgL8sBkt4hSlt",
+    "Why the Self Became Our God | Tara Isabella Burton"
+  );
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "other");
+  assert.match(result.error, /SPOTIFY_CLIENT_ID/);
+});
+
 test("sendPageUrl returns { ok: false, reason: 'other' } on other non-OK HTTP", async () => {
   resetMocks();
   const { sendPageUrl } = await loadBackgroundModule();
@@ -206,7 +230,7 @@ async function loadBackgroundModule() {
     global._localTokenMemoryTest = null;
   }
   
-  async function sendPageUrl(pageUrl) {
+  async function sendPageUrl(pageUrl, title) {
     const tokenResult = await getLocalApiToken();
     
     // Native host unavailable
@@ -226,7 +250,7 @@ async function loadBackgroundModule() {
     
     // Build request with token
     const buildFn = global.buildLocalSendRequestMock || global.buildLocalSendRequest;
-    const request = buildFn(pageUrl, tokenResult.token);
+    const request = buildFn(pageUrl, tokenResult.token, title ? { title } : null);
     if (!request.ok) {
       // Token present but request build failed (bad URL etc.) → "other"
       return { ok: false, reason: "other" };
@@ -251,7 +275,14 @@ async function loadBackgroundModule() {
     }
     
     if (!res.ok) {
-      // YTT-448: Server errors return "other"
+      try {
+        const errBody = await res.json();
+        if (errBody?.errorCode === "spotify" && typeof errBody.error === "string" && errBody.error.trim()) {
+          return { ok: false, reason: "other", error: errBody.error.trim().slice(0, 500) };
+        }
+      } catch {
+        /* ignore */
+      }
       return { ok: false, reason: "other" };
     }
     
