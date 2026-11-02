@@ -206,7 +206,7 @@ Works fully offline by default for YouTube. Cloud Whisper is optional — bring 
 - **Local + cloud transcription** — free local Whisper by default, optional cloud providers (Groq, OpenRouter, or custom endpoint) for faster results with your own API key
 - **Chrome extension** — one-tap send of the current page URL to the local app (no keys in extension storage or URLs)
 - **Multi-language captions** — request captions in any language YouTube supports (see [Language Preference](#language-preference) below)
-- **Summarize with LLM** — built-in summarize uses a server-held OpenRouter key (Settings / `OPENROUTER_API_KEY`); no pasted API keys. You can still open a transcript in ChatGPT or Claude via clipboard handoff
+- **Summarize with LLM** — hover a transcript and open it in ChatGPT or Claude via clipboard handoff. MCP / `POST /api/summaries` still summarize with a server-held OpenRouter key (Settings / `OPENROUTER_API_KEY`)
 - **Queue system** — batch-process multiple videos
 - **Search & filter** your transcript library
 - **Export as Markdown** or copy to clipboard with timestamps

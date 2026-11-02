@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-02
+
+### Removed
+- **Built-in (OpenRouter) · server key** from the transcript library Summarize menu (YTT-459). The sparkle menu now only offers **Open transcript in ChatGPT** and **Open transcript in Claude** (clipboard handoff). Server-side summarize (`POST /api/summaries`, MCP) is unchanged. A saved `llm-launcher-last-provider` value that is not `chatgpt` or `claude` is cleared so the menu falls back to ChatGPT, then Claude.
+
 ## 2026-10-20
 
 ### Changed
